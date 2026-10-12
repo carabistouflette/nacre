@@ -361,7 +361,7 @@ pub fn check(program: &t::Program) -> Result<(), Diagnostic> {
 
 /// A textual ownership CFG, not an executable or complete computation IR.
 pub fn dump(program: &t::Program, source: &str) -> Result<String, Diagnostic> {
-    let mut out = String::from("Nacre V6 — ownership CFG\nU=uninitialized, R=ready, M=moved; joins are unions.\nBranches are conservative (no constant-condition proof).\n\n");
+    let mut out = String::from("Nacre V7 — ownership CFG\nU=uninitialized, R=ready, M=moved; joins are unions.\nBranches are conservative (no constant-condition proof).\n\n");
     for function in &program.functions {
         if function.native.is_some() { continue; }
         let graph = Builder::build(function);

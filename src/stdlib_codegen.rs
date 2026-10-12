@@ -39,6 +39,7 @@ fn marker(method: M) -> &'static str {
         M::ListNew => "@LIST_NEW@", M::ListAdd => "@LIST_ADD@",
         M::ListSize => "@LIST_SIZE@", M::ListCapacity => "@LIST_CAPACITY@",
         M::ListIsEmpty => "@LIST_IS_EMPTY@", M::ListGet => "@LIST_GET@",
+        M::ListGetRef => "@LIST_GET_REF@", M::ListGetMut => "@LIST_GET_MUT@",
         M::ListSet => "@LIST_SET@", M::ListPop => "@LIST_POP@",
         M::ListRemove => "@LIST_REMOVE@", M::ListClear => "@LIST_CLEAR@",
         M::ListReserve => "@LIST_RESERVE@", M::TextNew => "@TEXT_NEW@",
@@ -240,6 +241,39 @@ fn io_implementations(program: &t::Program, text: usize) -> String {
     out
 }
 
+fn borrowed_list_method(program: &t::Program, function: &t::Function, element_class: usize) -> String {
+    let Type::Borrow { class, .. } = function.return_type else {
+        unreachable!("native List borrowed accessor must return a typed borrow")
+    };
+    assert_eq!(class, element_class, "List borrow result must match its element type");
+    let index_type = function.params.first().expect("List accessor index parameter").1;
+    let borrowed_element = if program.classes[element_class].is_interface {
+        "p->items[index]"
+    } else if program.classes[element_class].variants.is_some() {
+        "&p->items[index]"
+    } else {
+        "p->items[index]"
+    };
+    let method = function.native.expect("native List accessor");
+    include_str!("../stdlib/list_get_borrowed.c.in")
+        .replace("@RETURN_TYPE@", &ctype(program, function.return_type))
+        .replace("@INDEX_TYPE@", &ctype(program, index_type))
+        .replace("@LIST_METHOD@", marker(method))
+        .replace("@BORROWED_ELEMENT@", borrowed_element)
+}
+
+fn borrowed_list_methods(program: &t::Program, list_class: usize, element: Type) -> String {
+    let Type::Object(element_class) = element else { return String::new(); };
+    let mut methods = String::new();
+    for function in program.functions.iter().filter(|function| {
+        function.receiver == Some(list_class)
+            && matches!(function.native, Some(M::ListGetRef | M::ListGetMut))
+    }) {
+        methods.push_str(&borrowed_list_method(program, function, element_class));
+    }
+    methods
+}
+
 pub fn implementations(program: &t::Program) -> String {
     let text = text_class(program);
     let mut out = String::new();
@@ -249,8 +283,10 @@ pub fn implementations(program: &t::Program) -> String {
         let mut body = match native {
             C::List(element) => {
                 let getter = if element.is_object() { "" } else { include_str!("../stdlib/list_get.c.in") };
+                let borrowed_getters = borrowed_list_methods(program, class.id, element);
                 include_str!("../stdlib/list.c.in")
                     .replace("@GET_METHOD@", getter)
+                    .replace("@BORROWED_GETTERS@", &borrowed_getters)
                     .replace("@ELEMENT@", &ctype(program, element))
                     .replace("@ZERO@", &zero(program, element))
                     .replace("@DROP_AT_INDEX@", &drop_element(element, "p->items[index]"))

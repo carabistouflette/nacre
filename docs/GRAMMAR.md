@@ -1,4 +1,4 @@
-# Grammaire V6
+# Grammar V7
 
 Grammaire indicative du sous-ensemble implémenté. Les contraintes sémantiques
 ci-dessous font partie du langage. Identifiants ASCII ; sources et chaînes UTF-8 ;
@@ -45,6 +45,7 @@ call          = identifier "(" [ arguments ] ")"
               | place "." identifier "(" [ arguments ] ")" ;
 new           = "new" nominalType [ "." identifier ] "(" [ arguments ] ")" ;
 arguments     = expression { "," expression } ;
+borrowExpression = "borrow" [ "mut" ] place ;
 ```
 
 Les modificateurs de méthode peuvent aussi être écrits dans l'ordre inverse ;
@@ -62,12 +63,13 @@ unaires et binaires suivants :
 | 4 | `<`, `<=`, `>`, `>=` |
 | 5 | `+`, `-` |
 | 6 | `*`, `/`, `%` |
-| 7 | unaires `+`, `-`, `!` |
+| 7 | unary `+`, `-`, `!`, and `borrow` / `borrow mut` |
 
-Les `>` de `Holder<Box<int>>` ferment deux applications de type. Il n'existe pas
-d'opérateur de décalage `>>`. `println(expr)` et `System.out.println(expr)` sont
-intégrés, comme `move(objet)` et `drop(objet)`. Il n'existe pas d'expression
-`borrow(...)` : le type attendu détermine l'emprunt.
+The `>` characters in `Holder<Box<int>>` close two type applications; no `>>`
+shift operator exists. Builtins include `println(expr)`,
+`System.out.println(expr)`, `move(owner)`, and `drop(owner)`. Borrowing is inferred
+from an expected borrowed type or written as `borrow place` / `borrow mut place`,
+not a function call.
 
 ## Déclarations et interfaces
 
@@ -134,33 +136,34 @@ locale de branche. Les objets liés sont détruits en sortie de portée, y compr
 sur `return`, `break` et `continue`, sauf transfert de leur propriété.
 `None { ... }` et `None() { ... }` sont équivalents pour une variante vide.
 
-Les payloads ne peuvent contenir ni emprunt ni vue locale. Les emprunts d’enums
-sont rejetés en V6 ; pas de `match` emprunté. Les cycles de sommes imbriquées par
-valeur sont rejetés, même avec une variante vide : leur taille C serait infinie.
+Enum payloads cannot contain borrowed references or local views. V7 permits
+borrowed enum matching: primitive bindings copy and nominal bindings borrow the
+scrutinee without changing its tag. Cycles of inline sums remain forbidden,
+including cycles with an empty variant: their C size would be infinite.
 Un cycle passant par un objet alloué peut avoir un cas de base réel, par exemple
 `enum Link { End; Next(Node); }` avec un champ `Link` dans `Node`.
 
-`Option<T>` et `Result<T,E>` sont préinjectés comme enums réservées :
-`None`/`Some(T)` et `Ok(T)`/`Err(E)`. Il n’existe pas de déballage implicite,
-d’exception ou d’opérateur de propagation d’erreur en V6.
+`Option<T>` and `Result<T,E>` are reserved preinjected enums with `None`/`Some(T)`
+and `Ok(T)`/`Err(E)`. V7 has no implicit unwrapping, exception, or
+error-propagation operator.
 
 
 ## Objets et références
 
-Les variables possédées et scalaires peuvent être déclarées sans initialiseur ;
-l'analyse exige une initialisation certaine avant utilisation. Les variables
-`borrow` exigent un initialiseur nommé et ne sont pas réaffectables. L'ombrage
-d'une variable dans une portée déjà active reste interdit.
+Owning/scalar variables may omit an initializer, but must be definitely
+initialized before use. Borrowed variables require a stable place or
+receiver-bound result and cannot be reassigned. Active-scope shadowing is forbidden.
 
-Les retours `borrow` sont reconnus syntaxiquement mais rejetés sémantiquement.
-`borrow int`, `borrow String` et `borrow void` ne sont pas des types valides.
+Borrowed returns are supported only for instance receiver-derived references,
+including interface contracts. `borrow int`, `borrow String`, and `borrow void`
+are not valid types.
 Les propriétaires peuvent être convertis implicitement vers une interface
 implémentée, en transférant leur propriété. Les emprunts peuvent être convertis
 vers cette interface sans changement d'origine ni de mode d'accès.
 
-Il n'y a pas de `null`, références forgées, FFI, conversions explicites de types,
-tableaux ou champs possédés remplaçables. Les champs possédés sont initialisés
-au constructeur ; les champs scalaires restent modifiables via un accès mutable.
+No null, forged references, FFI, explicit casts, or arrays are provided. Typed
+owned fields may be replaced through mutable access after RHS stabilization and
+old-owner cleanup; constructor initialization and active-loan rules still apply.
 
 Les champs `borrow` partagés rendent leur classe locale à son bloc. Ils sont
 initialisés directement depuis un paramètre partagé du constructeur. Une vue ne

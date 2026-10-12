@@ -1,5 +1,5 @@
 class Counter {}
-borrow Counter bad() { // E3004 : les retours empruntes sont interdits en V3.
+borrow Counter bad() { // E3004: borrowed returns require a receiver, never a local owner.
     Counter counter = new Counter();
     return counter;
 }

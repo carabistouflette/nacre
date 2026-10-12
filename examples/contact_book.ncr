@@ -1,0 +1,489 @@
+class Contact {
+    private Text name;
+    private Option<Text> phone;
+
+    public Contact(Text name, Option<Text> phone) {
+        this.name = name;
+        this.phone = phone;
+    }
+
+    public readonly borrow Text getName() {
+        return this.name;
+    }
+
+    public readonly borrow Option<Text> getPhone() {
+        return this.phone;
+    }
+
+    public void setName(Text name) {
+        this.name = name;
+    }
+
+    public void setPhone(Option<Text> phone) {
+        this.phone = phone;
+    }
+}
+
+// A short-lived parsing view. It borrows the complete input and returns only
+// owned field Text values or owned errors; the parsed contact list is independent.
+class Reader {
+    private borrow Text source;
+    private int cursor = 0;
+
+    public Reader(borrow Text source) {
+        this.source = source;
+    }
+
+    private readonly boolean isBoundary(int position) {
+        int size = this.source.byteLength();
+        if (position == 0 || position == size) {
+            return true;
+        }
+        int value = this.source.byteAt(position);
+        return value < 128 || value > 191;
+    }
+
+    public Result<int,Text> readNumber() {
+        int size = this.source.byteLength();
+        int value = 0;
+        int digits = 0;
+        while (this.cursor < size) {
+            int byteValue = this.source.byteAt(this.cursor);
+            if (byteValue == 10) {
+                this.cursor = this.cursor + 1;
+                if (digits == 0) {
+                    return new Result<int,Text>.Err(new Text("Expected a non-negative decimal number."));
+                }
+                return new Result<int,Text>.Ok(value);
+            }
+            if (byteValue < 48 || byteValue > 57) {
+                return new Result<int,Text>.Err(new Text("Invalid decimal metadata in contact-book file."));
+            }
+            int digit = byteValue - 48;
+            if (value > 214748364 || (value == 214748364 && digit > 7)) {
+                return new Result<int,Text>.Err(new Text("Decimal metadata overflows the supported integer range."));
+            }
+            value = value * 10 + digit;
+            digits = digits + 1;
+            this.cursor = this.cursor + 1;
+        }
+        return new Result<int,Text>.Err(new Text("Contact-book file ends inside numeric metadata."));
+    }
+
+    public Result<Text,Text> readField(int byteCount) {
+        int size = this.source.byteLength();
+        if (byteCount < 0 || this.cursor > size || byteCount > size - this.cursor) {
+            return new Result<Text,Text>.Err(new Text("Contact-book file ends inside a length-prefixed field."));
+        }
+        int start = this.cursor;
+        int end = start + byteCount;
+        if (!this.isBoundary(start) || !this.isBoundary(end)) {
+            return new Result<Text,Text>.Err(new Text("A field length does not end on a UTF-8 boundary."));
+        }
+        this.cursor = end;
+        return this.source.sliceBytes(start, end);
+    }
+
+    public boolean consumeLineFeed() {
+        if (this.cursor >= this.source.byteLength() || this.source.byteAt(this.cursor) != 10) {
+            return false;
+        }
+        this.cursor = this.cursor + 1;
+        return true;
+    }
+
+    public Result<boolean,Text> readPhoneFlag() {
+        if (this.cursor >= this.source.byteLength()) {
+            return new Result<boolean,Text>.Err(new Text("Contact-book file ends before the phone flag."));
+        }
+        int flag = this.source.byteAt(this.cursor);
+        if (flag != 48 && flag != 49) {
+            return new Result<boolean,Text>.Err(new Text("Phone flag must be exactly 0 or 1."));
+        }
+        this.cursor = this.cursor + 1;
+        if (this.cursor >= this.source.byteLength() || this.source.byteAt(this.cursor) != 10) {
+            return new Result<boolean,Text>.Err(new Text("Phone flag must end with LF."));
+        }
+        this.cursor = this.cursor + 1;
+        return new Result<boolean,Text>.Ok(flag == 49);
+    }
+
+    public readonly boolean atEnd() {
+        return this.cursor == this.source.byteLength();
+    }
+}
+
+class ContactBook {
+    private List<Contact> contacts = new List<Contact>();
+    private boolean inputAvailable = true;
+
+    private void reportError(borrow Text error) {
+        Console.print("Error: ");
+        Console.printText(error);
+        println("");
+    }
+
+    // EOF and read errors both close the interactive loop. An ordinary bad
+    // response remains local to its command and the book can continue running.
+    private Option<Text> prompt(String label) {
+        Console.print(label);
+        Result<Option<Text>,Text> result = Console.readLine();
+        match (result) {
+            Ok(optionalLine) {
+                match (optionalLine) {
+                    Some(line) { return new Option<Text>.Some(line); }
+                    None {
+                        this.inputAvailable = false;
+                        println("");
+                        return new Option<Text>.None();
+                    }
+                }
+            }
+            Err(error) {
+                this.reportError(error);
+                this.inputAvailable = false;
+                return new Option<Text>.None();
+            }
+        }
+    }
+
+    private Option<int> promptPosition() {
+        Option<Text> entered = this.prompt("Contact number: ");
+        match (entered) {
+            Some(text) {
+                match (text.parseInt()) {
+                    Ok(number) { return new Option<int>.Some(number); }
+                    Err(error) {
+                        this.reportError(error);
+                        return new Option<int>.None();
+                    }
+                }
+            }
+            None { return new Option<int>.None(); }
+        }
+    }
+
+    private boolean validPosition(int position) {
+        if (position < 1 || position > this.contacts.size()) {
+            println("No contact exists at that position.");
+            return false;
+        }
+        return true;
+    }
+
+    private readonly void displayContact(int index) {
+        borrow Contact contact = this.contacts.getRef(index);
+        Text line = new Text("");
+        line.appendInt(index + 1);
+        line.append(". ");
+        line.appendText(contact.getName());
+        line.append(" | phone: ");
+        // getPhone returns a receiver-bound borrow. Matching this borrowed
+        // Option keeps the owned phone Text in the contact instead of consuming it.
+        match (contact.getPhone()) {
+            None { line.append("(none)"); }
+            Some(phone) { line.appendText(phone); }
+        }
+        line.print();
+    }
+
+    private readonly void listContacts() {
+        if (this.contacts.isEmpty()) {
+            println("The contact book is empty.");
+            return;
+        }
+        int index = 0;
+        while (index < this.contacts.size()) {
+            this.displayContact(index);
+            index = index + 1;
+        }
+    }
+
+    private void addContact() {
+        Option<Text> nameInput = this.prompt("Name: ");
+        match (nameInput) {
+            Some(name) {
+                Option<Text> phoneInput = this.prompt("Phone (leave blank for none): ");
+                match (phoneInput) {
+                    Some(phoneText) {
+                        Option<Text> phone;
+                        if (!phoneText.isEmpty()) {
+                            phone = new Option<Text>.Some(phoneText);
+                        } else {
+                            phone = new Option<Text>.None();
+                        }
+                        Contact contact = new Contact(name, phone);
+                        this.contacts.add(contact);
+                        println("Contact added.");
+                    }
+                    None {}
+                }
+            }
+            None {}
+        }
+    }
+
+    private void showContact() {
+        Option<int> requested = this.promptPosition();
+        match (requested) {
+            Some(position) {
+                if (this.validPosition(position)) {
+                    this.displayContact(position - 1);
+                }
+            }
+            None {}
+        }
+    }
+
+    private void editContact() {
+        Option<int> requested = this.promptPosition();
+        match (requested) {
+            Some(position) {
+                if (this.validPosition(position)) {
+                    Option<Text> nameInput = this.prompt("New name: ");
+                    match (nameInput) {
+                        Some(name) {
+                            Option<Text> phoneInput = this.prompt("New phone (leave blank for none): ");
+                            match (phoneInput) {
+                                Some(phoneText) {
+                                    Option<Text> phone;
+                                    if (!phoneText.isEmpty()) {
+                                        phone = new Option<Text>.Some(phoneText);
+                                    } else {
+                                        phone = new Option<Text>.None();
+                                    }
+                                    borrow mut Contact contact = this.contacts.getMut(position - 1);
+                                    contact.setName(name);
+                                    contact.setPhone(phone);
+                                    println("Contact updated.");
+                                }
+                                None {}
+                            }
+                        }
+                        None {}
+                    }
+                }
+            }
+            None {}
+        }
+    }
+
+    private void removeContact() {
+        Option<int> requested = this.promptPosition();
+        match (requested) {
+            Some(position) {
+                if (this.validPosition(position)) {
+                    Contact removed = this.contacts.remove(position - 1);
+                    println("Contact removed.");
+                }
+            }
+            None {}
+        }
+    }
+
+    private Result<List<Contact>,Text> parseContent(borrow Text content) {
+        Reader reader = new Reader(content);
+        Result<int,Text> versionResult = reader.readNumber();
+        int version = 0;
+        match (versionResult) {
+            Ok(value) { version = value; }
+            Err(error) { return new Result<List<Contact>,Text>.Err(error); }
+        }
+        if (version != 1) {
+            return new Result<List<Contact>,Text>.Err(new Text("Unsupported contact-book format version."));
+        }
+
+        Result<int,Text> countResult = reader.readNumber();
+        int count = 0;
+        match (countResult) {
+            Ok(value) { count = value; }
+            Err(error) { return new Result<List<Contact>,Text>.Err(error); }
+        }
+
+        List<Contact> candidate = new List<Contact>();
+        int index = 0;
+        while (index < count) {
+            Result<int,Text> nameLengthResult = reader.readNumber();
+            int nameLength = 0;
+            match (nameLengthResult) {
+                Ok(value) { nameLength = value; }
+                Err(error) { return new Result<List<Contact>,Text>.Err(error); }
+            }
+            Result<Text,Text> nameResult = reader.readField(nameLength);
+            Text name;
+            match (nameResult) {
+                Ok(value) { name = value; }
+                Err(error) { return new Result<List<Contact>,Text>.Err(error); }
+            }
+            if (!reader.consumeLineFeed()) {
+                return new Result<List<Contact>,Text>.Err(new Text("Name field must be followed by LF."));
+            }
+
+            Result<boolean,Text> phoneFlagResult = reader.readPhoneFlag();
+            boolean hasPhone = false;
+            match (phoneFlagResult) {
+                Ok(value) { hasPhone = value; }
+                Err(error) { return new Result<List<Contact>,Text>.Err(error); }
+            }
+
+            Option<Text> phone;
+            if (hasPhone) {
+                Result<int,Text> phoneLengthResult = reader.readNumber();
+                int phoneLength = 0;
+                match (phoneLengthResult) {
+                    Ok(value) { phoneLength = value; }
+                    Err(error) { return new Result<List<Contact>,Text>.Err(error); }
+                }
+                Result<Text,Text> phoneResult = reader.readField(phoneLength);
+                Text phoneText;
+                match (phoneResult) {
+                    Ok(value) { phoneText = value; }
+                    Err(error) { return new Result<List<Contact>,Text>.Err(error); }
+                }
+                if (!reader.consumeLineFeed()) {
+                    return new Result<List<Contact>,Text>.Err(new Text("Phone field must be followed by LF."));
+                }
+                phone = new Option<Text>.Some(phoneText);
+            } else {
+                phone = new Option<Text>.None();
+            }
+
+            Contact contact = new Contact(name, phone);
+            candidate.add(contact);
+            index = index + 1;
+        }
+
+        if (!reader.atEnd()) {
+            return new Result<List<Contact>,Text>.Err(new Text("Contact-book file contains trailing data."));
+        }
+        return new Result<List<Contact>,Text>.Ok(candidate);
+    }
+
+    private void loadFile(borrow Text path) {
+        Result<Text,Text> readResult = Files.readText(path);
+        match (readResult) {
+            Ok(content) {
+                Result<List<Contact>,Text> parseResult = this.parseContent(content);
+                match (parseResult) {
+                    Ok(candidate) {
+                        this.contacts = candidate;
+                        println("Contact book loaded.");
+                    }
+                    Err(error) { this.reportError(error); }
+                }
+            }
+            Err(error) { this.reportError(error); }
+        }
+    }
+
+    private readonly Text encode() {
+        Text output = new Text("");
+        output.appendInt(1);
+        output.append("\n");
+        output.appendInt(this.contacts.size());
+        output.append("\n");
+
+        int index = 0;
+        while (index < this.contacts.size()) {
+            borrow Contact contact = this.contacts.getRef(index);
+            borrow Text name = contact.getName();
+            output.appendInt(name.byteLength());
+            output.append("\n");
+            output.appendText(name);
+            output.append("\n");
+            match (contact.getPhone()) {
+                None { output.append("0\n"); }
+                Some(phone) {
+                    output.append("1\n");
+                    output.appendInt(phone.byteLength());
+                    output.append("\n");
+                    output.appendText(phone);
+                    output.append("\n");
+                }
+            }
+            index = index + 1;
+        }
+        return output;
+    }
+
+    private void saveFile(borrow Text path) {
+        Text content = this.encode();
+        Result<boolean,Text> writeResult = Files.writeTextAtomic(path, content);
+        match (writeResult) {
+            Ok(success) {
+                if (success) {
+                    println("Contact book saved.");
+                } else {
+                    println("The contact book was not saved.");
+                }
+            }
+            Err(error) { this.reportError(error); }
+        }
+    }
+
+    private void handleFileCommand(boolean loading) {
+        Option<Text> pathInput = this.prompt("File path: ");
+        match (pathInput) {
+            Some(path) {
+                if (path.isEmpty()) {
+                    println("A file path is required.");
+                } else if (loading) {
+                    this.loadFile(path);
+                } else {
+                    this.saveFile(path);
+                }
+            }
+            None {}
+        }
+    }
+
+    private void printHelp() {
+        println("Commands: list, show, add, edit, remove, load, save, help, quit.");
+        println("Each command is entered on its own line; prompts collect its additional data.");
+        println("Contact positions start at 1. A blank phone response means no phone number.");
+        println("For load and save, enter the full path on the next line; spaces are accepted.");
+    }
+
+    private void handleCommand(Text command) {
+        if (command.equalsString("list")) {
+            this.listContacts();
+        } else if (command.equalsString("show")) {
+            this.showContact();
+        } else if (command.equalsString("add")) {
+            this.addContact();
+        } else if (command.equalsString("edit")) {
+            this.editContact();
+        } else if (command.equalsString("remove")) {
+            this.removeContact();
+        } else if (command.equalsString("load")) {
+            this.handleFileCommand(true);
+        } else if (command.equalsString("save")) {
+            this.handleFileCommand(false);
+        } else if (command.equalsString("help")) {
+            this.printHelp();
+        } else if (command.equalsString("quit")) {
+            println("Goodbye.");
+            this.inputAvailable = false;
+        } else if (command.isEmpty()) {
+            println("Enter a command or type help.");
+        } else {
+            println("Unknown command. Type help for commands.");
+        }
+    }
+
+    public void run() {
+        while (this.inputAvailable) {
+            Option<Text> commandInput = this.prompt("contact-book> ");
+            match (commandInput) {
+                Some(command) { this.handleCommand(command); }
+                None { this.inputAvailable = false; }
+            }
+        }
+    }
+}
+
+void main() {
+    println("Nacre contact book. Type help for commands.");
+    ContactBook book = new ContactBook();
+    book.run();
+}

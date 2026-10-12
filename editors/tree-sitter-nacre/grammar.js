@@ -20,7 +20,7 @@ module.exports = grammar({
     $._return_type, $.type_identifier, $.method_modifiers, $.top_level_modifiers,
     $.interface_method_modifiers,
   ],
-  conflicts: ($) => [[$.generic_type, $._expression]],
+  conflicts: ($) => [[$.generic_type, $._expression], [$.borrowed_type, $._expression]],
 
   rules: {
     source_file: ($) => repeat($._top_level_declaration),
@@ -292,6 +292,7 @@ module.exports = grammar({
     _expression: ($) => choice(
       $.binary_expression,
       $.unary_expression,
+      $.borrow_expression,
       $.call_expression,
       $.member_expression,
       $.new_expression,
@@ -314,6 +315,12 @@ module.exports = grammar({
 
     unary_expression: ($) => prec(PREC.UNARY, seq(
       field('operator', choice('+', '-', '!')),
+      field('argument', $._expression),
+    )),
+
+    borrow_expression: ($) => prec(PREC.UNARY, seq(
+      'borrow',
+      optional('mut'),
       field('argument', $._expression),
     )),
 

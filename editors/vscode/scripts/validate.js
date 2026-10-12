@@ -75,6 +75,7 @@ function sourceForSnippet(name, body) {
     case 'Variant construction':
       return `void main() {\nOption<int> option = ${body};\nmatch (option) { Some(value) {} None {} }\n}\n`;
     case 'Consuming match':
+    case 'Borrowed enum match':
       return `void main() {\nOption<int> option = new Option<int>.Some(42);\n${body}\n}\n`;
     case 'Constructor':
       return `class Name {\n${body}\n}\nvoid main() {}\n`;
@@ -82,6 +83,10 @@ function sourceForSnippet(name, body) {
       return `class Host {\n${body}\n}\nvoid main() {}\n`;
     case 'Borrowed parameter':
       return `class Type {}\nvoid accept(${body}) {}\nvoid main() {}\n`;
+    case 'Receiver-bound borrowed getter':
+      return `class Host {\nText value = new Text("value");\n${body}\n}\nvoid main() {}\n`;
+    case 'Exclusive list element':
+      return `class Contact {}\nvoid main() {\nList<Contact> contacts = new List<Contact>();\ncontacts.add(new Contact());\n${body}\n}\n`;
     default:
       return `void main() {\n${body}\n}\n`;
   }

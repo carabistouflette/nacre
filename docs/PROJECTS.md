@@ -1,4 +1,4 @@
-# Sources, projets et LSP V6
+# Sources, projects, and LSP — V7
 
 Toutes les commandes de compilation acceptent un ou plusieurs chemins après la
 commande, avec les options aux emplacements usuels :

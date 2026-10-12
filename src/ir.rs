@@ -72,7 +72,7 @@ pub enum ExprKind {
     Int(i32), Boolean(bool), String(String), Read(Place), Move(usize),
     Borrow { place: Place, mutable: bool },
     Drop(Box<Expr>),
-    /// A move into an interface representation; never allocates or copies data.
+    /// Allocation-free interface upcast, preserving owned or borrowed status.
     Upcast { value: Box<Expr>, interface: usize, concrete: usize },
     New { class: usize, constructor: usize, args: Vec<Expr> },
     Variant { class: usize, variant: usize, args: Vec<Expr> },
@@ -88,7 +88,7 @@ pub enum CallTarget { Function(usize), Println }
 pub enum NativeClass { List(Type), Text, Console, Files, Args }
 #[derive(Debug, Clone, Copy)]
 pub enum NativeMethod {
-    ListNew, ListAdd, ListSize, ListCapacity, ListIsEmpty, ListGet,
+    ListNew, ListAdd, ListSize, ListCapacity, ListIsEmpty, ListGet, ListGetRef, ListGetMut,
     ListSet, ListPop, ListRemove, ListClear, ListReserve,
     TextNew, TextAppend, TextAppendInt, TextAppendBoolean, TextAppendText,
     TextByteLength, TextByteAt, TextIsEmpty, TextClear, TextPrint,

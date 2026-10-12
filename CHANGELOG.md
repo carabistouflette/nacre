@@ -1,5 +1,24 @@
 # Nacre — historique
 
+## V7 / 0.8.0
+
+- Instance methods and interface contracts may return shared/exclusive borrows
+  proven to derive from their receiver. Caller loans remain lexical; escaping
+  locals/parameters and readonly-to-exclusive conversions are rejected.
+- Affine `List<T>` elements expose checked, allocation-free `getRef`/`getMut`.
+  Object, inline enum, and interface representations preserve their correct ABI;
+  conflicting loans block whole-list mutation, relocation, movement, and cleanup.
+- Typed assignment replaces owned object/interface/enum fields, evaluating the
+  RHS once before destroying the old value. Arbitrary extraction/partial moves
+  and borrowed-field reassignment remain unsupported.
+- Explicit `borrow`/`borrow mut` expressions and borrowed exhaustive enum matches
+  copy primitives and lend nominal payloads without consuming tags or owners.
+- Complete interactive contact book: shared consultation, exclusive in-place
+  editing, optional phone matching, add/remove, validated candidate loading, and
+  atomic Unicode/path-with-spaces persistence.
+- VS Code/Zed packages `0.3.0`, grammar `0.2.0`, and 16 snippets cover V7.
+  Runtime/API boundary regressions replace superseded V6 rejection contracts.
+
 ## V6 stabilization / 0.7.1
 
 - Clean Nacre cutover: `nacre` crate and CLI, `.ncr` sources, `nacre.json`

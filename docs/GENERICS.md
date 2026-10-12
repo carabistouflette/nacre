@@ -1,10 +1,10 @@
-# Génériques par spécialisation — V6
+# Generic specialization — V7
 
 ## Modèle choisi
 
-La V6 propose des modèles de classes, d’interfaces et d’enums explicitement instanciés,
-sans effacement des types à l'exécution. Ce n'est pas une implémentation des
-génériques Java, et ce n'est pas le système de traits bornés de Rust.
+V7 specializes explicitly instantiated class, interface, and enum templates
+without runtime type erasure. This is neither Java's generic implementation nor
+Rust's bounded trait system.
 
 ```java
 class Pair<A, B> {
@@ -71,8 +71,8 @@ La spécialisation ne contourne aucune analyse mémoire. Un paramètre `T` subst
 par `int` est copié comme un entier. Substitué par `Counter`, il possède l’objet
 et le passage à une méthode consomme sa propriété. Substitué par une enum,
 il possède une somme affine par valeur ; il n’est pas copié implicitement.
-Un `borrow T` peut être substitué par un emprunt de classe ou d’interface,
-mais pas de primitive ni d’enum en V6.
+`borrow T` can specialize to a class, interface, or enum reference, but not a
+primitive. Returned borrows must also satisfy the receiver-origin contract.
 
 Le getter suivant ne convient pas à tous les arguments :
 
@@ -90,6 +90,11 @@ champ possédé ; il est refusé, même si `get()` n'est jamais appelé.
 Pour exposer une opération d'un objet contenu, utiliser par exemple
 `readonly int read() { return this.value.getValue(); }` dans un modèle dont les
 spécialisations fournissent effectivement `getValue()`.
+
+A nominal-only template may instead expose `readonly borrow T getRef() { return
+this.value; }`. Its caller keeps a lexical loan of the template instance.
+Specializing that method with a primitive is rejected; only trusted `List`
+conditionally prunes its copied/reference accessors by element category.
 
 ## Interfaces génériques
 

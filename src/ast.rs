@@ -59,6 +59,7 @@ pub enum ExprKind {
     MethodCall { receiver: Box<Expr>, name: String, args: Vec<Expr> },
     New { class: String, type_args: Vec<Type>, args: Vec<Expr> },
     Variant { class: String, type_args: Vec<Type>, variant: String, args: Vec<Expr> },
+    Borrow { expr: Box<Expr>, mutable: bool },
     Unary { op: UnaryOp, expr: Box<Expr> },
     Binary { op: BinaryOp, left: Box<Expr>, right: Box<Expr> },
 }

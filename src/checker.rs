@@ -1,6 +1,6 @@
 //! Name resolution, nominal types, visibility and call-site receiver locks.
 //! Definite initialization and moves across control flow are checked separately
-//! by ownership.rs. Object parameters consume; receiver borrows cannot escape.
+//! by ownership.rs. Object parameters consume; borrowed returns are receiver-bound.
 use std::collections::{HashMap, HashSet};
 use crate::ast::{self as a, BinaryOp as B, UnaryOp, Visibility};
 use crate::diagnostic::{Diagnostic, Span};
@@ -68,8 +68,11 @@ impl Tables {
         if matches!(f.name.as_str(), "println" | "move" | "drop") { return Err(Diagnostic::new(f.span, format!("`{}` est une fonction integree reservee", f.name))); }
         let params: Vec<Type> = f.params.iter().map(|p| self.resolve_type(&p.ty, p.span)).collect::<Result<_, _>>()?;
         let return_type = self.resolve_type(&f.return_type, f.span)?;
-        if return_type.is_borrow() {
-            return Err(Diagnostic::new(f.span, "[E3004] retour de reference empruntee non pris en charge en V5; retourner une valeur possedee ou une primitive"));
+        if return_type.is_borrow() && !matches!(kind, Kind::Instance | Kind::Interface) {
+            return Err(Diagnostic::new(f.span, "[E3004] borrowed returns require an instance receiver"));
+        }
+        if matches!(return_type, Type::Borrow { mutable: true, .. }) && f.readonly {
+            return Err(Diagnostic::new(f.span, "[E3003] a readonly receiver cannot return an exclusive borrow"));
         }
         if self.is_view(return_type) || params.iter().any(|ty| self.is_view(*ty)) {
             return Err(Diagnostic::new(f.span, "[E3007] une classe a champs empruntes est une vue locale; ni parametre ni retour de vue en V5"));
@@ -481,9 +484,6 @@ impl Checker<'_> {
                     self.require(target.ty, source_type, stmt.span)?;
                     self.field_sources[init_field.unwrap()] = Some(source);
                 }
-                if target.ty.is_object() && !matches!(target.kind, PlaceKind::Var(_)) && !is_initialization {
-                    return Err(Diagnostic::new(stmt.span, "remplacement d'un champ objet interdit en V5; sa propriete est fixee au constructeur"));
-                }
                 // Stabilize the receiver while evaluating an assignment RHS.
                 let lock = if matches!(target.kind, PlaceKind::Field { .. }) { target.root_var() } else { None };
                 if let Some(id) = lock { self.locks.push(id); }
@@ -532,8 +532,11 @@ impl Checker<'_> {
             }
             S::Match { value, arms } => {
                 let value = self.expression(value)?;
-                let Type::Object(class) = value.ty else {
-                    return Err(Diagnostic::new(stmt.span, "match consomme une valeur enum possedee; emprunts et primitives interdits"));
+                let class = value.ty.object_class()
+                    .ok_or_else(|| Diagnostic::new(stmt.span, "match requires an owned or borrowed enum"))?;
+                let borrowed = match value.ty {
+                    Type::Borrow { mutable, .. } => Some(mutable),
+                    _ => None,
                 };
                 let variants = self.tables.classes[class].variants.clone()
                     .ok_or_else(|| Diagnostic::new(stmt.span, format!("match exige une enum, pas `{}`", self.tables.classes[class].name)))?;
@@ -555,7 +558,11 @@ impl Checker<'_> {
                     self.scopes.push(HashMap::new());
                     let mut bindings = Vec::with_capacity(payload.len());
                     for (name, ty) in arm.bindings.iter().zip(payload) {
-                        let id = self.declare(name, *ty, arm.span)?;
+                        let binding_type = match (*ty, borrowed) {
+                            (Type::Object(class), Some(mutable)) => Type::Borrow { class, mutable },
+                            _ => *ty,
+                        };
+                        let id = self.declare(name, binding_type, arm.span)?;
                         bindings.push(id);
                     }
                     let (body, stops) = self.block(&arm.body)?;
@@ -625,6 +632,25 @@ impl Checker<'_> {
     /// Borrowing changes the call contract, not ownership. No allocation or copy.
     fn expected_expression(&mut self, expected: Type, expr: &a::Expr) -> Result<t::Expr, Diagnostic> {
         if let Type::Borrow { class, mutable } = expected {
+            if matches!(expr.kind, a::ExprKind::Call { .. } | a::ExprKind::MethodCall { .. } | a::ExprKind::Borrow { .. }) {
+                let mut value = self.expression(expr)?;
+                let Type::Borrow { class: actual, mutable: actual_mutable } = value.ty else {
+                    return Err(Diagnostic::new(expr.span, "[E3004] a temporary owner cannot supply a borrowed result"));
+                };
+                if mutable && !actual_mutable {
+                    return Err(Diagnostic::new(expr.span, "[E3003] shared access cannot become an exclusive borrow"));
+                }
+                if !self.tables.can_upcast(actual, class) {
+                    return Err(Diagnostic::new(expr.span, format!("type incompatible: attendu {}, trouve {}", self.tables.type_name(expected), self.tables.type_name(value.ty))));
+                }
+                // Downgrade the returned capability before retaining its caller loan.
+                value.ty = Type::Borrow { class: actual, mutable };
+                if actual != class {
+                    return Ok(t::Expr { kind: t::ExprKind::Upcast { value: Box::new(value), interface: class, concrete: actual },
+                        ty: expected, span: expr.span });
+                }
+                return Ok(value);
+            }
             let place = self.place(expr, false).map_err(|d| d.with_help("un emprunt exige un objet nomme ou un champ; stocker d'abord un objet temporaire dans une variable"))?;
             if !place.ty.object_class().is_some_and(|actual| self.tables.can_upcast(actual, class)) {
                 return Err(Diagnostic::new(expr.span, format!("type incompatible: attendu {}, trouve {}", self.tables.type_name(expected), self.tables.type_name(place.ty))));
@@ -718,6 +744,13 @@ impl Checker<'_> {
             E::Int(n) => (t::ExprKind::Int(*n), Type::Int),
             E::Boolean(b) => (t::ExprKind::Boolean(*b), Type::Boolean),
             E::String(s) => (t::ExprKind::String(s.clone()), Type::String),
+            E::Borrow { expr: inner, mutable } => {
+                let place = self.place(inner, false)?;
+                let class = place.ty.object_class()
+                    .ok_or_else(|| Diagnostic::new(expr.span, "[E3004] borrow requires a named nominal value"))?;
+                let value = self.expected_expression(Type::Borrow { class, mutable: *mutable }, inner)?;
+                (value.kind, value.ty)
+            }
             E::Var(_) | E::This | E::Field { .. } => {
                 let place = self.place(expr, false)?;
                 let ty = place.ty;

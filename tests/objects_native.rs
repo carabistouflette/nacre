@@ -29,6 +29,7 @@ case!(object_replacement, "class C { int n; C(int n) { this.n = n; } } void main
 case!(identity_return, "class C { int n = 9; } C identity(C c) { return c; } void main() { C c = new C(); c = identity(c); println(c.n); }", "9\n", 1);
 case!(return_from_inner_block, "class C { int n = 7; } C make() { C spare = new C(); { C result = new C(); return result; } } void main() { C c = make(); println(c.n); }", "7\n", 2);
 case!(constructor_consumes_object, "class B { int n = 3; } class A { B b; A(B b) { this.b = b; } } void main() { B b = new B(); A a = new A(b); println(a.b.n); }", "3\n", 2);
+case!(constructor_owned_field_replacement, "class B { int n; B(int n) { this.n = n; } } class A { B b; A() { b = new B(1); b = new B(2); } } void main() { A a = new A(); println(a.b.n); }", "2\n", 3);
 case!(nested_composition, "class C { int n = 8; } class B { C c = new C(); } class A { B b = new B(); } void main() { A a = new A(); println(a.b.c.n); }", "8\n", 3);
 case!(owned_field_mutation, "class B { int n = 1; void inc() { n = n + 1; } } class A { B b = new B(); void inc() { b.inc(); } } void main() { A a = new A(); a.inc(); println(a.b.n); }", "2\n", 2);
 case!(read_field_before_rhs_mutation, "class C { int n = 1; int inc() { n = n + 1; return n; } } void main() { C c = new C(); println(c.n + c.inc()); println(c.n); }", "3\n2\n", 1);

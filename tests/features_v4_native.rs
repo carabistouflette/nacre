@@ -583,3 +583,14 @@ fn generic_unused_type_parameter() {
     assert_eq!(result.stdout, "7\n".as_bytes());
     assert_eq!(result.stderr, "NACRE_MEMORY allocations=1 frees=1 live=0\n".as_bytes());
 }
+
+#[test]
+fn interface_field_replacement() {
+    let source = "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } class Owner{I i=new C();}void main(){Owner o=new Owner();o.i=new D();println(o.i.get());}";
+    let c = compile_to_c(source).unwrap_or_else(|e| panic!("{}", e.render("case.ncr", source)));
+    let program = native::compile_c_with_flags(&c, &["-DNACRE_MEMORY_STATS"]).unwrap();
+    let result = program.output().unwrap();
+    assert!(result.status.success(), "{}", String::from_utf8_lossy(&result.stderr));
+    assert_eq!(result.stdout, "10\n".as_bytes());
+    assert_eq!(result.stderr, "NACRE_MEMORY allocations=3 frees=3 live=0\n".as_bytes());
+}

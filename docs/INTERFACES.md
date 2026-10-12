@@ -51,8 +51,8 @@ un `Number` à l'exécution. `Readable other = r` déplace la valeur d'interface
 ne crée pas deux propriétaires. Le remplacement ou la fin de portée de `r` doit
 invoquer la destruction concrète, y compris ses champs possédés.
 
-Une classe possédant un champ d'interface suit les mêmes règles : champ fixé à
-l'initialisation, pas d'extraction ni de remplacement ultérieur de sa propriété.
+Owned interface fields can be replaced using typed assignment; the old concrete
+owner is destroyed exactly once. Arbitrary extraction remains unsupported.
 Les branches, boucles, sorties précoces, `move` et `drop` utilisent le même CFG que
 pour les types concrets.
 
@@ -132,5 +132,6 @@ Une spécialisation `List<Interface>` stocke les représentations d'interface
 possédées, pas un second propriétaire parallèle. `add` consomme la valeur,
 `pop`/`remove` la transfèrent à l'appelant, et `clear`, `set` ou la destruction de
 la liste utilisent la destruction dynamique de chaque élément restant.
-`get` n'existe pas pour ces éléments : les retours empruntés sont encore absents.
+Copied `get` is absent for affine interface elements; `getRef`/`getMut` instead
+return origin-tracked borrowed fat-pointer values without allocating or extracting.
 Voir [STDLIB.md](STDLIB.md).

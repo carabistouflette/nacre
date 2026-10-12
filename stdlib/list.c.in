@@ -38,6 +38,7 @@ static bool @LIST_IS_EMPTY@(ncr_obj_@ID@ *p, size_t line, size_t column) {
     (void)line; (void)column; return p->length == 0;
 }
 @GET_METHOD@
+@BORROWED_GETTERS@
 static void @LIST_SET@(ncr_obj_@ID@ *p, int32_t index, @ELEMENT@ value, size_t line, size_t column) {
     ncr_list_check_@ID@(p, index, line, column);
     @DROP_AT_INDEX@

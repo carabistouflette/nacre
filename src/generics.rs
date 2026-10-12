@@ -151,9 +151,10 @@ impl Expander {
     fn class(&mut self, class: &mut a::Class, env: &Environment) -> Result<(), Diagnostic> {
         if let Some(a::NativeClass::List(element)) = &mut class.native {
             *element = self.ty(element, env, class.span, 0)?;
-            // Copy access cannot return an owning pointer. Borrowed element
-            // returns need a future lifetime-aware extension, not a C shortcut.
-            if !matches!(element, Type::Int | Type::Boolean | Type::String) {
+            // Primitive elements copy; nominal elements require receiver-bound loans.
+            if matches!(element, Type::Int | Type::Boolean | Type::String) {
+                class.methods.retain(|method| !matches!(method.name.as_str(), "getRef" | "getMut"));
+            } else {
                 class.methods.retain(|method| method.name != "get");
             }
         }
@@ -230,7 +231,7 @@ impl Expander {
                 self.expression(receiver, env)?;
                 for arg in args { self.expression(arg, env)?; }
             }
-            E::Unary { expr, .. } => self.expression(expr, env)?,
+            E::Unary { expr, .. } | E::Borrow { expr, .. } => self.expression(expr, env)?,
             E::Binary { left, right, .. } => { self.expression(left, env)?; self.expression(right, env)?; }
             E::Int(_) | E::Boolean(_) | E::String(_) | E::Var(_) | E::This => {}
         }

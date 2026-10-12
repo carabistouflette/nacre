@@ -115,5 +115,35 @@
       "}"
     ],
     "description": "Exhaustively consume an Option and bind its payload"
+  },
+  "Receiver-bound borrowed getter": {
+    "prefix": "getref",
+    "body": [
+      "public readonly borrow ${1:Text} ${2:getValue}() {",
+      "    return this.${3:value};",
+      "}"
+    ],
+    "description": "Return shared access tied to the receiver"
+  },
+  "Exclusive list element": {
+    "prefix": "listmut",
+    "body": [
+      "borrow mut ${1:Contact} ${2:contact} = ${3:contacts}.getMut(${4:0});"
+    ],
+    "description": "Borrow a nominal list element without extracting it"
+  },
+  "Borrowed enum match": {
+    "prefix": "bmatch",
+    "body": [
+      "match (borrow ${1:option}) {",
+      "    Some(${2:value}) {",
+      "        ${3}",
+      "    }",
+      "    None {",
+      "        $0",
+      "    }",
+      "}"
+    ],
+    "description": "Exhaustively inspect an Option without consuming it"
   }
 }

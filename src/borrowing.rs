@@ -10,7 +10,7 @@
 //! Views (classes with shared borrowed fields) are non-movable, non-exportable
 //! local objects. Their constructor records which shared arguments are retained.
 //! This deliberately restricted rule makes their lifetimes lexical and inferred.
-//! No borrowed return values, lifetime parameters, or NLL in this version.
+//! Borrowed returns are tied to the receiver; there are no lifetime parameters or NLL.
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
 
@@ -38,7 +38,7 @@ struct Loan {
     span: Span, label: String, active: bool,
 }
 #[derive(Clone, Copy)]
-struct Guard { root: Root, span: Span }
+struct Guard { root: Root, span: Span, projected: bool }
 
 struct Analyzer<'a> {
     program: &'a t::Program,
@@ -132,13 +132,17 @@ impl<'a> Analyzer<'a> {
                 .with_note(loan.span, format!("emprunt #{} `{}` commence ici", id, loan.label))
                 .with_help("placer l'emprunt dans un bloc plus court; il reste actif jusqu'a la fin de son bloc (ou de son appel pour un argument)"));
         }
-        if mode == Access::Destroy {
-            for guard in &self.guards {
-                if guard.root == origin.root {
-                    return Err(Diagnostic::new(span, format!(
-                        "[E3002] deplacement ou destruction de `{}` pendant l'evaluation d'un receveur", self.label(origin.root)))
-                        .with_note(guard.span, "le receveur doit rester vivant jusqu'a la fin de l'appel ou de l'affectation"));
-                }
+        for guard in &self.guards {
+            if guard.root != origin.root { continue; }
+            if mode == Access::Destroy {
+                return Err(Diagnostic::new(span, format!(
+                    "[E3002] deplacement ou destruction de `{}` pendant l'evaluation d'un receveur", self.label(origin.root)))
+                    .with_note(guard.span, "le receveur doit rester vivant jusqu'a la fin de l'appel ou de l'affectation"));
+            }
+            if mode == Access::Write && guard.projected {
+                return Err(Diagnostic::new(span, format!(
+                    "[E3001] exclusive access to `{}` could invalidate a stabilized field receiver", self.label(origin.root)))
+                    .with_note(guard.span, "evaluate the modifying expression before selecting the field receiver"));
             }
         }
         self.log(span, format!("{mode:?} {} via {:?}", self.label(origin.root), origin.via));
@@ -146,7 +150,9 @@ impl<'a> Analyzer<'a> {
     }
     fn borrow(&mut self, place: &Place, mutable: bool, span: Span, label: String) -> Result<Origin, Diagnostic> {
         self.projections(place, span)?;
-        let origin = self.origin(place);
+        self.loan(self.origin(place), mutable, span, label)
+    }
+    fn loan(&mut self, origin: Origin, mutable: bool, span: Span, label: String) -> Result<Origin, Diagnostic> {
         self.access(origin, if mutable { Access::Write } else { Access::Read }, span)?;
         if self.loans.len() >= MAX_LOANS {
             return Err(Diagnostic::new(span, "[E3099] limite V5 de 8192 emprunts par fonction"));
@@ -206,8 +212,8 @@ impl<'a> Analyzer<'a> {
         match stmt {
             S::Let { id, ty, value } => {
                 if let Some(value) = value {
-                    if let t::ExprKind::Borrow { place, mutable } = &value.kind {
-                        let origin = self.borrow(place, *mutable, value.span, self.function.locals[*id].name.clone())?;
+                    if ty.is_borrow() {
+                        let origin = self.reference(value, self.function.locals[*id].name.clone())?;
                         self.bindings.insert(*id, origin);
                     } else if self.is_view(*ty) {
                         let t::ExprKind::New { class, constructor, args } = &value.kind
@@ -227,7 +233,8 @@ impl<'a> Analyzer<'a> {
                     PlaceKind::Field { base, .. } => {
                         self.projections(base, value.span)?;
                         let origin = self.origin(base);
-                        self.guards.push(Guard { root: origin.root, span: value.span });
+                        self.guards.push(Guard { root: origin.root, span: value.span,
+                            projected: matches!(base.kind, PlaceKind::Field { .. }) });
                         (origin, Access::Write)
                     }
                     PlaceKind::Var(id) => (Origin { root: Root::Local(*id), via: None },
@@ -236,9 +243,9 @@ impl<'a> Analyzer<'a> {
                 };
                 let mark = self.loans.len();
                 self.expression(value)?;
+                self.guards.truncate(guards_before);
                 self.access(destination.0, destination.1, value.span)?;
                 self.end_since(mark, &HashSet::new(), "assignment completed");
-                self.guards.truncate(guards_before);
             }
             S::Expr(expr) => { self.expression(expr)?; }
             S::If { condition, then_block, else_block } => {
@@ -253,8 +260,22 @@ impl<'a> Analyzer<'a> {
                 self.block(body)?;
             }
             S::Match { value, arms } => {
-                self.expression(value)?;
+                let mark = self.loans.len();
+                let origin = if value.ty.is_borrow() {
+                    Some(self.reference(value, "borrowed match".to_owned())?)
+                } else {
+                    self.expression(value)?;
+                    None
+                };
                 for arm in arms {
+                    let arm_mark = self.loans.len();
+                    if let Some(origin) = origin {
+                        for id in &arm.bindings {
+                            if self.function.locals[*id].ty.is_borrow() {
+                                self.bindings.insert(*id, origin);
+                            }
+                        }
+                    }
                     self.block(&arm.body)?;
                     for id in arm.bindings.iter().rev() {
                         let ty = self.function.locals[*id].ty;
@@ -265,9 +286,23 @@ impl<'a> Analyzer<'a> {
                         self.bindings.remove(id);
                         self.views.remove(id);
                     }
+                    self.end_since(arm_mark, &HashSet::new(), "match arm completed");
+                }
+                self.end_since(mark, &HashSet::new(), "match completed");
+            }
+            S::Return(value) => {
+                if let Some(value) = value {
+                    if self.function.return_type.is_borrow() {
+                        let origin = self.reference(value, "receiver-bound return".to_owned())?;
+                        if origin.root != Root::This {
+                            return Err(Diagnostic::new(value.span, "[E3004] borrowed return must derive from this or a transitively owned receiver field")
+                                .with_help("do not return locals, parameters, or externally borrowed view fields"));
+                        }
+                    } else {
+                        self.expression(value)?;
+                    }
                 }
             }
-            S::Return(value) => { if let Some(value) = value { self.expression(value)?; } }
             S::Break | S::Continue => {}
             S::Block(block) => self.block(block)?,
         }
@@ -276,8 +311,8 @@ impl<'a> Analyzer<'a> {
     fn arguments(&mut self, args: &[t::Expr]) -> Result<Vec<Option<Origin>>, Diagnostic> {
         let mut origins = Vec::new();
         for (index, arg) in args.iter().enumerate() {
-            let origin = if let t::ExprKind::Borrow { place, mutable } = &arg.kind {
-                Some(self.borrow(place, *mutable, arg.span, format!("argument {}", index + 1))?)
+            let origin = if arg.ty.is_borrow() {
+                Some(self.reference(arg, format!("argument {}", index + 1))?)
             } else { self.expression(arg)?; None };
             origins.push(origin);
         }
@@ -302,7 +337,61 @@ impl<'a> Analyzer<'a> {
         self.end_since(mark, &keep, "constructor completed");
         Ok(fields)
     }
+    fn reference(&mut self, expr: &t::Expr, label: String) -> Result<Origin, Diagnostic> {
+        use t::ExprKind as E;
+        let Type::Borrow { mutable, .. } = expr.ty else {
+            unreachable!("typed borrowed expression");
+        };
+        match &expr.kind {
+            E::Borrow { place, mutable: requested } => {
+                let origin = self.borrow(place, *requested, expr.span, label)?;
+                // A newly created exclusive capability may be downgraded to shared.
+                self.loans[origin.via.expect("new loan")].mutable = mutable;
+                Ok(origin)
+            }
+            E::Read(place) => self.borrow(place, mutable, expr.span, label),
+            E::Upcast { value, .. } => self.reference(value, label),
+            E::Call { .. } => Ok(self.call(expr, Some(label))?.expect("borrowed method has receiver")),
+            _ => unreachable!("borrowed values are places, upcasts, or receiver calls"),
+        }
+    }
+    fn call(&mut self, expr: &t::Expr, label: Option<String>) -> Result<Option<Origin>, Diagnostic> {
+        let t::ExprKind::Call { target, receiver, args } = &expr.kind else {
+            unreachable!("call expression");
+        };
+        let mark = self.loans.len();
+        let guards_before = self.guards.len();
+        let receiver_origin = if let Some(place) = receiver {
+            self.projections(place, expr.span)?;
+            let origin = self.origin(place);
+            self.guards.push(Guard { root: origin.root, span: expr.span,
+                projected: matches!(place.kind, PlaceKind::Field { .. }) });
+            self.log(expr.span, format!("reserve receiver {}", self.label(origin.root)));
+            Some(origin)
+        } else { None };
+        self.arguments(args)?;
+        self.guards.truncate(guards_before);
+        if let Some(origin) = receiver_origin {
+            let CallTarget::Function(id) = target else { unreachable!("println has no receiver") };
+            // Arguments finish before the outer receiver capability activates.
+            let mode = if self.program.functions[*id].readonly { Access::Read } else { Access::Write };
+            self.access(origin, mode, expr.span)?;
+            self.log(expr.span, format!("activate receiver for fn#{id}"));
+        }
+        self.end_since(mark, &HashSet::new(), "call completed");
+        if let Type::Borrow { mutable, .. } = expr.ty {
+            let origin = receiver_origin.expect("borrowed returns require an instance receiver");
+            return self.loan(origin, mutable, expr.span, label.unwrap_or_else(|| "returned borrow".to_owned())).map(Some);
+        }
+        Ok(None)
+    }
     fn expression(&mut self, expr: &t::Expr) -> Result<(), Diagnostic> {
+        if expr.ty.is_borrow() {
+            let mark = self.loans.len();
+            self.reference(expr, "temporary borrowed expression".to_owned())?;
+            self.end_since(mark, &HashSet::new(), "borrowed expression discarded");
+            return Ok(());
+        }
         use t::ExprKind as E;
         match &expr.kind {
             E::Int(_) | E::Boolean(_) | E::String(_) => {}
@@ -325,28 +414,7 @@ impl<'a> Analyzer<'a> {
                 self.arguments(args)?;
                 self.end_since(mark, &HashSet::new(), "enum construction completed");
             }
-            E::Call { target, receiver, args } => {
-                let mark = self.loans.len();
-                let guards_before = self.guards.len();
-                let receiver_origin = if let Some(place) = receiver {
-                    self.projections(place, expr.span)?;
-                    let origin = self.origin(place);
-                    self.guards.push(Guard { root: origin.root, span: expr.span });
-                    self.log(expr.span, format!("reserve receiver {}", self.label(origin.root)));
-                    Some(origin)
-                } else { None };
-                self.arguments(args)?;
-                if let Some(origin) = receiver_origin {
-                    let CallTarget::Function(id) = target else { unreachable!("println has no receiver") };
-                    // Two phases preserve c.add(c.get()): argument calls finish
-                    // before the outer receiver's exclusive access is activated.
-                    let mode = if self.program.functions[*id].readonly { Access::Read } else { Access::Write };
-                    self.access(origin, mode, expr.span)?;
-                    self.log(expr.span, format!("activate receiver for fn#{id}"));
-                }
-                self.end_since(mark, &HashSet::new(), "call completed");
-                self.guards.truncate(guards_before);
-            }
+            E::Call { .. } => { self.call(expr, None)?; }
             E::Unary { expr, .. } => self.expression(expr)?,
             E::Binary { left, right, .. } => {
                 self.expression(left)?;
@@ -366,7 +434,7 @@ pub fn check(program: &t::Program) -> Result<(), Diagnostic> {
     Ok(())
 }
 pub fn dump(program: &t::Program, source: &str) -> Result<String, Diagnostic> {
-    let mut out = String::from("Nacre V6 — lexical borrow analysis\nLoan lifetimes are lexical; root = owner and its owned fields.\nReceiver reservations precede arguments; activation follows them.\n\n");
+    let mut out = String::from("Nacre V7 — lexical borrow analysis\nLoan lifetimes are lexical; root = owner and its owned fields.\nReceiver reservations precede arguments; activation follows them.\nReturned borrows retain receiver-derived loans.\n\n");
     for function in &program.functions {
         if function.native.is_some() { continue; }
         let mut analyzer = Analyzer::new(program, function, Some(source));

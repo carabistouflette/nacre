@@ -1,0 +1,19 @@
+class Entry {
+    Text value;
+    Entry(Text value) { this.value = value; }
+    readonly borrow Text view() { return this.value; }
+    void replace(Text value) { this.value = value; }
+}
+void main() {
+    List<Entry> items = new List<Entry>();
+    items.add(new Entry(new Text("é")));
+    {
+        borrow Entry entry = items.getRef(0);
+        borrow Text value = entry.view();
+        println(value.byteLength());
+    }
+    { borrow mut Entry entry = items.getMut(0); entry.replace(new Text("new")); }
+    Option<Text> option = new Option<Text>.Some(new Text("old"));
+    match (borrow mut option) { None { } Some(value) { value.append("!"); } }
+    match (borrow option) { None { } Some(value) { println(value.byteLength()); } }
+}

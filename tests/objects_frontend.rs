@@ -88,8 +88,6 @@ rejects!(move_outer_in_loop_condition, "class C {} boolean f(C c) { return false
 accepts!(move_outer_loop_local_then_inner_break_v2, "class C {} void f(C c) {} void main() { while (true) { C c = new C(); while (true) { f(c); break; } break; } }");
 rejects!(return_this, "class C { C f() { return this; } } void main() {}", "deplacement de this");
 rejects!(move_out_of_field, "class B {} class A { B b = new B(); } void main() { A a = new A(); B b = a.b; }", "champ objet interdit");
-rejects!(replace_object_field, "class B {} class A { B b = new B(); } void main() { A a = new A(); a.b = new B(); }", "remplacement");
-rejects!(double_object_field_initialization, "class B {} class A { B b; A() { b = new B(); b = new B(); } } void main() {}", "remplacement");
 rejects!(move_ancestor_of_receiver, "class B { int f(int n) { return n; } } class A { B b = new B(); } int consume(A a) { return 1; } void main() { A a = new A(); println(a.b.f(consume(a))); }", "emprunte");
 rejects!(move_assignment_receiver, "class A { int n = 1; } int consume(A a) { return 1; } void main() { A a = new A(); a.n = consume(a); }", "emprunte");
 rejects!(temporary_receiver, "class C { int f() { return 1; } } void main() { println(new C().f()); }", "temporaire");

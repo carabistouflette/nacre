@@ -393,6 +393,13 @@ impl Parser {
     }
     fn unary(&mut self) -> Result<Expr, Diagnostic> {
         self.nested(|p| {
+            if p.at(&K::Borrow) {
+                let start = p.bump().span;
+                let mutable = p.eat(&K::Mut);
+                let expr = p.unary()?;
+                let span = start.join(expr.span);
+                return make_expr(ExprKind::Borrow { expr: Box::new(expr), mutable }, span);
+            }
             let op = match p.current().kind {
                 K::Minus => Some(UnaryOp::Neg), K::Bang => Some(UnaryOp::Not),
                 K::Plus => Some(UnaryOp::Plus), _ => None,
@@ -498,7 +505,7 @@ fn binary_op(kind: &K) -> Option<(BinaryOp, u8)> {
 fn make_expr(kind: ExprKind, span: Span) -> Result<Expr, Diagnostic> {
     let depth = 1 + match &kind {
         ExprKind::Binary { left, right, .. } => left.depth.max(right.depth),
-        ExprKind::Unary { expr, .. } => expr.depth,
+        ExprKind::Unary { expr, .. } | ExprKind::Borrow { expr, .. } => expr.depth,
         ExprKind::Call { args, .. } | ExprKind::New { args, .. } | ExprKind::Variant { args, .. } =>
             args.iter().map(|arg| arg.depth).max().unwrap_or(0),
         ExprKind::MethodCall { receiver, args, .. } => receiver.depth.max(args.iter().map(|arg| arg.depth).max().unwrap_or(0)),

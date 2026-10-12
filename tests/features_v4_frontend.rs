@@ -558,10 +558,9 @@ fn interface_view_cannot_be_erased() {
 }
 
 #[test]
-fn interface_field_cannot_be_replaced() {
-    let source = "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } class Owner{I i=new C();}void main(){Owner o=new Owner();o.i=new D();}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("remplacement"), "{}", e.render("case.ncr", source));
+fn interface_field_replacement() {
+    let source = "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } class Owner{I i=new C();}void main(){Owner o=new Owner();o.i=new D();println(o.i.get());}";
+    validate(source).unwrap_or_else(|e| panic!("{}", e.render("case.ncr", source)));
 }
 
 #[test]

@@ -1,49 +1,56 @@
-# Bibliothèque standard V6
+# Standard Library V7
 
-`List`, `Text`, `Option`, `Result`, `Console`, `Files` et `Args` sont réservés et
-préinjectés, sans imports. Les deux types somme utilisent la représentation
-ordinaire des enums ; les méthodes natives appartiennent à la base de confiance.
-Les spécialisations sont émises à la demande, avec toutes leurs signatures.
-La portée de la validation réelle est décrite dans [VALIDATION.md](VALIDATION.md).
+`List`, `Text`, `Option`, `Result`, `Console`, `Files`, and `Args` are reserved
+and pre-injected without imports. The two sum types use the ordinary enum
+representation; native methods belong to the trusted base. Specializations are
+emitted on demand with all their signatures. The scope of real validation is
+described in [VALIDATION.md](VALIDATION.md).
 
 ## List<T>
 
-`new List<T>()` crée une liste vide. `T` peut être `int`, `boolean`, une `String`
-statique, une classe/interface possédée, une enum, `Text` ou une autre liste.
-Les vues à champs empruntés et les emprunts eux-mêmes sont interdits, même imbriqués.
-Les listes sont invariantes : `List<Dog>` ne devient pas `List<Animal>`.
-En revanche, `List<Animal>.add(new Dog())` accepte une conversion vers une
-interface `Animal` explicitement implémentée par `Dog`.
+`new List<T>()` creates an empty list. `T` may be `int`, `boolean`, a static
+`String`, an owned class or interface, an enum, `Text`, or another list.
+Borrow-containing views and borrows are not valid list elements, including when
+nested. Lists are invariant: `List<Dog>` is not a `List<Animal>`. However,
+`List<Animal>.add(new Dog())` accepts an upcast to an interface explicitly
+implemented by `Dog`.
 
-| Méthode | Contrat |
+| Method | Contract |
 |---|---|
-| `void add(T value)` | Copie une primitive ; consomme un objet propriétaire. Agrandit le buffer au besoin. |
-| `readonly int size()` | Nombre d’éléments initialisés. |
-| `readonly int capacity()` | Capacité actuelle du buffer. |
-| `readonly boolean isEmpty()` | `size() == 0`. |
-| `readonly T get(int index)` | Disponible seulement pour les types copiables ; vérifie les limites. |
-| `void set(int index, T value)` | Remplace un élément ; détruit l’ancien si propriétaire. |
-| `T pop()` | Retire le dernier élément et transfère sa propriété. Fatal si vide. |
-| `T remove(int index)` | Retire un élément, maintient l’ordre, transfère sa propriété. |
-| `void clear()` | Détruit les éléments restants, conserve le buffer. |
-| `void reserve(int capacity)` | Assure au moins cette capacité ; ne change pas la taille. Valeur négative fatale. |
+| `void add(T value)` | Copies a primitive or consumes an owned object; grows the buffer as needed. |
+| `readonly int size()` | Number of initialized elements. |
+| `readonly int capacity()` | Current buffer capacity. |
+| `readonly boolean isEmpty()` | Whether `size() == 0`. |
+| `readonly T get(int index)` | Copies an element of `int`, `boolean`, or `String`; checks bounds. |
+| `readonly borrow T getRef(int index)` | Returns a shared borrow of an affine nominal element; checks bounds and does not allocate or transfer ownership. |
+| `borrow mut T getMut(int index)` | Returns an exclusive borrow of an affine nominal element; checks bounds and does not allocate or transfer ownership. |
+| `void set(int index, T value)` | Replaces an element and destroys the old owned value; checks bounds. |
+| `T pop()` | Removes and transfers ownership of the last element; fatal if the list is empty. |
+| `T remove(int index)` | Removes an element, preserves order, and transfers ownership; checks bounds. |
+| `void clear()` | Destroys remaining elements and retains the buffer. |
+| `void reserve(int capacity)` | Ensures at least this capacity without changing the size; a negative value is fatal. |
 
-Croissance géométrique, vérifications d’overflow avant multiplication de tailles.
-Une réallocation déplace les représentations des valeurs sans les détruire ;
-seule la plage `[0, size())` possède les éléments. `remove` décale la suite et
-invalide l’ancienne dernière case pour ne pas la détruire deux fois.
-La destruction d’une liste libère ses éléments dans l’ordre inverse, son buffer
-puis l’objet liste. Un élément extrait n’est plus libéré avec la liste.
+The buffer grows geometrically, with overflow checks before size multiplication.
+Reallocation relocates stored representations without destroying them; only
+`[0, size())` owns elements. `remove` shifts subsequent elements and clears the
+old final slot to prevent a second destruction. List destruction releases its
+elements in reverse order, then its buffer and the list object. Extracted
+elements are no longer released by the list.
 
-`get` est volontairement absent pour les objets : une copie de pointeur casserait
-la propriété unique. Aucun emprunt vers un élément ne peut actuellement s’échapper.
-Les futurs itérateurs et références d’éléments devront empêcher `add`, `reserve`,
-`clear`, `remove`, `set` et la destruction pendant leur durée de vie.
+`getRef` and `getMut` borrow from the entire list, not just the selected index.
+Their returned reference is scoped lexically. While either borrow is active,
+`add`, `set`, `pop`, `remove`, `clear`, `reserve`, moving the list, or destroying
+it is forbidden; these operations could replace an element or relocate storage.
+A mutable element borrow also prevents independent reads of the list. The
+borrowed element itself may be read through `getRef` or mutated through
+`getMut`. Ordinary objects return their stored object pointer, inline enums
+return the address of their inline slot, and interfaces use their existing
+allocation-free borrowed fat-pointer representation.
 
-Les appels conservent les emprunts V3 et les réservations de receveur :
-`xs.add(xs.get(0))` pour `List<int>` évalue l’argument avant la mutation.
-Un emprunt partagé nommé interdit toute mutation du même propriétaire jusqu’à la
-fin du bloc. Le même principe interdit un déplacement pendant l’appel.
+Call arguments retain the language's receiver reservations: `xs.add(xs.get(0))`
+for `List<int>` evaluates the copied argument before mutation. A named shared
+borrow prevents mutation of the same owner until the end of its lexical scope;
+the same rule prevents moving it during that scope.
 
 ## Text
 

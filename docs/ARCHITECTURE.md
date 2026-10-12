@@ -1,4 +1,4 @@
-# Architecture Nacre V6
+# Architecture Nacre V7
 
 Cette note décrit l'implémentation source livrée. Le périmètre de validation
 du compilateur Rust et de ses programmes générés est documenté dans
@@ -88,11 +88,11 @@ l'appel, sauf capture par une vue. Les origines conservent racine et capacité
 parent pour les réemprunts. Le passage à une interface ne change pas cette origine :
 il ne permet pas d'obtenir un accès mutable concurrent à un emprunt partagé.
 
-Les signatures des méthodes virtuelles exposent les mêmes contrats que les
-méthodes concrètes ; le corps de chaque implémentation est vérifié séparément.
-Le borrow checker n'a pas à choisir une implémentation dynamique pour déterminer
-si un argument est consommé ou emprunté. Les restrictions V3 sur les vues,
-retours empruntés et champs possédés restent applicables.
+Virtual method signatures expose the same contracts as concrete methods; every
+implementation body is checked separately. Borrow analysis need not select a
+dynamic implementation to determine whether an argument owns or borrows.
+V7 records borrowed returns in those signatures and proves their receiver origin;
+caller-side result loans survive call cleanup. Local views remain non-exportable.
 
 ## Représentation C
 
@@ -134,8 +134,9 @@ variables de branche et invalide son temporaire ; le CFG et les nettoyages
 lexicaux couvrent retours et sorties de boucle. Il est émis comme une chaîne
 `if`/`else if`, pour qu’un `break` continue de viser la boucle source.
 
-Les références d’enums et les payloads contenant des vues sont interdits en V6.
-Ce n’est pas une implémentation de patterns empruntés ou de déplacements partiels.
+V7 enum references point to inline storage. Borrowed matching preserves the tag
+and binds primitive copies or receiver/scrutinee-derived nominal references;
+payloads containing borrowed fields/local views remain forbidden.
 
 
 Les fonctions de dispatch virtuel transmettent les paramètres à l'implémentation
@@ -156,10 +157,9 @@ nettoyage après une erreur fatale.
 mesuré. Un niveau d'optimisation plus élevé n'est pas présenté comme une garantie
 de code plus rapide.
 
-`emit-llvm` appelle Clang sur ce même C avec `-S -emit-llvm` pour récupérer l'IR
-textuelle. **Il n’existe pas de backend LLVM direct écrit en Rust dans cette V6.**
-La commande nécessite `clang`, ou `NACRE_CLANG`. `NACRE_CC`/`CC` sélectionne séparément
-le compilateur C de `run` et `build`.
+`emit-llvm` invokes Clang with `-S -emit-llvm` on the same generated C. V7 has no
+direct LLVM backend written in Rust. `NACRE_CLANG` selects that Clang executable;
+`NACRE_CC`/`CC` separately select the compiler used by `run` and `build`.
 
 ## Inspection et tests
 
@@ -179,8 +179,9 @@ ne sont pas un substitut à cette validation.
 `ast::Class.native` n'est jamais produit par le parser. Le prelude interne
 associe ce marqueur à `List<T>` et `Text`. La spécialisation remplace le type
 d'élément puis le checker résout `ir::NativeClass` et les `NativeMethod`.
-Les classes natives sans usage ne sont pas matérialisées. Un getter qui copierait
-un propriétaire est retiré avant le typage ; les vues locales sont rejetées.
+Unused native classes are not materialized. Copied `get` is removed for affine
+elements; `getRef`/`getMut` are removed for primitive elements before typing.
+Borrowed accessors derive their checked object/enum/interface ABI from typed IR.
 
 Les fonctions natives reçoivent des signatures typées normales, mais leurs corps
 IR vides sont explicitement exemptés d'analyse. `ownership.rs` et `borrowing.rs`
@@ -223,7 +224,7 @@ seulement un squelette local neuf. `--sanitize` transmet les options de détecti
 mémoire au compilateur C. Le pipeline natif et `doctor` ont été exécutés sous
 Linux avec GCC et Clang ; voir le rapport de validation.
 
-## LSP et E/S V6
+## LSP and recoverable I/O
 
 `nacre lsp` échange des messages JSON-RPC avec framing `Content-Length`.
 Il réutilise `SourceBundle::validate` et `SourceBundle::locate`, sans compilateur C,

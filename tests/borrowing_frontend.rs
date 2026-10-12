@@ -453,13 +453,6 @@ fn borrow_temporary() {
 }
 
 #[test]
-fn borrow_returned_temporary() {
-    let source = "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } C make() { return new C(); } void main() { borrow C r = make(); }";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("temporaire"), "{}", e.render("case.ncr", source));
-}
-
-#[test]
 fn borrowed_argument_temporary() {
     let source = "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void f(borrow C c) {} void main() { f(new C()); }";
     let e = validate(source).expect_err("invalid source accepted");

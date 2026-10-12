@@ -18,6 +18,8 @@ class List<T> {
     public readonly int capacity() {}
     public readonly boolean isEmpty() {}
     public readonly T get(int index) {}
+    public readonly borrow T getRef(int index) {}
+    public borrow mut T getMut(int index) {}
     public void set(int index, T value) {}
     public T pop() {}
     public T remove(int index) {}

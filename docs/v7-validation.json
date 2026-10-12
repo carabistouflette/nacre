@@ -1,0 +1,108 @@
+{
+  "release": {
+    "name": "nacre",
+    "version": "0.8.0"
+  },
+  "status": "local_verification_passed",
+  "compiler_suite": {
+    "passed": 962,
+    "suites": 27,
+    "ignored": 2,
+    "features": [
+      "fuzzing"
+    ],
+    "command": "cargo test --offline --locked --features fuzzing --no-fail-fast",
+    "log": "artifact://545"
+  },
+  "clippy": "all targets, fuzzing feature, -D warnings passed",
+  "msrv": "Rust 1.74.0 all-target locked offline check passed",
+  "native": {
+    "status": "passed",
+    "successful_runs": 414,
+    "expected_fatal_runs": 14,
+    "invalid_source_rejections": 420,
+    "llvm_round_trips": 11,
+    "all_reported_live_zero": true
+  },
+  "nominal_abi_smoke": [
+    {
+      "compiler": "gcc",
+      "stdout": "8\n2\n3\n5\n",
+      "stderr": "NACRE_MEMORY allocations=12 frees=12 live=0\n",
+      "sanitizers": true
+    },
+    {
+      "compiler": "clang",
+      "stdout": "8\n2\n3\n5\n",
+      "stderr": "NACRE_MEMORY allocations=12 frees=12 live=0\n",
+      "sanitizers": true
+    }
+  ],
+  "contact_book": {
+    "gcc_clang_sanitized_runs": [
+      {
+        "compiler": "gcc",
+        "sanitizers": true,
+        "allocations": 83,
+        "frees": 83,
+        "live_at_exit": 0,
+        "stdout": "Nacre contact book. Type help for commands.\ncontact-book> Name: Phone (leave blank for none): Contact added.\ncontact-book> 1. Ada Lovelace — Ω | phone: ada@example.test\ncontact-book> Contact number: 1. Ada Lovelace — Ω | phone: ada@example.test\ncontact-book> Contact number: New name: New phone (leave blank for none): Contact updated.\ncontact-book> Name: Phone (leave blank for none): Contact added.\ncontact-book> Contact number: Contact removed.\ncontact-book> File path: Contact book saved.\ncontact-book> Contact number: Contact removed.\ncontact-book> File path: Contact book loaded.\ncontact-book> Contact number: 1. Ada Byron — Ω | phone: +44 20 7946 0958\ncontact-book> Goodbye.\n",
+        "stderr": "NACRE_MEMORY allocations=83 frees=83 live=0\n"
+      },
+      {
+        "compiler": "clang",
+        "sanitizers": true,
+        "allocations": 83,
+        "frees": 83,
+        "live_at_exit": 0,
+        "stdout": "Nacre contact book. Type help for commands.\ncontact-book> Name: Phone (leave blank for none): Contact added.\ncontact-book> 1. Ada Lovelace — Ω | phone: ada@example.test\ncontact-book> Contact number: 1. Ada Lovelace — Ω | phone: ada@example.test\ncontact-book> Contact number: New name: New phone (leave blank for none): Contact updated.\ncontact-book> Name: Phone (leave blank for none): Contact added.\ncontact-book> Contact number: Contact removed.\ncontact-book> File path: Contact book saved.\ncontact-book> Contact number: Contact removed.\ncontact-book> File path: Contact book loaded.\ncontact-book> Contact number: 1. Ada Byron — Ω | phone: +44 20 7946 0958\ncontact-book> Goodbye.\n",
+        "stderr": "NACRE_MEMORY allocations=83 frees=83 live=0\n"
+      }
+    ],
+    "malformed_load_preserves_book": {
+      "invalid_utf8_field_boundary": "passed",
+      "decimal_overflow": "passed",
+      "trailing_data": "passed",
+      "allocations": 70,
+      "frees": 70,
+      "live_at_exit": 0
+    },
+    "active_borrow_deletion_rejected": "E3001 at examples/invalid/contact_delete_during_borrow.ncr:19:23"
+  },
+  "projected_receiver_regression": {
+    "before": "Actual AddressSanitizer heap-use-after-free reproduced for parent.child.assign(parent.replaceChild())",
+    "after": "Compiler E3001 rejects ancestor exclusive access while projected receiver is stabilized",
+    "coverage": "argument call, assignment RHS, mutable argument alias rejection, and safe prior evaluation"
+  },
+  "fuzz": {
+    "frontend": {
+      "executed_units": 619701,
+      "seconds": 31,
+      "cov": 5076,
+      "features": 16998,
+      "peak_rss_mb": 408,
+      "seed_files": 4
+    },
+    "lsp_frames": {
+      "executed_units": 3222702,
+      "seconds": 31,
+      "cov": 937,
+      "features": 3888,
+      "peak_rss_mb": 395,
+      "seed_files": 8
+    },
+    "observed_crashes": 0,
+    "observed_timeouts": 0,
+    "log": "artifact://482",
+    "scope": "Real bounded compiler/frontend and framing campaigns, not a general safety proof"
+  },
+  "editor_packages": {
+    "vscode": "0.3.0",
+    "zed": "0.3.0",
+    "grammar": "0.2.0",
+    "snippets": 16,
+    "parsed_examples": 38,
+    "zed_queries": 4,
+    "locked_wasi_build": "passed"
+  }
+}

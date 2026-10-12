@@ -472,12 +472,6 @@
     "error": "temporaire"
   },
   {
-    "name": "borrow_returned_temporary",
-    "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } C make() { return new C(); } void main() { borrow C r = make(); }",
-    "valid": false,
-    "error": "temporaire"
-  },
-  {
     "name": "borrowed_argument_temporary",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void f(borrow C c) {} void main() { f(new C()); }",
     "valid": false,

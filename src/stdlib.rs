@@ -40,6 +40,8 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
         (C::List(_), "capacity") => M::ListCapacity,
         (C::List(_), "isEmpty") => M::ListIsEmpty,
         (C::List(_), "get") => M::ListGet,
+        (C::List(_), "getRef") => M::ListGetRef,
+        (C::List(_), "getMut") => M::ListGetMut,
         (C::List(_), "set") => M::ListSet,
         (C::List(_), "pop") => M::ListPop,
         (C::List(_), "remove") => M::ListRemove,

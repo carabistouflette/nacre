@@ -1,9 +1,9 @@
 [package]
 name = "nacre"
-version = "0.7.1"
+version = "0.8.0"
 edition = "2021"
 rust-version = "1.74"
-description = "Nacre V6 compiler: ownership, lexical borrowing, and C11/native output"
+description = "Nacre V7 compiler: ownership, receiver-bound lexical borrowing, and C11/native output"
 license = "MIT"
 
 [[bin]]

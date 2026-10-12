@@ -14,10 +14,10 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
-LIST = 'NEW ADD SIZE CAPACITY IS_EMPTY GET SET POP REMOVE CLEAR RESERVE'.split()
+LIST = 'NEW ADD SIZE CAPACITY IS_EMPTY GET GET_REF GET_MUT SET POP REMOVE CLEAR RESERVE'.split()
 TEXT = 'NEW APPEND APPEND_INT APPEND_BOOLEAN APPEND_TEXT BYTE_LENGTH BYTE_AT IS_EMPTY CLEAR PRINT CLONE EQUALS EQUALS_STRING PARSE_INT SLICE_BYTES'.split()
 
-def list_code(cid, element, zero, drop='', copy=True):
+def list_code(cid, element, zero, drop='', copy=True, borrow_type='', borrow_element=''):
     fields = f'typedef struct ncr_obj_{cid} {{ {element} *items; int32_t length; int32_t capacity; }} ncr_obj_{cid};\n'
     destructor = f'''static void ncr_drop_{cid}(ncr_obj_{cid} *p) {{
         if (p == NULL) return;
@@ -26,6 +26,15 @@ def list_code(cid, element, zero, drop='', copy=True):
     }}\n'''
     body = (ROOT/'stdlib/list.c.in').read_text()
     body = body.replace('@GET_METHOD@', (ROOT/'stdlib/list_get.c.in').read_text() if copy else '')
+    borrowed = ''
+    if borrow_type:
+        helper = (ROOT/'stdlib/list_get_borrowed.c.in').read_text()
+        for name in ('GET_REF', 'GET_MUT'):
+            method = helper.replace('@RETURN_TYPE@', borrow_type)
+            method = method.replace('@INDEX_TYPE@', 'int32_t')
+            method = method.replace('@LIST_METHOD@', f'@LIST_{name}@')
+            borrowed += method.replace('@BORROWED_ELEMENT@', borrow_element)
+    body = body.replace('@BORROWED_GETTERS@', borrowed)
     replacements = {'@ID@': str(cid), '@ELEMENT@': element, '@ZERO@': zero,
                     '@DROP_AT_INDEX@': drop.replace('VALUE', 'p->items[index]')}
     replacements.update({f'@LIST_{x}@':f'list{cid}_{x.lower()}' for x in LIST})
@@ -79,14 +88,17 @@ static size_t created_objects = 0, destroyed_objects = 0;
 typedef struct { int32_t n; } Item;
 static Item *item_new(int32_t n) { Item *p=ncr_allocate(sizeof(Item),1,1);p->n=n;++created_objects;return p; }
 static void item_drop(Item *p) { if(p){++destroyed_objects;ncr_deallocate(p);} }
+typedef struct { int32_t tag; union { struct { Item *f0; } v0; struct { int32_t f0; } v1; } data; } Sum;
+static void sum_drop(Sum value) { if(value.tag==0) item_drop(value.data.v0.f0); }
 typedef struct { void *data; void (*destroy)(void *); } Iface;
 static void erase_drop(void *p) { item_drop((Item *)p); }
 static void iface_drop(Iface p) { if(p.data) p.destroy(p.data); }
 ''' + list_code(0,'int32_t','0') + list_code(1,'bool','false') + list_code(2,'ncr_string','(ncr_string){NULL,0}') \
-    +list_code(3,'Item *','NULL','item_drop(VALUE);',False) \
-    +list_code(4,'Iface','(Iface){NULL,NULL}','iface_drop(VALUE);',False) \
-    +text_code(10)+list_code(11,'ncr_obj_10 *','NULL','ncr_drop_10(VALUE);',False) \
-    +list_code(12,'ncr_obj_0 *','NULL','ncr_drop_0(VALUE);',False)
+    +list_code(3,'Item *','NULL','item_drop(VALUE);',False,'Item *','p->items[index]') \
+    +list_code(4,'Iface','(Iface){NULL,NULL}','iface_drop(VALUE);',False,'Iface','p->items[index]') \
+    +list_code(5,'Sum','(Sum){.tag=-1}','sum_drop(VALUE);',False,'Sum *','&p->items[index]') \
+    +text_code(10)+list_code(11,'ncr_obj_10 *','NULL','ncr_drop_10(VALUE);',False,'ncr_obj_10 *','p->items[index]') \
+    +list_code(12,'ncr_obj_0 *','NULL','ncr_drop_0(VALUE);',False,'ncr_obj_0 *','p->items[index]')
 
 POSITIVE = r'''
 static uint32_t seed=71;

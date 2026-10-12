@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use nacre::{compile_to_c, native};
 use nacre::project::{self, SourceBundle};
 
-const HELP: &str = "Nacre V6 — compilateur experimental ecrit en Rust
+const HELP: &str = "Nacre V7 — experimental native compiler written in Rust
 
 Utilisation:
   nacre check  source.ncr ... | dossier

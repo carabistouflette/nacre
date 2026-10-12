@@ -1,0 +1,22 @@
+class Contact {
+    private Text name;
+
+    public Contact(Text name) {
+        this.name = name;
+    }
+
+    public readonly borrow Text getName() {
+        return this.name;
+    }
+}
+
+void main() {
+    List<Contact> contacts = new List<Contact>();
+    contacts.add(new Contact(new Text("Ada Lovelace")));
+
+    borrow Contact selected = contacts.getRef(0);
+    // Rejected: remove invalidates the entire list root while selected still borrows it.
+    Contact removed = contacts.remove(0);
+    borrow Text name = selected.getName();
+    println(name.byteLength());
+}
