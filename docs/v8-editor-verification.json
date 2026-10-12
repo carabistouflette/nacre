@@ -20,5 +20,6 @@
     "host_notes": ["Mesa llvmpipe/software rendering used under Xvfb", "Private desktop portal/accessibility/media-service warnings did not prevent acceptance", "Initial isolated HOME lacked a Rustup default; dev-extension installation succeeded using the host toolchain"]
   },
   "visual_inspection": "Parent inspected actual VS Code syntax and expanded snippet screenshots, and actual Zed syntax and E3001 screenshots",
+  "cleanup": "Owned desktop apps, language servers, Xvfb/private desktop services, downloads, profiles, workspaces and caches were stopped or removed; curated proof alone remains outside Git",
   "publication": "Curated UI proof is retained outside Git; this report contains no workstation paths, process IDs or private evidence locations"
 }

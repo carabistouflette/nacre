@@ -83,11 +83,17 @@ Portable acceptance evidence is in
 actual screenshots. Xvfb/software rendering and desktop-service setup warnings
 are reported separately, not hidden or treated as compiler/editor failures.
 
-## Remote CI baseline
+## Remote CI
 
-The full V7 cleanup workflow passed before V8 implementation:
+The complete V8 workflow passed on source commit `96d5030`:
+[run 38303938675](https://github.com/carabistouflette/nacre/actions/runs/38303938675).
+All six jobs succeeded: Rust 1.74.0/stable × GCC/Clang, editor packaging/WASI,
+and real nightly fuzzing. The Clang jobs explicitly execute the ignored LLVM
+tests. Non-fatal runner notices concern Node action-runtime deprecation and the
+upcoming `ubuntu-latest` image migration, not test failures.
+
+The earlier V7 cleanup baseline also passed:
 [run 38295939217](https://github.com/carabistouflette/nacre/actions/runs/38295939217).
-That run is baseline evidence only, not a V8 verification claim.
 
 ## Boundaries and publication
 

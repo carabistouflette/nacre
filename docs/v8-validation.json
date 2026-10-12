@@ -1,6 +1,12 @@
 {
   "release": "Nacre 0.9.0",
   "status": "passed",
+  "remote_ci": {
+    "source_commit": "96d5030a869dba42789777cdd02f440769ae8bec",
+    "run_url": "https://github.com/carabistouflette/nacre/actions/runs/38303938675",
+    "status": "passed",
+    "jobs": ["Rust 1.74.0 GCC", "Rust 1.74.0 Clang", "Rust stable GCC", "Rust stable Clang", "editor packaging and WASI", "real nightly fuzzing"]
+  },
   "scope": "Observed local compiler, generated native programs, trusted-template fixtures, fuzzing, grammar and packaging; desktop acceptance is recorded separately",
   "compiler_suite": {
     "passed": 973,
