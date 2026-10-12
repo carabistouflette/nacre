@@ -1,0 +1,64 @@
+{
+  "result": "Final NACRE UI acceptance was exercised in the actual portable VS Code and Zed desktop apps, using isolated profiles and the .ncr workspace at /tmp/jvn-editors.BbV82z/nacre/workspace.",
+  "environment": {
+    "vscode": "Portable VS Code 1.141.0 (the portable editor version recorded in the prior handoff)",
+    "zed": "Portable Zed 1.23.2+stable.369.c0199504b9cce79bc27524950022ed701bc3ebd5",
+    "compiler": "/home/arobin/Downloads/javanative-v5/target/debug/nacre",
+    "workspace_files": [
+      "Main.ncr",
+      "Calculator.ncr",
+      "nacre.json"
+    ],
+    "vscode_version_provenance": "Portable version reported by the editor verification worker from its prior installation record; parent directly inspected the Nacre UI screenshots, not the removed editor executable."
+  },
+  "vscode": {
+    "vsix": "/home/arobin/Downloads/javanative-v5/editors/vscode/nacre-0.2.0.vsix",
+    "initial_bad_setting": "/tmp/jvn-editors.BbV82z/nacre/missing/nacre",
+    "initial_failure": "Actual UI notification from Nacre: Language Server client could not create connection; extension-host output: spawn /tmp/jvn-editors.BbV82z/nacre/missing/nacre ENOENT.",
+    "corrected_setting": "/home/arobin/Downloads/javanative-v5/target/debug/nacre",
+    "recovery_command": "Nacre: Restart Language Server",
+    "recovery_process_pid": 647447,
+    "later_restart_process_pid": 684607,
+    "restart_observation": "After the second restart, pgrep showed only the new NACRE process (684607); the previous process (647447) was gone.",
+    "diagnostics": "The actual Problems panel showed `type incompatible: attendu int, trouve String` for an invalid integer assignment, then `type incompatible: attendu boolean, trouve int` after fixing the integer. Fixing the boolean produced `No problems have been detected in the workspace.` Parent inspected the corresponding screenshots.",
+    "unsaved_overlay": "Renaming Calculator.answer to answerChanged in the unsaved Calculator.ncr tab produced the actual Problems entry `methode 'answer' inconnue` in Main.ncr; restoring the symbol cleared it.",
+    "reopen": "Saved both buffers, closed Main.ncr, reopened it from Explorer; no Problems remained.",
+    "failure_log": "/tmp/jvn-editors.BbV82z/nacre/vscode/profile/logs/20261012T190003/window1/exthost/output_logging_20261012T190004/1-Nacre Language Server.log"
+  },
+  "zed": {
+    "dev_extension": "/home/arobin/Downloads/javanative-v5/editors/zed/dist/nacre",
+    "settings": "lsp.nacre.binary.path = /home/arobin/Downloads/javanative-v5/target/debug/nacre; arguments = [\"lsp\"]",
+    "launch_log": "2026-10-12T19:08:19+02:00 INFO [lsp] starting language server process. binary path: \"/home/arobin/Downloads/javanative-v5/target/debug/nacre\", working directory: \"/tmp/jvn-editors.BbV82z/nacre/workspace\", args: [\"lsp\"]",
+    "restart_log": "2026-10-12T19:13:10+02:00 INFO [project::lsp_store] stopping language server nacre; followed by a new nacre launch with the same absolute path and args [\"lsp\"].",
+    "initial_process_pid": 693161,
+    "restarted_process_pid": 762871,
+    "diagnostics": "In the real Zed editor the invalid integer and invalid boolean each showed an inline red diagnostic; each fix cleared the error. An unsaved Calculator.answer -> answerChanged rename produced a red diagnostic on Main.ncr, and restoring answer cleared the Problems indicator.",
+    "reopen": "After saving both valid buffers, closed Main.ncr and reopened it from the project tree; Zed reported No problems."
+  },
+  "screenshots": [
+    "/tmp/jvn-editors.BbV82z/evidence/nacre-vscode-failed-start.png",
+    "/tmp/jvn-editors.BbV82z/evidence/nacre-vscode-restarted.png",
+    "/tmp/jvn-editors.BbV82z/evidence/nacre-vscode-problems.png",
+    "/tmp/jvn-editors.BbV82z/evidence/nacre-vscode-bool-invalid.png",
+    "/tmp/jvn-editors.BbV82z/evidence/nacre-vscode-fixed.png",
+    "/tmp/jvn-editors.BbV82z/evidence/nacre-vscode-unsaved-symbol.png",
+    "/tmp/jvn-editors.BbV82z/evidence/nacre-vscode-symbol-restored.png",
+    "/tmp/jvn-editors.BbV82z/evidence/nacre-vscode-restarted-again.png",
+    "/tmp/jvn-editors.BbV82z/evidence/nacre-vscode-reopened.png",
+    "/tmp/jvn-editors.BbV82z/evidence/nacre-zed-extension-installed.png",
+    "/tmp/jvn-editors.BbV82z/evidence/nacre-zed-main.png",
+    "/tmp/jvn-editors.BbV82z/evidence/nacre-zed-invalid.png",
+    "/tmp/jvn-editors.BbV82z/evidence/nacre-zed-bool-invalid.png",
+    "/tmp/jvn-editors.BbV82z/evidence/nacre-zed-fixed.png",
+    "/tmp/jvn-editors.BbV82z/evidence/nacre-zed-unsaved-symbol.png",
+    "/tmp/jvn-editors.BbV82z/evidence/nacre-zed-symbol-restored.png",
+    "/tmp/jvn-editors.BbV82z/evidence/nacre-zed-restarted.png",
+    "/tmp/jvn-editors.BbV82z/evidence/nacre-zed-reopened.png"
+  ],
+  "zed_session_log": "proc://nacre-zed-ui2",
+  "notes": [
+    "The tests used the actual editor UIs, not a headless tokenizer/editor substitute.",
+    "Zed ran under Xvfb with llvmpipe; its private session displayed a benign missing desktop-portal notification.",
+    "Actual Zed UI installation generated editors/zed/dist/nacre/extension.wasm. Parent was notified; no manual source edits were made."
+  ]
+}

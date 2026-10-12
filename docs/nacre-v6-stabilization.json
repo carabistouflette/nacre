@@ -1,0 +1,39 @@
+{
+  "release": {
+    "name": "nacre",
+    "version": "0.7.1"
+  },
+  "scope": "Observed local generated native-program validation; does not certify GUI or remote CI",
+  "command": "python3 scripts/validate.py --cc gcc --cc clang --sanitizers --llvm --report /tmp/nacre-native-stabilization.json",
+  "compilers": [
+    "gcc",
+    "clang"
+  ],
+  "sanitizers": true,
+  "native": {
+    "status": "passed",
+    "successful_runs": 412,
+    "expected_fatal_runs": 14,
+    "invalid_source_rejections": 424,
+    "llvm_round_trips": 11,
+    "all_reported_live_zero": true
+  },
+  "full_console_log": "artifact://306",
+  "targeted_runtime_repair": {
+    "interface_fixture_gcc_and_clang_plain_and_sanitized": "passed",
+    "interface_fixture_allocations_per_run": 50004,
+    "interface_fixture_frees_per_run": 50004,
+    "interface_fixture_live_at_exit": 0,
+    "clang_fixture_llvm_round_trip": "passed",
+    "io_v6_and_atomic_files_tests_passed": 19,
+    "actual_sanitized_args_smoke_gcc_and_clang": {
+      "argument_count": 2,
+      "first_argument": "spaced ✓ arg",
+      "allocations": 2,
+      "frees": 2,
+      "live_at_exit": 0
+    }
+  },
+  "msrv_all_targets": "Rust 1.74.0 passed",
+  "zed_locked_wasm32_wasip2_build": "passed"
+}

@@ -15,7 +15,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 LIST = 'NEW ADD SIZE CAPACITY IS_EMPTY GET SET POP REMOVE CLEAR RESERVE'.split()
-TEXT = 'NEW APPEND APPEND_INT APPEND_BOOLEAN APPEND_TEXT BYTE_LENGTH BYTE_AT IS_EMPTY CLEAR PRINT CLONE EQUALS EQUALS_STRING'.split()
+TEXT = 'NEW APPEND APPEND_INT APPEND_BOOLEAN APPEND_TEXT BYTE_LENGTH BYTE_AT IS_EMPTY CLEAR PRINT CLONE EQUALS EQUALS_STRING PARSE_INT SLICE_BYTES'.split()
 
 def list_code(cid, element, zero, drop='', copy=True):
     fields = f'typedef struct ncr_obj_{cid} {{ {element} *items; int32_t length; int32_t capacity; }} ncr_obj_{cid};\n'
@@ -34,10 +34,42 @@ def list_code(cid, element, zero, drop='', copy=True):
     return fields+destructor+body
 
 def text_code(cid):
+    parse_id, slice_id = cid + 100, cid + 200
     fields=f'typedef struct ncr_obj_{cid} {{ unsigned char *bytes; int32_t length; int32_t capacity; }} ncr_obj_{cid};\n'
+    # Independent fixture layouts model the real inline Result payloads.
+    fields += f'''typedef struct {{
+        int32_t tag;
+        union {{ struct {{ int32_t f0; }} v0; struct {{ ncr_obj_{cid} *f0; }} v1; }} data;
+    }} ncr_obj_{parse_id};
+    typedef struct {{
+        int32_t tag;
+        union {{ struct {{ ncr_obj_{cid} *f0; }} v0; struct {{ ncr_obj_{cid} *f0; }} v1; }} data;
+    }} ncr_obj_{slice_id};
+    static void text{cid}_new(ncr_obj_{cid} *, ncr_string, size_t, size_t);
+    static ncr_obj_{cid} *text{cid}_from_bytes(const unsigned char *bytes, size_t length, size_t line, size_t column) {{
+        ncr_obj_{cid} *text = ncr_allocate(sizeof(ncr_obj_{cid}), line, column);
+        text{cid}_new(text, (ncr_string){{bytes, length}}, line, column);
+        return text;
+    }}
+    '''
+    for result_id in (parse_id, slice_id):
+        fields += f'''static ncr_obj_{result_id} text{cid}_error_{result_id}(const char *message, size_t length, size_t line, size_t column) {{
+            ncr_obj_{cid} *error = text{cid}_from_bytes((const unsigned char *)message, length, line, column);
+            return (ncr_obj_{result_id}){{.tag = 1, .data.v1.f0 = error}};
+        }}
+        '''
     destructor=f'static void ncr_drop_{cid}(ncr_obj_{cid} *p) {{ if (p) {{ ncr_deallocate(p->bytes); ncr_deallocate(p); }} }}\n'
     body=(ROOT/'stdlib/text.c.in').read_text().replace('@ID@',str(cid))
-    for name in TEXT: body=body.replace(f'@TEXT_{name}@',f'text{cid}_{name.lower()}')
+    replacements = {
+        '@PARSE_RESULT@': str(parse_id), '@PARSE_OK_TAG@': '0',
+        '@ERROR_PARSE_RESULT@': f'text{cid}_error_{parse_id}',
+        '@SLICE_RESULT@': str(slice_id), '@SLICE_OK_TAG@': '0',
+        '@ERROR_SLICE_RESULT@': f'text{cid}_error_{slice_id}',
+        '@TEXT_MAKE@': f'text{cid}_from_bytes',
+    }
+    replacements.update({f'@TEXT_{name}@': f'text{cid}_{name.lower()}' for name in TEXT})
+    for marker, value in replacements.items():
+        body = body.replace(marker, value)
     assert not re.search(r'@[A-Z_]+@',body)
     return fields+destructor+body
 

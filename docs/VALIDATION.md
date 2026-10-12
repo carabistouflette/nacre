@@ -1,5 +1,27 @@
 # Validation de livraison — Nacre V6 / 0.7.0
 
+## Nacre 0.7.1 stabilization
+
+Current local proof is recorded in [nacre-v6-stabilization.json](nacre-v6-stabilization.json).
+The renamed compiler again completed 412 sanitized native successes, 14 expected
+fatal runs, 424 invalid-source rejections, and 11 LLVM round trips. Rust 1.74
+all-target compilation and the locked Zed WASI build pass.
+
+Actual VS Code and Zed desktop sessions exercised Nacre highlighting, live
+integer/boolean diagnostics and correction clearing, unsaved cross-file symbol
+changes, language-server replacement on restart, and saving/closing/reopening.
+VS Code also recovered through its restart command after a deliberately missing
+server executable was corrected. Zed's isolated Xvfb session showed a benign
+missing desktop-portal notification, separate from the language extension.
+
+The bounded real [frontend and LSP framing campaigns](fuzz-stabilization.json)
+completed without observed crashes or timeouts. This is finite fuzz evidence,
+not a general safety proof. Remote CI conclusions are recorded separately once
+the complete run finishes.
+
+The V6 results below describe the original 0.7.0 run; captured historical reports
+have not been rewritten as new Nacre executions.
+
 ## Statut réel
 
 Le compilateur et ses exécutables natifs ont été réellement exécutés sous Linux

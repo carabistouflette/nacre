@@ -8,9 +8,9 @@ The Cargo package version is `0.7.1`; the original V0 began at `0.1.0`.
 > **Validation locale : les programmes V6 et le LSP ont été réellement exécutés.**
 > Les contrôles incluent transferts de propriété, erreurs d’E/S récupérables,
 > Sudoku interactif, sanitizers et positions LSP UTF-16.
-> Les extensions ont été vérifiées headless ; leur affichage dans les éditeurs
-> n’a pas été observé. Voir [VALIDATION.md](docs/VALIDATION.md) pour les résultats
-> et les limites : ces contrôles ne sont pas une preuve générale de sûreté.
+> Actual VS Code and Zed verification now covers highlighting, live diagnostics,
+> unsaved cross-file overlays, server restart, and close/reopen. See
+> [VALIDATION.md](docs/VALIDATION.md); these checks do not prove general safety.
 
 ## Démarrage
 
