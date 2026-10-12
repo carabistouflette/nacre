@@ -28,5 +28,6 @@
   },
   "editor_packages": {"vscode": "0.5.0", "zed": "0.5.0", "grammar": "0.4.0", "snippets_compiled": 24, "examples_parsed": 45, "queries_executed": 4, "locked_wasi_build": "passed"},
   "package_audit": {"status": "passed", "include_str_paths": 62, "declared_rust_tests_not_executed_by_audit": 991},
+  "remote_ci": {"status": "passed", "source_commit": "bdff6c15b707bf2239c482d873cee4a4e9585bd2", "run_url": "https://github.com/carabistouflette/nacre/actions/runs/38312906936", "successful_jobs": ["test (1.74.0, gcc)", "test (1.74.0, clang)", "test (stable, gcc)", "test (stable, clang)", "editors", "fuzz"], "scope": "Exact source commit; subsequent evidence-only publication does not change executable sources", "warnings": ["Existing actions target deprecated Node 20 and were forced to Node 24", "Hosted ubuntu-latest migration notice"]},
   "publication_policy": "Curated portable sources only: no workstation paths, process IDs, credentials, session-local artifact references, private proof locations, profiles or caches"
 }

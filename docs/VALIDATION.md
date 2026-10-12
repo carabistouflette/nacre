@@ -96,11 +96,19 @@ edits/undo, restart recovery, save/reopen, the clean lending bundle and VS Code
 mapref completion insertion. Parent inspected retained syntax/snippet and live
 diagnostic screenshots. All owned temporary desktop resources were cleaned up.
 
-## Remote CI baseline
+## Remote CI
 
-The complete V8 source workflow passed before V9 implementation:
-[run 38303938675](https://github.com/carabistouflette/nacre/actions/runs/38303938675).
-This is baseline evidence, not a V9 workflow claim.
+All six V9 jobs passed for source commit
+`bdff6c15b707bf2239c482d873cee4a4e9585bd2`:
+[run 38312906936](https://github.com/carabistouflette/nacre/actions/runs/38312906936).
+The matrix covers Rust 1.74/stable × GCC/Clang, editors/locked WASI, and real
+nightly fuzzing. An evidence-only follow-up records this exact source run without
+changing executable sources. Hosted CI emitted non-failing Node 20 deprecation
+and upcoming ubuntu-latest migration notices; toolchain checks passed.
+
+The historical V8 baseline remains
+[run 38303938675](https://github.com/carabistouflette/nacre/actions/runs/38303938675);
+it is not relabeled as V9 evidence.
 
 ## Boundaries and publication
 
