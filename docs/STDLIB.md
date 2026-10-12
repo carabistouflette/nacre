@@ -1,4 +1,4 @@
-# Standard Library V9
+# Nacre standard library
 
 `List`, `Map`, `Text`, `Option`, `Result`, `Console`, `Files`, and `Args` are reserved
 and pre-injected without imports. The two sum types use the ordinary enum
@@ -69,10 +69,10 @@ See [V8.md](V8.md) for traversal and recoverable-operation contracts.
 
 ## Map<int,V>
 
-`new Map<int,V>()` creates an empty dictionary. V9 accepts only signed `int`
+`new Map<int,V>()` creates an empty dictionary. Maps accept only signed `int`
 keys, including zero, negative values, INT32_MIN and INT32_MAX. Value types follow
 List ownership rules; borrows and local views cannot be stored. Generic types
-remain invariant. There is no map traversal, custom hashing, or text-key API.
+remain invariant. There is no custom hashing or text-key API.
 
 | Method | Contract |
 |---|---|
@@ -102,7 +102,12 @@ either reference is active, even if the call would be a no-op. Exclusive value
 access blocks independent map reads. Objects return stored pointers, inline
 enums return slot addresses, and interfaces retain their borrowed fat-pointer
 ABI. Bounds/presence observations do not grant a reference or lifetime refinement.
-See [V9.md](V9.md) for the exact milestone contract.
+Built-in traversal uses `for (int key, int value : map)` for copied values and
+`for (int key, borrow V value : map)` / `borrow mut V` for affine values.
+It visits occupied slots directly, without iterator allocation or key rehashing.
+Cost is linear in capacity, not just live count; order is unspecified. The whole
+map root stays loaned for the loop, so structural mutation is forbidden.
+See [MAP_TRAVERSAL.md](MAP_TRAVERSAL.md) for the exact traversal contract.
 
 ## Text
 

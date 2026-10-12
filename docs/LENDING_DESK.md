@@ -3,9 +3,16 @@
 `examples/lending_desk/` is a multi-file Nacre source bundle. It starts with an
 empty catalog and member registry. Books and tools implement the same `Loanable`
 interface and share owned label/availability data. The generic `Catalog<T>`
-combines `Map<int,T>` with a separate insertion-ordered ID list; the application
-uses `Catalog<Loanable>` and `Catalog<Member>` so resource display and persistence
-remain polymorphic without map iteration.
+combines `Map<int,T>` with a separate insertion-ordered ID list; built-in map
+traversal is used only for order-independent internal relationship guard scans.
+The application uses `Catalog<Loanable>` and `Catalog<Member>`; listings and
+persistence retain the ordered ID lists.
+
+`Catalog<T>.entriesRef()` gives the internal guard scans a read-only borrowed
+`Map<int,T>` view; traversal order is unspecified and the map root remains
+borrowed for the loop. Exposing the collection type is a current-language
+tradeoff because no opaque borrowed traversal view exists. Listings and
+persistence continue to use the ordered `idsRef()` list.
 
 ## Run
 

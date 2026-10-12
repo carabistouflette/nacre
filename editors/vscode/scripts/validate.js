@@ -91,8 +91,13 @@ function sourceForSnippet(name, body) {
       return `class Contact {}\nvoid main() {\nList<Contact> contacts = new List<Contact>();\ncontacts.add(new Contact());\n${body}\n}\n`;
     case 'Copied list traversal':
       return `void main() {\nList<int> numbers = new List<int>();\nnumbers.add(1);\n${body}\n}\n`;
+    case 'Copied map traversal':
+      return `void main() {\nMap<int,int> counts = new Map<int,int>();\n${body}\n}\n`;
+    case 'Shared map traversal':
+    case 'Exclusive map traversal':
+      return `class Contact {}\nvoid main() {\nMap<int,Contact> entries = new Map<int,Contact>();\n${body}\n}\n`;
     case 'Recoverable list removal':
-      return `void main() {\nList<int> items = new List<int>();\nitems.add(1);\n${body}\n}\n`;
+      return `void main() {\nList<int> items = new List<int>();\n${body}\n}\n`;
     case 'Shared map value':
     case 'Exclusive map value':
       return `class Contact {}\nvoid main() {\nMap<int,Contact> entries = new Map<int,Contact>();\nmatch (entries.put(1, new Contact())) { None {} Some(previous) {} }\n${body}\n}\n`;
@@ -264,6 +269,30 @@ async function main() {
   assertHasScope(scopesAt(traversal, 0, 'int'), 'storage.type.primitive.nacre', 'copied traversal type');
   assertHasScope(scopesAt(traversal, 1, 'borrow'), 'storage.modifier.ownership.nacre', 'shared traversal modifier');
   assertHasScope(scopesAt(traversal, 2, 'mut'), 'storage.modifier.ownership.nacre', 'exclusive traversal modifier');
+
+  const mapTraversal = tokenize(grammar, [
+    'for (int key, int value : counts) {}',
+    'for (int key, borrow Contact value : entries) {}',
+    'for (int key, borrow mut Contact value : entries) {}'
+  ].join('\n'));
+  for (let line = 0; line < mapTraversal.length; line += 1) {
+    assertHasScope(scopesAt(mapTraversal, line, 'for'), 'keyword.control.nacre', 'map traversal keyword');
+    assertHasScope(scopesAt(mapTraversal, line, ','), 'punctuation.separator.nacre', 'map binding separator');
+    assertHasScope(scopesAt(mapTraversal, line, ':'), 'punctuation.separator.nacre', 'map traversal separator');
+    assertHasScope(scopesAt(mapTraversal, line, 'key'), 'variable.other.nacre', 'map key binding');
+    assertLacksScope(scopesAt(mapTraversal, line, 'key'), 'storage.modifier', 'map key binding');
+    assertHasScope(scopesAt(mapTraversal, line, 'value'), 'variable.other.nacre', 'map value binding');
+    assertLacksScope(scopesAt(mapTraversal, line, 'value'), 'storage.modifier', 'map value binding');
+  }
+  assertHasScope(scopesAt(mapTraversal, 0, 'int'), 'storage.type.primitive.nacre', 'map key type');
+  assertHasScope(scopesAt(mapTraversal, 0, 'int', 1), 'storage.type.primitive.nacre', 'copied map value type');
+  assertHasScope(scopesAt(mapTraversal, 1, 'borrow'), 'storage.modifier.ownership.nacre', 'shared map value modifier');
+  assertHasScope(scopesAt(mapTraversal, 1, 'Contact'), 'entity.name.type.nacre', 'shared map value type');
+  assertHasScope(scopesAt(mapTraversal, 2, 'borrow'), 'storage.modifier.ownership.nacre', 'exclusive map borrow modifier');
+  assertHasScope(scopesAt(mapTraversal, 2, 'mut'), 'storage.modifier.ownership.nacre', 'exclusive map mut modifier');
+  assertHasScope(scopesAt(mapTraversal, 2, 'Contact'), 'entity.name.type.nacre', 'exclusive map value type');
+  assertLacksScope(scopesAt(mapTraversal, 1, 'Contact'), 'variable.other', 'shared map value type');
+  assertLacksScope(scopesAt(mapTraversal, 2, 'Contact'), 'variable.other', 'exclusive map value type');
 
   const integerMap = tokenize(grammar, [
     'Map<int,Text> entries = new Map<int,Text>();',

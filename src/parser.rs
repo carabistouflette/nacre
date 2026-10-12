@@ -33,7 +33,7 @@ impl Parser {
     }
     fn nested<T>(&mut self, f: impl FnOnce(&mut Self) -> Result<T, Diagnostic>) -> Result<T, Diagnostic> {
         if self.depth >= 128 {
-            return Err(Diagnostic::new(self.current().span, "imbrication trop profonde pour cette V5"));
+            return Err(Diagnostic::new(self.current().span, "imbrication trop profonde"));
         }
         self.depth += 1;
         let result = f(self);
@@ -62,7 +62,7 @@ impl Parser {
                 _ => break,
             }
         }
-        // V5 has one source unit and no packages: omitted visibility means public.
+        // A source bundle has no package boundaries: omitted visibility means public.
         Ok((visibility.unwrap_or(Visibility::Public), is_static, readonly))
     }
     fn program(mut self) -> Result<Program, Diagnostic> {
@@ -185,7 +185,7 @@ impl Parser {
                 let return_type = self.ty(true)?;
                 let (method_name, _) = self.ident()?;
                 let params = self.parameters()?;
-                let end = self.expect(&K::Semicolon, "`;` (pas de corps, de champ ou de methode default dans une interface V5)")?.span;
+                let end = self.expect(&K::Semicolon, "`;` (pas de corps, de champ ou de methode default dans une interface)")?.span;
                 methods.push(Function { name: method_name, span: member_start.join(end), return_type,
                     params, body: Vec::new(), visibility, is_static: false, readonly });
                 continue;
@@ -194,7 +194,7 @@ impl Parser {
                 && self.tokens.get(self.pos + 1).is_some_and(|t| t.kind == K::LParen) {
                 self.bump();
                 if is_static || readonly { return Err(Diagnostic::new(member_start, "un constructeur ne peut pas etre static ou readonly")); }
-                if constructor.is_some() { return Err(Diagnostic::new(member_start, "un seul constructeur par classe en V5; pas de surcharge")); }
+                if constructor.is_some() { return Err(Diagnostic::new(member_start, "un seul constructeur par classe; pas de surcharge")); }
                 constructor = Some(self.function_tail(name.clone(), Type::Void, visibility, false, false, member_start)?);
                 continue;
             }
@@ -205,7 +205,7 @@ impl Parser {
                 methods.push(self.function_tail(member_name, ty, visibility, is_static, readonly, member_start)?);
             } else {
                 if readonly { return Err(Diagnostic::new(member_start, "readonly est un modificateur de methode, pas de champ")); }
-                if is_static { return Err(Diagnostic::new(member_start, "les champs static ne sont pas pris en charge en V5")); }
+                if is_static { return Err(Diagnostic::new(member_start, "les champs static ne sont pas pris en charge")); }
                 if ty == Type::Void { return Err(Diagnostic::new(member_start, "un champ ne peut pas avoir le type void")); }
                 let initializer = if self.eat(&K::Equal) { Some(self.expression()?) } else { None };
                 let end = self.expect(&K::Semicolon, "`;`")?.span;
@@ -239,7 +239,7 @@ impl Parser {
         if !self.eat(&K::Less) { return Ok(Vec::new()); }
         self.nested(|p| {
             if p.at(&K::Greater) {
-                return Err(Diagnostic::new(p.current().span, "[E4101] les arguments generiques sont explicites; pas de diamant <> en V5"));
+                return Err(Diagnostic::new(p.current().span, "[E4101] les arguments generiques sont explicites; pas de diamant <>"));
             }
             let mut args = Vec::new();
             loop {
@@ -326,14 +326,21 @@ impl Parser {
                 self.bump();
                 self.expect(&K::LParen, "`(`")?;
                 let header_start = self.current().span;
-                let ty = self.ty(false)?;
-                let (name, name_span) = self.ident()?;
+                let first_ty = self.ty(false)?;
+                let (first_name, first_name_span) = self.ident()?;
+                let (key, ty, name, name_span) = if self.eat(&K::Comma) {
+                    let value_ty = self.ty(false)?;
+                    let (value_name, value_name_span) = self.ident()?;
+                    (Some((first_ty, first_name)), value_ty, value_name, value_name_span)
+                } else {
+                    (None, first_ty, first_name, first_name_span)
+                };
                 let header_span = header_start.join(name_span);
                 self.expect(&K::Colon, "`:` apres le type et le nom de l'element")?;
                 let collection = self.expression()?;
                 self.expect(&K::RParen, "`)`")?;
                 let body = self.block()?;
-                StmtKind::ForEach { ty, name, collection, body, header_span }
+                StmtKind::ForEach { ty, name, key, collection, body, header_span }
             }
             K::Match => {
                 self.bump();
@@ -526,7 +533,7 @@ fn make_expr(kind: ExprKind, span: Span) -> Result<Expr, Diagnostic> {
         _ => 0,
     };
     if depth > 128 {
-        return Err(Diagnostic::new(span, "expression trop profonde pour cette V5"));
+        return Err(Diagnostic::new(span, "expression trop profonde"));
     }
     Ok(Expr { kind, span, depth })
 }

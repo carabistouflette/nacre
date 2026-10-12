@@ -1,0 +1,10 @@
+class Box {
+    void increment() { }
+}
+
+void main() {
+    Map<int, Box> entries = new Map<int, Box>();
+    entries.put(1, new Box());
+    // Rejected: exclusive value traversal excludes independent reads of the map.
+    for (int key, borrow mut Box value : entries) { println(entries.size()); }
+}

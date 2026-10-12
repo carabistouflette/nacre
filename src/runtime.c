@@ -1,4 +1,4 @@
-/* Nacre V1 support: no GC and no VM; unique-owned object allocation.
+/* Nacre runtime support: no GC and no VM; unique-owned object allocation.
  * libc is still used for output and process termination.
  */
 #define _POSIX_C_SOURCE 200809L
@@ -89,7 +89,7 @@ static void ncr_print_string(ncr_string value) {
     (void)fputc('\n', stdout);
 }
 
-/* V1 object allocation. No tracing, reference counting, or object registry.
+/* Object allocation. No tracing, reference counting, or object registry.
    The frontend enforces unique ownership; generated lexical drops do the work.
    Optional counters are diagnostics only and never manage object lifetimes. */
 #ifdef NACRE_MEMORY_STATS

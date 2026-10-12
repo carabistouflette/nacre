@@ -203,6 +203,11 @@ impl Builder {
             E::Read(place) => self.read_place(place, expr.span, false, at),
             E::Borrow { place, .. } => self.read_place(place, expr.span, true, at),
             E::Move(id) => self.step(at, Op::Move { id: *id, span: expr.span }),
+            E::MapCapacity(map) => self.read_place(map, expr.span, true, at),
+            E::MapSlot { map, index, .. } => {
+                let at = self.read_place(map, expr.span, true, at);
+                self.expression(index, at)
+            }
             E::Drop(inner) => {
                 let at = self.expression(inner, at);
                 let Type::Object(class) = inner.ty else { unreachable!("checked drop") };
@@ -267,7 +272,7 @@ fn solve(graph: &Graph, function: &t::Function) -> Result<States, Diagnostic> {
     let cells = graph.nodes.len().saturating_mul(function.locals.len());
     if graph.nodes.len() > MAX_NODES || cells > MAX_STATE_CELLS {
         return Err(Diagnostic::new(function.locals.first().map_or(Span::default(), |l| l.span),
-            "fonction trop complexe pour l'analyse V5: limite de 50 000 noeuds ou 16 Mio de cellules d'etat"));
+            "fonction trop complexe pour l'analyse: limite de 50 000 noeuds ou 16 Mio de cellules d'etat"));
     }
     let mut initial = vec![UNINIT; function.locals.len()];
     for (id, _) in &function.params { initial[*id] = READY; }
@@ -361,7 +366,7 @@ pub fn check(program: &t::Program) -> Result<(), Diagnostic> {
 
 /// A textual ownership CFG, not an executable or complete computation IR.
 pub fn dump(program: &t::Program, source: &str) -> Result<String, Diagnostic> {
-    let mut out = String::from("Nacre V7 — ownership CFG\nU=uninitialized, R=ready, M=moved; joins are unions.\nBranches are conservative (no constant-condition proof).\n\n");
+    let mut out = String::from("Nacre — ownership CFG\nU=uninitialized, R=ready, M=moved; joins are unions.\nBranches are conservative (no constant-condition proof).\n\n");
     for function in &program.functions {
         if function.native.is_some() { continue; }
         let graph = Builder::build(function);

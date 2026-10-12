@@ -1,0 +1,5 @@
+void main() {
+    Map<int, int> entries = new Map<int, int>();
+    // Rejected: the copied value binding must match the map's value type.
+    for (int key, boolean value : entries) { }
+}

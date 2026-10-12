@@ -1,0 +1,8 @@
+class Box { }
+
+void inspect(borrow Map<int, Box> entries) {
+    // Rejected: traversal cannot extract an owned value from a borrowed map.
+    for (int key, Box value : entries) { }
+}
+
+void main() { }

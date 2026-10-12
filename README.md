@@ -1,16 +1,21 @@
-# Nacre V9 — integer-keyed maps and a complete lending desk
+# Nacre
 
 Nacre is an experimental Rust compiler with a Java-like syntax and the pipeline
 **Nacre → C11 → GCC/Clang → native executable**. No JVM, garbage collector, or
-reference counting is used. Cargo package/CLI: `nacre` **0.10.0**; source files:
+reference counting is used. Cargo package/CLI: `nacre` **0.11.0**; source files:
 `.ncr`; project marker: `nacre.json`. Rust **1.74** is the declared minimum.
 
-V9 adds `Map<int,V>` with recoverable ownership transfer and receiver-bound
+Nacre provides `Map<int,V>` with recoverable ownership transfer and receiver-bound
 references, plus a multi-file lending desk demonstrating interfaces, generic
 catalogs, enums, local parsing views, lexical traversal, validated loading, and
-atomic saving. Borrow lifetimes stay lexical and alias domains conservative.
+atomic saving. Built-in map traversal copies keys and primitive values or borrows
+affine values. Borrow lifetimes stay lexical and alias domains conservative.
 
-The bounded milestone contract and explicit exclusions are in [V9.md](docs/V9.md).
+Nacre is pre-1.0: language and standard-library compatibility are not guaranteed.
+Development is feature-driven; releases use ordinary `0.x.y` package versions,
+not numbered language milestones. Historical evidence retains its original labels.
+See the [development roadmap](docs/ROADMAP.md) and
+[map traversal contract](docs/MAP_TRAVERSAL.md).
 
 ## Start
 
@@ -51,7 +56,7 @@ Memory statistics appear on stderr as
 `NACRE_MEMORY allocations=N frees=N live=0`; object allocations and owned buffers
 are both counted.
 
-## V8 list traversal and recovery
+## List traversal and recovery
 
 ```java
 void main() {
@@ -80,6 +85,28 @@ retain their fatal-boundary behavior. Run the complete
 
 ```sh
 nacre run examples/collections_v8.ncr --memory-stats
+```
+
+## Map traversal
+
+```java
+for (int key, int count : counts) { println(count); }
+for (int key, borrow Contact contact : entries) {
+    borrow Text name = contact.getName();
+    name.print();
+}
+for (int key, borrow mut Contact contact : entries) {
+    contact.setName(new Text("Updated"));
+}
+```
+
+Keys copy; affine values borrow. The collection is evaluated once and loaned
+for the whole loop. Structural mutation is rejected, including absent removal.
+Order is unspecified; retain explicit ordered IDs when order matters.
+See [the contract](docs/MAP_TRAVERSAL.md) and run the complete example:
+
+```sh
+cargo run --offline --locked -- run examples/map_traversal.ncr --memory-stats
 ```
 
 ## Ownership and borrowed access
@@ -216,7 +243,7 @@ require a C compiler. See [PROJECTS.md](docs/PROJECTS.md).
 
 ## VS Code and Zed
 
-Packages **0.5.0**, grammar **0.4.0**, and 24 snippets cover integer maps,
+Packages **0.6.0**, grammar **0.5.0**, and 27 snippets cover integer maps,
 copied/shared/exclusive traversal, and recoverable collection operations.
 Both clients launch `nacre lsp` and use the real compiler for diagnostics.
 
@@ -229,7 +256,7 @@ npm --prefix editors/vscode test
 npm --prefix editors/vscode run package
 ```
 
-Install `editors/vscode/nacre-0.5.0.vsix`; configure `nacre.serverPath` if the
+Install `editors/vscode/nacre-0.6.0.vsix`; configure `nacre.serverPath` if the
 compiler is not on PATH. The `Nacre: Restart Language Server` command supports
 recovery after failed startup and serializes lifecycle operations.
 
@@ -263,15 +290,15 @@ seed corpora. Preserve crash artifacts for reproduction. Finite successful runs
 are evidence, not a general fuzz-safety proof.
 
 [VALIDATION.md](docs/VALIDATION.md) records observed compiler/native/editor/CI
-evidence and unverified platform boundaries. V9 local results include 989 tests
-and 30 dedicated sanitized generated-program runs.
-[Actual desktop acceptance](docs/v9-editor-verification.json) passes in VS Code
-and Zed, including unsaved overlays, loan diagnostics and restart recovery.
+evidence and unverified platform boundaries. Release 0.11.0 includes 998 passed
+tests and 16 dedicated sanitized traversal/lending generated-program runs.
+[Actual desktop acceptance](docs/editors-0.11.0.json) passes in VS Code and Zed,
+including traversal completion, unsaved overlays, loan diagnostics and recovery.
 
 ## Boundaries and design notes
 
 No modules/packages/imports or separate compilation, arrays `T[]`, non-int map
-keys, map traversal, first-class borrowed iterators, NLL/lifetime parameters,
+keys, first-class borrowed iterators, NLL/lifetime parameters,
 network API, threads, FFI, inheritance,
 overloading, or direct LLVM backend. Very deep owned trees may exhaust the C
 stack during recursive destruction. Untrusted programs are not sandboxed.

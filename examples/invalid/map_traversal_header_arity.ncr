@@ -1,0 +1,5 @@
+void main() {
+    Map<int, int> entries = new Map<int, int>();
+    // Rejected: map traversal has exactly two header bindings.
+    for (int key, int value, int extra : entries) { }
+}

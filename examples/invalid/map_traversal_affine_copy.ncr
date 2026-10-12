@@ -1,0 +1,8 @@
+class Box { }
+
+void main() {
+    Map<int, Box> entries = new Map<int, Box>();
+    entries.put(1, new Box());
+    // Rejected: affine values must be explicitly borrowed by traversal.
+    for (int key, Box value : entries) { }
+}

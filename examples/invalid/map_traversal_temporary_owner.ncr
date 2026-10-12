@@ -1,0 +1,4 @@
+void main() {
+    // Rejected: the traversed map must have a stable owner place.
+    for (int key, int value : new Map<int, int>()) { }
+}

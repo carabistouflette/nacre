@@ -78,7 +78,7 @@ impl<'a> Analyzer<'a> {
     fn charge(&mut self, amount: usize, span: Span) -> Result<(), Diagnostic> {
         self.work = self.work.saturating_add(amount);
         if self.work > MAX_WORK {
-            Err(Diagnostic::new(span, "[E3099] fonction trop complexe pour le borrow checker V5; separer les blocs ou les fonctions"))
+            Err(Diagnostic::new(span, "[E3099] fonction trop complexe pour le borrow checker; separer les blocs ou les fonctions"))
         } else { Ok(()) }
     }
     fn origin(&self, place: &Place) -> Origin {
@@ -155,7 +155,7 @@ impl<'a> Analyzer<'a> {
     fn loan(&mut self, origin: Origin, mutable: bool, span: Span, label: String) -> Result<Origin, Diagnostic> {
         self.access(origin, if mutable { Access::Write } else { Access::Read }, span)?;
         if self.loans.len() >= MAX_LOANS {
-            return Err(Diagnostic::new(span, "[E3099] limite V5 de 8192 emprunts par fonction"));
+            return Err(Diagnostic::new(span, "[E3099] limite de 8192 emprunts par fonction"));
         }
         let id = self.loans.len();
         self.log(span, format!("loan #{id} {} <- {} parent={:?} holder={label}",
@@ -352,7 +352,12 @@ impl<'a> Analyzer<'a> {
             E::Read(place) => self.borrow(place, mutable, expr.span, label),
             E::Upcast { value, .. } => self.reference(value, label),
             E::Call { .. } => Ok(self.call(expr, Some(label))?.expect("borrowed method has receiver")),
-            _ => unreachable!("borrowed values are places, upcasts, or receiver calls"),
+            E::MapSlot { map, index, .. } => {
+                self.expression(index)?;
+                self.projections(map, expr.span)?;
+                self.loan(self.origin(map), mutable, expr.span, label)
+            }
+            _ => unreachable!("borrowed values are places, upcasts, receiver calls, or Map traversal slots"),
         }
     }
     fn call(&mut self, expr: &t::Expr, label: Option<String>) -> Result<Option<Origin>, Diagnostic> {
@@ -402,6 +407,15 @@ impl<'a> Analyzer<'a> {
             E::Borrow { place, mutable } => {
                 self.borrow(place, *mutable, expr.span, "field initialization".to_owned())?;
             }
+            E::MapCapacity(map) => {
+                self.projections(map, expr.span)?;
+                self.access(self.origin(map), Access::Read, expr.span)?;
+            }
+            E::MapSlot { map, index, .. } => {
+                self.expression(index)?;
+                self.projections(map, expr.span)?;
+                self.access(self.origin(map), Access::Read, expr.span)?;
+            }
             E::Move(id) => {
                 self.access(Origin { root: Root::Local(*id), via: None }, Access::Destroy, expr.span)?;
             }
@@ -434,7 +448,7 @@ pub fn check(program: &t::Program) -> Result<(), Diagnostic> {
     Ok(())
 }
 pub fn dump(program: &t::Program, source: &str) -> Result<String, Diagnostic> {
-    let mut out = String::from("Nacre V7 — lexical borrow analysis\nLoan lifetimes are lexical; root = owner and its owned fields.\nReceiver reservations precede arguments; activation follows them.\nReturned borrows retain receiver-derived loans.\n\n");
+    let mut out = String::from("Nacre — lexical borrow analysis\nLoan lifetimes are lexical; root = owner and its owned fields.\nReceiver reservations precede arguments; activation follows them.\nReturned borrows retain receiver-derived loans.\n\n");
     for function in &program.functions {
         if function.native.is_some() { continue; }
         let mut analyzer = Analyzer::new(program, function, Some(source));

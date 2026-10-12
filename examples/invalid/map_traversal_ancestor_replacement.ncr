@@ -1,0 +1,11 @@
+class Box { }
+class Shelf { Map<int, Box> entries = new Map<int, Box>(); }
+
+void main() {
+    Shelf shelf = new Shelf();
+    shelf.entries.put(1, new Box());
+    // Rejected: replacing an ancestor of the traversed map invalidates its owner.
+    for (int key, borrow Box value : shelf.entries) {
+        shelf.entries = new Map<int, Box>();
+    }
+}

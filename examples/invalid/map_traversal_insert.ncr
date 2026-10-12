@@ -1,0 +1,6 @@
+void main() {
+    Map<int, int> entries = new Map<int, int>();
+    entries.put(1, 10);
+    // Rejected: insertion structurally changes the traversed root.
+    for (int key, int value : entries) { entries.put(2, 20); }
+}

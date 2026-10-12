@@ -1,0 +1,15 @@
+class Box {
+    readonly int read() { return 1; }
+}
+
+class Shelf {
+    borrow Box escape() {
+        Map<int, Box> local = new Map<int, Box>();
+        local.put(1, new Box());
+        // Rejected: an iteration view cannot escape its local map owner.
+        for (int key, borrow Box value : local) { return value; }
+        return local.getRef(1);
+    }
+}
+
+void main() { }

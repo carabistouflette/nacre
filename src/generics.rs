@@ -1,6 +1,6 @@
 //! Bounded, deterministic monomorphization before nominal type checking.
 //!
-//! This V5 uses explicitly instantiated class/interface templates, NOT Java
+//! Nacre uses explicitly instantiated class/interface templates, NOT Java
 //! erasure and NOT universally checked bounded generics. A template body is
 //! checked for each requested specialization. Every specialization then passes
 //! through the same type, ownership and borrow checkers as ordinary code.
@@ -24,7 +24,7 @@ struct Expander {
 /// The strings are only for inspection. No C symbol is based on a source name.
 pub fn expand(mut program: a::Program) -> Result<(a::Program, Vec<String>), Diagnostic> {
     if program.classes.iter().filter(|c| !c.is_builtin).count() > 128 {
-        return Err(Diagnostic::new(Span::default(), "limite V5: 128 classes ou interfaces utilisateur par programme, modeles compris"));
+        return Err(Diagnostic::new(Span::default(), "limite: 128 classes ou interfaces utilisateur par programme, modeles compris"));
     }
     let mut expander = Expander { definitions: HashMap::new(), requested: HashSet::new(),
         pending: VecDeque::new(), names: Vec::new() };
@@ -212,8 +212,11 @@ impl Expander {
                     if let Some(block) = else_block { self.block(block, env)?; }
                 }
                 S::While { condition, body } => { self.expression(condition, env)?; self.block(body, env)?; }
-                S::ForEach { ty, collection, body, .. } => {
+                S::ForEach { ty, key, collection, body, .. } => {
                     *ty = self.ty(ty, env, stmt.span, 0)?;
+                    if let Some((key_ty, _)) = key {
+                        *key_ty = self.ty(key_ty, env, stmt.span, 0)?;
+                    }
                     self.expression(collection, env)?;
                     self.block(body, env)?;
                 }

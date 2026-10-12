@@ -1,0 +1,6 @@
+void main() {
+    Map<int, int> entries = new Map<int, int>();
+    entries.put(1, 10);
+    // Rejected even though this key is absent: removal invalidates the root domain.
+    for (int key, int value : entries) { entries.tryRemove(999); }
+}

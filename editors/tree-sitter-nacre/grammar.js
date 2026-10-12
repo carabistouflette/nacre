@@ -274,8 +274,19 @@ module.exports = grammar({
     for_statement: ($) => seq(
       'for',
       '(',
-      field('type', $._type),
-      field('name', $.identifier),
+      choice(
+        seq(
+          field('type', $._type),
+          field('name', $.identifier),
+        ),
+        seq(
+          field('key_type', $._type),
+          field('key', $.identifier),
+          ',',
+          field('value_type', $._type),
+          field('value', $.identifier),
+        ),
+      ),
       ':',
       field('collection', $._expression),
       ')',

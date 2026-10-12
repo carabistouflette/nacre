@@ -1,7 +1,7 @@
 {
   "name": "tree-sitter-nacre",
-  "version": "0.4.0",
-  "description": "Tree-sitter grammar for Nacre V9",
+  "version": "0.5.0",
+  "description": "Tree-sitter grammar for Nacre",
   "license": "MIT",
   "scripts": {
     "generate": "tree-sitter generate",

@@ -23,6 +23,11 @@ class Catalog<T> {
         return this.order;
     }
 
+    // Entry order is unspecified; this read-only view borrows the complete map root.
+    public readonly borrow Map<int,T> entriesRef() {
+        return this.entries;
+    }
+
     public readonly borrow T getRef(int id) {
         return this.entries.getRef(id);
     }
@@ -151,47 +156,35 @@ class DeskState {
     }
 
     public readonly boolean hasActiveLoanFor(int memberId) {
-        int index = 0;
-        while (index < this.resources.size()) {
-            int resourceId = this.resources.idAt(index);
+        for (int resourceId, borrow Loanable resource : this.resources.entriesRef()) {
             boolean found = false;
-            {
-                borrow Loanable resource = this.resources.getRef(resourceId);
-                match (resource.getAvailability()) {
-                    Available {}
-                    Lent(borrowerId, dueDay) {
-                        if (borrowerId == memberId) { found = true; }
-                    }
-                    Maintenance(reason) {}
+            match (resource.getAvailability()) {
+                Available {}
+                Lent(borrowerId, dueDay) {
+                    if (borrowerId == memberId) { found = true; }
                 }
+                Maintenance(reason) {}
             }
             if (found) { return true; }
-            index = index + 1;
         }
         return false;
     }
 
     public readonly boolean hasValidRelationships() {
-        int index = 0;
-        while (index < this.resources.size()) {
-            int resourceId = this.resources.idAt(index);
+        for (int resourceId, borrow Loanable resource : this.resources.entriesRef()) {
             boolean valid = true;
-            {
-                borrow Loanable resource = this.resources.getRef(resourceId);
-                match (resource.getAvailability()) {
-                    Available {}
-                    Lent(memberId, dueDay) {
-                        if (memberId <= 0 || dueDay < 0 || !this.members.containsKey(memberId)) {
-                            valid = false;
-                        }
+            match (resource.getAvailability()) {
+                Available {}
+                Lent(memberId, dueDay) {
+                    if (memberId <= 0 || dueDay < 0 || !this.members.containsKey(memberId)) {
+                        valid = false;
                     }
-                    Maintenance(reason) {
-                        if (reason.isEmpty()) { valid = false; }
-                    }
+                }
+                Maintenance(reason) {
+                    if (reason.isEmpty()) { valid = false; }
                 }
             }
             if (!valid) { return false; }
-            index = index + 1;
         }
         return true;
     }

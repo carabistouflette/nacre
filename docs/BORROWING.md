@@ -1,4 +1,4 @@
-# Ownership and lexical borrowing — Nacre V9
+# Ownership and lexical borrowing
 
 Nacre separates owning values from shared/exclusive access. Ordinary objects
 own their heap allocation; enums are affine inline values; interfaces use an
@@ -147,6 +147,15 @@ Maps stored beside another field share their containing owner's root. Shared
 traversal of an ID list may coexist with shared map lookup, but not mutation of
 that sibling map. End those scopes before mutation; there is no NLL or early
 release operation. A Catalog in the lending example follows this rule explicitly.
+
+Two-binding map traversal holds the same root loan across the whole loop:
+`for (int key, borrow V value : map)` is shared; `borrow mut V` is exclusive.
+Keys and primitive values copy, while affine bindings reborrow occupied slots.
+Exclusive traversal permits mutation through the current value binding, not
+independent map access. Bindings end per iteration; existing loop cleanup handles
+all exits. Receiver-derived borrowed returns retain the caller's root loan;
+local-owned values cannot escape. [MAP_TRAVERSAL.md](MAP_TRAVERSAL.md) defines
+header, stability and ordering requirements.
 
 ## Replacing owned fields
 

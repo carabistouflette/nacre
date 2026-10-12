@@ -1,0 +1,9 @@
+class Box { }
+class Other { }
+
+void main() {
+    Map<int, Box> entries = new Map<int, Box>();
+    entries.put(1, new Box());
+    // Rejected: a borrowed header binding must match the stored value type.
+    for (int key, borrow Other value : entries) { }
+}

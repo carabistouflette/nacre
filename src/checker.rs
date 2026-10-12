@@ -75,7 +75,7 @@ impl Tables {
             return Err(Diagnostic::new(f.span, "[E3003] a readonly receiver cannot return an exclusive borrow"));
         }
         if self.is_view(return_type) || params.iter().any(|ty| self.is_view(*ty)) {
-            return Err(Diagnostic::new(f.span, "[E3007] une classe a champs empruntes est une vue locale; ni parametre ni retour de vue en V5"));
+            return Err(Diagnostic::new(f.span, "[E3007] une classe a champs empruntes est une vue locale; ni parametre ni retour de vue"));
         }
         let id = self.signatures.len();
         let virtual_slot = if kind == Kind::Interface { Some(self.classes[owner.unwrap()].interface_methods.len()) } else { None };
@@ -86,7 +86,7 @@ impl Tables {
 
 pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
     if program.classes.iter().filter(|c| !c.is_builtin).count() > 128 {
-        return Err(Diagnostic::new(Span::default(), "limite V5: 128 classes utilisateur par programme"));
+        return Err(Diagnostic::new(Span::default(), "limite: 128 classes utilisateur par programme"));
     }
     let mut tables = Tables { names: HashMap::new(), classes: Vec::new(), globals: HashMap::new(), signatures: Vec::new() };
     for (id, class) in program.classes.iter().enumerate() {
@@ -142,7 +142,7 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
             }
             let ty = tables.resolve_type(&field.ty, field.span)?;
             if matches!(ty, Type::Borrow { mutable: true, .. }) {
-                return Err(Diagnostic::new(field.span, "[E3007] les champs empruntes sont en lecture seule en V5; borrow mut est reserve aux variables et parametres"));
+                return Err(Diagnostic::new(field.span, "[E3007] les champs empruntes sont en lecture seule; borrow mut est reserve aux variables et parametres"));
             }
             if ty.is_borrow() && field.initializer.is_some() {
                 return Err(Diagnostic::new(field.span, "[E3007] initialiser un champ emprunte dans le constructeur depuis un parametre borrow"));
@@ -234,7 +234,7 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
     for function in &program.functions {
         let id = tables.add_signature(function, None, Kind::Free)?;
         if tables.globals.insert(function.name.clone(), id).is_some() {
-            return Err(Diagnostic::new(function.span, format!("fonction `{}` deja declaree; pas de surcharge en V5", function.name)));
+            return Err(Diagnostic::new(function.span, format!("fonction `{}` deja declaree; pas de surcharge", function.name)));
         }
         declarations.push(function.clone());
     }
@@ -243,7 +243,7 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
             let kind = if class.is_interface { Kind::Interface } else if method.is_static { Kind::Static } else { Kind::Instance };
             let id = tables.add_signature(method, Some(class_id), kind)?;
             if tables.classes[class_id].methods.insert(method.name.clone(), id).is_some() {
-                return Err(Diagnostic::new(method.span, format!("methode `{}` deja declaree; pas de surcharge en V5", method.name)));
+                return Err(Diagnostic::new(method.span, format!("methode `{}` deja declaree; pas de surcharge", method.name)));
             }
             if class.is_interface { tables.classes[class_id].interface_methods.push(id); }
             declarations.push(method.clone());
@@ -272,7 +272,7 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
                 return Err(Diagnostic::new(class.span, "[E4001] interface implementee plusieurs fois"));
             }
             if tables.is_view(Type::Object(class_id)) {
-                return Err(Diagnostic::new(class.span, "[E4005] une vue locale ne peut pas etre effacee derriere une interface en V5"));
+                return Err(Diagnostic::new(class.span, "[E4005] une vue locale ne peut pas etre effacee derriere une interface"));
             }
             let mut methods = Vec::new();
             for id in &tables.classes[interface_id].interface_methods {
@@ -388,7 +388,7 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
         body.extend(checked_body);
         if checker.constructor { checker.require_initialized(function.span)?; }
         if sig.return_type != Type::Void && !stops {
-            return Err(Diagnostic::new(function.span, format!("`{}` doit retourner un {} sur tous les chemins; une boucle n'est pas une preuve de retour en V5", function.name, tables.type_name(sig.return_type))));
+            return Err(Diagnostic::new(function.span, format!("`{}` doit retourner un {} sur tous les chemins; une boucle n'est pas une preuve de retour", function.name, tables.type_name(sig.return_type))));
         }
         let name = sig.owner.map_or_else(|| function.name.clone(),
             |c| format!("{}.{}", tables.classes[c].name, function.name));
@@ -483,7 +483,7 @@ impl Checker<'_> {
                     return Err(Diagnostic::new(stmt.span, "[E3005] un emprunt local exige un initialiseur et ne peut pas etre reaffecte"));
                 }
                 if ty.is_borrow() && self.tables.is_view(ty) {
-                    return Err(Diagnostic::new(stmt.span, "[E3007] emprunter une vue locale n'est pas pris en charge en V5"));
+                    return Err(Diagnostic::new(stmt.span, "[E3007] emprunter une vue locale n'est pas pris en charge"));
                 }
                 if ty.is_object() && self.tables.is_view(ty)
                     && !value.as_ref().is_some_and(|v| matches!(v.kind, a::ExprKind::New { .. })) {
@@ -501,7 +501,7 @@ impl Checker<'_> {
                 };
                 let is_initialization = init_field.is_some_and(|f| !self.initialized[f]);
                 if is_initialization && (self.block_depth != 1 || self.loop_depth != 0) {
-                    return Err(Diagnostic::new(stmt.span, "initialisation de champ exigee directement dans le constructeur, hors branche, boucle ou bloc imbrique en V5"));
+                    return Err(Diagnostic::new(stmt.span, "initialisation de champ exigee directement dans le constructeur, hors branche, boucle ou bloc imbrique"));
                 }
                 if !is_initialization {
                     if target.ty.is_borrow() {
@@ -568,8 +568,8 @@ impl Checker<'_> {
                 self.loop_depth -= 1;
                 (t::Stmt::While { condition, body }, false)
             }
-            S::ForEach { ty, name, collection, body, header_span } => {
-                (self.for_each(ty, name, collection, body, *header_span, stmt.span)?, false)
+            S::ForEach { .. } => {
+                (self.for_each(stmt)?, false)
             }
             S::Match { value, arms } => {
                 let value = self.expression(value)?;
@@ -637,71 +637,40 @@ impl Checker<'_> {
         })
     }
 
-    fn for_each(&mut self, header: &a::Type, name: &str, collection: &a::Expr, body: &a::Block,
-                header_span: Span, span: Span) -> Result<t::Stmt, Diagnostic> {
+    fn for_each(&mut self, stmt: &a::Stmt) -> Result<t::Stmt, Diagnostic> {
+        let a::StmtKind::ForEach { ty: header, name, key, collection, body, header_span } = &stmt.kind
+            else { unreachable!("for-each statement"); };
+        let header_span = *header_span;
+        let span = stmt.span;
         let place = self.place(collection, false).ok();
         let value = if place.is_none() { Some(self.expression(collection)?) } else { None };
         let source_type = if let Some(place) = &place { place.ty } else { value.as_ref().unwrap().ty };
-        let list_class = source_type.object_class()
-            .ok_or_else(|| Diagnostic::new(collection.span, "la collection d'une boucle for-each doit etre une List<T> nommee ou empruntee"))?;
+        let source_class = source_type.object_class()
+            .ok_or_else(|| Diagnostic::new(collection.span, "la collection doit etre une List<T> ou Map<int, V> nommee ou empruntee"))?;
+        match self.tables.classes[source_class].native {
+            Some(t::NativeClass::Map(_, map_value)) => {
+                if key.is_none() {
+                    return Err(Diagnostic::new(header_span, "Map<int, V> exige deux bindings typés: clé et valeur"));
+                }
+                return self.for_each_map(stmt, place, value, source_type, source_class, map_value);
+            }
+            Some(t::NativeClass::List(_)) => {
+                if key.is_some() {
+                    return Err(Diagnostic::new(header_span, "List<T> conserve son unique binding d'element"));
+                }
+            }
+            _ => return Err(Diagnostic::new(collection.span, "la collection d'une boucle for-each doit etre une List<T> ou Map<int, V>")),
+        }
+        let list_class = source_class;
         let Some(t::NativeClass::List(element_type)) = self.tables.classes[list_class].native else {
-            return Err(Diagnostic::new(collection.span, "la collection d'une boucle for-each doit etre une List<T>"));
+            unreachable!("checked List traversal type");
         };
-        let header_type = self.tables.resolve_type(header, header_span)?;
-        let (exclusive, getter) = match element_type {
-            Type::Int | Type::Boolean | Type::String => {
-                if header_type != element_type {
-                    return Err(Diagnostic::new(header_span, format!(
-                        "type d'element incompatible: List<{}> exige le meme type copiable dans l'entete",
-                        self.tables.type_name(element_type))));
-                }
-                (false, "get")
-            }
-            Type::Object(element_class) => {
-                let Type::Borrow { class: header_class, mutable } = header_type else {
-                    return Err(Diagnostic::new(header_span,
-                        "[E5004] un element affine de List<T> doit etre lie par `borrow T` ou `borrow mut T`"));
-                };
-                if header_class != element_class {
-                    return Err(Diagnostic::new(header_span, format!(
-                        "type d'emprunt incompatible: attendu {}, trouve {}",
-                        self.tables.type_name(Type::Borrow { class: element_class, mutable }),
-                        self.tables.type_name(header_type))));
-                }
-                (mutable, if mutable { "getMut" } else { "getRef" })
-            }
-            _ => return Err(Diagnostic::new(collection.span, "type d'element non pris en charge dans List<T>")),
-        };
-        if matches!(source_type, Type::Object(_)) && place.is_none() {
-            return Err(Diagnostic::new(collection.span,
-                "une collection possedee temporaire ne peut pas etre parcourue; utiliser un emplacement stable ou un emprunt existant"));
-        }
-        if exclusive && matches!(source_type, Type::Borrow { mutable: false, .. }) {
-            return Err(Diagnostic::new(collection.span,
-                "[E3003] un parcours mutable exige un emprunt exclusif de la liste"));
-        }
+        let (binding_type, exclusive) = self.traversal_binding(header, element_type, header_span)?;
+        let getter = if binding_type.is_borrow() {
+            if exclusive { "getMut" } else { "getRef" }
+        } else { "get" };
         let list_type = Type::Borrow { class: list_class, mutable: exclusive };
-        let frozen_value = if let Some(place) = place {
-            if matches!(place.kind, PlaceKind::This) { self.require_initialized(collection.span)?; }
-            if exclusive { self.require_mutable(&place, collection.span)?; }
-            t::Expr { kind: t::ExprKind::Borrow { place, mutable: exclusive },
-                ty: list_type, span: collection.span }
-        } else {
-            let mut value = value.unwrap();
-            let Type::Borrow { class, mutable } = value.ty else {
-                return Err(Diagnostic::new(collection.span,
-                    "une collection possedee temporaire ne peut pas etre parcourue; utiliser un emplacement stable ou un emprunt existant"));
-            };
-            if exclusive && !mutable {
-                return Err(Diagnostic::new(collection.span,
-                    "[E3003] un parcours mutable exige un emprunt exclusif de la liste"));
-            }
-            if class != list_class {
-                return Err(Diagnostic::new(collection.span, "type d'emprunt de liste incompatible"));
-            }
-            value.ty = list_type;
-            value
-        };
+        let frozen_value = self.traversal_receiver(place, value, source_type, list_type, collection.span)?;
 
         self.scopes.push(HashMap::new());
         self.block_depth += 1;
@@ -754,6 +723,140 @@ impl Checker<'_> {
         self.scopes.pop();
         result
     }
+    /// Lists and maps share the same copied/borrowed value-binding contract.
+    fn traversal_binding(&self, header: &a::Type, value_type: Type, span: Span) -> Result<(Type, bool), Diagnostic> {
+        let header_type = self.tables.resolve_type(header, span)?;
+        match value_type {
+            Type::Int | Type::Boolean | Type::String if header_type == value_type => Ok((value_type, false)),
+            Type::Int | Type::Boolean | Type::String => Err(Diagnostic::new(span, format!(
+                "type d'element incompatible: attendu {}", self.tables.type_name(value_type)))),
+            Type::Object(class) => {
+                let Type::Borrow { class: header_class, mutable } = header_type else {
+                    return Err(Diagnostic::new(span,
+                        "[E5004] un element affine doit etre lie par `borrow T` ou `borrow mut T`"));
+                };
+                if header_class != class {
+                    return Err(Diagnostic::new(span, format!(
+                        "type d'emprunt incompatible: attendu {}, trouve {}",
+                        self.tables.type_name(Type::Borrow { class, mutable }),
+                        self.tables.type_name(header_type))));
+                }
+                Ok((header_type, mutable))
+            }
+            _ => Err(Diagnostic::new(span, "type d'element non pris en charge pour le parcours")),
+        }
+    }
+
+    /// Freeze one stable place or an already borrowed result for the whole loop.
+    fn traversal_receiver(&mut self, place: Option<Place>, value: Option<t::Expr>, source_type: Type,
+                          borrow_type: Type, span: Span) -> Result<t::Expr, Diagnostic> {
+        let Type::Borrow { mutable, .. } = borrow_type else { unreachable!("traversal receiver type"); };
+        if mutable && matches!(source_type, Type::Borrow { mutable: false, .. }) {
+            return Err(Diagnostic::new(span, "[E3003] un parcours mutable exige un emprunt exclusif de la collection"));
+        }
+        if let Some(place) = place {
+            if matches!(place.kind, PlaceKind::This) { self.require_initialized(span)?; }
+            if mutable { self.require_mutable(&place, span)?; }
+            Ok(t::Expr { kind: t::ExprKind::Borrow { place, mutable }, ty: borrow_type, span })
+        } else {
+            let mut value = value.expect("non-place traversal expression was checked");
+            if !value.ty.is_borrow() {
+                return Err(Diagnostic::new(span,
+                    "une collection possedee temporaire ne peut pas etre parcourue; utiliser un emplacement stable ou un emprunt existant"));
+            }
+            value.ty = borrow_type;
+            Ok(value)
+        }
+    }
+
+    fn for_each_map(&mut self, stmt: &a::Stmt, place: Option<Place>, value: Option<t::Expr>,
+                    source_type: Type, map_class: usize, map_value: Type) -> Result<t::Stmt, Diagnostic> {
+        let a::StmtKind::ForEach { ty: header, name, key: Some((key_header, key_name)),
+                                  collection, body, header_span } = &stmt.kind
+            else { unreachable!("checked two-binding map traversal"); };
+        let header_span = *header_span;
+        let span = stmt.span;
+        let key_type = self.tables.resolve_type(key_header, header_span)?;
+        if key_type != Type::Int {
+            return Err(Diagnostic::new(header_span, "Map traversal exige un binding de clé `int`"));
+        }
+        let (value_binding_type, exclusive) = self.traversal_binding(header, map_value, header_span)?;
+        let map_type = Type::Borrow { class: map_class, mutable: exclusive };
+        let frozen_value = self.traversal_receiver(place, value, source_type, map_type, collection.span)?;
+
+        self.scopes.push(HashMap::new());
+        self.block_depth += 1;
+        let result = (|| {
+            let unique = self.variables.len();
+            let map_name = format!("$nacre_for_map_{unique}");
+            let cursor_name = format!("$nacre_for_bucket_{unique}");
+            let map_id = self.declare(&map_name, map_type, span)?;
+            let cursor_id = self.declare(&cursor_name, Type::Int, span)?;
+            let capacity_id = self.declare(&format!("$nacre_for_capacity_{unique}"), Type::Int, span)?;
+            let key_id = self.declare(key_name, Type::Int, header_span)?;
+            let value_id = self.declare(name, value_binding_type, header_span)?;
+
+            let map_place = Place { kind: PlaceKind::Var(map_id), ty: map_type };
+            let cursor_place = Place { kind: PlaceKind::Var(cursor_id), ty: Type::Int };
+            let typed_expr = |kind, ty, expr_span| t::Expr { kind, ty, span: expr_span };
+            let cursor_read = || typed_expr(t::ExprKind::Read(cursor_place.clone()), Type::Int, span);
+            let slot = |kind, ty| typed_expr(t::ExprKind::MapSlot {
+                map: map_place.clone(),
+                index: Box::new(cursor_read()),
+                kind,
+            }, ty, collection.span);
+            let advance = || t::Stmt::Assign {
+                target: cursor_place.clone(),
+                value: typed_expr(t::ExprKind::Binary {
+                    op: B::Add,
+                    left: Box::new(cursor_read()),
+                    right: Box::new(typed_expr(t::ExprKind::Int(1), Type::Int, span)),
+                }, Type::Int, span),
+            };
+
+            let condition = typed_expr(t::ExprKind::Binary {
+                op: B::Lt,
+                left: Box::new(cursor_read()),
+                right: Box::new(typed_expr(t::ExprKind::Read(Place {
+                    kind: PlaceKind::Var(capacity_id), ty: Type::Int,
+                }), Type::Int, collection.span)),
+            }, Type::Boolean, span);
+            let map_slot_occupied = slot(t::MapSlotKind::Occupied, Type::Boolean);
+            let key_value = slot(t::MapSlotKind::Key, Type::Int);
+            let entry_value = slot(t::MapSlotKind::Value, value_binding_type);
+            let mut occupied_body = vec![
+                t::Stmt::Let { id: key_id, ty: Type::Int, value: Some(key_value) },
+                t::Stmt::Let { id: value_id, ty: value_binding_type, value: Some(entry_value) },
+                advance(),
+            ];
+
+            let (user_body, _) = {
+                self.loop_depth += 1;
+                let result = self.block(body);
+                self.loop_depth -= 1;
+                result?
+            };
+            occupied_body.extend(user_body);
+            let loop_body = vec![t::Stmt::If {
+                condition: map_slot_occupied,
+                then_block: occupied_body,
+                else_block: Some(vec![advance()]),
+            }];
+            Ok(t::Stmt::Block(vec![
+                t::Stmt::Let { id: map_id, ty: map_type, value: Some(frozen_value) },
+                // Structural mutation is forbidden by the root loan, so capacity is invariant.
+                t::Stmt::Let { id: capacity_id, ty: Type::Int,
+                    value: Some(typed_expr(t::ExprKind::MapCapacity(map_place), Type::Int, collection.span)) },
+                t::Stmt::Let { id: cursor_id, ty: Type::Int,
+                    value: Some(typed_expr(t::ExprKind::Int(0), Type::Int, span)) },
+                t::Stmt::While { condition, body: loop_body },
+            ]))
+        })();
+        self.block_depth -= 1;
+        self.scopes.pop();
+        result
+    }
+
 
     fn this_place(&self, span: Span) -> Result<Place, Diagnostic> {
         let id = self.receiver.ok_or_else(|| Diagnostic::new(span, "this ou membre d'instance inaccessible depuis une fonction ou methode static"))?;
@@ -786,7 +889,7 @@ impl Checker<'_> {
                 let base = self.place(base, false)?;
                 self.field_place(base, name, expr.span, write)
             }
-            _ => Err(Diagnostic::new(expr.span, "recepteur temporaire non pris en charge en V5; stocker l'objet dans une variable locale")),
+            _ => Err(Diagnostic::new(expr.span, "recepteur temporaire non pris en charge; stocker l'objet dans une variable locale")),
         }
     }
     /// Borrowing changes the call contract, not ownership. No allocation or copy.
@@ -816,7 +919,7 @@ impl Checker<'_> {
                 return Err(Diagnostic::new(expr.span, format!("type incompatible: attendu {}, trouve {}", self.tables.type_name(expected), self.tables.type_name(place.ty))));
             }
             if self.tables.is_view(expected) {
-                return Err(Diagnostic::new(expr.span, "[E3007] emprunter une vue locale n'est pas pris en charge en V5"));
+                return Err(Diagnostic::new(expr.span, "[E3007] emprunter une vue locale n'est pas pris en charge"));
             }
             if matches!(place.kind, PlaceKind::This) { self.require_initialized(expr.span)?; }
             if mutable { self.require_mutable(&place, expr.span)?; }
@@ -833,7 +936,7 @@ impl Checker<'_> {
         Ok(value)
     }
     /// Shared access is transitive through owned fields. A borrowed field is
-    /// always shared in V5, even when its containing view is mutable.
+    /// always shared, even when its containing view is mutable.
     fn writable(&self, place: &Place) -> bool {
         if matches!(place.ty, Type::Borrow { mutable: false, .. }) { return false; }
         match &place.kind {
@@ -854,7 +957,7 @@ impl Checker<'_> {
             return Err(Diagnostic::new(span, "[E3007] deplacement d'une vue locale interdit; sa duree de vie est son bloc de declaration"));
         }
         let PlaceKind::Var(id) = place.kind else {
-            return Err(Diagnostic::new(span, "deplacement de this ou d'un champ objet interdit en V5; seuls les objets locaux et parametres sont transferables"));
+            return Err(Diagnostic::new(span, "deplacement de this ou d'un champ objet interdit; seuls les objets locaux et parametres sont transferables"));
         };
         if self.locks.contains(&id) {
             return Err(Diagnostic::new(span, "objet emprunte comme recepteur d'un appel en cours; deplacement interdit"));
@@ -893,7 +996,7 @@ impl Checker<'_> {
         Ok((t::ExprKind::Call { target: CallTarget::Println, receiver: None, args: vec![value] }, Type::Void))
     }
     fn expression(&mut self, expr: &a::Expr) -> Result<t::Expr, Diagnostic> {
-        if self.expr_depth >= 128 { return Err(Diagnostic::new(expr.span, "expression trop profonde pour cette V5")); }
+        if self.expr_depth >= 128 { return Err(Diagnostic::new(expr.span, "expression trop profonde")); }
         self.expr_depth += 1;
         let result = self.expression_inner(expr);
         self.expr_depth -= 1; result
@@ -1021,7 +1124,7 @@ impl Checker<'_> {
                     }
                     B::Eq | B::Ne => {
                         if !matches!(left.ty, Type::Int | Type::Boolean) {
-                            return Err(Diagnostic::new(expr.span, "== et != sont limites a int et boolean en V5"));
+                            return Err(Diagnostic::new(expr.span, "== et != sont limites a int et boolean"));
                         }
                         self.require(left.ty, right.ty, right.span)?; Type::Boolean
                     }

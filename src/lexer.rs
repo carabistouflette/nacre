@@ -44,14 +44,14 @@ pub fn lex(source: &str) -> Result<Vec<Token>, Diagnostic> {
                 "extends" | "null" |
                 "super" | "import" | "package" | "final" | "throw" |
                 "try" | "catch" | "switch" | "long" | "double" | "float" | "char" => {
-                    return Err(Diagnostic::new(Span::new(start, lexer.pos), format!("`{word}` n'est pas encore pris en charge en V5")));
+                    return Err(Diagnostic::new(Span::new(start, lexer.pos), format!("`{word}` n'est pas encore pris en charge")));
                 }
                 _ => TokenKind::Ident(word.to_owned()),
             }
         } else if c.is_ascii_digit() {
             while lexer.peek().is_some_and(|c| c.is_ascii_digit()) { lexer.bump(); }
             if lexer.peek().is_some_and(|c| c.is_ascii_alphabetic() || c == '_') {
-                return Err(Diagnostic::new(Span::new(start, lexer.pos), "entier decimal invalide (ni suffixe ni hexadecimal en V5)"));
+                return Err(Diagnostic::new(Span::new(start, lexer.pos), "entier decimal invalide (ni suffixe ni hexadecimal)"));
             }
             TokenKind::Number(source[start..lexer.pos].to_owned())
         } else {

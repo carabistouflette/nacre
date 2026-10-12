@@ -1,0 +1,6 @@
+void main() {
+    Map<int, int> entries = new Map<int, int>();
+    entries.put(1, 10);
+    // Rejected: replacement is structural even when the key already exists.
+    for (int key, int value : entries) { entries.put(1, 20); }
+}

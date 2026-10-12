@@ -1,0 +1,5 @@
+void main() {
+    // Rejected: map traversal supports the map's integer key representation.
+    Map<boolean, int> entries = new Map<boolean, int>();
+    for (int key, int value : entries) { }
+}

@@ -1,4 +1,4 @@
-# Grammar V9
+# Nacre grammar
 
 Grammaire indicative du sous-ensemble implémenté. Les contraintes sémantiques
 ci-dessous font partie du langage. Identifiants ASCII ; sources et chaînes UTF-8 ;
@@ -36,7 +36,7 @@ statement     = type identifier [ "=" expression ] ";"
               | callOrNew ";"
               | "if" "(" expression ")" block [ "else" ( block | ifStatement ) ]
               | "while" "(" expression ")" block
-              | "for" "(" type identifier ":" expression ")" block
+              | "for" "(" type identifier [ "," type identifier ] ":" expression ")" block
               | "return" [ expression ] ";"
               | "break" ";" | "continue" ";" | matchStatement | block ;
 matchStatement = "match" "(" expression ")" "{" matchArm { matchArm } "}" ;
@@ -72,10 +72,11 @@ shift operator exists. Builtins include `println(expr)`,
 from an expected borrowed type or written as `borrow place` / `borrow mut place`,
 not a function call.
 
-List `for` headers explicitly copy primitive elements or borrow nominal elements
-with `borrow` / `borrow mut`. Collections are evaluated once, cannot be temporary
-owners, and stay borrowed for the complete loop. This is not a C-style `for`
-statement or a first-class iterator API. See [V8.md](V8.md).
+List `for` headers have one binding; map headers have two typed bindings,
+`int key, V value`, with `borrow V` / `borrow mut V` for affine values.
+Collections are evaluated once, cannot be temporary owners, and stay borrowed
+for the complete loop. Map order is unspecified. This is not a C-style `for`
+statement or a first-class iterator API. See [MAP_TRAVERSAL.md](MAP_TRAVERSAL.md).
 
 ## Déclarations et interfaces
 
@@ -142,7 +143,7 @@ locale de branche. Les objets liés sont détruits en sortie de portée, y compr
 sur `return`, `break` et `continue`, sauf transfert de leur propriété.
 `None { ... }` et `None() { ... }` sont équivalents pour une variante vide.
 
-Enum payloads cannot contain borrowed references or local views. V7 permits
+Enum payloads cannot contain borrowed references or local views. Nacre permits
 borrowed enum matching: primitive bindings copy and nominal bindings borrow the
 scrutinee without changing its tag. Cycles of inline sums remain forbidden,
 including cycles with an empty variant: their C size would be infinite.
@@ -150,7 +151,7 @@ Un cycle passant par un objet alloué peut avoir un cas de base réel, par exemp
 `enum Link { End; Next(Node); }` avec un champ `Link` dans `Node`.
 
 `Option<T>` and `Result<T,E>` are reserved preinjected enums with `None`/`Some(T)`
-and `Ok(T)`/`Err(E)`. V7 has no implicit unwrapping, exception, or
+and `Ok(T)`/`Err(E)`. Nacre has no implicit unwrapping, exception, or
 error-propagation operator.
 
 
@@ -199,8 +200,8 @@ statiques, sans concaténation ni construction dynamique.
 `List<T>`, `Map<int,V>`, `Text`, `Console`, `Files`, `Args`, `Option<T>` et
 `Result<T,E>` sont des noms réservés préinjectés, pas de nouveaux mots-clés.
 Leurs contrats sont décrits dans [STDLIB.md](STDLIB.md).
-V9 Map has two explicit generic arguments, but only int keys are supported.
-Ordinary generic syntax applies; map iteration is not added to list `for`.
+Map has two explicit generic arguments, but only int keys are supported.
+Ordinary generic syntax applies; two-binding map `for` shares lexical list-loop rules.
 `String` reste statique ; `Text` est la valeur possédée modifiable. La syntaxe
 `T[]` et l'indexation `xs[i]` restent absentes.
 

@@ -1,0 +1,6 @@
+void main() {
+    Map<int, int> entries = new Map<int, int>();
+    entries.put(1, 10);
+    // Rejected: the owner cannot be destroyed during traversal.
+    for (int key, int value : entries) { drop(entries); break; }
+}

@@ -182,6 +182,30 @@ fn catalog_commands_preserve_polymorphism_relationships_and_stable_ids() {
 }
 
 #[test]
+fn relationship_guard_scans_surviving_map_values_and_keeps_list_order() {
+    let program = program();
+    let input = concat!(
+        "add-book\nFirst\nAuthor\n1\n",
+        "add-tool\nSecond\nWorkshop\n1\n",
+        "add-book\nThird\nAuthor\n1\n",
+        "add-member\nReader\n\n",
+        "lend\n3\n1\n",
+        "remove\n1\nremove\n2\n",
+        "remove-member\n1\n",
+        "add-book\nFourth\nAuthor\n1\n",
+        "list\nmembers\nquit\n"
+    );
+    let output = execute(&program, input, &[]);
+    let transcript = String::from_utf8(output.stdout).unwrap();
+    assert!(transcript.contains("A member with an active loan cannot be removed."));
+    assert!(transcript.contains("Member #1"));
+    assert!(transcript.contains("Name: Reader"));
+    let third = transcript.find("Label: Third").unwrap();
+    let fourth = transcript.find("Label: Fourth").unwrap();
+    assert!(third < fourth);
+}
+
+#[test]
 fn optional_startup_file_loads_complete_unicode_state() {
     let program = program();
     let workspace = Workspace::new();

@@ -52,3 +52,48 @@ void main() {
     (parameter_list)
     (block
       (MISSING "}"))))
+
+==================
+List and map traversal headers
+==================
+void main() {
+    for (int item : items) {}
+    for (int key, int value : counts) {}
+    for (int key, borrow Counter value : counters) {}
+    for (int key, borrow mut Counter value : counters) {}
+}
+---
+(source_file
+  (function_declaration
+    (primitive_type)
+    (identifier)
+    (parameter_list)
+    (block
+      (for_statement
+        (primitive_type)
+        (identifier)
+        (identifier)
+        (block))
+      (for_statement
+        (primitive_type)
+        (identifier)
+        (primitive_type)
+        (identifier)
+        (identifier)
+        (block))
+      (for_statement
+        (primitive_type)
+        (identifier)
+        (borrowed_type
+          (type_identifier))
+        (identifier)
+        (identifier)
+        (block))
+      (for_statement
+        (primitive_type)
+        (identifier)
+        (borrowed_type
+          (type_identifier))
+        (identifier)
+        (identifier)
+        (block)))))

@@ -1,0 +1,5 @@
+void main() {
+    Map<int, int> entries = new Map<int, int>();
+    // Rejected: an integer-keyed map binds its key as int.
+    for (boolean key, int value : entries) { }
+}

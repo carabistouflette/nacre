@@ -1,0 +1,25 @@
+{
+  "release": "0.11.0",
+  "status": "passed",
+  "scope": "Actual official native desktop applications on isolated X11/Xvfb, not headless grammar substitutes",
+  "compiler": "0.11.0",
+  "extension_version": "0.6.0",
+  "grammar_version": "0.5.0",
+  "vscode": {
+    "observed_version": "1.141.0",
+    "commit": "2a59476c9bfcb90b3ddc372c36762471b7dfad1c",
+    "extension": "nacre.nacre@0.6.0",
+    "verified": ["Both typed map bindings, commas, generics and borrow mut highlighted", "mapforeachref selected and inserted through actual completion UI", "Live E3001 for absent removal inside shared map loop while value remains used; moving removal after loop clears it", "Unsaved cross-file getter declaration rename produces unknown-method diagnostic in unchanged borrowed loop-value call; undo clears it", "Language-server restart republishes active overlay diagnostic", "Save/close/reopen returns clean diagnostics", "Copied lending model and desk open clean"],
+    "host_note": "An initial pre-isolation launch accessed existing host shared storage; it was preserved rather than deleted. Retained acceptance used private HOME/XDG/profile paths. No credentials entered"
+  },
+  "zed": {
+    "observed_package_version": "1.23.2-1",
+    "observed_application_version": "1.23.2+stable",
+    "extension": "Nacre 0.6.0 dev",
+    "verified": ["Both typed map bindings, commas, generics and borrow mut highlighted", "Live E3001 for absent removal inside shared map loop; moving removal after loop clears it", "Unsaved cross-file getter declaration rename produces diagnostic in unchanged loop-value call; undo clears it", "Restart Language Server republishes active E3001 and correction clears it", "Save/close/reopen clean", "Copied lending model and desk open; Project Diagnostics reports no problems"]
+  },
+  "rename_semantics": "Manual unsaved declaration edit and undo exercise overlays; no LSP rename-refactoring API is claimed",
+  "visual_inspection": "Parent inspected actual VS Code traversal syntax/expanded completion and actual Zed traversal syntax/live E3001 screenshots",
+  "cleanup": "Owned editor/LSP sessions, private desktop services and Xvfb stopped; owned downloads, profiles, extension copies, workspaces and caches removed; unrelated resources preserved",
+  "publication": "Curated proof retained outside Git; summary omits workstation paths, process IDs, display identifiers, private proof locations and credentials"
+}

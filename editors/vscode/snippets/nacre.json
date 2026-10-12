@@ -208,6 +208,33 @@
     ],
     "description": "Mutate an affine map value under an exclusive whole-map loan"
   },
+  "Copied map traversal": {
+    "prefix": "mapfor",
+    "body": [
+      "for (int ${1:key}, ${2:int} ${3:value} : ${4:counts}) {",
+      "    $0",
+      "}"
+    ],
+    "description": "Traverse copied map values under a shared whole-map loan"
+  },
+  "Shared map traversal": {
+    "prefix": "mapforeachref",
+    "body": [
+      "for (int ${1:key}, borrow ${2:Contact} ${3:value} : ${4:entries}) {",
+      "    $0",
+      "}"
+    ],
+    "description": "Traverse affine map values under a shared whole-map loan"
+  },
+  "Exclusive map traversal": {
+    "prefix": "mapforeachmut",
+    "body": [
+      "for (int ${1:key}, borrow mut ${2:Contact} ${3:value} : ${4:entries}) {",
+      "    $0",
+      "}"
+    ],
+    "description": "Mutate affine map values under an exclusive whole-map loan"
+  },
   "Recoverable map removal": {
     "prefix": "mapremove",
     "body": [

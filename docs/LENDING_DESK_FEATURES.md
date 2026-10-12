@@ -1,8 +1,9 @@
 # Lending desk feature coverage
 
-The desk is a behavior-focused companion to the V9 map API. It intentionally
-uses only integer-keyed map lookup/update/removal and a separate ordered ID list;
-it does not add map iteration or another key type.
+The desk is a behavior-focused companion to the integer-keyed map API. It uses
+map lookup/update/removal and built-in traversal for order-independent guard
+scans; a separate insertion-ordered ID list remains the source for display and
+persistence order. No additional map key type is introduced.
 
 | Feature or invariant | Implementation: file and functions | Coverage |
 |---|---|---|
@@ -10,7 +11,8 @@ it does not add map iteration or another key type.
 | Owned interface upcast and polymorphic models | `model.ncr`: `Book`, `Tool`, `Loanable`; `desk.ncr`: `addBook`, `addTool`, `printPreview`, `displayResource` | `catalog_commands_preserve_polymorphism_relationships_and_stable_ids` checks both resource kinds and their distinct details |
 | Receiver-derived shared/exclusive resource access | `model.ncr`: `getLabel`, `getLabelMut`, `getAvailability`; `catalog.ncr`: `getRef`, `getMut`; `desk.ncr`: `displayResource`, `renameResource`, `lendResource`, `returnResource`, `setMaintenance` | The behavior test reads sibling catalogs together, replaces labels, appends through an exclusive label borrow, and updates availability only after shared loans end |
 | Generic map plus insertion order | `examples/lending_desk/catalog.ncr`: `Catalog<T>.put`, `getRef`, `getMut`, `remove`, `idAt` | Persistence snapshots and command tests check stable insertion order after deleting an earlier resource and adding a later ID |
-| V8 lexical list traversal under shared catalog loans | `catalog.ncr`: `idsRef`, `resourceIdsRef`, `memberIdsRef`; `desk.ncr`: `listResources`, `listMembers` | Lists stable IDs once per traversal, performs shared sibling-map lookup, and ends the whole-list loan before later commands mutate catalogs |
+| List traversal for ordered shared catalog loans | `catalog.ncr`: `idsRef`, `resourceIdsRef`, `memberIdsRef`; `desk.ncr`: `listResources`, `listMembers` | Listings preserve stable ID order, perform shared sibling-map lookup, and end the whole-list loan before later commands mutate catalogs |
+| Built-in map traversal for order-independent guard scans | `catalog.ncr`: `Catalog<T>.entriesRef`; `DeskState.hasActiveLoanFor`, `hasValidRelationships` | `relationship_guard_scans_surviving_map_values_and_keeps_list_order` checks the active-loan guard after earlier resources are removed; malformed-load tests check relationship validation |
 | Members, optional notes, and active-loan references | `model.ncr`: `Member`; `catalog.ncr`: `DeskState.hasActiveLoanFor`, `hasValidRelationships`; `desk.ncr`: `displayMember`, `removeMember` | Behavior and malformed-load tests cover note presence, removal rejection for an active borrower, and missing-member reference rejection |
 | Availability state guards | `desk.ncr`: `lendResource`, `returnResource`, `setMaintenance`, `removeResource` | Behavior test checks lending guards, lent-resource maintenance/removal rejection, successful return, maintenance entry/release, and return rejection when not lent |
 | Checked logical day and due-date arithmetic | `catalog.ncr`: `DeskState.logicalDay`, `setLogicalDay`; `desk.ncr`: `lendResource`, `advanceDay` | `overflowing_day_and_due_date_leave_a_loaded_state_unchanged` checks that due-date and day overflow preserve the saved state |

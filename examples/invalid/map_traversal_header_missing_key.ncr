@@ -1,0 +1,5 @@
+void main() {
+    Map<int, int> entries = new Map<int, int>();
+    // Rejected: map traversal requires both key and value bindings.
+    for (int value : entries) { }
+}

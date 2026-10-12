@@ -1,4 +1,4 @@
-# Architecture Nacre V9
+# Nacre architecture
 
 Cette note décrit l'implémentation source livrée. Le périmètre de validation
 du compilateur Rust et de ses programmes générés est documenté dans
@@ -53,12 +53,14 @@ Des bornes sur la profondeur, le nombre et la longueur des instances limitent
 les expansions récursives. Ce n'est pas une inférence de paramètres, ni un
 système de contraintes génériques avec bornes de type.
 
-V8 `ForEach` AST nodes preserve the header type, collection, body, and source
-spans. The checker evaluates the collection once, creates an unspellable hidden
-borrow/cursor binding, and lowers to the existing typed block/while IR. A small
-statement prefix binds the element and advances the cursor before the original
-body is checked by reference, not cloned. Existing flow, borrowing, and C cleanup
-passes therefore govern loop joins and exits; no iterator object is introduced.
+`ForEach` AST nodes preserve both typed map bindings (or one list binding),
+collection, body and source spans. The checker shares binding/receiver contracts,
+evaluates the collection once, and lowers to existing typed block/while IR.
+Lists use indexed accessors; maps use compiler-only capacity/occupied/key/value
+expressions, with C layout knowledge confined to `stdlib_codegen`.
+The cursor advances before the original body is checked by reference, not cloned.
+Existing flow, borrowing and C cleanup passes govern joins/exits. No iterator
+object, affine-owner copy or per-entry key rehashing is introduced.
 
 Recoverable list intrinsics return inline `Option<T>` layouts obtained from
 ordinary specialization. Native enum IDs/tags are looked up, not fixed in the
@@ -105,7 +107,7 @@ il ne permet pas d'obtenir un accès mutable concurrent à un emprunt partagé.
 Virtual method signatures expose the same contracts as concrete methods; every
 implementation body is checked separately. Borrow analysis need not select a
 dynamic implementation to determine whether an argument owns or borrows.
-V7 records borrowed returns in those signatures and proves their receiver origin;
+The checker records borrowed returns in those signatures and proves their receiver origin;
 caller-side result loans survive call cleanup. Local views remain non-exportable.
 
 ## Représentation C
@@ -148,7 +150,7 @@ variables de branche et invalide son temporaire ; le CFG et les nettoyages
 lexicaux couvrent retours et sorties de boucle. Il est émis comme une chaîne
 `if`/`else if`, pour qu’un `break` continue de viser la boucle source.
 
-V7 enum references point to inline storage. Borrowed matching preserves the tag
+Enum references point to inline storage. Borrowed matching preserves the tag
 and binds primitive copies or receiver/scrutinee-derived nominal references;
 payloads containing borrowed fields/local views remain forbidden.
 
@@ -171,7 +173,7 @@ nettoyage après une erreur fatale.
 mesuré. Un niveau d'optimisation plus élevé n'est pas présenté comme une garantie
 de code plus rapide.
 
-`emit-llvm` invokes Clang with `-S -emit-llvm` on the same generated C. V7 has no
+`emit-llvm` invokes Clang with `-S -emit-llvm` on the same generated C. Nacre has no
 direct LLVM backend written in Rust. `NACRE_CLANG` selects that Clang executable;
 `NACRE_CC`/`CC` separately select the compiler used by `run` and `build`.
 
@@ -192,7 +194,7 @@ ne sont pas un substitut à cette validation.
 
 `ast::Class.native` is never produced by source parsing. Trusted prelude injection
 marks List<T>, Map<K,V>, Text and the static runtime APIs. Specialization resolves
-collection parameters; V9 requires Map keys to be int before ordinary checking.
+collection parameters; Map keys must be int before ordinary checking.
 The checker resolves native classes and typed methods without granting native
 privileges to a user-defined spelling.
 Unused native classes are not materialized. Copied `get` is removed for affine

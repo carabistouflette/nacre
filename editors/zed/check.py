@@ -105,6 +105,27 @@ void main() {
         outline = QueryCursor(queries["outline"]).captures(tree.root_node)
         outline_names = {enum_match[node.start_byte:node.end_byte].decode() for node in outline.get("name", [])}
         assert {"Choice", "Empty", "Item"}.issubset(outline_names), outline_names
+        map_traversal = b'''void main() {
+    for (int item : numbers) {}
+    for (int key, int value : counts) {}
+    for (int key, borrow Counter value : counters) {}
+    for (int key, borrow mut Counter value : counters) {}
+}'''
+        tree = parser.parse(map_traversal)
+        assert not tree.root_node.has_error, tree.root_node
+        captures = QueryCursor(queries["highlights"]).captures(tree.root_node)
+        captured_text = {
+            capture: [map_traversal[node.start_byte:node.end_byte].decode() for node in nodes]
+            for capture, nodes in captures.items()
+        }
+        assert sorted(captured_text.get("variable.parameter", [])) == sorted([
+            "item", "key", "value", "key", "value", "key", "value"
+        ]), captured_text.get("variable.parameter")
+        assert captured_text.get("type.builtin", []).count("int") == 5
+        assert captured_text.get("type", []).count("Counter") == 2
+        assert {"for", "borrow", "mut"}.issubset(set(captured_text.get("keyword", [])))
+        assert not {"item", "key", "value"} & set(captured_text.get("type", []))
+        print("Verified list/map binding captures for key/value types, names, borrow modes, and lexical scope.")
         print(f"Zed smoke: {count} examples parsed without errors; all {len(queries)} queries executed.")
         print("Verified ownership keywords, enum/match syntax, variant construction, consuming bindings, string/comment isolation, escapes, types, properties, and Sudoku outline.")
 

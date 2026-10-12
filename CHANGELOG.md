@@ -1,6 +1,26 @@
 # Nacre changelog
 
-## V9 / 0.10.0
+## 0.11.0
+
+- Built-in integer-map traversal binds copied keys and copied primitive or
+  shared/exclusive affine values. Each live entry is visited once in unspecified
+  order; collections are evaluated once and loaned for the complete loop.
+- Direct occupied-slot scanning avoids iterator allocations, affine-owner copies
+  and key rehashing. Existing block/while ownership and cleanup handle nested
+  loops, continue, break, return and receiver-derived borrowed results.
+- List and map traversal share binding/receiver contract checks. Internal slot
+  expressions keep C layout knowledge in the native collection backend.
+- Editor packages 0.6.0, grammar 0.5.0 and 27 snippets cover both loop bindings.
+- Development is feature-driven and versions use ordinary pre-1.0 0.x.y releases.
+  Current help, diagnostics, dump headers and docs no longer use Vx branding;
+  historical reports/contracts and Git history retain their original identity.
+- Design/review follows the linked Rust design principles: focused composition,
+  encapsulation, explicit contracts, side-effect-free queries, DRY/KISS and
+  predictable behavior. Mutating commands may return transferred ownership.
+- No first-class iterators, text/custom keys, NLL/lifetime refinements, disjoint
+  entry borrowing, fallible allocation or new backend is introduced.
+
+## 0.10.0
 
 - Map<int,V> supports all signed int32 keys and the existing copied/owned value
   representations. Put transfers the previous value in an inline Option;
@@ -21,7 +41,7 @@
 - Text/custom keys, map traversal, lifetime refinements, fallible allocation,
   exception unwinding and new backends remain excluded; see docs/V9.md.
 
-## V8 / 0.9.0
+## 0.9.0
 
 - List `for` traversal copies primitive elements or explicitly borrows affine
   elements shared/exclusively. The collection is evaluated once and loaned for
@@ -34,12 +54,12 @@
 - Contact-book substring search, phone filtering, and confirmed batch removal
   exercise traversal and recoverable extraction. Unicode persistence and
   candidate-load rollback retain the existing version-1 file format.
-- Editor packages 0.4.0, grammar 0.3.0, and 20 snippets include V8 traversal and
-  recoverable removal. The explicit milestone and exclusions are in `docs/V8.md`.
+- Editor packages 0.4.0, grammar 0.3.0, and 20 snippets include list traversal and
+  recoverable removal. The historical release contract is in `docs/V8.md`.
 - First-class iterators, maps, lifetime refinements, fallible allocation, exception
   unwinding, and new backends remain outside this release.
 
-## V7 / 0.8.0
+## 0.8.0
 
 - Instance methods and interface contracts return shared/exclusive borrows proven
   to derive from their receiver. Caller loans remain lexical; escaping locals or
@@ -57,7 +77,7 @@
 - Complete interactive contact book: shared consultation, exclusive in-place
   editing, optional phone matching, add/remove, validated candidate loading, and
   atomic Unicode/path-with-spaces persistence.
-- VS Code/Zed packages 0.3.0, grammar 0.2.0, and 16 snippets cover V7. Both actual
+- Editor packages 0.3.0, grammar 0.2.0, and 16 snippets cover borrowed returns. Both actual
   desktop applications exercise compiler diagnostics, overlays, restart/reopen.
 - Behavioral/native regressions replace obsolete restrictions and source-shape
   assertions. Rust 1.74, GCC/Clang sanitizer/LLVM paths, real fuzzing, and remote

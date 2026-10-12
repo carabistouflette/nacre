@@ -423,6 +423,18 @@ impl Emitter<'_> {
                 }
                 else { self.bind(expr.ty, &format!("(ncr_obj_{target}){{(void *){}, &ncr_vtable_{concrete}_{target}}}", place_text(place))) }
             }
+            E::MapCapacity(map) => {
+                let map = place_text(map);
+                let capacity = crate::stdlib_codegen::map_capacity_expression(&map);
+                self.bind(expr.ty, &capacity)
+            }
+            E::MapSlot { map, index, kind } => {
+                let index = self.expression(index);
+                let map = place_text(map);
+                let slot = crate::stdlib_codegen::map_slot_expression(
+                    self.program, &map, &index, *kind, expr.ty);
+                self.bind(expr.ty, &slot)
+            }
             E::Upcast { value, interface, concrete } => {
                 let value = self.expression(value);
                 self.bind(expr.ty, &format!("(ncr_obj_{interface}){{(void *){value}, &ncr_vtable_{concrete}_{interface}}}"))

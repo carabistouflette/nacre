@@ -1,0 +1,34 @@
+{
+  "release": "0.11.0",
+  "status": "passed",
+  "scope": "Observed local compiler, generated programs, fuzzing and editor packages; actual desktop and remote CI recorded separately",
+  "rust_suite": {"passed": 998, "suites": 33, "ignored": 2, "features": ["fuzzing"]},
+  "new_behavioral_regressions": {"map_traversal": 8, "lending_guard_traversal": 1},
+  "clippy": "all targets, fuzzing feature, -D warnings passed",
+  "minimum_rust": "1.74.0 locked offline all-target check passed",
+  "standard_native": {"compilers": ["gcc", "clang"], "successful_runs": 414, "expected_fatal_runs": 14, "invalid_source_rejections": 420, "llvm_round_trips": 11, "ignored_llvm_tests_executed": true},
+  "traversal_native": {
+    "scope": "Actual final compiler-generated C11 under GCC/Clang ASan/UBSan",
+    "successful_runs": 16,
+    "cases_per_compiler": ["signed keys, exact associations/coverage, growth and shifted collision chains", "copied boolean/String and borrowed object/enum/interface/nested-collection values", "generic headers, evaluated-once borrowed getter, receiver-derived borrowed return", "nested shared loops and continue/break/return ownership cleanup", "allocation baseline", "traversal allocation comparison", "shipped traversal example", "lending unordered guards and ordered snapshots"],
+    "allocation_balances_per_compiler": [24, 40, 11, 23, 2, 2, 6, 98],
+    "iterator_allocation_delta": 0,
+    "all_reported_live_zero": true,
+    "rejected_companions": 20
+  },
+  "fuzz": {
+    "frontend": {"inputs": 374503, "seconds": 31, "coverage": 5766, "features": 20732, "peak_rss_mb": 417, "seed_files": 7},
+    "lsp_frames": {"inputs": 2931176, "seconds": 31, "coverage": 944, "features": 3851, "peak_rss_mb": 358, "seed_files": 8},
+    "observed_crashes": 0,
+    "observed_timeouts": 0,
+    "scope": "Real bounded local development campaigns; final source commit additionally runs remote CI fuzzing. Finite runs are not a safety proof"
+  },
+  "editor_packages": {"vscode": "0.6.0", "zed": "0.6.0", "grammar": "0.5.0", "snippets_compiled": 27, "grammar_corpus_cases": 4, "examples_parsed": 46, "zed_queries_executed": 4, "locked_wasi_build": "passed"},
+  "package_audit": {"include_str_paths": 82, "declared_rust_tests_not_executed_by_audit": 1000},
+  "design_principles": {
+    "reference": "https://rust-unofficial.github.io/patterns/additional_resources/design-principles.html",
+    "applied": ["List/map binding and receiver rules share one checked contract", "Existing block/while flow and cleanup reused", "Storage expressions stay compiler-only; C layout knowledge remains in collection backend", "Borrowed map representation shared between direct traversal and ordinary accessors", "Capacity captured once under invariant root loan; no iterator allocation, owner copies or key rehashing", "Read-only catalog queries separate scans from commands; ordered persistence unchanged", "No predicate framework or redundant validation pass added"],
+    "tradeoffs": ["Internal typed IR expressions require pass-specific handlers while sharing an authoritative vocabulary", "Catalog.entriesRef exposes standard collection type as a read-only capability because no opaque iterator view exists; bucket layout and mutable access remain hidden", "Mutating put/tryRemove commands return transferred owners rather than enforcing void-only command-query separation"]
+  },
+  "publication": "Curated portable sources only; historical evidence labels preserved; no workstation paths, credentials, process IDs, profiles, caches or private proof locations"
+}

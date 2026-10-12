@@ -1,4 +1,4 @@
-//! Nacre V6: Rust frontend -> typed ownership IR -> C11 -> native code.
+//! Nacre: Rust frontend -> typed ownership IR -> C11 -> native code.
 //! Classes, interfaces, generic sums and consuming exhaustive match use unique ownership.
 //! Lexical shared/exclusive borrows, readonly methods, and scoped shared views.
 //! Interfaces use allocation-free fat pointers; generic classes/enums are monomorphized.
@@ -25,7 +25,7 @@ use diagnostic::{Diagnostic, Span};
 
 fn front_end(source: &str) -> Result<ir::Program, Diagnostic> {
     if source.len() > 1024 * 1024 {
-        return Err(Diagnostic::new(Span::default(), "source trop volumineux: limite V6 de 1 Mio"));
+        return Err(Diagnostic::new(Span::default(), "source trop volumineux: limite de 1 Mio"));
     }
     let tokens = lexer::lex(source)?;
     check_parsed(parser::parse(tokens)?)
@@ -69,7 +69,7 @@ pub fn emit_types(source: &str) -> Result<String, Diagnostic> {
 }
 
 pub(crate) fn type_dump(typed: &ir::Program) -> String {
-    let mut out = String::from("Nacre V6 — nominal types and specializations\n");
+    let mut out = String::from("Nacre — nominal types and specializations\n");
     for class in &typed.classes {
         let kind = if class.variants.is_some() { "enum" } else if class.is_interface { "interface" } else { "class" };
         out.push_str(&format!("#{} {kind} {}\n", class.id, class.name));

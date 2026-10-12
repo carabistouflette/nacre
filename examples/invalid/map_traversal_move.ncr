@@ -1,0 +1,9 @@
+void main() {
+    Map<int, int> entries = new Map<int, int>();
+    entries.put(1, 10);
+    // Rejected: the owner cannot move while its map root is traversed.
+    for (int key, int value : entries) {
+        Map<int, int> moved = move(entries);
+        break;
+    }
+}

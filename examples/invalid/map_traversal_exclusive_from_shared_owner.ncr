@@ -1,0 +1,10 @@
+class Box {
+    void increment() { }
+}
+
+void visit(borrow Map<int, Box> entries) {
+    // Rejected: a shared borrowed map cannot grant an exclusive traversal loan.
+    for (int key, borrow mut Box value : entries) { value.increment(); }
+}
+
+void main() { }

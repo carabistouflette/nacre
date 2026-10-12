@@ -1,0 +1,48 @@
+interface Counter {
+    readonly int value();
+    void increment();
+}
+
+class Cell implements Counter {
+    int stored;
+    Cell(int stored) { this.stored = stored; }
+    public readonly int value() { return this.stored; }
+    public void increment() { this.stored = this.stored + 1; }
+}
+
+void main() {
+    Map<int, int> counts = new Map<int, int>();
+    counts.put(-4, 8);
+    counts.put(12, 5);
+    counts.put(30, 9);
+    int entries = 0;
+    int total = 0;
+    for (int key, int count : counts) {
+        entries = entries + 1;
+        total = total + count;
+    }
+    println("Count entries:");
+    println(entries);
+    println("Total items:");
+    println(total);
+
+    Map<int, Counter> counters = new Map<int, Counter>();
+    counters.put(101, new Cell(3));
+    counters.put(205, new Cell(7));
+    int before = 0;
+    for (int key, borrow Counter counter : counters) {
+        before = before + counter.value();
+    }
+    println("Counter total before update:");
+    println(before);
+
+    for (int key, borrow mut Counter counter : counters) {
+        counter.increment();
+    }
+    int after = 0;
+    for (int key, borrow Counter counter : counters) {
+        after = after + counter.value();
+    }
+    println("Counter total after update:");
+    println(after);
+}

@@ -1,4 +1,4 @@
-# Generic specialization — V9
+# Generic specialization
 
 ## Modèle choisi
 
@@ -131,7 +131,7 @@ syntaxique de type 32 et une longueur de nom spécialisé 4096. Atteindre une bo
 produit `E4199`, pas une allocation illimitée intentionnelle. Ces bornes ne sont
 pas une preuve générale de résistance aux entrées hostiles.
 
-Les types récursifs possédés directs restent soumis aux restrictions V3.
+Les types récursifs possédés directs restent soumis aux restrictions de propriété.
 
 ## Diagnostics
 
@@ -159,7 +159,7 @@ For-each header and collection types are substituted before ordinary checking.
 An empty `List<Node>` permits finite owned recursion, unlike a required
 `Node next` field without a base case. `List<T>` remains invariant.
 
-V9 Map has exactly two arguments and accepts only int keys. Value methods are
+Map has exactly two arguments and accepts only int keys. Value methods are
 pruned before ordinary checking: copied primitives retain tryGet, while nominal
 values retain getRef/getMut. Put/tryRemove return specialized inline Option<V>
 for every supported value representation. Borrows/local views cannot be values.

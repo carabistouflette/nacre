@@ -17,6 +17,29 @@ pub fn map_entry_definition(program: &t::Program, class_id: usize, value: Type) 
         ctype(program, value),
     )
 }
+pub(crate) fn map_borrowed_value(program: &t::Program, borrow_type: Type, stored: &str) -> String {
+    let Type::Borrow { class, .. } = borrow_type else {
+        unreachable!("Map value traversal requires a borrowed value type");
+    };
+    // Inline enums are stored by value; other representations are already borrowed views.
+    if program.classes[class].variants.is_some() { format!("&({stored})") }
+    else { stored.to_owned() }
+}
+pub(crate) fn map_capacity_expression(map: &str) -> String {
+    format!("{map}->capacity")
+}
+pub(crate) fn map_slot_expression(
+    program: &t::Program, map: &str, index: &str, kind: t::MapSlotKind, value_type: Type,
+) -> String {
+    let entry = format!("{map}->entries[{index}]");
+    match kind {
+        t::MapSlotKind::Occupied => format!("{entry}.occupied"),
+        t::MapSlotKind::Key => format!("{entry}.key"),
+        t::MapSlotKind::Value if value_type.is_borrow() =>
+            map_borrowed_value(program, value_type, &format!("{entry}.value")),
+        t::MapSlotKind::Value => format!("{entry}.value"),
+    }
+}
 fn drop_element(ty: Type, expression: &str) -> String {
     match ty {
         Type::Object(id) => format!("ncr_drop_{id}({expression});"),
@@ -363,17 +386,11 @@ fn borrowed_map_method(program: &t::Program, function: &t::Function, value_class
         unreachable!("native Map borrowed accessor must return a typed borrow")
     };
     assert_eq!(class, value_class, "Map borrow result must match its value type");
-    let borrowed_value = if program.classes[value_class].is_interface {
-        "p->entries[index].value"
-    } else if program.classes[value_class].variants.is_some() {
-        "&p->entries[index].value"
-    } else {
-        "p->entries[index].value"
-    };
+    let borrowed_value = map_borrowed_value(program, function.return_type, "p->entries[index].value");
     include_str!("../stdlib/map_get_borrowed.c.in")
         .replace("@RETURN_TYPE@", &ctype(program, function.return_type))
         .replace("@MAP_METHOD@", marker(function.native.expect("native Map accessor")))
-        .replace("@BORROWED_VALUE@", borrowed_value)
+        .replace("@BORROWED_VALUE@", &borrowed_value)
 }
 
 fn borrowed_map_methods(program: &t::Program, map_class: usize, value: Type) -> String {

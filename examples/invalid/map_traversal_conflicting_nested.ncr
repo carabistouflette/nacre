@@ -1,0 +1,10 @@
+class Box { }
+
+void main() {
+    Map<int, Box> entries = new Map<int, Box>();
+    entries.put(1, new Box());
+    // Rejected: an exclusive nested traversal conflicts with the shared outer loan.
+    for (int outerKey, borrow Box outer : entries) {
+        for (int innerKey, borrow mut Box inner : entries) { }
+    }
+}

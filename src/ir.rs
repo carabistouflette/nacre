@@ -71,6 +71,9 @@ pub struct Expr { pub kind: ExprKind, pub ty: Type, pub span: Span }
 pub enum ExprKind {
     Int(i32), Boolean(bool), String(String), Read(Place), Move(usize),
     Borrow { place: Place, mutable: bool },
+    /// Compiler-only direct storage access for built-in Map traversal.
+    MapCapacity(Place),
+    MapSlot { map: Place, index: Box<Expr>, kind: MapSlotKind },
     Drop(Box<Expr>),
     /// Allocation-free interface upcast, preserving owned or borrowed status.
     Upcast { value: Box<Expr>, interface: usize, concrete: usize },
@@ -80,6 +83,8 @@ pub enum ExprKind {
     Unary { op: UnaryOp, expr: Box<Expr> },
     Binary { op: BinaryOp, left: Box<Expr>, right: Box<Expr> },
 }
+#[derive(Debug, Clone, Copy)]
+pub enum MapSlotKind { Occupied, Key, Value }
 #[derive(Debug, Clone, Copy)]
 pub enum CallTarget { Function(usize), Println }
 
