@@ -16,8 +16,17 @@ missing desktop-portal notification, separate from the language extension.
 
 The bounded real [frontend and LSP framing campaigns](fuzz-stabilization.json)
 completed without observed crashes or timeouts. This is finite fuzz evidence,
-not a general safety proof. Remote CI conclusions are recorded separately once
-the complete run finishes.
+not a general safety proof.
+
+## Remote CI — final result
+
+The complete workflow passed on commit `915e09c` in [GitHub Actions run 38283995876](https://github.com/carabistouflette/nacre/actions/runs/38283995876). All six jobs succeeded: the editor build and tests, the Rust 1.74.0/stable × GCC/Clang matrix, and the nightly fuzz job. The ignored V4 tools test is Clang-only by workflow configuration and passed in both Clang jobs.
+
+The final bounded campaigns executed 612,925 frontend inputs and 2,295,090
+LSP-framing inputs in 31 seconds per target, with no observed crash or timeout.
+These finite runs are not a general safety proof.
+
+Earlier failures remain part of the record. Run [38281468493](https://github.com/carabistouflette/nacre/actions/runs/38281468493) failed on interface-fixture compiler warnings and a stale Zed lockfile; the fixture’s argument-storage path was repaired and the Zed lockfile regenerated. Its fuzz campaigns nevertheless completed without observed crashes or timeouts (787,489 frontend and 3,050,701 LSP-framing inputs). Run [38282654415](https://github.com/carabistouflette/nacre/actions/runs/38282654415) then failed on a stale template-substitution assertion in `scripts/test_stdlib_support.py`. The fixture was repaired to instantiate the shipped templates with inline Result layouts and owning Text errors, without stubs. Subsequent GCC and Clang O2 and ASan/UBSan runs passed with 13,561 allocations and frees per successful run, `live=0`, and all 16 expected error scenarios.
 
 The V6 results below describe the original 0.7.0 run; captured historical reports
 have not been rewritten as new Nacre executions.
