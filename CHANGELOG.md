@@ -12,6 +12,9 @@
 - VS Code lifecycle operations serialize activation, restart, and shutdown.
   Restart after failed server startup no longer attempts to stop an inactive
   client.
+- Process-argument storage is emitted with the generated executable, rather
+  than the standalone runtime; strict GCC/Clang fixture builds remain valid.
+- Regenerated the renamed Zed adapter lockfile for locked WASI builds.
 - Historical captured validation reports and original legal attribution are
   retained without relabeling their recorded outputs.
 

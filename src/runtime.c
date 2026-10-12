@@ -16,10 +16,6 @@ typedef struct {
     size_t length;
 } ncr_string;
 
-/* Raw process arguments, initialized by the generated C main. */
-static int ncr_argc;
-static char **ncr_argv;
-
 /* Strict RFC 3629 validation: reject overlong sequences, surrogates and
    code points above U+10FFFF. NUL is valid UTF-8 and remains length-aware. */
 static bool ncr_utf8_valid(const unsigned char *data, size_t length) {
