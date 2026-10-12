@@ -1,0 +1,16 @@
+static bool @IO_RESERVE@(unsigned char **bytes, size_t *capacity, size_t required, size_t used, size_t line, size_t column) {
+    if (required > (size_t)INT32_MAX) { return false; }
+    if (required <= *capacity) { return true; }
+    size_t grown = *capacity == 0 ? 16 : *capacity;
+    while (grown < required) {
+        if (grown > (size_t)INT32_MAX / 2) { grown = (size_t)INT32_MAX; break; }
+        grown *= 2;
+    }
+    if (grown < required) { return false; }
+    unsigned char *next = ncr_allocate(grown, line, column);
+    if (used > 0) { memcpy(next, *bytes, used); }
+    ncr_deallocate(*bytes);
+    *bytes = next;
+    *capacity = grown;
+    return true;
+}

@@ -1,0 +1,11 @@
+void main() {
+    Text message = new Text("Bonjour");
+    message.append(" ! Réponse = ");
+    message.appendInt(42);
+    message.print();
+    Text copy = message.clone(); // Copie explicite et independante.
+    println(copy.equals(message));
+    message.clear();
+    println(message.isEmpty());
+    copy.print();
+}

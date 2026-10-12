@@ -1,0 +1,24 @@
+class Counter {
+    private int value;
+
+    public Counter(int start) {
+        this.value = start;
+    }
+
+    public void increment() {
+        this.value = this.value + 1;
+    }
+
+    public int getValue() {
+        return this.value;
+    }
+}
+
+public class Main {
+    public static void main() {
+        Counter counter = new Counter(40);
+        counter.increment();
+        counter.increment();
+        System.out.println(counter.getValue());
+    }
+}

@@ -1,0 +1,20 @@
+static int32_t @ARGS_COUNT@(size_t line, size_t column) {
+    (void)line; (void)column;
+    return ncr_argc > 1 ? (int32_t)(ncr_argc - 1) : INT32_C(0);
+}
+static ncr_obj_@RESULT_TEXT@ @ARGS_GET@(int32_t index, size_t line, size_t column) {
+    if (index < 0 || ncr_argc <= 1 || index >= ncr_argc - 1 || ncr_argv == NULL
+        || ncr_argv[(size_t)index + 1] == NULL) {
+        return @ERROR_TEXT_RESULT@("Args.get: index out of range", sizeof("Args.get: index out of range") - 1, line, column);
+    }
+    const unsigned char *argument = (const unsigned char *)ncr_argv[(size_t)index + 1];
+    size_t length = strlen((const char *)argument);
+    if (length > (size_t)INT32_MAX || !ncr_utf8_valid(argument, length)) {
+        return @ERROR_TEXT_RESULT@("Args.get: invalid UTF-8 argument", sizeof("Args.get: invalid UTF-8 argument") - 1, line, column);
+    }
+    ncr_obj_@TEXT_ID@ *text = @TEXT_MAKE@(argument, length, line, column);
+    return (ncr_obj_@RESULT_TEXT@){
+        .tag = @TEXT_RESULT_OK_TAG@,
+        .data.v@TEXT_RESULT_OK_TAG@.f0 = text
+    };
+}

@@ -1,0 +1,16 @@
+{
+  "name": "tree-sitter-nacre",
+  "version": "0.1.0",
+  "description": "Tree-sitter grammar for Nacre V6",
+  "license": "MIT",
+  "scripts": {
+    "generate": "tree-sitter generate",
+    "test": "tree-sitter test"
+  },
+  "devDependencies": {
+    "tree-sitter-cli": "0.25.10"
+  },
+  "allowScripts": {
+    "tree-sitter-cli": true
+  }
+}

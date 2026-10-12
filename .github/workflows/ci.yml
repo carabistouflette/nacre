@@ -1,0 +1,61 @@
+name: Nacre
+on: [push, pull_request, workflow_dispatch]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust: ["1.74.0", stable]
+        cc: [gcc, clang]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+      - run: python3 scripts/generate_v2_tests.py --check
+      - run: python3 scripts/generate_v3_tests.py --check
+      - run: python3 scripts/generate_v4_tests.py --check
+      - run: python3 scripts/generate_v5_tests.py --check
+      - run: cargo fetch --locked
+      - run: cargo test --locked --offline
+        env:
+          NACRE_CC: ${{ matrix.cc }}
+      - run: python3 scripts/test_runtime.py --cc ${{ matrix.cc }}
+      - run: python3 scripts/test_borrow_support.py --cc ${{ matrix.cc }}
+      - run: python3 scripts/test_interface_support.py --cc ${{ matrix.cc }}
+      - run: python3 scripts/test_stdlib_support.py --cc ${{ matrix.cc }}
+      - run: python3 scripts/validate.py --cc ${{ matrix.cc }} --sanitizers --report docs/ci-validation.json
+      - if: matrix.cc == 'clang'
+        run: cargo test --locked --offline --test features_v4_tools -- --ignored
+  editors:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip2
+      - run: cargo build --locked
+      - run: npm --prefix editors/vscode ci
+      - run: npm --prefix editors/vscode test
+      - run: npm --prefix editors/vscode run package
+      - run: npm --prefix editors/tree-sitter-nacre ci
+      - run: npm --prefix editors/tree-sitter-nacre run generate
+      - run: npm --prefix editors/tree-sitter-nacre test
+      - run: python3 -m pip install tree-sitter==0.25.2
+      - run: python3 editors/zed/check.py
+      - run: python3 editors/zed/prepare.py
+      - run: cargo build --manifest-path editors/zed/dist/nacre/Cargo.toml --target wasm32-wasip2 --release --locked
+
+  fuzz:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - run: cargo install cargo-fuzz --version 0.13.2 --locked
+      - run: python3 scripts/fuzz_smoke.py

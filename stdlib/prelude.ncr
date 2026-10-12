@@ -1,0 +1,60 @@
+// Compiler-owned contracts. These empty bodies are NOT Nacre implementations.
+// Only the trusted injector can mark these declarations as native intrinsics.
+// Editing this file requires rebuilding and revalidating the Rust compiler.
+enum Option<T> {
+    None;
+    Some(T);
+}
+
+enum Result<T, E> {
+    Ok(T);
+    Err(E);
+}
+
+class List<T> {
+    public List() {}
+    public void add(T value) {}
+    public readonly int size() {}
+    public readonly int capacity() {}
+    public readonly boolean isEmpty() {}
+    public readonly T get(int index) {}
+    public void set(int index, T value) {}
+    public T pop() {}
+    public T remove(int index) {}
+    public void clear() {}
+    public void reserve(int capacity) {}
+}
+class Text {
+    public Text(String initial) {}
+    public void append(String value) {}
+    public void appendInt(int value) {}
+    public void appendBoolean(boolean value) {}
+    public void appendText(borrow Text other) {}
+    public readonly int byteLength() {}
+    public readonly int byteAt(int index) {}
+    public readonly boolean isEmpty() {}
+    public void clear() {}
+    public readonly void print() {}
+    public readonly Text clone() {}
+    public readonly boolean equals(borrow Text other) {}
+    public readonly boolean equalsString(String other) {}
+    public readonly Result<int, Text> parseInt() {}
+    public readonly Result<Text, Text> sliceBytes(int start, int end) {}
+}
+class Console {
+    public static Result<Option<Text>, Text> readLine() {}
+    public static void print(String value) {}
+    public static void printText(borrow Text value) {}
+}
+
+class Files {
+    public static Result<Text, Text> readText(borrow Text path) {}
+    public static Result<boolean, Text> writeText(borrow Text path, borrow Text content) {}
+    public static Result<boolean, Text> writeTextAtomic(borrow Text path, borrow Text content) {}
+}
+
+class Args {
+    public static int count() {}
+    public static Result<Text, Text> get(int index) {}
+}
+

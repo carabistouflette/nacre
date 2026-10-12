@@ -1,0 +1,88 @@
+{
+  "name": "nacre",
+  "displayName": "Nacre",
+  "description": "Syntax highlighting, language editing support, snippets, and language server support for Nacre V6.",
+  "version": "0.2.0",
+  "publisher": "nacre",
+  "license": "MIT",
+  "main": "./dist/extension.js",
+  "engines": {
+    "vscode": "^1.82.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "keywords": [
+    "nacre",
+    "ownership"
+  ],
+  "scripts": {
+    "test": "node ./scripts/validate.js",
+    "compile": "esbuild ./src/extension.js --bundle --platform=node --target=node16 --external:vscode --outfile=dist/extension.js",
+    "prepackage": "node -e \"require('node:fs').copyFileSync('../../LICENSE', 'LICENSE')\"",
+    "package": "npm run compile && vsce package --allow-missing-repository"
+  },
+  "contributes": {
+    "languages": [
+      {
+        "id": "nacre",
+        "aliases": [
+          "Nacre",
+          "nacre"
+        ],
+        "extensions": [
+          ".ncr"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "nacre",
+        "scopeName": "source.nacre",
+        "path": "./syntaxes/nacre.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "nacre",
+        "path": "./snippets/nacre.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "nacre.restartLanguageServer",
+        "title": "Nacre: Restart Language Server"
+      }
+    ],
+    "configuration": {
+      "title": "Nacre",
+      "properties": {
+        "nacre.serverPath": {
+          "type": "string",
+          "default": "nacre",
+          "description": "Path to the Nacre compiler executable used to launch `nacre lsp`."
+        }
+      }
+    },
+    "configurationDefaults": {
+      "[nacre]": {
+        "editor.insertSpaces": true,
+        "editor.tabSize": 4
+      }
+    }
+  },
+  "dependencies": {
+    "vscode-languageclient": "9.0.1"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "4.0.0",
+    "esbuild": "0.25.5",
+    "vscode-oniguruma": "2.0.1",
+    "vscode-textmate": "9.3.2"
+  },
+  "allowScripts": {
+    "@vscode/vsce-sign": false,
+    "esbuild": true
+  }
+}

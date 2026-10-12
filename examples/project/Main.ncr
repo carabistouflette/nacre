@@ -1,0 +1,12 @@
+public class Main {
+    public static void main() {
+        List<int> values = new List<int>();
+        values.add(10);
+        values.add(20);
+        values.add(12);
+
+        Text message = new Text("Somme = ");
+        message.appendInt(Statistics.sum(values));
+        message.print();
+    }
+}

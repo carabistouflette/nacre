@@ -1,0 +1,54 @@
+==================
+Borrowed nested generic parameter
+==================
+void visit(borrow mut List<List<int>> items) {}
+---
+(source_file
+  (function_declaration
+    (primitive_type)
+    (identifier)
+    (parameter_list
+      (parameter
+        (borrowed_type
+          (type_identifier)
+          (type_arguments
+            (generic_type
+              (type_identifier)
+              (type_arguments
+                (primitive_type)))))
+        (identifier)))
+    (block)))
+
+==================
+Multiplication binds more tightly than addition
+==================
+void main() { println(1 + 2 * 3); }
+---
+(source_file
+  (function_declaration
+    (primitive_type)
+    (identifier)
+    (parameter_list)
+    (block
+      (expression_statement
+        (call_expression
+          (identifier)
+          (argument_list
+            (binary_expression
+              (integer_literal)
+              (binary_expression
+                (integer_literal)
+                (integer_literal)))))))))
+
+==================
+Incomplete block during editing retains function structure
+==================
+void main() {
+---
+(source_file
+  (function_declaration
+    (primitive_type)
+    (identifier)
+    (parameter_list)
+    (block
+      (MISSING "}"))))

@@ -1,0 +1,6 @@
+class Box { public int value = 42; }
+void main() {
+    Box first = new Box();
+    Box second = first;
+    println(first.value); // Rejected: first no longer owns the object.
+}

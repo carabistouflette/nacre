@@ -1,0 +1,127 @@
+{
+  "scope": "exact shipped C templates instantiated by Python; NOT the Rust compiler or its actual C output",
+  "status": "passed",
+  "randomized_list_operations": 50000,
+  "results": [
+    {
+      "compiler": "gcc (Debian 14.2.0-19) 14.2.0",
+      "profile": "O2",
+      "status": "passed",
+      "stderr": "JVN_MEMORY allocations=13561 frees=13561 live=0"
+    },
+    {
+      "compiler": "gcc (Debian 14.2.0-19) 14.2.0",
+      "profile": "sanitizers",
+      "status": "passed",
+      "stderr": "JVN_MEMORY allocations=13561 frees=13561 live=0"
+    },
+    {
+      "compiler": "gcc (Debian 14.2.0-19) 14.2.0",
+      "case": "negative_index",
+      "status": "correctly_aborted",
+      "exit_code": 70
+    },
+    {
+      "compiler": "gcc (Debian 14.2.0-19) 14.2.0",
+      "case": "past_end",
+      "status": "correctly_aborted",
+      "exit_code": 70
+    },
+    {
+      "compiler": "gcc (Debian 14.2.0-19) 14.2.0",
+      "case": "remove_past_end",
+      "status": "correctly_aborted",
+      "exit_code": 70
+    },
+    {
+      "compiler": "gcc (Debian 14.2.0-19) 14.2.0",
+      "case": "pop_empty",
+      "status": "correctly_aborted",
+      "exit_code": 70
+    },
+    {
+      "compiler": "gcc (Debian 14.2.0-19) 14.2.0",
+      "case": "negative_capacity",
+      "status": "correctly_aborted",
+      "exit_code": 70
+    },
+    {
+      "compiler": "gcc (Debian 14.2.0-19) 14.2.0",
+      "case": "text_past_end",
+      "status": "correctly_aborted",
+      "exit_code": 70
+    },
+    {
+      "compiler": "gcc (Debian 14.2.0-19) 14.2.0",
+      "case": "text_size_overflow",
+      "status": "correctly_aborted",
+      "exit_code": 70
+    },
+    {
+      "compiler": "gcc (Debian 14.2.0-19) 14.2.0",
+      "case": "list_size_overflow",
+      "status": "correctly_aborted",
+      "exit_code": 70
+    },
+    {
+      "compiler": "clang version 17.0.0 (https://github.com/swiftlang/llvm-project.git 10999b6d034fe318f3d56c83bddb6572593a8bb0)",
+      "profile": "O2",
+      "status": "passed",
+      "stderr": "JVN_MEMORY allocations=13561 frees=13561 live=0"
+    },
+    {
+      "compiler": "clang version 17.0.0 (https://github.com/swiftlang/llvm-project.git 10999b6d034fe318f3d56c83bddb6572593a8bb0)",
+      "profile": "sanitizers",
+      "status": "passed",
+      "stderr": "JVN_MEMORY allocations=13561 frees=13561 live=0"
+    },
+    {
+      "compiler": "clang version 17.0.0 (https://github.com/swiftlang/llvm-project.git 10999b6d034fe318f3d56c83bddb6572593a8bb0)",
+      "case": "negative_index",
+      "status": "correctly_aborted",
+      "exit_code": 70
+    },
+    {
+      "compiler": "clang version 17.0.0 (https://github.com/swiftlang/llvm-project.git 10999b6d034fe318f3d56c83bddb6572593a8bb0)",
+      "case": "past_end",
+      "status": "correctly_aborted",
+      "exit_code": 70
+    },
+    {
+      "compiler": "clang version 17.0.0 (https://github.com/swiftlang/llvm-project.git 10999b6d034fe318f3d56c83bddb6572593a8bb0)",
+      "case": "remove_past_end",
+      "status": "correctly_aborted",
+      "exit_code": 70
+    },
+    {
+      "compiler": "clang version 17.0.0 (https://github.com/swiftlang/llvm-project.git 10999b6d034fe318f3d56c83bddb6572593a8bb0)",
+      "case": "pop_empty",
+      "status": "correctly_aborted",
+      "exit_code": 70
+    },
+    {
+      "compiler": "clang version 17.0.0 (https://github.com/swiftlang/llvm-project.git 10999b6d034fe318f3d56c83bddb6572593a8bb0)",
+      "case": "negative_capacity",
+      "status": "correctly_aborted",
+      "exit_code": 70
+    },
+    {
+      "compiler": "clang version 17.0.0 (https://github.com/swiftlang/llvm-project.git 10999b6d034fe318f3d56c83bddb6572593a8bb0)",
+      "case": "text_past_end",
+      "status": "correctly_aborted",
+      "exit_code": 70
+    },
+    {
+      "compiler": "clang version 17.0.0 (https://github.com/swiftlang/llvm-project.git 10999b6d034fe318f3d56c83bddb6572593a8bb0)",
+      "case": "text_size_overflow",
+      "status": "correctly_aborted",
+      "exit_code": 70
+    },
+    {
+      "compiler": "clang version 17.0.0 (https://github.com/swiftlang/llvm-project.git 10999b6d034fe318f3d56c83bddb6572593a8bb0)",
+      "case": "list_size_overflow",
+      "status": "correctly_aborted",
+      "exit_code": 70
+    }
+  ]
+}

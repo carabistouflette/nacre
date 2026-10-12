@@ -1,0 +1,18 @@
+class Engine {
+    int power = 150;
+}
+class Car {
+    Engine engine;
+    Car(Engine engine) { this.engine = engine; }
+    int power() { return engine.power; }
+}
+void main() {
+    Engine engine = new Engine();
+    Car car = new Car(move(engine));
+    println(car.power());
+    drop(car); // releases car AND its owned engine
+    // Reinitializing a moved variable is valid.
+    car = new Car(new Engine());
+    println(car.power());
+    // Remaining owners are still released automatically on scope exit.
+}

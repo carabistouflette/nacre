@@ -1,0 +1,54 @@
+static ncr_obj_@RESULT_READLINE@ @CONSOLE_READ_LINE@(size_t line, size_t column) {
+    unsigned char *bytes = NULL;
+    size_t capacity = 0;
+    size_t length = 0;
+    bool newline = false;
+    const char *failure = NULL;
+    for (;;) {
+        int next = fgetc(stdin);
+        if (next == EOF) {
+            if (ferror(stdin)) { failure = "Console.readLine: input failed"; }
+            break;
+        }
+        if (next == '\n') { newline = true; break; }
+        if (length == (size_t)INT32_MAX
+            || !@IO_RESERVE@(&bytes, &capacity, length + 1, length, line, column)) {
+            failure = "Console.readLine: line too large";
+            break;
+        }
+        bytes[length++] = (unsigned char)next;
+    }
+    if (failure == NULL && ferror(stdin)) { failure = "Console.readLine: input failed"; }
+    if (failure == NULL && !newline && length == 0 && feof(stdin)) {
+        ncr_deallocate(bytes);
+        return (ncr_obj_@RESULT_READLINE@){
+            .tag = @READLINE_OK_TAG@,
+            .data.v@READLINE_OK_TAG@.f0 = (ncr_obj_@OPTION_TEXT@){ .tag = @OPTION_NONE_TAG@ }
+        };
+    }
+    if (failure == NULL && newline && length > 0 && bytes[length - 1] == '\r') { --length; }
+    if (failure == NULL && !ncr_utf8_valid(bytes, length)) { failure = "Console.readLine: invalid UTF-8"; }
+    if (failure != NULL) {
+        ncr_deallocate(bytes);
+        return @ERROR_READLINE@(failure, strlen(failure), line, column);
+    }
+    ncr_obj_@TEXT_ID@ *text = @TEXT_TAKE@(bytes, length, capacity, line, column);
+    return (ncr_obj_@RESULT_READLINE@){
+        .tag = @READLINE_OK_TAG@,
+        .data.v@READLINE_OK_TAG@.f0 = (ncr_obj_@OPTION_TEXT@){
+            .tag = @OPTION_SOME_TAG@,
+            .data.v@OPTION_SOME_TAG@.f0 = text
+        }
+    };
+}
+
+static void @CONSOLE_PRINT@(ncr_string value, size_t line, size_t column) {
+    (void)line; (void)column;
+    if (value.length > 0) { (void)fwrite(value.data, 1, value.length, stdout); }
+    (void)fflush(stdout);
+}
+static void @CONSOLE_PRINT_TEXT@(ncr_obj_@TEXT_ID@ *value, size_t line, size_t column) {
+    (void)line; (void)column;
+    if (value->length > 0) { (void)fwrite(value->bytes, 1, (size_t)value->length, stdout); }
+    (void)fflush(stdout);
+}

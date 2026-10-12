@@ -1,0 +1,5 @@
+class Counter {
+    private int value;
+    public Counter() { } // Rejected: all fields must be initialized.
+}
+void main() { Counter counter = new Counter(); }

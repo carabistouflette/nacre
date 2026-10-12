@@ -1,0 +1,139 @@
+{
+  "scope": "delimiter balance only; NOT Rust syntax or type validation",
+  "rust_tests_executed": false,
+  "status": "passed",
+  "results": [
+    {
+      "file": "src/ast.rs",
+      "balanced_pairs": 63
+    },
+    {
+      "file": "src/borrowing.rs",
+      "balanced_pairs": 436
+    },
+    {
+      "file": "src/checker.rs",
+      "balanced_pairs": 1125
+    },
+    {
+      "file": "src/codegen.rs",
+      "balanced_pairs": 574
+    },
+    {
+      "file": "src/diagnostic.rs",
+      "balanced_pairs": 98
+    },
+    {
+      "file": "src/generics.rs",
+      "balanced_pairs": 352
+    },
+    {
+      "file": "src/ir.rs",
+      "balanced_pairs": 96
+    },
+    {
+      "file": "src/lexer.rs",
+      "balanced_pairs": 174
+    },
+    {
+      "file": "src/lib.rs",
+      "balanced_pairs": 61
+    },
+    {
+      "file": "src/main.rs",
+      "balanced_pairs": 245
+    },
+    {
+      "file": "src/native.rs",
+      "balanced_pairs": 196
+    },
+    {
+      "file": "src/ownership.rs",
+      "balanced_pairs": 659
+    },
+    {
+      "file": "src/parser.rs",
+      "balanced_pairs": 587
+    },
+    {
+      "file": "src/project.rs",
+      "balanced_pairs": 322
+    },
+    {
+      "file": "src/stdlib.rs",
+      "balanced_pairs": 69
+    },
+    {
+      "file": "src/stdlib_codegen.rs",
+      "balanced_pairs": 70
+    },
+    {
+      "file": "tests/borrowing_diagnostics.rs",
+      "balanced_pairs": 175
+    },
+    {
+      "file": "tests/borrowing_frontend.rs",
+      "balanced_pairs": 1018
+    },
+    {
+      "file": "tests/borrowing_native.rs",
+      "balanced_pairs": 875
+    },
+    {
+      "file": "tests/cli.rs",
+      "balanced_pairs": 371
+    },
+    {
+      "file": "tests/features_v4_frontend.rs",
+      "balanced_pairs": 819
+    },
+    {
+      "file": "tests/features_v4_native.rs",
+      "balanced_pairs": 1008
+    },
+    {
+      "file": "tests/features_v4_tools.rs",
+      "balanced_pairs": 237
+    },
+    {
+      "file": "tests/features_v5_frontend.rs",
+      "balanced_pairs": 540
+    },
+    {
+      "file": "tests/features_v5_native.rs",
+      "balanced_pairs": 809
+    },
+    {
+      "file": "tests/flow_diagnostics.rs",
+      "balanced_pairs": 79
+    },
+    {
+      "file": "tests/frontend.rs",
+      "balanced_pairs": 175
+    },
+    {
+      "file": "tests/native.rs",
+      "balanced_pairs": 154
+    },
+    {
+      "file": "tests/objects_frontend.rs",
+      "balanced_pairs": 157
+    },
+    {
+      "file": "tests/objects_native.rs",
+      "balanced_pairs": 75
+    },
+    {
+      "file": "tests/ownership_frontend.rs",
+      "balanced_pairs": 607
+    },
+    {
+      "file": "tests/ownership_native.rs",
+      "balanced_pairs": 780
+    },
+    {
+      "file": "tests/project_v5.rs",
+      "balanced_pairs": 493
+    }
+  ]
+}

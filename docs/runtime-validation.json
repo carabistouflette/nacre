@@ -1,0 +1,19 @@
+{
+  "scope": "C runtime only; not the Rust compiler",
+  "results": [
+    {
+      "compiler": "gcc (Debian 14.2.0-19) 14.2.0",
+      "arithmetic_assertions": 60704,
+      "ubsan_boundary_check": "passed",
+      "division_and_modulo_zero": "passed",
+      "embedded_nul_string": "passed"
+    },
+    {
+      "compiler": "clang version 17.0.0 (https://github.com/swiftlang/llvm-project.git 10999b6d034fe318f3d56c83bddb6572593a8bb0)",
+      "arithmetic_assertions": 60704,
+      "ubsan_boundary_check": "passed",
+      "division_and_modulo_zero": "passed",
+      "embedded_nul_string": "passed"
+    }
+  ]
+}

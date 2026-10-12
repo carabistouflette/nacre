@@ -1,0 +1,18 @@
+void main() {
+    List<int> scores = new List<int>();
+    scores.add(10);
+    scores.add(20);
+    scores.add(12);
+    int sum = 0;
+    int i = 0;
+    while (i < scores.size()) {
+        sum = sum + scores.get(i);
+        i = i + 1;
+    }
+    Text message = new Text("Somme = ");
+    message.appendInt(sum);
+    message.print();
+    println(scores.remove(1));
+    println(scores.pop());
+    println(scores.size());
+}

@@ -1,0 +1,5 @@
+class Secret { private int code = 1234; }
+void main() {
+    Secret secret = new Secret();
+    println(secret.code); // Rejected: private field.
+}

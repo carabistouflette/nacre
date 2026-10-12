@@ -1,0 +1,234 @@
+{
+  "status": "passed",
+  "scope": "actual V6 native programs with GCC/Clang ASan/UBSan plus stdio LSP smoke",
+  "native_results": [
+    {
+      "case": "console-min",
+      "compiler": "gcc",
+      "status": "passed",
+      "exit_code": 0,
+      "allocations": 2,
+      "frees": 2,
+      "live_at_exit": 0,
+      "sanitizers": true
+    },
+    {
+      "case": "console-eof",
+      "compiler": "gcc",
+      "status": "passed",
+      "exit_code": 0,
+      "allocations": 0,
+      "frees": 0,
+      "live_at_exit": 0,
+      "sanitizers": true
+    },
+    {
+      "case": "console-utf8-error",
+      "compiler": "gcc",
+      "status": "passed",
+      "exit_code": 0,
+      "allocations": 3,
+      "frees": 3,
+      "live_at_exit": 0,
+      "sanitizers": true
+    },
+    {
+      "case": "sum-inline",
+      "compiler": "gcc",
+      "status": "passed",
+      "exit_code": 0,
+      "allocations": 0,
+      "frees": 0,
+      "live_at_exit": 0,
+      "sanitizers": true
+    },
+    {
+      "case": "args",
+      "compiler": "gcc",
+      "status": "passed",
+      "exit_code": 0,
+      "allocations": 6,
+      "frees": 6,
+      "live_at_exit": 0,
+      "sanitizers": true
+    },
+    {
+      "case": "files-exact-capacity",
+      "compiler": "gcc",
+      "status": "passed",
+      "exit_code": 0,
+      "allocations": 7,
+      "frees": 7,
+      "live_at_exit": 0,
+      "sanitizers": true
+    },
+    {
+      "case": "files-utf8-and-nul",
+      "compiler": "gcc",
+      "status": "passed",
+      "exit_code": 0,
+      "allocations": 7,
+      "frees": 7,
+      "live_at_exit": 0,
+      "sanitizers": true
+    },
+    {
+      "case": "console-min",
+      "compiler": "clang",
+      "status": "passed",
+      "exit_code": 0,
+      "allocations": 2,
+      "frees": 2,
+      "live_at_exit": 0,
+      "sanitizers": true
+    },
+    {
+      "case": "console-eof",
+      "compiler": "clang",
+      "status": "passed",
+      "exit_code": 0,
+      "allocations": 0,
+      "frees": 0,
+      "live_at_exit": 0,
+      "sanitizers": true
+    },
+    {
+      "case": "console-utf8-error",
+      "compiler": "clang",
+      "status": "passed",
+      "exit_code": 0,
+      "allocations": 3,
+      "frees": 3,
+      "live_at_exit": 0,
+      "sanitizers": true
+    },
+    {
+      "case": "sum-inline",
+      "compiler": "clang",
+      "status": "passed",
+      "exit_code": 0,
+      "allocations": 0,
+      "frees": 0,
+      "live_at_exit": 0,
+      "sanitizers": true
+    },
+    {
+      "case": "args",
+      "compiler": "clang",
+      "status": "passed",
+      "exit_code": 0,
+      "allocations": 6,
+      "frees": 6,
+      "live_at_exit": 0,
+      "sanitizers": true
+    },
+    {
+      "case": "files-exact-capacity",
+      "compiler": "clang",
+      "status": "passed",
+      "exit_code": 0,
+      "allocations": 7,
+      "frees": 7,
+      "live_at_exit": 0,
+      "sanitizers": true
+    },
+    {
+      "case": "files-utf8-and-nul",
+      "compiler": "clang",
+      "status": "passed",
+      "exit_code": 0,
+      "allocations": 7,
+      "frees": 7,
+      "live_at_exit": 0,
+      "sanitizers": true
+    },
+    {
+      "case": "sudoku-save-load-input-recovery",
+      "compiler": "gcc",
+      "status": "passed",
+      "exit_code": 0,
+      "allocations": 102,
+      "frees": 102,
+      "live_at_exit": 0,
+      "sanitizers": true
+    },
+    {
+      "case": "sudoku-initial-file-clue-separation",
+      "compiler": "gcc",
+      "status": "passed",
+      "exit_code": 0,
+      "allocations": 46,
+      "frees": 46,
+      "live_at_exit": 0,
+      "sanitizers": true
+    },
+    {
+      "case": "sudoku-invalid-stream-graceful-exit",
+      "compiler": "gcc",
+      "status": "passed",
+      "exit_code": 0,
+      "allocations": 13,
+      "frees": 13,
+      "live_at_exit": 0,
+      "sanitizers": true
+    },
+    {
+      "case": "sudoku-save-load-input-recovery",
+      "compiler": "clang",
+      "status": "passed",
+      "exit_code": 0,
+      "allocations": 102,
+      "frees": 102,
+      "live_at_exit": 0,
+      "sanitizers": true
+    },
+    {
+      "case": "sudoku-initial-file-clue-separation",
+      "compiler": "clang",
+      "status": "passed",
+      "exit_code": 0,
+      "allocations": 46,
+      "frees": 46,
+      "live_at_exit": 0,
+      "sanitizers": true
+    },
+    {
+      "case": "sudoku-invalid-stream-graceful-exit",
+      "compiler": "clang",
+      "status": "passed",
+      "exit_code": 0,
+      "allocations": 13,
+      "frees": 13,
+      "live_at_exit": 0,
+      "sanitizers": true
+    },
+    {
+      "case": "sum-container-lifetimes",
+      "compiler": "gcc",
+      "status": "passed",
+      "exit_code": 0,
+      "allocations": 13,
+      "frees": 13,
+      "live_at_exit": 0,
+      "sanitizers": true
+    },
+    {
+      "case": "sum-container-lifetimes",
+      "compiler": "clang",
+      "status": "passed",
+      "exit_code": 0,
+      "allocations": 13,
+      "frees": 13,
+      "live_at_exit": 0,
+      "sanitizers": true
+    }
+  ],
+  "lsp": {
+    "utf16_unicode_uri": "passed",
+    "unsaved_edit_and_diagnostic_clearing": "passed",
+    "invalid_exit_request_keeps_server_alive": "passed",
+    "shutdown_exit": "passed"
+  },
+  "cli_run_argument_forwarding": "passed: spaces, leading flag, Unicode",
+  "visual_limits": "Terminal game observed; VS Code and Zed checked headlessly, not inside editor UI."
+}

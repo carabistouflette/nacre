@@ -1,0 +1,27 @@
+class Engine {
+    private int power;
+    public Engine(int power) { this.power = power; }
+    public int getPower() { return this.power; }
+}
+
+class Car {
+    private Engine engine;
+    private String name;
+
+    public Car(String name, Engine engine) {
+        this.name = name;
+        this.engine = engine; // Transfer: the car now owns the engine.
+    }
+
+    public void describe() {
+        println(this.name);
+        println(this.engine.getPower());
+    }
+}
+
+void main() {
+    Engine engine = new Engine(150);
+    Car car = new Car("Ma voiture", engine);
+    // engine.getPower(); would be rejected: engine was moved into car.
+    car.describe();
+} // Car and its Engine are both freed, with no GC.

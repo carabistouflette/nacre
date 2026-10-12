@@ -1,0 +1,30 @@
+{
+  "interfaces": {
+    "stdout": "Ouaf !\nOuaf !\nMiaou !\n",
+    "allocations": 2
+  },
+  "interface_borrowing": {
+    "stdout": "41\n42\n",
+    "allocations": 1
+  },
+  "generic_box": {
+    "stdout": "42\nBonjour les generiques !\ntrue\n",
+    "allocations": 3
+  },
+  "generic_composition": {
+    "stdout": "42\n",
+    "allocations": 2
+  },
+  "generic_interfaces": {
+    "stdout": "42\nPolymorphisme generique\n",
+    "allocations": 2
+  },
+  "interface_composition": {
+    "stdout": "42\n7\n",
+    "allocations": 3
+  },
+  "generic_view": {
+    "stdout": "42\n43\n",
+    "allocations": 2
+  }
+}

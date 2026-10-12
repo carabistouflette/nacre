@@ -1,0 +1,25 @@
+interface Readable { readonly int read(); }
+
+class Number implements Readable {
+    private int value;
+    Number(int value) { this.value = value; }
+    readonly int read() { return this.value; }
+}
+
+class Task {
+    private Readable source;
+    Task(Readable source) { this.source = source; }
+    readonly int execute() { return this.source.read(); }
+}
+
+Readable make(boolean first) {
+    if (first) { return new Number(42); }
+    else { return new Number(7); }
+}
+
+void main() {
+    Task task = new Task(make(true));
+    println(task.execute());
+    Readable other = make(false);
+    println(other.read());
+}

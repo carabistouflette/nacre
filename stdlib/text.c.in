@@ -1,0 +1,126 @@
+/* Native owned UTF-8 byte text; no returned pointers or temporary String views. */
+static void ncr_text_append_@ID@(ncr_obj_@ID@ *p, const unsigned char *data, size_t length, size_t line, size_t column) {
+    if (length > (size_t)(INT32_MAX - p->length)) { ncr_fail("Text trop grand", line, column); }
+    int32_t required = p->length + (int32_t)length;
+    if (required > p->capacity) {
+        int64_t capacity = p->capacity == 0 ? 16 : p->capacity;
+        while (capacity < required) { capacity = capacity > INT32_MAX / 2 ? INT32_MAX : capacity * 2; }
+        if ((uint64_t)capacity > SIZE_MAX) { ncr_fail("Text trop grand", line, column); }
+        unsigned char *bytes = ncr_allocate((size_t)capacity, line, column);
+        if (p->length > 0) { memcpy(bytes, p->bytes, (size_t)p->length); }
+        ncr_deallocate(p->bytes);
+        p->bytes = bytes; p->capacity = (int32_t)capacity;
+    }
+    /* The frontend forbids self-aliasing for appendText's retained argument. */
+    if (length > 0) { memcpy(p->bytes + p->length, data, length); }
+    p->length = required;
+}
+static void @TEXT_NEW@(ncr_obj_@ID@ *p, ncr_string initial, size_t line, size_t column) {
+    p->bytes = NULL; p->length = 0; p->capacity = 0;
+    ncr_text_append_@ID@(p, initial.data, initial.length, line, column);
+}
+static void @TEXT_APPEND@(ncr_obj_@ID@ *p, ncr_string value, size_t line, size_t column) {
+    ncr_text_append_@ID@(p, value.data, value.length, line, column);
+}
+static void @TEXT_APPEND_INT@(ncr_obj_@ID@ *p, int32_t value, size_t line, size_t column) {
+    char buffer[32];
+    int count = snprintf(buffer, sizeof(buffer), "%" PRId32, value);
+    if (count < 0 || (size_t)count >= sizeof(buffer)) { ncr_fail("formatage int impossible", line, column); }
+    ncr_text_append_@ID@(p, (const unsigned char *)buffer, (size_t)count, line, column);
+}
+static void @TEXT_APPEND_BOOLEAN@(ncr_obj_@ID@ *p, bool value, size_t line, size_t column) {
+    const unsigned char *data = (const unsigned char *)(value ? "true" : "false");
+    ncr_text_append_@ID@(p, data, value ? 4 : 5, line, column);
+}
+static void @TEXT_APPEND_TEXT@(ncr_obj_@ID@ *p, ncr_obj_@ID@ *other, size_t line, size_t column) {
+    ncr_text_append_@ID@(p, other->bytes, (size_t)other->length, line, column);
+}
+static int32_t @TEXT_BYTE_LENGTH@(ncr_obj_@ID@ *p, size_t line, size_t column) {
+    (void)line; (void)column; return p->length;
+}
+static int32_t @TEXT_BYTE_AT@(ncr_obj_@ID@ *p, int32_t index, size_t line, size_t column) {
+    if (index < 0 || index >= p->length) { ncr_fail("indice de Text hors limites", line, column); }
+    return p->bytes[index];
+}
+static bool @TEXT_IS_EMPTY@(ncr_obj_@ID@ *p, size_t line, size_t column) {
+    (void)line; (void)column; return p->length == 0;
+}
+static void @TEXT_CLEAR@(ncr_obj_@ID@ *p, size_t line, size_t column) {
+    (void)line; (void)column; p->length = 0;
+}
+static void @TEXT_PRINT@(ncr_obj_@ID@ *p, size_t line, size_t column) {
+    (void)line; (void)column;
+    if (p->length > 0) { (void)fwrite(p->bytes, 1, (size_t)p->length, stdout); }
+    (void)fputc('\n', stdout);
+}
+static ncr_obj_@ID@ *@TEXT_CLONE@(ncr_obj_@ID@ *p, size_t line, size_t column) {
+    ncr_obj_@ID@ *copy = ncr_allocate(sizeof(ncr_obj_@ID@), line, column);
+    copy->bytes = NULL; copy->length = 0; copy->capacity = 0;
+    ncr_text_append_@ID@(copy, p->bytes, (size_t)p->length, line, column);
+    return copy;
+}
+static bool @TEXT_EQUALS@(ncr_obj_@ID@ *p, ncr_obj_@ID@ *other, size_t line, size_t column) {
+    (void)line; (void)column;
+    return p->length == other->length && (p->length == 0 || memcmp(p->bytes, other->bytes, (size_t)p->length) == 0);
+}
+static bool @TEXT_EQUALS_STRING@(ncr_obj_@ID@ *p, ncr_string other, size_t line, size_t column) {
+    (void)line; (void)column;
+    return (size_t)p->length == other.length && (p->length == 0 || memcmp(p->bytes, other.data, (size_t)p->length) == 0);
+}
+static ncr_obj_@PARSE_RESULT@ @TEXT_PARSE_INT@(ncr_obj_@ID@ *p, size_t line, size_t column) {
+    size_t length = (size_t)p->length;
+    size_t index = 0;
+    bool negative = false;
+    if (length == 0) {
+        return @ERROR_PARSE_RESULT@("Text.parseInt: invalid integer", sizeof("Text.parseInt: invalid integer") - 1, line, column);
+    }
+    if (p->bytes[index] == '+' || p->bytes[index] == '-') {
+        negative = p->bytes[index] == '-';
+        ++index;
+    }
+    if (index == length) {
+        return @ERROR_PARSE_RESULT@("Text.parseInt: invalid integer", sizeof("Text.parseInt: invalid integer") - 1, line, column);
+    }
+    uint32_t limit = negative ? UINT32_C(2147483648) : (uint32_t)INT32_MAX;
+    uint32_t value = 0;
+    for (; index < length; ++index) {
+        unsigned char byte = p->bytes[index];
+        if (byte < '0' || byte > '9') {
+            return @ERROR_PARSE_RESULT@("Text.parseInt: invalid integer", sizeof("Text.parseInt: invalid integer") - 1, line, column);
+        }
+        uint32_t digit = (uint32_t)(byte - '0');
+        if (value > (limit - digit) / 10) {
+            return @ERROR_PARSE_RESULT@("Text.parseInt: invalid integer", sizeof("Text.parseInt: invalid integer") - 1, line, column);
+        }
+        value = value * 10 + digit;
+    }
+    int32_t parsed;
+    if (negative) {
+        parsed = value == UINT32_C(2147483648) ? INT32_MIN : -(int32_t)value;
+    } else {
+        parsed = (int32_t)value;
+    }
+    return (ncr_obj_@PARSE_RESULT@){
+        .tag = @PARSE_OK_TAG@,
+        .data.v@PARSE_OK_TAG@.f0 = parsed
+    };
+}
+
+static bool ncr_text_boundary_@ID@(ncr_obj_@ID@ *p, int32_t index) {
+    if (index < 0 || index > p->length) { return false; }
+    if (index == 0 || index == p->length) { return true; }
+    return (p->bytes[index] & 0xc0) != 0x80;
+}
+static ncr_obj_@SLICE_RESULT@ @TEXT_SLICE_BYTES@(ncr_obj_@ID@ *p, int32_t start, int32_t end, size_t line, size_t column) {
+    if (start < 0 || end < start || end > p->length
+        || !ncr_text_boundary_@ID@(p, start) || !ncr_text_boundary_@ID@(p, end)) {
+        return @ERROR_SLICE_RESULT@("Text.sliceBytes: invalid byte range", sizeof("Text.sliceBytes: invalid byte range") - 1, line, column);
+    }
+    size_t length = (size_t)(end - start);
+    const unsigned char *bytes = p->bytes == NULL || length == 0 ? NULL : p->bytes + start;
+    ncr_obj_@ID@ *slice = @TEXT_MAKE@(bytes, length, line, column);
+    return (ncr_obj_@SLICE_RESULT@){
+        .tag = @SLICE_OK_TAG@,
+        .data.v@SLICE_OK_TAG@.f0 = slice
+    };
+}

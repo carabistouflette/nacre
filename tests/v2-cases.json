@@ -1,0 +1,529 @@
+[
+  {
+    "name": "explicit_move",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a = new Box(); Box b = move(a); println(b.value); }",
+    "valid": true,
+    "stdout": "7\n",
+    "allocations": 1
+  },
+  {
+    "name": "explicit_move_of_new",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a = move(new Box()); println(a.value); }",
+    "valid": true,
+    "stdout": "7\n",
+    "allocations": 1
+  },
+  {
+    "name": "explicit_move_return",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } Box make() { Box a = new Box(); return move(a); } void main() { Box b = make(); println(b.value); }",
+    "valid": true,
+    "stdout": "7\n",
+    "allocations": 1
+  },
+  {
+    "name": "explicit_self_move",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a = new Box(); a = move(a); println(a.value); }",
+    "valid": true,
+    "stdout": "7\n",
+    "allocations": 1
+  },
+  {
+    "name": "drop_local",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a = new Box(); drop(a); }",
+    "valid": true,
+    "stdout": "",
+    "allocations": 1
+  },
+  {
+    "name": "drop_new",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { drop(new Box()); }",
+    "valid": true,
+    "stdout": "",
+    "allocations": 1
+  },
+  {
+    "name": "drop_owned_return",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { drop(identity(new Box())); }",
+    "valid": true,
+    "stdout": "",
+    "allocations": 1
+  },
+  {
+    "name": "drop_reinitialize",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a = new Box(); drop(a); a = new Box(); println(a.value); }",
+    "valid": true,
+    "stdout": "7\n",
+    "allocations": 2
+  },
+  {
+    "name": "conditional_drop",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a = new Box(); if (true) { drop(a); } }",
+    "valid": true,
+    "stdout": "",
+    "allocations": 1
+  },
+  {
+    "name": "conditional_drop_not_taken",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a = new Box(); if (false) { drop(a); } }",
+    "valid": true,
+    "stdout": "",
+    "allocations": 1
+  },
+  {
+    "name": "conditional_drop_and_repair",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a = new Box(); if (true) { drop(a); } a = new Box(); println(a.value); }",
+    "valid": true,
+    "stdout": "7\n",
+    "allocations": 2
+  },
+  {
+    "name": "deferred_object",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a; a = new Box(); println(a.value); }",
+    "valid": true,
+    "stdout": "7\n",
+    "allocations": 1
+  },
+  {
+    "name": "deferred_unused_object",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a; }",
+    "valid": true,
+    "stdout": "",
+    "allocations": 0
+  },
+  {
+    "name": "deferred_primitives",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { int a; boolean b; String c; a = 42; b = true; c = \"ok\"; println(a); println(b); println(c); }",
+    "valid": true,
+    "stdout": "42\ntrue\nok\n",
+    "allocations": 0
+  },
+  {
+    "name": "deferred_branch_init",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void f(boolean b) { Box a; if (b) { a = new Box(); } else { a = new Box(); } println(a.value); } void main() { f(true); f(false); }",
+    "valid": true,
+    "stdout": "7\n7\n",
+    "allocations": 2
+  },
+  {
+    "name": "deferred_return_branch",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void f(boolean b) { Box a; if (b) { return; } else { a = new Box(); } println(a.value); } void main() { f(true); f(false); }",
+    "valid": true,
+    "stdout": "7\n",
+    "allocations": 1
+  },
+  {
+    "name": "deferred_nested_scope",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a; { a = new Box(); } println(a.value); }",
+    "valid": true,
+    "stdout": "7\n",
+    "allocations": 1
+  },
+  {
+    "name": "loop_move_reinitialize",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a = new Box(); int i = 0; while (i < 10) { consume(a); a = new Box(); i = i + 1; } println(a.value); }",
+    "valid": true,
+    "stdout": "7\n",
+    "allocations": 11
+  },
+  {
+    "name": "loop_identity",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a = new Box(); int i = 0; while (i < 100) { a = identity(move(a)); i = i + 1; } println(a.value); }",
+    "valid": true,
+    "stdout": "7\n",
+    "allocations": 1
+  },
+  {
+    "name": "loop_reinitialize_before_move",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a; int i = 0; while (i < 3) { a = new Box(); consume(a); i = i + 1; } }",
+    "valid": true,
+    "stdout": "",
+    "allocations": 3
+  },
+  {
+    "name": "loop_move_break",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a = new Box(); while (true) { consume(a); break; } }",
+    "valid": true,
+    "stdout": "",
+    "allocations": 1
+  },
+  {
+    "name": "loop_move_return",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void f(boolean b) { Box a = new Box(); while (b) { consume(a); return; } println(a.value); } void main() { f(true); f(false); }",
+    "valid": true,
+    "stdout": "7\n",
+    "allocations": 2
+  },
+  {
+    "name": "loop_continue_repaired",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a = new Box(); int i = 0; while (i < 3) { drop(a); a = new Box(); i = i + 1; continue; } println(a.value); }",
+    "valid": true,
+    "stdout": "7\n",
+    "allocations": 4
+  },
+  {
+    "name": "loop_both_branches_repair",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a = new Box(); int i = 0; while (i < 3) { drop(a); if (i == 0) { a = new Box(); } else { a = new Box(); } i = i + 1; } println(a.value); }",
+    "valid": true,
+    "stdout": "7\n",
+    "allocations": 4
+  },
+  {
+    "name": "loop_break_repair_after",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a = new Box(); while (true) { drop(a); break; } a = new Box(); println(a.value); }",
+    "valid": true,
+    "stdout": "7\n",
+    "allocations": 2
+  },
+  {
+    "name": "loop_condition_consumes_repair_body",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a = new Box(); while (test(a)) { a = new Box(); } }",
+    "valid": true,
+    "stdout": "",
+    "allocations": 1
+  },
+  {
+    "name": "nested_loops_restore",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a = new Box(); int i = 0; while (i < 3) { int j = 0; while (j < 2) { drop(a); a = new Box(); j = j + 1; } i = i + 1; } println(a.value); }",
+    "valid": true,
+    "stdout": "7\n",
+    "allocations": 7
+  },
+  {
+    "name": "loop_local_deferred_reset",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { int i = 0; while (i < 3) { Box a; if (i == 0) { a = new Box(); } else { a = new Box(); } println(a.value); i = i + 1; } }",
+    "valid": true,
+    "stdout": "7\n7\n7\n",
+    "allocations": 3
+  },
+  {
+    "name": "loop_consumed_then_return_branch_only",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void f(boolean b) { Box a = new Box(); while (b) { if (b) { drop(a); return; } } println(a.value); } void main() { f(false); }",
+    "valid": true,
+    "stdout": "7\n",
+    "allocations": 1
+  },
+  {
+    "name": "loop_break_skips_backedge_only",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a = new Box(); while (true) { if (true) { drop(a); break; } } }",
+    "valid": true,
+    "stdout": "",
+    "allocations": 1
+  },
+  {
+    "name": "loop_zero_iterations_cleanup",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a = new Box(); while (false) { drop(a); a = new Box(); } println(a.value); }",
+    "valid": true,
+    "stdout": "7\n",
+    "allocations": 1
+  },
+  {
+    "name": "conditional_uninitialized_cleanup",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void f(boolean b) { Box a; if (b) { a = new Box(); } } void main() { f(true); f(false); }",
+    "valid": true,
+    "stdout": "",
+    "allocations": 1
+  },
+  {
+    "name": "short_circuit_conditional_move_cleanup",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a = new Box(); println(false && test(a)); }",
+    "valid": true,
+    "stdout": "false\n",
+    "allocations": 1
+  },
+  {
+    "name": "short_circuit_conditional_move_repaired",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a = new Box(); println(true || test(a)); a = new Box(); println(a.value); }",
+    "valid": true,
+    "stdout": "true\n7\n",
+    "allocations": 2
+  },
+  {
+    "name": "return_owner_after_reinitializing_loop",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } Box make() { Box a = new Box(); int i = 0; while (i < 3) { a = identity(a); i = i + 1; } return a; } void main() { Box a = make(); println(a.value); }",
+    "valid": true,
+    "stdout": "7\n",
+    "allocations": 1
+  },
+  {
+    "name": "parameter_reinitialization_loop",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } Box f(Box a) { int i = 0; while (i < 3) { consume(a); a = new Box(); i = i + 1; } return a; } void main() { Box a = f(new Box()); println(a.value); }",
+    "valid": true,
+    "stdout": "7\n",
+    "allocations": 4
+  },
+  {
+    "name": "composed_drop",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } class Outer { Box inner = new Box(); } void main() { Outer a = new Outer(); drop(a); }",
+    "valid": true,
+    "stdout": "",
+    "allocations": 2
+  },
+  {
+    "name": "return_with_uninitialized_owner",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void f() { Box a; return; } void main() { f(); }",
+    "valid": true,
+    "stdout": "",
+    "allocations": 0
+  },
+  {
+    "name": "early_break_cleans_deferred_local",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { while (true) { Box a; if (true) { a = new Box(); } break; } }",
+    "valid": true,
+    "stdout": "",
+    "allocations": 1
+  },
+  {
+    "name": "stress_move_reinitialize",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a = new Box(); int i = 0; while (i < 10000) { consume(a); a = new Box(); i = i + 1; } }",
+    "valid": true,
+    "stdout": "",
+    "allocations": 10001
+  },
+  {
+    "name": "move_primitive",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { int n = 1; move(n); }",
+    "valid": false,
+    "error": "move exige"
+  },
+  {
+    "name": "move_string",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { String s = \"s\"; move(s); }",
+    "valid": false,
+    "error": "move exige"
+  },
+  {
+    "name": "drop_primitive",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { drop(1); }",
+    "valid": false,
+    "error": "drop exige"
+  },
+  {
+    "name": "drop_void",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { drop(println(1)); }",
+    "valid": false,
+    "error": "drop exige"
+  },
+  {
+    "name": "move_no_argument",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { move(); }",
+    "valid": false,
+    "error": "exactement un argument"
+  },
+  {
+    "name": "drop_two_arguments",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { drop(new Box(), new Box()); }",
+    "valid": false,
+    "error": "exactement un argument"
+  },
+  {
+    "name": "reserved_move_function",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void move() {} void main() {}",
+    "valid": false,
+    "error": "reservee"
+  },
+  {
+    "name": "reserved_drop_method",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } class C { void drop() {} } void main() {}",
+    "valid": false,
+    "error": "reservee"
+  },
+  {
+    "name": "double_drop",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a = new Box(); drop(a); drop(a); }",
+    "valid": false,
+    "error": "E2001"
+  },
+  {
+    "name": "use_after_explicit_drop",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a = new Box(); drop(a); println(a.value); }",
+    "valid": false,
+    "error": "E2001"
+  },
+  {
+    "name": "use_after_explicit_move",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a = new Box(); Box b = move(a); a.get(); }",
+    "valid": false,
+    "error": "E2001"
+  },
+  {
+    "name": "move_twice_one_call",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void f(Box a, Box b) {} void main() { Box a = new Box(); f(move(a), move(a)); }",
+    "valid": false,
+    "error": "E2001"
+  },
+  {
+    "name": "deferred_read_int",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { int a; println(a); }",
+    "valid": false,
+    "error": "E2002"
+  },
+  {
+    "name": "deferred_read_string",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { String a; println(a); }",
+    "valid": false,
+    "error": "E2002"
+  },
+  {
+    "name": "deferred_read_boolean",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { boolean a; if (a) {} }",
+    "valid": false,
+    "error": "E2002"
+  },
+  {
+    "name": "deferred_object_borrow",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a; a.get(); }",
+    "valid": false,
+    "error": "E2002"
+  },
+  {
+    "name": "deferred_object_move",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a; consume(a); }",
+    "valid": false,
+    "error": "E2002"
+  },
+  {
+    "name": "deferred_object_drop",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a; drop(a); }",
+    "valid": false,
+    "error": "E2002"
+  },
+  {
+    "name": "deferred_field_assign",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a; a.value = 1; }",
+    "valid": false,
+    "error": "E2002"
+  },
+  {
+    "name": "deferred_self_assignment",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { int a; a = a; }",
+    "valid": false,
+    "error": "E2002"
+  },
+  {
+    "name": "partial_branch_init",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { int a; if (true) { a = 1; } println(a); }",
+    "valid": false,
+    "error": "E2002"
+  },
+  {
+    "name": "partial_object_init",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a; if (true) { a = new Box(); } println(a.value); }",
+    "valid": false,
+    "error": "E2002"
+  },
+  {
+    "name": "loop_may_not_initialize",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { int a; while (false) { a = 1; break; } println(a); }",
+    "valid": false,
+    "error": "E2002"
+  },
+  {
+    "name": "loop_object_may_not_initialize",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a; while (true) { a = new Box(); break; } println(a.value); }",
+    "valid": false,
+    "error": "E2002"
+  },
+  {
+    "name": "loop_use_after_move",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a = new Box(); while (true) { consume(a); } }",
+    "valid": false,
+    "error": "E2001"
+  },
+  {
+    "name": "loop_continue_without_repair",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a = new Box(); while (true) { consume(a); continue; } }",
+    "valid": false,
+    "error": "E2001"
+  },
+  {
+    "name": "loop_conditional_continue_skips_repair",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a = new Box(); while (true) { drop(a); if (true) { continue; } a = new Box(); } }",
+    "valid": false,
+    "error": "E2001"
+  },
+  {
+    "name": "loop_repair_one_branch",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a = new Box(); while (true) { drop(a); if (true) { a = new Box(); } } }",
+    "valid": false,
+    "error": "E2001"
+  },
+  {
+    "name": "loop_move_in_condition_no_repair",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a = new Box(); while (test(a)) {} }",
+    "valid": false,
+    "error": "E2001"
+  },
+  {
+    "name": "loop_break_moved_exit",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a = new Box(); while (true) { consume(a); break; } a.get(); }",
+    "valid": false,
+    "error": "E2001"
+  },
+  {
+    "name": "loop_break_skips_post_body_repair",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a = new Box(); while (true) { consume(a); if (true) { break; } a = new Box(); } a.get(); }",
+    "valid": false,
+    "error": "E2001"
+  },
+  {
+    "name": "loop_condition_consumption_on_false_exit",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a = new Box(); while (test(a)) { a = new Box(); } a.get(); }",
+    "valid": false,
+    "error": "E2001"
+  },
+  {
+    "name": "nested_loop_break_moved_outer_backedge",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a = new Box(); while (true) { while (true) { consume(a); break; } } }",
+    "valid": false,
+    "error": "E2001"
+  },
+  {
+    "name": "loop_local_cannot_reuse_previous_iteration",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { int i = 0; while (i < 3) { int x; if (i == 0) { x = 1; } println(x); i = i + 1; } }",
+    "valid": false,
+    "error": "E2002"
+  },
+  {
+    "name": "short_circuit_move_still_possible",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a = new Box(); println(false && test(a)); a.get(); }",
+    "valid": false,
+    "error": "E2001"
+  },
+  {
+    "name": "conditional_repair_after_drop",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a = new Box(); drop(a); if (true) { a = new Box(); } a.get(); }",
+    "valid": false,
+    "error": "E2001"
+  },
+  {
+    "name": "cannot_drop_borrowed_this",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } class C { void f() { drop(this); } } void main() {}",
+    "valid": false,
+    "error": "deplacement de this"
+  },
+  {
+    "name": "cannot_drop_owned_field",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } class Outer { Box inner = new Box(); } void main() { Outer a = new Outer(); drop(a.inner); }",
+    "valid": false,
+    "error": "champ objet interdit"
+  },
+  {
+    "name": "receiver_still_locked",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } class C { int f(int n) { return n; } } int take(C c) { return 1; } void main() { C c = new C(); c.f(take(move(c))); }",
+    "valid": false,
+    "error": "emprunte"
+  },
+  {
+    "name": "read_after_move_in_argument_order",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void f(Box x, int n) {} void main() { Box a = new Box(); f(a, a.value); }",
+    "valid": false,
+    "error": "E2001"
+  },
+  {
+    "name": "read_before_move_in_argument_order",
+    "source": "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void f(int n, Box x) { println(n); } void main() { Box a = new Box(); f(a.value, a); }",
+    "valid": true,
+    "stdout": "7\n",
+    "allocations": 1
+  }
+]

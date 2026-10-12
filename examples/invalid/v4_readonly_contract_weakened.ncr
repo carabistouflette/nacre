@@ -1,0 +1,1 @@
+interface I {readonly int get();}class C implements I {int get(){return 1;}}void main(){}

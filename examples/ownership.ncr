@@ -1,0 +1,20 @@
+class Box {
+    private int value;
+    public Box(int value) { this.value = value; }
+    public int get() { return this.value; }
+}
+
+Box makeBox(int value) { return new Box(value); }
+
+void consume(Box box) {
+    println(box.get());
+} // Consumed parameter is freed here.
+
+void main() {
+    Box first = makeBox(42);
+    Box second = first; // Move, not a Java reference copy.
+    println(second.get());
+    consume(second); // Move into a function parameter.
+    first = makeBox(7); // Reinitializing a moved binding is allowed.
+    println(first.get());
+}

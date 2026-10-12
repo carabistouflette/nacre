@@ -1,0 +1,25 @@
+class Counter {
+    private int value;
+    public Counter(int value) { this.value = value; }
+    public int getValue() { return this.value; }
+}
+
+// An owned parameter is consumed. Its fields can be read before scope cleanup.
+int readAndConsume(Counter counter) {
+    return counter.getValue();
+}
+
+public class Main {
+    public static void main() {
+        Counter current = new Counter(10);
+        int i = 0;
+        while (i < 3) {
+            int value = readAndConsume(move(current));
+            // Restore ownership on every path reaching the next iteration.
+            current = new Counter(value + 1);
+            i = i + 1;
+        }
+        System.out.println(current.getValue());
+        drop(current); // deterministic release now, not at the end of main
+    }
+}

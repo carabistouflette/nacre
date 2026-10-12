@@ -1,0 +1,1 @@
+class Box<T> { T value; Box(T value) { this.value = value; } readonly T get() { return this.value; } } void main(){Box<int> a=new Box<int>(1);Box<boolean> b=a;}

@@ -1,0 +1,88 @@
+static bool ncr_io_path_valid_@TEXT_ID@(ncr_obj_@TEXT_ID@ *path) {
+    return path->length >= 0 && (path->length == 0 || path->bytes != NULL)
+        && ncr_utf8_valid(path->bytes, (size_t)path->length)
+        && (path->length == 0 || memchr(path->bytes, 0, (size_t)path->length) == NULL);
+}
+
+static ncr_obj_@RESULT_TEXT@ @FILES_READ_TEXT@(ncr_obj_@TEXT_ID@ *path, size_t line, size_t column) {
+    if (!ncr_io_path_valid_@TEXT_ID@(path)) {
+        return @ERROR_TEXT_RESULT@("Files.readText: invalid path", sizeof("Files.readText: invalid path") - 1, line, column);
+    }
+    size_t path_length = (size_t)path->length;
+    unsigned char *terminated = ncr_allocate(path_length + 1, line, column);
+    if (path_length > 0) { memcpy(terminated, path->bytes, path_length); }
+    terminated[path_length] = 0;
+    FILE *file = fopen((const char *)terminated, "rb");
+    ncr_deallocate(terminated);
+    if (file == NULL) {
+        return @ERROR_TEXT_RESULT@("Files.readText: cannot open file", sizeof("Files.readText: cannot open file") - 1, line, column);
+    }
+    unsigned char *bytes = NULL;
+    size_t capacity = 0;
+    size_t length = 0;
+    const char *failure = NULL;
+    for (;;) {
+        if (length == capacity) {
+            // Peek before growing so exact-capacity EOF needs no extra buffer.
+            int next = fgetc(file);
+            if (next == EOF) {
+                if (ferror(file)) { failure = "Files.readText: read failed"; }
+                break;
+            }
+            size_t required = capacity == 0 ? 4096 : length + 1;
+            if (length == (size_t)INT32_MAX
+                || !@IO_RESERVE@(&bytes, &capacity, required, length, line, column)) {
+                failure = "Files.readText: file too large";
+                break;
+            }
+            bytes[length++] = (unsigned char)next;
+        }
+        size_t available = capacity - length;
+        size_t count = fread(bytes + length, 1, available, file);
+        length += count;
+        if (count < available) {
+            if (ferror(file) || !feof(file)) { failure = "Files.readText: read failed"; }
+            break;
+        }
+    }
+    if (fclose(file) != 0 && failure == NULL) { failure = "Files.readText: close failed"; }
+    if (failure == NULL && !ncr_utf8_valid(bytes, length)) { failure = "Files.readText: invalid UTF-8"; }
+    if (failure != NULL) {
+        ncr_deallocate(bytes);
+        return @ERROR_TEXT_RESULT@(failure, strlen(failure), line, column);
+    }
+    ncr_obj_@TEXT_ID@ *text = @TEXT_TAKE@(bytes, length, capacity, line, column);
+    return (ncr_obj_@RESULT_TEXT@){
+        .tag = @TEXT_RESULT_OK_TAG@,
+        .data.v@TEXT_RESULT_OK_TAG@.f0 = text
+    };
+}
+
+static ncr_obj_@RESULT_BOOL@ @FILES_WRITE_TEXT@(ncr_obj_@TEXT_ID@ *path, ncr_obj_@TEXT_ID@ *content, size_t line, size_t column) {
+    if (!ncr_io_path_valid_@TEXT_ID@(path)) {
+        return @ERROR_BOOL_RESULT@("Files.writeText: invalid path", sizeof("Files.writeText: invalid path") - 1, line, column);
+    }
+    size_t path_length = (size_t)path->length;
+    unsigned char *terminated = ncr_allocate(path_length + 1, line, column);
+    if (path_length > 0) { memcpy(terminated, path->bytes, path_length); }
+    terminated[path_length] = 0;
+    FILE *file = fopen((const char *)terminated, "wb");
+    ncr_deallocate(terminated);
+    if (file == NULL) {
+        return @ERROR_BOOL_RESULT@("Files.writeText: cannot open file", sizeof("Files.writeText: cannot open file") - 1, line, column);
+    }
+    bool success = true;
+    if (content->length > 0
+        && fwrite(content->bytes, 1, (size_t)content->length, file) != (size_t)content->length) {
+        success = false;
+    }
+    if (fflush(file) != 0) { success = false; }
+    if (fclose(file) != 0) { success = false; }
+    if (!success) {
+        return @ERROR_BOOL_RESULT@("Files.writeText: write failed", sizeof("Files.writeText: write failed") - 1, line, column);
+    }
+    return (ncr_obj_@RESULT_BOOL@){
+        .tag = @BOOL_RESULT_OK_TAG@,
+        .data.v@BOOL_RESULT_OK_TAG@.f0 = true
+    };
+}

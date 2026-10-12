@@ -1,0 +1,111 @@
+{
+  "invocation": "PATH=/tmp/nacre-tooling/bin:$PATH python3 scripts/fuzz_smoke.py",
+  "toolchain": {
+    "cargo_fuzz": "0.13.2",
+    "rustc": "1.99.0-nightly (7608eb7b0 2026-08-05)"
+  },
+  "limits": {
+    "max_total_time_seconds_per_target": 30,
+    "per_input_timeout_seconds": 5,
+    "rss_limit_mb": 512,
+    "max_input_bytes": {
+      "frontend": 16384,
+      "lsp_frames": 65536
+    },
+    "python_subprocess_timeout_seconds": 300
+  },
+  "corpora": {
+    "campaign_inputs": "Per-target temporary copies of the retained seed corpora; libFuzzer expansions were discarded with the temporary directories.",
+    "retained_seeds": {
+      "frontend": [
+        "hello.ncr",
+        "truncated_function.ncr",
+        "type_mismatch.ncr"
+      ],
+      "lsp_frames": [
+        "duplicate_content_length.frm",
+        "invalid_json.frm",
+        "malformed_content_length.frm",
+        "oversized_content_length.frm",
+        "truncated_body.frm",
+        "truncated_header.frm",
+        "utf8_document.frm",
+        "valid_exit.frm"
+      ]
+    }
+  },
+  "campaigns": [
+    {
+      "target": "frontend",
+      "entry_point": "fuzz/fuzz_targets/frontend.rs: nacre::validate; valid UTF-8 sources also call compile_to_c, emit_flow, emit_borrows, and emit_types",
+      "execution": "fuzz/target/x86_64-unknown-linux-gnu/release/frontend -artifact_prefix=/home/arobin/Downloads/javanative-v5/fuzz/artifacts/frontend/ -max_total_time=30 -timeout=5 -rss_limit_mb=512 -max_len=16384 -print_final_stats=1 /tmp/nacre-fuzz-frontend-j2brp2ex/frontend",
+      "seed_files": 3,
+      "instrumentation": {
+        "inline_counters": 21456,
+        "pc_table_entries": 21456
+      },
+      "libfuzzer_elapsed_seconds": 31,
+      "executed_units": 1055371,
+      "average_exec_per_second": 34044,
+      "new_units_added": 6242,
+      "coverage_features": {
+        "cov": 3325,
+        "ft": 11264
+      },
+      "peak_rss_mb": 413,
+      "slowest_input_seconds": 0
+    },
+    {
+      "target": "lsp_frames",
+      "entry_point": "fuzz/fuzz_targets/lsp_frames.rs: nacre::lsp::fuzz_read_frame",
+      "execution": "fuzz/target/x86_64-unknown-linux-gnu/release/lsp_frames -artifact_prefix=/home/arobin/Downloads/javanative-v5/fuzz/artifacts/lsp_frames/ -max_total_time=30 -timeout=5 -rss_limit_mb=512 -max_len=65536 -print_final_stats=1 /tmp/nacre-fuzz-lsp_frames-3iec_r08/lsp_frames",
+      "seed_files": 8,
+      "instrumentation": {
+        "inline_counters": 3174,
+        "pc_table_entries": 3174
+      },
+      "libfuzzer_elapsed_seconds": 31,
+      "executed_units": 3127845,
+      "average_exec_per_second": 100898,
+      "new_units_added": 6318,
+      "coverage_features": {
+        "cov": 946,
+        "ft": 3959
+      },
+      "peak_rss_mb": 391,
+      "slowest_input_seconds": 0
+    }
+  ],
+  "script_wall_time_seconds": 62.6,
+  "findings": {
+    "crashes": 0,
+    "timeouts": 0,
+    "crash_artifacts": [],
+    "result": "Both bounded campaigns exited successfully; no crash or timeout was observed. This is not evidence of general fuzz safety."
+  },
+  "earlier_in_place_pass": {
+    "note": "The first pass ran against the repository corpus directories and generated libFuzzer corpus entries. Those hash-named expansions were removed; the final pass above uses temporary copies and left all intended seed files intact.",
+    "targets": {
+      "frontend": {
+        "seed_files": 3,
+        "elapsed_seconds": 31,
+        "executed_units": 1037297,
+        "cov": 3545,
+        "ft": 11104,
+        "peak_rss_mb": 427,
+        "crashes": 0,
+        "timeouts": 0
+      },
+      "lsp_frames": {
+        "seed_files": 8,
+        "elapsed_seconds": 31,
+        "executed_units": 3792960,
+        "cov": 961,
+        "ft": 3932,
+        "peak_rss_mb": 401,
+        "crashes": 0,
+        "timeouts": 0
+      }
+    }
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "scope": "actual runtime + HANDWRITTEN interface C fixture ONLY",
+  "rust_tests_executed": false,
+  "generated_code_tested": false,
+  "results": [
+    {
+      "compiler": "gcc",
+      "sanitizers": false,
+      "llvm_roundtrip": false,
+      "allocations": 50004,
+      "frees": 50004,
+      "live_at_exit": 0,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "sanitizers": true,
+      "llvm_roundtrip": false,
+      "allocations": 50004,
+      "frees": 50004,
+      "live_at_exit": 0,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "sanitizers": false,
+      "llvm_roundtrip": false,
+      "allocations": 50004,
+      "frees": 50004,
+      "live_at_exit": 0,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "sanitizers": true,
+      "llvm_roundtrip": false,
+      "allocations": 50004,
+      "frees": 50004,
+      "live_at_exit": 0,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "sanitizers": false,
+      "llvm_roundtrip": true,
+      "allocations": 50004,
+      "frees": 50004,
+      "live_at_exit": 0,
+      "status": "passed"
+    }
+  ]
+}

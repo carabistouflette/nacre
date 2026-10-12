@@ -1,0 +1,10 @@
+int absolu(int n) {
+    if (n < 0) {
+        return -n;
+    }
+    // Il manque return n;
+}
+
+void main() {
+    println(absolu(5));
+}

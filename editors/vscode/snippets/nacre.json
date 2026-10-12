@@ -1,0 +1,119 @@
+{
+  "Main function": {
+    "prefix": "main",
+    "body": [
+      "void main() {",
+      "    $0",
+      "}"
+    ],
+    "description": "Declare the Nacre program entry point"
+  },
+  "Class": {
+    "prefix": "class",
+    "body": [
+      "class ${1:Name} {",
+      "    $0",
+      "}"
+    ],
+    "description": "Declare a class"
+  },
+  "Interface": {
+    "prefix": "interface",
+    "body": [
+      "interface ${1:Name} {",
+      "    $0",
+      "}"
+    ],
+    "description": "Declare a Nacre interface"
+  },
+  "Constructor": {
+    "prefix": "constructor",
+    "body": [
+      "public ${1:Name}(${2}) {",
+      "    $0",
+      "}"
+    ],
+    "description": "Declare a class constructor"
+  },
+  "Readonly method": {
+    "prefix": "readonly-method",
+    "body": [
+      "public readonly ${1:void} ${2:methodName}(${3}) {",
+      "    $0",
+      "}"
+    ],
+    "description": "Declare an instance method that cannot mutate its receiver"
+  },
+  "While loop": {
+    "prefix": "while",
+    "body": [
+      "while (${1:true}) {",
+      "    $0",
+      "}"
+    ],
+    "description": "Loop while a condition is true"
+  },
+  "If statement": {
+    "prefix": "if",
+    "body": [
+      "if (${1:true}) {",
+      "    ${2}",
+      "} else {",
+      "    $0",
+      "}"
+    ],
+    "description": "Branch on a boolean condition"
+  },
+  "List declaration": {
+    "prefix": "list",
+    "body": [
+      "List<${1:int}> ${2:items} = new List<${1:int}>();"
+    ],
+    "description": "Declare and initialize a typed List"
+  },
+  "Text declaration": {
+    "prefix": "text",
+    "body": [
+      "Text ${1:text} = new Text(\"${2}\");"
+    ],
+    "description": "Declare and initialize a Text value"
+  },
+  "Borrowed parameter": {
+    "prefix": "borrow",
+    "body": [
+      "borrow ${1:Type} ${2:value}"
+    ],
+    "description": "Declare an immutable borrowed parameter type"
+  },
+  "Enum declaration": {
+    "prefix": "enum",
+    "body": [
+      "enum ${1:Choice}<${2:T}> {",
+      "    ${3:None};",
+      "    ${4:Some}(${2:T});",
+      "}"
+    ],
+    "description": "Declare a generic enum and its variants"
+  },
+  "Variant construction": {
+    "prefix": "variant",
+    "body": [
+      "new Option<int>.Some(${1:42})"
+    ],
+    "description": "Construct a payload-carrying Option variant"
+  },
+  "Consuming match": {
+    "prefix": "match",
+    "body": [
+      "match (${1:option}) {",
+      "    Some(${2:value}) {",
+      "        ${3}",
+      "    }",
+      "    None {",
+      "        $0",
+      "    }",
+      "}"
+    ],
+    "description": "Exhaustively consume an Option and bind its payload"
+  }
+}

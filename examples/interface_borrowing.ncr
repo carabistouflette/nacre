@@ -1,0 +1,25 @@
+interface CounterAccess {
+    void increment();
+    readonly int getValue();
+}
+
+class Counter implements CounterAccess {
+    private int value;
+    Counter(int value) { this.value = value; }
+    public void increment() { this.value = this.value + 1; }
+    public readonly int getValue() { return this.value; }
+}
+
+void bump(borrow mut CounterAccess counter) { counter.increment(); }
+
+void main() {
+    Counter counter = new Counter(40);
+    bump(counter); // Emprunt et conversion d'interface implicites, sans allocation.
+    {
+        borrow CounterAccess reader = counter;
+        println(reader.getValue());
+        // counter.increment() serait refuse pendant cet emprunt.
+    }
+    counter.increment();
+    println(counter.getValue());
+}

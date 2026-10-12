@@ -1,0 +1,20 @@
+class Token {
+    private int number;
+    public Token(int number) { this.number = number; }
+    public int get() { return this.number; }
+}
+
+int work(int limit) {
+    Token outer = new Token(100);
+    int index = 0;
+    while (index < limit) {
+        Token temporary = new Token(index);
+        index = index + 1;
+        if (index == 2) { continue; }
+        if (index == 4) { break; }
+        println(temporary.get());
+    }
+    return outer.get();
+}
+
+void main() { println(work(10)); }

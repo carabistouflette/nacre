@@ -1,0 +1,30 @@
+// V6: tagged values are inline; only the owned Text allocates.
+enum Parcel<T> {
+    Empty;
+    Value(T);
+}
+
+void main() {
+    Parcel<Text> parcel = new Parcel<Text>.Value(new Text("42"));
+    match (parcel) {
+        Empty {
+            println("Empty parcel");
+        }
+        Value(text) {
+            match (text.parseInt()) {
+                Ok(value) {
+                    println(value);
+                }
+                Err(error) {
+                    error.print();
+                }
+            }
+        }
+    }
+    // parcel is consumed. text/error payloads are destroyed at scope exit.
+    Option<int> missing = new Option<int>.None();
+    match (missing) {
+        None { println(0); }
+        Some(value) { println(value); }
+    }
+}

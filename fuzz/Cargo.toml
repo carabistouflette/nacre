@@ -1,0 +1,29 @@
+[package]
+name = "nacre-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "=0.4.10"
+nacre = { path = "..", features = ["fuzzing"] }
+
+[[bin]]
+name = "frontend"
+path = "fuzz_targets/frontend.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "lsp_frames"
+path = "fuzz_targets/lsp_frames.rs"
+test = false
+doc = false
+bench = false
+
+[workspace]
+members = ["."]

@@ -1,0 +1,15 @@
+class Settings {
+    public int width = 80;
+    public boolean enabled = true;
+    public String label = "Configuration";
+    public int doubleWidth() { return this.width * 2; }
+    // A default no-argument constructor is synthesized.
+}
+
+void main() {
+    Settings settings = new Settings();
+    println(settings.label);
+    println(settings.enabled);
+    settings.width = 100;
+    println(settings.doubleWidth());
+}

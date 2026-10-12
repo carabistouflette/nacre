@@ -1,0 +1,20 @@
+class Counter {
+    int value = 42;
+    readonly int getValue() { return this.value; }
+}
+
+class View<T> {
+    private borrow T target;
+    View(borrow T target) { this.target = target; }
+    readonly int read() { return this.target.getValue(); }
+}
+
+void main() {
+    Counter counter = new Counter();
+    {
+        View<Counter> view = new View<Counter>(counter);
+        println(view.read());
+    }
+    counter.value = 43;
+    println(counter.getValue());
+}

@@ -1,0 +1,73 @@
+/* Native List<@ELEMENT@>. Only initialized [0,length) slots own elements. */
+static void ncr_list_reserve_@ID@(ncr_obj_@ID@ *p, int32_t requested, size_t line, size_t column) {
+    if (requested < 0) { ncr_fail("capacite de List negative", line, column); }
+    if (requested <= p->capacity) { return; }
+    int64_t capacity = p->capacity == 0 ? 4 : p->capacity;
+    while (capacity < requested) {
+        capacity = capacity > INT32_MAX / 2 ? INT32_MAX : capacity * 2;
+    }
+    if ((uint64_t)capacity > SIZE_MAX / sizeof(@ELEMENT@)) {
+        ncr_fail("capacite de List trop grande", line, column);
+    }
+    @ELEMENT@ *items = ncr_allocate((size_t)capacity * sizeof(@ELEMENT@), line, column);
+    if (p->length > 0) { memcpy(items, p->items, (size_t)p->length * sizeof(@ELEMENT@)); }
+    /* Raw relocation transfers ownership; do NOT destroy the old slots. */
+    ncr_deallocate(p->items);
+    p->items = items;
+    p->capacity = (int32_t)capacity;
+}
+static void ncr_list_check_@ID@(ncr_obj_@ID@ *p, int32_t index, size_t line, size_t column) {
+    if (index < 0 || index >= p->length) { ncr_fail("indice de List hors limites", line, column); }
+}
+static void @LIST_NEW@(ncr_obj_@ID@ *p, size_t line, size_t column) {
+    (void)line; (void)column;
+    p->items = NULL; p->length = 0; p->capacity = 0;
+}
+static void @LIST_ADD@(ncr_obj_@ID@ *p, @ELEMENT@ value, size_t line, size_t column) {
+    if (p->length == INT32_MAX) { ncr_fail("List pleine", line, column); }
+    ncr_list_reserve_@ID@(p, p->length + 1, line, column);
+    p->items[p->length++] = value;
+}
+static int32_t @LIST_SIZE@(ncr_obj_@ID@ *p, size_t line, size_t column) {
+    (void)line; (void)column; return p->length;
+}
+static int32_t @LIST_CAPACITY@(ncr_obj_@ID@ *p, size_t line, size_t column) {
+    (void)line; (void)column; return p->capacity;
+}
+static bool @LIST_IS_EMPTY@(ncr_obj_@ID@ *p, size_t line, size_t column) {
+    (void)line; (void)column; return p->length == 0;
+}
+@GET_METHOD@
+static void @LIST_SET@(ncr_obj_@ID@ *p, int32_t index, @ELEMENT@ value, size_t line, size_t column) {
+    ncr_list_check_@ID@(p, index, line, column);
+    @DROP_AT_INDEX@
+    p->items[index] = value;
+}
+static @ELEMENT@ @LIST_POP@(ncr_obj_@ID@ *p, size_t line, size_t column) {
+    if (p->length == 0) { ncr_fail("pop sur une List vide", line, column); }
+    @ELEMENT@ value = p->items[--p->length];
+    p->items[p->length] = @ZERO@;
+    return value;
+}
+static @ELEMENT@ @LIST_REMOVE@(ncr_obj_@ID@ *p, int32_t index, size_t line, size_t column) {
+    ncr_list_check_@ID@(p, index, line, column);
+    @ELEMENT@ value = p->items[index];
+    int32_t remaining = p->length - index - 1;
+    if (remaining > 0) {
+        memmove(&p->items[index], &p->items[index + 1], (size_t)remaining * sizeof(@ELEMENT@));
+    }
+    --p->length;
+    p->items[p->length] = @ZERO@;
+    return value;
+}
+static void @LIST_CLEAR@(ncr_obj_@ID@ *p, size_t line, size_t column) {
+    (void)line; (void)column;
+    while (p->length > 0) {
+        int32_t index = --p->length;
+        @DROP_AT_INDEX@
+        p->items[index] = @ZERO@;
+    }
+}
+static void @LIST_RESERVE@(ncr_obj_@ID@ *p, int32_t capacity, size_t line, size_t column) {
+    ncr_list_reserve_@ID@(p, capacity, line, column);
+}

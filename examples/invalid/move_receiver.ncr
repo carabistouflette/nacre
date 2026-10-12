@@ -1,0 +1,9 @@
+class Box {
+    public int value = 1;
+    public int add(int x) { return this.value + x; }
+}
+int consume(Box b) { return b.value; }
+void main() {
+    Box box = new Box();
+    println(box.add(consume(box))); // Rejected: receiver must stay alive.
+}

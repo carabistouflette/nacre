@@ -1,0 +1,23 @@
+{
+  "method": "static source inventory; not cargo test --list",
+  "rust_tests_executed": false,
+  "explicitly_ignored_llvm_tests": 2,
+  "counts": {
+    "tests/ownership_native.rs": 41,
+    "tests/frontend.rs": 69,
+    "tests/flow_diagnostics.rs": 8,
+    "tests/cli.rs": 30,
+    "tests/objects_native.rs": 40,
+    "tests/features_v4_native.rs": 53,
+    "tests/borrowing_frontend.rs": 133,
+    "tests/native.rs": 25,
+    "tests/borrowing_native.rs": 46,
+    "tests/features_v4_frontend.rs": 109,
+    "tests/ownership_frontend.rs": 81,
+    "tests/borrowing_diagnostics.rs": 12,
+    "tests/features_v4_tools.rs": 19,
+    "tests/objects_frontend.rs": 96,
+    "src/ownership.rs": 4
+  },
+  "total": 766
+}

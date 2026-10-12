@@ -1,0 +1,16 @@
+interface Source<T> {
+    readonly T read();
+}
+
+class Constant<T> implements Source<T> {
+    private T value;
+    Constant(T value) { this.value = value; }
+    public readonly T read() { return this.value; }
+}
+
+void main() {
+    Source<int> number = new Constant<int>(42);
+    Source<String> text = new Constant<String>("Polymorphisme generique");
+    println(number.read());
+    println(text.read());
+}

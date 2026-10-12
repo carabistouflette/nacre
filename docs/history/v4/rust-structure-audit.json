@@ -1,0 +1,115 @@
+{
+  "scope": "delimiter balance only; NOT Rust syntax or type validation",
+  "rust_tests_executed": false,
+  "status": "passed",
+  "results": [
+    {
+      "file": "src/ast.rs",
+      "balanced_pairs": 59
+    },
+    {
+      "file": "src/borrowing.rs",
+      "balanced_pairs": 432
+    },
+    {
+      "file": "src/checker.rs",
+      "balanced_pairs": 1071
+    },
+    {
+      "file": "src/codegen.rs",
+      "balanced_pairs": 537
+    },
+    {
+      "file": "src/diagnostic.rs",
+      "balanced_pairs": 92
+    },
+    {
+      "file": "src/generics.rs",
+      "balanced_pairs": 315
+    },
+    {
+      "file": "src/ir.rs",
+      "balanced_pairs": 89
+    },
+    {
+      "file": "src/lexer.rs",
+      "balanced_pairs": 174
+    },
+    {
+      "file": "src/lib.rs",
+      "balanced_pairs": 52
+    },
+    {
+      "file": "src/main.rs",
+      "balanced_pairs": 189
+    },
+    {
+      "file": "src/native.rs",
+      "balanced_pairs": 196
+    },
+    {
+      "file": "src/ownership.rs",
+      "balanced_pairs": 655
+    },
+    {
+      "file": "src/parser.rs",
+      "balanced_pairs": 587
+    },
+    {
+      "file": "tests/borrowing_diagnostics.rs",
+      "balanced_pairs": 175
+    },
+    {
+      "file": "tests/borrowing_frontend.rs",
+      "balanced_pairs": 1018
+    },
+    {
+      "file": "tests/borrowing_native.rs",
+      "balanced_pairs": 875
+    },
+    {
+      "file": "tests/cli.rs",
+      "balanced_pairs": 371
+    },
+    {
+      "file": "tests/features_v4_frontend.rs",
+      "balanced_pairs": 819
+    },
+    {
+      "file": "tests/features_v4_native.rs",
+      "balanced_pairs": 1008
+    },
+    {
+      "file": "tests/features_v4_tools.rs",
+      "balanced_pairs": 237
+    },
+    {
+      "file": "tests/flow_diagnostics.rs",
+      "balanced_pairs": 79
+    },
+    {
+      "file": "tests/frontend.rs",
+      "balanced_pairs": 175
+    },
+    {
+      "file": "tests/native.rs",
+      "balanced_pairs": 154
+    },
+    {
+      "file": "tests/objects_frontend.rs",
+      "balanced_pairs": 157
+    },
+    {
+      "file": "tests/objects_native.rs",
+      "balanced_pairs": 75
+    },
+    {
+      "file": "tests/ownership_frontend.rs",
+      "balanced_pairs": 607
+    },
+    {
+      "file": "tests/ownership_native.rs",
+      "balanced_pairs": 780
+    }
+  ]
+}

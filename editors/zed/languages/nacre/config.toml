@@ -1,0 +1,14 @@
+name = "Nacre"
+grammar = "nacre"
+path_suffixes = ["ncr"]
+line_comments = ["// "]
+block_comment = ["/*", "*/"]
+tab_size = 4
+hard_tabs = false
+code_fence_block_name = "nacre"
+autoclose_before = ";:.,=}])>\n\t "
+brackets = [
+    { start = "{", end = "}", close = true, newline = true, not_in = ["string", "comment"] },
+    { start = "(", end = ")", close = true, newline = false, not_in = ["string", "comment"] },
+    { start = "\"", end = "\"", close = true, newline = false, not_in = ["string", "comment"] },
+]

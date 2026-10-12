@@ -1,0 +1,10 @@
+class Counter {}
+class View {
+    borrow Counter target;
+    View(borrow Counter target) { this.target = target; }
+}
+void main() {
+    Counter counter = new Counter();
+    View view = new View(counter);
+    drop(counter); // E3002 : le champ emprunte de view doit rester valide.
+}

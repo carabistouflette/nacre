@@ -1,0 +1,5568 @@
+{
+  "scope": "actual Rust compiler and generated executables",
+  "llvm_cases": [
+    {
+      "case": "interfaces",
+      "status": "passed"
+    },
+    {
+      "case": "interface_borrowing",
+      "status": "passed"
+    },
+    {
+      "case": "generic_box",
+      "status": "passed"
+    },
+    {
+      "case": "generic_composition",
+      "status": "passed"
+    },
+    {
+      "case": "generic_interfaces",
+      "status": "passed"
+    },
+    {
+      "case": "interface_composition",
+      "status": "passed"
+    },
+    {
+      "case": "generic_view",
+      "status": "passed"
+    },
+    {
+      "case": "collections",
+      "status": "passed"
+    },
+    {
+      "case": "owned_list",
+      "status": "passed"
+    },
+    {
+      "case": "owned_tree",
+      "status": "passed"
+    },
+    {
+      "case": "dynamic_text",
+      "status": "passed"
+    }
+  ],
+  "status": "passed",
+  "results": [
+    {
+      "compiler": "gcc",
+      "case": "borrowing",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "sums",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "reborrowing",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "borrowed_fields",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "borrowed_loop",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "readonly_composition",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "counter",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "composition",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "ownership",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "field_initializers",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "static_methods",
+      "allocations": 0,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "object_scopes",
+      "allocations": 5,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "ownership_loop",
+      "allocations": 4,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "definite_initialization",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "explicit_drop",
+      "allocations": 4,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "ownership_continue",
+      "allocations": 5,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "ownership_break",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "interfaces",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "interface_borrowing",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "generic_box",
+      "allocations": 3,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "generic_composition",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "generic_interfaces",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "interface_composition",
+      "allocations": 3,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "generic_view",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "collections",
+      "allocations": 4,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "owned_list",
+      "allocations": 4,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "owned_tree",
+      "allocations": 7,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "dynamic_text",
+      "allocations": 5,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "multifile_project",
+      "allocations": 4,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_explicit_move",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_explicit_move_of_new",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_explicit_move_return",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_explicit_self_move",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_drop_local",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_drop_new",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_drop_owned_return",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_drop_reinitialize",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_conditional_drop",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_conditional_drop_not_taken",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_conditional_drop_and_repair",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_deferred_object",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_deferred_unused_object",
+      "allocations": 0,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_deferred_primitives",
+      "allocations": 0,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_deferred_branch_init",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_deferred_return_branch",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_deferred_nested_scope",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_loop_move_reinitialize",
+      "allocations": 11,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_loop_identity",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_loop_reinitialize_before_move",
+      "allocations": 3,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_loop_move_break",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_loop_move_return",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_loop_continue_repaired",
+      "allocations": 4,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_loop_both_branches_repair",
+      "allocations": 4,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_loop_break_repair_after",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_loop_condition_consumes_repair_body",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_nested_loops_restore",
+      "allocations": 7,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_loop_local_deferred_reset",
+      "allocations": 3,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_loop_consumed_then_return_branch_only",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_loop_break_skips_backedge_only",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_loop_zero_iterations_cleanup",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_conditional_uninitialized_cleanup",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_short_circuit_conditional_move_cleanup",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_short_circuit_conditional_move_repaired",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_return_owner_after_reinitializing_loop",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_parameter_reinitialization_loop",
+      "allocations": 4,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_composed_drop",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_return_with_uninitialized_owner",
+      "allocations": 0,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_early_break_cleans_deferred_local",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_stress_move_reinitialize",
+      "allocations": 10001,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_read_before_move_in_argument_order",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_example_borrowing",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_example_reborrowing",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_example_borrowed_fields",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_example_borrowed_loop",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_example_readonly_composition",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_shared_local",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_two_shared_locals",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_mutable_local",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_shared_parameter",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_mutable_parameter",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_borrowed_parameter_forwarding",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_shared_reborrow",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_mutable_reborrow",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_shared_reborrow_of_mutable",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_read_after_inner_mutable_scope",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_scope_releases_before_owner_move",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_borrow_owned_field",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_distinct_owners",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_nested_receiver_compatibility",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_readonly_alias_parameter",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_readonly_can_mutate_separate_parameter",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_readonly_can_mutate_local",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_borrow_this",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_mutable_borrow_this",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_borrowed_constructor_argument_no_escape",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_mutable_constructor_argument_no_escape",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_borrow_before_early_return",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_borrowed_loop_condition",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_branch_scopes",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_reference_after_definite_initialization",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_borrow_then_reinitialize_next_iteration",
+      "allocations": 4,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_readonly_recursion_signature",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_view_captures_shared",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_view_captures_shared_reborrow",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_view_downgrades_mutable_local",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_view_duplicate_fields_one_argument",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_view_two_aliased_arguments",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_view_parameter_mapping",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_view_reversed_mapping",
+      "allocations": 3,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_view_with_owned_child",
+      "allocations": 3,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_view_own_state_mutable",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_view_borrowed_field_projection",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_view_inside_loop",
+      "allocations": 4,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_view_break_cleanup",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_view_early_return_cleanup",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_two_views_same_referent",
+      "allocations": 3,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_example_interfaces",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_example_interface_borrowing",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_example_generic_box",
+      "allocations": 3,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_example_generic_composition",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_example_generic_interfaces",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_example_interface_composition",
+      "allocations": 3,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_example_generic_view",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_owned_interface_moves",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_owned_interface_replacement",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_owned_interface_self_assignment",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_interface_argument_consumes",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_interface_factory_return",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_interface_identity_return",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_interface_early_return_cleanup",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_discard_interface_return",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_drop_interface_explicit",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_shared_interface_parameter",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_mutable_interface_parameter",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_borrow_owned_interface",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_interface_mutable_reborrow",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_interface_parameter_forwarding",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_two_shared_interface_arguments",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_multiple_interfaces",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_marker_interface",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_forward_interface_declaration",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_interface_methods_source_order",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_interface_owned_field",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_interface_field_borrow",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_interface_borrowed_field",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_interface_conditional_move",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_interface_definite_init",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_interface_loop_move_reinit",
+      "allocations": 4,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_interface_loop_cleanup",
+      "allocations": 4,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_interface_short_circuit",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_interface_dynamic_object_return",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_interface_dynamic_interface_return",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_interface_dynamic_owned_argument",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_interface_dynamic_borrowed_argument",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_interface_many_replacements",
+      "allocations": 1001,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_generic_two_parameters",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_generic_nested_owner",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_generic_whitespace_angles",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_generic_comparisons_not_types",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_generic_same_specialization_reused",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_generic_default_constructor",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_generic_static_inside_instance",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_generic_borrow_parameter",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_generic_owned_return",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_generic_interface_argument",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_generic_unused_body_checked_on_instantiation",
+      "allocations": 0,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_generic_owned_parameter_semantics",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_generic_primitive_parameter_semantics",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_generic_unused_type_parameter",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_example_collections",
+      "allocations": 4,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_example_owned_list",
+      "allocations": 4,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_example_owned_tree",
+      "allocations": 7,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_example_dynamic_text",
+      "allocations": 5,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_list_empty",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_list_primitive_mutations",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_list_boolean",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_list_static_string_outlives_container",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_list_string_embedded_nul",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_list_reserve_reuse",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_list_grows_1000",
+      "allocations": 10,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_list_nested_pop",
+      "allocations": 4,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_list_owned_pop_outlives_list",
+      "allocations": 3,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_list_owned_set_destroys_previous",
+      "allocations": 4,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_list_owned_ignored_pop_drops",
+      "allocations": 3,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_list_owned_function_return",
+      "allocations": 3,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_list_owned_replace_container",
+      "allocations": 4,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_list_owned_clear_reuse",
+      "allocations": 4,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_list_borrow_parameter",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_list_exclusive_parameter",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_list_two_phase_receiver",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_list_shared_reads",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_list_generic_wrapper",
+      "allocations": 3,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_list_generic_owned_wrapper",
+      "allocations": 4,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_text_empty",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_text_formatting",
+      "allocations": 3,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_text_utf8_bytes",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_text_embedded_nul",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_text_clone_independence",
+      "allocations": 4,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_text_append_borrow",
+      "allocations": 4,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_text_shared_same_object_equality",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_text_return_owner",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_text_owned_in_list",
+      "allocations": 4,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_text_grows_10000",
+      "allocations": 12,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_text_borrowed_view",
+      "allocations": 3,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_list_uninitialized_then_assigned",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_reserved_prelude_parameter_does_not_shadow_user_t",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_list_negative_index",
+      "status": "correctly_aborted",
+      "exit_code": 70,
+      "sanitizers": false
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_list_past_end",
+      "status": "correctly_aborted",
+      "exit_code": 70,
+      "sanitizers": false
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_list_empty_pop",
+      "status": "correctly_aborted",
+      "exit_code": 70,
+      "sanitizers": false
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_list_empty_remove",
+      "status": "correctly_aborted",
+      "exit_code": 70,
+      "sanitizers": false
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_list_negative_reserve",
+      "status": "correctly_aborted",
+      "exit_code": 70,
+      "sanitizers": false
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_text_negative_index",
+      "status": "correctly_aborted",
+      "exit_code": 70,
+      "sanitizers": false
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_text_empty_index",
+      "status": "correctly_aborted",
+      "exit_code": 70,
+      "sanitizers": false
+    },
+    {
+      "compiler": "clang",
+      "case": "borrowing",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "sums",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "reborrowing",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "borrowed_fields",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "borrowed_loop",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "readonly_composition",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "counter",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "composition",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "ownership",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "field_initializers",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "static_methods",
+      "allocations": 0,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "object_scopes",
+      "allocations": 5,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "ownership_loop",
+      "allocations": 4,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "definite_initialization",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "explicit_drop",
+      "allocations": 4,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "ownership_continue",
+      "allocations": 5,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "ownership_break",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "interfaces",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "interface_borrowing",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "generic_box",
+      "allocations": 3,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "generic_composition",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "generic_interfaces",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "interface_composition",
+      "allocations": 3,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "generic_view",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "collections",
+      "allocations": 4,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "owned_list",
+      "allocations": 4,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "owned_tree",
+      "allocations": 7,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "dynamic_text",
+      "allocations": 5,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "multifile_project",
+      "allocations": 4,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_explicit_move",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_explicit_move_of_new",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_explicit_move_return",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_explicit_self_move",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_drop_local",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_drop_new",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_drop_owned_return",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_drop_reinitialize",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_conditional_drop",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_conditional_drop_not_taken",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_conditional_drop_and_repair",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_deferred_object",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_deferred_unused_object",
+      "allocations": 0,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_deferred_primitives",
+      "allocations": 0,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_deferred_branch_init",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_deferred_return_branch",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_deferred_nested_scope",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_loop_move_reinitialize",
+      "allocations": 11,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_loop_identity",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_loop_reinitialize_before_move",
+      "allocations": 3,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_loop_move_break",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_loop_move_return",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_loop_continue_repaired",
+      "allocations": 4,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_loop_both_branches_repair",
+      "allocations": 4,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_loop_break_repair_after",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_loop_condition_consumes_repair_body",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_nested_loops_restore",
+      "allocations": 7,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_loop_local_deferred_reset",
+      "allocations": 3,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_loop_consumed_then_return_branch_only",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_loop_break_skips_backedge_only",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_loop_zero_iterations_cleanup",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_conditional_uninitialized_cleanup",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_short_circuit_conditional_move_cleanup",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_short_circuit_conditional_move_repaired",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_return_owner_after_reinitializing_loop",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_parameter_reinitialization_loop",
+      "allocations": 4,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_composed_drop",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_return_with_uninitialized_owner",
+      "allocations": 0,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_early_break_cleans_deferred_local",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_stress_move_reinitialize",
+      "allocations": 10001,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_read_before_move_in_argument_order",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_example_borrowing",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_example_reborrowing",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_example_borrowed_fields",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_example_borrowed_loop",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_example_readonly_composition",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_shared_local",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_two_shared_locals",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_mutable_local",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_shared_parameter",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_mutable_parameter",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_borrowed_parameter_forwarding",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_shared_reborrow",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_mutable_reborrow",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_shared_reborrow_of_mutable",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_read_after_inner_mutable_scope",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_scope_releases_before_owner_move",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_borrow_owned_field",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_distinct_owners",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_nested_receiver_compatibility",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_readonly_alias_parameter",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_readonly_can_mutate_separate_parameter",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_readonly_can_mutate_local",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_borrow_this",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_mutable_borrow_this",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_borrowed_constructor_argument_no_escape",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_mutable_constructor_argument_no_escape",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_borrow_before_early_return",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_borrowed_loop_condition",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_branch_scopes",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_reference_after_definite_initialization",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_borrow_then_reinitialize_next_iteration",
+      "allocations": 4,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_readonly_recursion_signature",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_view_captures_shared",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_view_captures_shared_reborrow",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_view_downgrades_mutable_local",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_view_duplicate_fields_one_argument",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_view_two_aliased_arguments",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_view_parameter_mapping",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_view_reversed_mapping",
+      "allocations": 3,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_view_with_owned_child",
+      "allocations": 3,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_view_own_state_mutable",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_view_borrowed_field_projection",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_view_inside_loop",
+      "allocations": 4,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_view_break_cleanup",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_view_early_return_cleanup",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_two_views_same_referent",
+      "allocations": 3,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_example_interfaces",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_example_interface_borrowing",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_example_generic_box",
+      "allocations": 3,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_example_generic_composition",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_example_generic_interfaces",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_example_interface_composition",
+      "allocations": 3,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_example_generic_view",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_owned_interface_moves",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_owned_interface_replacement",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_owned_interface_self_assignment",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_interface_argument_consumes",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_interface_factory_return",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_interface_identity_return",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_interface_early_return_cleanup",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_discard_interface_return",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_drop_interface_explicit",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_shared_interface_parameter",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_mutable_interface_parameter",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_borrow_owned_interface",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_interface_mutable_reborrow",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_interface_parameter_forwarding",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_two_shared_interface_arguments",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_multiple_interfaces",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_marker_interface",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_forward_interface_declaration",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_interface_methods_source_order",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_interface_owned_field",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_interface_field_borrow",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_interface_borrowed_field",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_interface_conditional_move",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_interface_definite_init",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_interface_loop_move_reinit",
+      "allocations": 4,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_interface_loop_cleanup",
+      "allocations": 4,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_interface_short_circuit",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_interface_dynamic_object_return",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_interface_dynamic_interface_return",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_interface_dynamic_owned_argument",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_interface_dynamic_borrowed_argument",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_interface_many_replacements",
+      "allocations": 1001,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_generic_two_parameters",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_generic_nested_owner",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_generic_whitespace_angles",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_generic_comparisons_not_types",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_generic_same_specialization_reused",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_generic_default_constructor",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_generic_static_inside_instance",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_generic_borrow_parameter",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_generic_owned_return",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_generic_interface_argument",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_generic_unused_body_checked_on_instantiation",
+      "allocations": 0,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_generic_owned_parameter_semantics",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_generic_primitive_parameter_semantics",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_generic_unused_type_parameter",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_example_collections",
+      "allocations": 4,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_example_owned_list",
+      "allocations": 4,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_example_owned_tree",
+      "allocations": 7,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_example_dynamic_text",
+      "allocations": 5,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_list_empty",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_list_primitive_mutations",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_list_boolean",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_list_static_string_outlives_container",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_list_string_embedded_nul",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_list_reserve_reuse",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_list_grows_1000",
+      "allocations": 10,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_list_nested_pop",
+      "allocations": 4,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_list_owned_pop_outlives_list",
+      "allocations": 3,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_list_owned_set_destroys_previous",
+      "allocations": 4,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_list_owned_ignored_pop_drops",
+      "allocations": 3,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_list_owned_function_return",
+      "allocations": 3,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_list_owned_replace_container",
+      "allocations": 4,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_list_owned_clear_reuse",
+      "allocations": 4,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_list_borrow_parameter",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_list_exclusive_parameter",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_list_two_phase_receiver",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_list_shared_reads",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_list_generic_wrapper",
+      "allocations": 3,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_list_generic_owned_wrapper",
+      "allocations": 4,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_text_empty",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_text_formatting",
+      "allocations": 3,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_text_utf8_bytes",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_text_embedded_nul",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_text_clone_independence",
+      "allocations": 4,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_text_append_borrow",
+      "allocations": 4,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_text_shared_same_object_equality",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_text_return_owner",
+      "allocations": 2,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_text_owned_in_list",
+      "allocations": 4,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_text_grows_10000",
+      "allocations": 12,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_text_borrowed_view",
+      "allocations": 3,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_list_uninitialized_then_assigned",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_reserved_prelude_parameter_does_not_shadow_user_t",
+      "allocations": 1,
+      "live_at_exit": 0,
+      "sanitizers": true,
+      "status": "passed"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_list_negative_index",
+      "status": "correctly_aborted",
+      "exit_code": 70,
+      "sanitizers": false
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_list_past_end",
+      "status": "correctly_aborted",
+      "exit_code": 70,
+      "sanitizers": false
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_list_empty_pop",
+      "status": "correctly_aborted",
+      "exit_code": 70,
+      "sanitizers": false
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_list_empty_remove",
+      "status": "correctly_aborted",
+      "exit_code": 70,
+      "sanitizers": false
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_list_negative_reserve",
+      "status": "correctly_aborted",
+      "exit_code": 70,
+      "sanitizers": false
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_text_negative_index",
+      "status": "correctly_aborted",
+      "exit_code": 70,
+      "sanitizers": false
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_text_empty_index",
+      "status": "correctly_aborted",
+      "exit_code": 70,
+      "sanitizers": false
+    }
+  ],
+  "negative_cases": [
+    {
+      "compiler": "gcc",
+      "case": "v2_move_primitive",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_move_string",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_drop_primitive",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_drop_void",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_move_no_argument",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_drop_two_arguments",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_reserved_move_function",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_reserved_drop_method",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_double_drop",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_use_after_explicit_drop",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_use_after_explicit_move",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_move_twice_one_call",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_deferred_read_int",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_deferred_read_string",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_deferred_read_boolean",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_deferred_object_borrow",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_deferred_object_move",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_deferred_object_drop",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_deferred_field_assign",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_deferred_self_assignment",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_partial_branch_init",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_partial_object_init",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_loop_may_not_initialize",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_loop_object_may_not_initialize",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_loop_use_after_move",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_loop_continue_without_repair",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_loop_conditional_continue_skips_repair",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_loop_repair_one_branch",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_loop_move_in_condition_no_repair",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_loop_break_moved_exit",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_loop_break_skips_post_body_repair",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_loop_condition_consumption_on_false_exit",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_nested_loop_break_moved_outer_backedge",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_loop_local_cannot_reuse_previous_iteration",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_short_circuit_move_still_possible",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_conditional_repair_after_drop",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_cannot_drop_borrowed_this",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_cannot_drop_owned_field",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_receiver_still_locked",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v2_read_after_move_in_argument_order",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_shared_then_mutable",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_mutable_then_shared",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_two_mutable",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_owner_read_during_mutable",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_owner_mutation_during_shared",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_owner_field_write_during_shared",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_owner_drop_during_shared",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_owner_move_during_shared",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_owner_replace_during_shared",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_owner_drop_during_mutable",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_shared_reference_mutation",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_shared_reference_field_write",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_shared_parameter_mutation",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_shared_cannot_reborrow_mutable",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_shared_cannot_pass_mutable",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_parent_mutable_frozen_by_child",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_parent_read_frozen_by_mutable_child",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_sibling_mutable_reborrows",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_no_nll_even_unused_reference",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_borrow_uninitialized_owner",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_borrow_moved_owner",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_borrow_uninitialized_binding",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_borrow_reassignment",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_borrow_mutable_reassignment",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_borrow_temporary",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_borrow_returned_temporary",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_borrowed_argument_temporary",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_borrow_wrong_class",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_borrow_unknown_class",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_borrow_int",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_borrow_void",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_borrow_string",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_borrow_return_type",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_borrow_return_mutable_type",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_borrow_cannot_be_owned",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_borrow_cannot_return_ownership",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_borrow_cannot_consume",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_borrow_cannot_drop",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_borrow_cannot_move",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_borrow_cannot_print",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_readonly_direct_mutation",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_readonly_indirect_mutation",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_readonly_calls_mutating_helper",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_readonly_mutably_borrows_this",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_readonly_free_function",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_readonly_static_method",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_readonly_constructor",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_readonly_field",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_readonly_duplicate",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_shared_calls_unmarked_getter",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_borrow_this_before_initialized",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_argument_shared_then_owned",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_argument_owned_then_shared",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_argument_mutable_then_read",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_argument_shared_then_mutating_call",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_receiver_conflicts_with_borrowed_argument",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_readonly_receiver_conflicts_mutable_argument",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_parent_and_child_root_conflict",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_borrowed_ancestor_cannot_drop",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_borrowed_owner_cannot_return",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_view_prevents_drop",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_view_prevents_mutation",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_view_field_cannot_mutate",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_view_cannot_move",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_view_cannot_drop_explicitly",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_view_cannot_return",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_view_cannot_be_parameter",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_view_cannot_be_borrowed_parameter",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_view_cannot_be_borrowed_local",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_view_cannot_be_nested_owned",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_view_cannot_be_nested_borrowed",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_view_requires_initializer",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_view_cannot_be_reassigned",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_view_no_discarded_temporary",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_view_no_temporary_referent",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_borrowed_field_from_local",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_borrowed_field_from_owned_parameter",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_borrowed_field_from_mutable_parameter",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_borrowed_field_from_projection",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_borrowed_field_mutable_unsupported",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_borrowed_field_initializer",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_borrowed_field_uninitialized",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_borrowed_field_conditionally_initialized",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_borrowed_field_replacement",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_view_keeps_parent_reborrow_frozen",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_view_owned_argument_alias",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v3_view_cannot_escape_branch",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_missing_method",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_wrong_return",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_readonly_contract_weakened",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_readonly_contract_must_match",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_private_implementation",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_static_implementation",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_borrow_mode_contract",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_mutable_borrow_mode_contract",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_interface_method_arity",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_duplicate_implements",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_implements_class",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_instantiate_interface",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_interface_private_method",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_interface_static_method",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_interface_body_forbidden",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_interface_field_forbidden",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_nominal_not_structural",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_interface_downcast",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_interface_cross_cast",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_interface_move_original_invalid",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_interface_move_binding_invalid",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_interface_use_after_drop",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_borrow_upcast_blocks_drop",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_borrow_upcast_blocks_move",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_borrow_upcast_blocks_mutation",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_mutable_upcast_blocks_owner_read",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_readonly_interface_cannot_mutate",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_interface_shared_to_mutable",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_interface_conflicting_args",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_interface_borrow_cannot_be_owned",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_interface_borrow_temp_forbidden",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_interface_borrow_return_forbidden",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_interface_cannot_access_hidden_fields",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_interface_view_cannot_be_erased",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_interface_field_cannot_be_replaced",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_interface_not_definitely_initialized",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_generic_raw_type",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_generic_arity",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_nongeneric_applied",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_unknown_template",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_unknown_type_argument",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_duplicate_type_param",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_type_param_shadows_class",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_type_argument_borrow",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_borrow_substituted_primitive",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_generic_diamond",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_generic_invariance",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_generic_constructor_argument",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_generic_body_checked",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_generic_object_field_not_movable",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_generic_move_enforced",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_generic_borrow_blocks_drop",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_generic_interface_invariance",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_generic_interface_bad_implementation",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_generic_nonterminating_expansion",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v4_generic_recursive_ownership",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_reserved_list_class",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_reserved_text_class",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_raw_list_missing_type",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_text_is_not_generic",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_list_unknown_element",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_list_primitive_argument_mismatch",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_list_index_not_int",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_list_owned_get_forbidden",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_list_nested_get_forbidden",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_list_view_element_forbidden",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_list_view_nested_forbidden",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_list_owned_add_is_move",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_list_container_move",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_list_drop_during_borrow",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_list_mutate_during_shared_borrow",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_list_mutate_through_shared_borrow",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_list_get_during_exclusive_borrow",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_list_native_fields_private",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_list_invariant_types",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_text_initial_argument_required",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_text_append_wrong_type",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_text_to_static_string_forbidden",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_text_to_string_borrow_not_supported",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_text_move_is_not_copy",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_text_mutate_during_borrow",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_text_self_append_forbidden",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_text_shared_mutation_forbidden",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_text_private_storage",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "gcc",
+      "case": "v5_text_readonly_field_mutation",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_move_primitive",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_move_string",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_drop_primitive",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_drop_void",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_move_no_argument",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_drop_two_arguments",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_reserved_move_function",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_reserved_drop_method",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_double_drop",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_use_after_explicit_drop",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_use_after_explicit_move",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_move_twice_one_call",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_deferred_read_int",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_deferred_read_string",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_deferred_read_boolean",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_deferred_object_borrow",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_deferred_object_move",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_deferred_object_drop",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_deferred_field_assign",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_deferred_self_assignment",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_partial_branch_init",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_partial_object_init",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_loop_may_not_initialize",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_loop_object_may_not_initialize",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_loop_use_after_move",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_loop_continue_without_repair",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_loop_conditional_continue_skips_repair",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_loop_repair_one_branch",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_loop_move_in_condition_no_repair",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_loop_break_moved_exit",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_loop_break_skips_post_body_repair",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_loop_condition_consumption_on_false_exit",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_nested_loop_break_moved_outer_backedge",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_loop_local_cannot_reuse_previous_iteration",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_short_circuit_move_still_possible",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_conditional_repair_after_drop",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_cannot_drop_borrowed_this",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_cannot_drop_owned_field",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_receiver_still_locked",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v2_read_after_move_in_argument_order",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_shared_then_mutable",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_mutable_then_shared",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_two_mutable",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_owner_read_during_mutable",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_owner_mutation_during_shared",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_owner_field_write_during_shared",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_owner_drop_during_shared",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_owner_move_during_shared",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_owner_replace_during_shared",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_owner_drop_during_mutable",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_shared_reference_mutation",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_shared_reference_field_write",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_shared_parameter_mutation",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_shared_cannot_reborrow_mutable",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_shared_cannot_pass_mutable",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_parent_mutable_frozen_by_child",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_parent_read_frozen_by_mutable_child",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_sibling_mutable_reborrows",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_no_nll_even_unused_reference",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_borrow_uninitialized_owner",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_borrow_moved_owner",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_borrow_uninitialized_binding",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_borrow_reassignment",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_borrow_mutable_reassignment",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_borrow_temporary",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_borrow_returned_temporary",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_borrowed_argument_temporary",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_borrow_wrong_class",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_borrow_unknown_class",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_borrow_int",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_borrow_void",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_borrow_string",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_borrow_return_type",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_borrow_return_mutable_type",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_borrow_cannot_be_owned",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_borrow_cannot_return_ownership",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_borrow_cannot_consume",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_borrow_cannot_drop",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_borrow_cannot_move",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_borrow_cannot_print",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_readonly_direct_mutation",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_readonly_indirect_mutation",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_readonly_calls_mutating_helper",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_readonly_mutably_borrows_this",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_readonly_free_function",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_readonly_static_method",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_readonly_constructor",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_readonly_field",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_readonly_duplicate",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_shared_calls_unmarked_getter",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_borrow_this_before_initialized",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_argument_shared_then_owned",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_argument_owned_then_shared",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_argument_mutable_then_read",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_argument_shared_then_mutating_call",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_receiver_conflicts_with_borrowed_argument",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_readonly_receiver_conflicts_mutable_argument",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_parent_and_child_root_conflict",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_borrowed_ancestor_cannot_drop",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_borrowed_owner_cannot_return",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_view_prevents_drop",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_view_prevents_mutation",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_view_field_cannot_mutate",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_view_cannot_move",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_view_cannot_drop_explicitly",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_view_cannot_return",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_view_cannot_be_parameter",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_view_cannot_be_borrowed_parameter",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_view_cannot_be_borrowed_local",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_view_cannot_be_nested_owned",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_view_cannot_be_nested_borrowed",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_view_requires_initializer",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_view_cannot_be_reassigned",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_view_no_discarded_temporary",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_view_no_temporary_referent",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_borrowed_field_from_local",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_borrowed_field_from_owned_parameter",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_borrowed_field_from_mutable_parameter",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_borrowed_field_from_projection",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_borrowed_field_mutable_unsupported",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_borrowed_field_initializer",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_borrowed_field_uninitialized",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_borrowed_field_conditionally_initialized",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_borrowed_field_replacement",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_view_keeps_parent_reborrow_frozen",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_view_owned_argument_alias",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v3_view_cannot_escape_branch",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_missing_method",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_wrong_return",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_readonly_contract_weakened",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_readonly_contract_must_match",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_private_implementation",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_static_implementation",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_borrow_mode_contract",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_mutable_borrow_mode_contract",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_interface_method_arity",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_duplicate_implements",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_implements_class",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_instantiate_interface",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_interface_private_method",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_interface_static_method",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_interface_body_forbidden",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_interface_field_forbidden",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_nominal_not_structural",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_interface_downcast",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_interface_cross_cast",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_interface_move_original_invalid",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_interface_move_binding_invalid",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_interface_use_after_drop",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_borrow_upcast_blocks_drop",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_borrow_upcast_blocks_move",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_borrow_upcast_blocks_mutation",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_mutable_upcast_blocks_owner_read",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_readonly_interface_cannot_mutate",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_interface_shared_to_mutable",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_interface_conflicting_args",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_interface_borrow_cannot_be_owned",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_interface_borrow_temp_forbidden",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_interface_borrow_return_forbidden",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_interface_cannot_access_hidden_fields",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_interface_view_cannot_be_erased",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_interface_field_cannot_be_replaced",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_interface_not_definitely_initialized",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_generic_raw_type",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_generic_arity",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_nongeneric_applied",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_unknown_template",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_unknown_type_argument",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_duplicate_type_param",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_type_param_shadows_class",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_type_argument_borrow",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_borrow_substituted_primitive",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_generic_diamond",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_generic_invariance",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_generic_constructor_argument",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_generic_body_checked",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_generic_object_field_not_movable",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_generic_move_enforced",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_generic_borrow_blocks_drop",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_generic_interface_invariance",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_generic_interface_bad_implementation",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_generic_nonterminating_expansion",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v4_generic_recursive_ownership",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_reserved_list_class",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_reserved_text_class",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_raw_list_missing_type",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_text_is_not_generic",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_list_unknown_element",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_list_primitive_argument_mismatch",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_list_index_not_int",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_list_owned_get_forbidden",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_list_nested_get_forbidden",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_list_view_element_forbidden",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_list_view_nested_forbidden",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_list_owned_add_is_move",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_list_container_move",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_list_drop_during_borrow",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_list_mutate_during_shared_borrow",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_list_mutate_through_shared_borrow",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_list_get_during_exclusive_borrow",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_list_native_fields_private",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_list_invariant_types",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_text_initial_argument_required",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_text_append_wrong_type",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_text_to_static_string_forbidden",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_text_to_string_borrow_not_supported",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_text_move_is_not_copy",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_text_mutate_during_borrow",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_text_self_append_forbidden",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_text_shared_mutation_forbidden",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_text_private_storage",
+      "status": "correctly_rejected"
+    },
+    {
+      "compiler": "clang",
+      "case": "v5_text_readonly_field_mutation",
+      "status": "correctly_rejected"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+interface Named {
+    readonly String name();
+}
+class Person implements Named {
+    private String value;
+    public Person(String value) { this.value = value; }
+    public readonly String name() { return this.value; }
+}
+void main() {
+    List<Named> people = new List<Named>();
+    Person alice = new Person("Alice");
+    people.add(alice); // Transfert; alice n'est plus utilisable.
+    people.add(new Person("Bob"));
+    Named first = people.remove(0);
+    println(first.name());
+    // Vider la liste detruit Bob, mais pas Alice extraite par remove.
+    people.clear();
+    println(first.name());
+    println(people.isEmpty());
+}

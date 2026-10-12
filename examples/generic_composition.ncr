@@ -1,0 +1,19 @@
+class Counter {
+    private int value;
+    Counter(int value) { this.value = value; }
+    readonly int getValue() { return this.value; }
+}
+
+class Holder<T> {
+    private T content;
+    Holder(T content) { this.content = content; }
+    readonly int read() { return this.content.getValue(); }
+}
+
+void main() {
+    Counter counter = new Counter(42);
+    Holder<Counter> holder = new Holder<Counter>(counter);
+    // counter a ete transfere dans holder.
+    println(holder.read());
+    // La destruction de holder detruit aussi son Counter.
+}

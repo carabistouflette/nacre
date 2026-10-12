@@ -1,0 +1,37 @@
+class Counter {
+    private int value;
+
+    public Counter(int value) { this.value = value; }
+    public void increment() { this.value = this.value + 1; }
+    public readonly int getValue() { return this.value; }
+}
+
+void incrementTwice(borrow mut Counter counter) {
+    counter.increment();
+    counter.increment();
+}
+
+int read(borrow Counter counter) {
+    return counter.getValue();
+}
+
+public class Main {
+    public static void main() {
+        Counter counter = new Counter(40);
+        incrementTwice(counter); // Emprunt pour l'appel, pas un transfert.
+        println(read(counter));
+
+        {
+            borrow Counter first = counter;
+            borrow Counter second = counter;
+            println(first.getValue() + second.getValue());
+        } // Les deux emprunts partages se terminent ici.
+
+        {
+            borrow mut Counter editor = counter;
+            editor.increment();
+        } // L'emprunt exclusif se termine ici.
+
+        println(counter.getValue());
+    }
+}

@@ -1,0 +1,12 @@
+class MathUtil {
+    public static int square(int value) { return value * value; }
+    private static int addOne(int value) { return value + 1; }
+    public static int nextSquare(int value) { return square(addOne(value)); }
+}
+
+class Main {
+    public static void main() {
+        println(MathUtil.square(6));
+        println(MathUtil.nextSquare(6));
+    }
+}

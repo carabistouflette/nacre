@@ -1,0 +1,32 @@
+class Counter {
+    private int value;
+    Counter(int value) { this.value = value; }
+    void increment() { this.value = this.value + 1; }
+    readonly int getValue() { return this.value; }
+}
+
+// Classe a champ emprunte : vue locale, non transferable hors de son bloc.
+class CounterView {
+    private borrow Counter target;
+    private String title;
+
+    CounterView(borrow Counter target, String title) {
+        this.target = target;
+        this.title = title;
+    }
+    readonly void display() {
+        println(this.title);
+        println(this.target.getValue());
+    }
+}
+
+void main() {
+    Counter counter = new Counter(42);
+    {
+        CounterView view = new CounterView(counter, "Compteur partage");
+        view.display();
+        // counter.increment() serait refuse pendant la vie de view.
+    } // Detruit view, mais pas l'objet qu'elle emprunte.
+    counter.increment();
+    println(counter.getValue());
+}

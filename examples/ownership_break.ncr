@@ -1,0 +1,13 @@
+class Box {
+    int value = 7;
+}
+void main() {
+    Box current = new Box();
+    while (current.value > 0) {
+        drop(current);
+        break;
+    }
+    // A break may carry a moved state. Reinitialization restores an owner.
+    current = new Box();
+    println(current.value);
+}

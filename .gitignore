@@ -1,0 +1,21 @@
+/target/
+/out/
+*.exe
+*.generated.c
+__pycache__/
+*.pyc
+
+docs/local-*.json
+
+# Local editor tooling and packaged artifacts
+node_modules/
+/editors/zed/dist/
+*.vsix
+/editors/tree-sitter-nacre/*.so
+/editors/vscode/LICENSE
+/editors/zed/target/
+/editors/vscode/dist/
+
+# Local analysis output and libFuzzer corpus growth
+/graphify-out/
+/fuzz/corpus/*/[0-9a-f][0-9a-f]*

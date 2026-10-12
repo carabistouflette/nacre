@@ -1,0 +1,9 @@
+class Box { int value = 1; }
+void main() {
+    Box current = new Box();
+    int i = 0;
+    while (i < 3) {
+        drop(current); // rejected: current is moved on the next iteration
+        i = i + 1;
+    }
+}

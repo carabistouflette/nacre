@@ -1,0 +1,24 @@
+interface Animal {
+    readonly void speak();
+}
+
+class Dog implements Animal {
+    public readonly void speak() { println("Ouaf !"); }
+}
+
+class Cat implements Animal {
+    public readonly void speak() { println("Miaou !"); }
+}
+
+void speakTwice(borrow Animal animal) {
+    animal.speak();
+    animal.speak();
+}
+
+void main() {
+    Animal animal = new Dog();
+    speakTwice(animal);
+    // Le remplacement detruit le Dog, puis conserve le Cat.
+    animal = new Cat();
+    animal.speak();
+}

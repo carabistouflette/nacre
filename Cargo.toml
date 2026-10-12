@@ -1,0 +1,22 @@
+[package]
+name = "nacre"
+version = "0.7.1"
+edition = "2021"
+rust-version = "1.74"
+description = "Nacre V6 compiler: ownership, lexical borrowing, and C11/native output"
+license = "MIT"
+
+[[bin]]
+name = "nacre"
+path = "src/main.rs"
+
+[dependencies]
+serde_json = "=1.0.145"
+
+[features]
+fuzzing = []
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

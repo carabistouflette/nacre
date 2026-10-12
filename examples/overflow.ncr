@@ -1,0 +1,9 @@
+void main() {
+    int maximum = 2147483647;
+    int minimum = -2147483648;
+    println(maximum + 1);       // -2147483648
+    println(minimum - 1);       // 2147483647
+    println(maximum * maximum); // 1
+    println(minimum / -1);      // -2147483648
+    println(minimum % -1);      // 0
+}

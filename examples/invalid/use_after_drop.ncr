@@ -1,0 +1,6 @@
+class Box { int value = 1; }
+void main() {
+    Box box = new Box();
+    drop(box);
+    println(box.value); // rejected: explicit drop consumed ownership
+}

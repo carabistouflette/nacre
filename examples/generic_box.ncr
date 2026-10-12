@@ -1,0 +1,15 @@
+// Les methodes du modele sont verifiees pour chaque specialisation demandee.
+class Box<T> {
+    private T value;
+    public Box(T value) { this.value = value; }
+    public readonly T get() { return this.value; }
+}
+
+void main() {
+    Box<int> number = new Box<int>(42);
+    Box<String> text = new Box<String>("Bonjour les generiques !");
+    Box<boolean> flag = new Box<boolean>(true);
+    println(number.get());
+    println(text.get());
+    println(flag.get());
+}

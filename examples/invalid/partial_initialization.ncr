@@ -1,0 +1,6 @@
+void main() {
+    int value;
+    if (true) { value = 42; }
+    // Conditions are deliberately not constant-folded by the ownership analysis.
+    println(value); // no definite initialization on the other path
+}

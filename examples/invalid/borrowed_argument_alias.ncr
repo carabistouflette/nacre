@@ -1,0 +1,9 @@
+class Counter { int value = 0; }
+void update(borrow mut Counter left, borrow mut Counter right) {
+    left.value = 1;
+    right.value = 2;
+}
+void main() {
+    Counter counter = new Counter();
+    update(counter, counter); // E3001 : deux emprunts exclusifs du meme objet.
+}

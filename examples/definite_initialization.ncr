@@ -1,0 +1,22 @@
+class Message {
+    String text;
+    Message(String text) { this.text = text; }
+    void print() { println(text); }
+}
+
+void show(boolean french) {
+    Message message;
+    if (french) {
+        message = new Message("Bonjour !");
+    } else {
+        message = new Message("Hello!");
+    }
+    message.print();
+}
+
+void main() {
+    show(true);
+    show(false);
+    // An unused uninitialized owner has nothing to free.
+    Message unused;
+}

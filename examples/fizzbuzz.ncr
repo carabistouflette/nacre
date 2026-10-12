@@ -1,0 +1,16 @@
+// Les fonctions libres sont aussi acceptees en V0.
+void main() {
+    int i = 1;
+    while (i <= 20) {
+        if (i % 15 == 0) {
+            println("FizzBuzz");
+        } else if (i % 3 == 0) {
+            println("Fizz");
+        } else if (i % 5 == 0) {
+            println("Buzz");
+        } else {
+            println(i);
+        }
+        i = i + 1;
+    }
+}

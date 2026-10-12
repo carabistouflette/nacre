@@ -1,0 +1,11 @@
+class Statistics {
+    public static int sum(borrow List<int> values) {
+        int result = 0;
+        int i = 0;
+        while (i < values.size()) {
+            result = result + values.get(i);
+            i = i + 1;
+        }
+        return result;
+    }
+}

@@ -1,0 +1,17 @@
+class Engine {
+    int power = 120;
+    readonly int getPower() { return power; }
+    void tune() { power = power + 10; }
+}
+class Car {
+    Engine engine = new Engine();
+    readonly int getPower() { return engine.getPower(); }
+    void tune() { engine.tune(); }
+}
+void show(borrow Car car) { println(car.getPower()); }
+void main() {
+    Car car = new Car();
+    show(car);
+    car.tune();
+    show(car);
+}

@@ -1,0 +1,5 @@
+class Counter {
+    int value = 0;
+    readonly void increment() { value = value + 1; } // E3003.
+}
+void main() {}

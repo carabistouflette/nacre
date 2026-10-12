@@ -1,0 +1,68 @@
+use crate::diagnostic::Span;
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Type { Int, Boolean, String, Void, Named(String), Applied { name: String, args: Vec<Type> }, Borrow { name: String, args: Vec<Type>, mutable: bool } }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Visibility { Public, Private }
+#[derive(Debug, Clone)]
+pub struct Program { pub functions: Vec<Function>, pub classes: Vec<Class> }
+#[derive(Debug, Clone)]
+pub enum NativeClass { List(Type), Text, Console, Files, Args }
+#[derive(Debug, Clone)]
+pub struct Variant { pub name: String, pub fields: Vec<Type>, pub span: Span }
+#[derive(Debug, Clone)]
+pub struct Class {
+    /// Set only by the trusted prelude injector, never by source syntax.
+    pub native: Option<NativeClass>,
+    /// Prelude-owned declarations, including non-native Option/Result enums.
+    pub is_builtin: bool,
+    pub name: String, pub span: Span, pub fields: Vec<Field>,
+    pub type_params: Vec<String>, pub implements: Vec<Type>, pub is_interface: bool,
+    pub variants: Option<Vec<Variant>>,
+    pub methods: Vec<Function>, pub constructor: Option<Function>,
+}
+#[derive(Debug, Clone)]
+pub struct Field {
+    pub name: String, pub ty: Type, pub visibility: Visibility,
+    pub initializer: Option<Expr>, pub span: Span,
+}
+#[derive(Debug, Clone)]
+pub struct Function {
+    pub name: String, pub span: Span, pub return_type: Type,
+    pub params: Vec<Param>, pub body: Block,
+    pub visibility: Visibility, pub is_static: bool, pub readonly: bool,
+}
+#[derive(Debug, Clone)]
+pub struct Param { pub name: String, pub ty: Type, pub span: Span }
+pub type Block = Vec<Stmt>;
+#[derive(Debug, Clone)]
+pub struct Stmt { pub kind: StmtKind, pub span: Span }
+#[derive(Debug, Clone)]
+pub enum StmtKind {
+    Let { ty: Type, name: String, value: Option<Expr> },
+    Assign { target: Expr, value: Expr },
+    Expr(Expr),
+    If { condition: Expr, then_block: Block, else_block: Option<Block> },
+    While { condition: Expr, body: Block },
+    Match { value: Expr, arms: Vec<MatchArm> },
+    Return(Option<Expr>), Break, Continue, Block(Block),
+}
+#[derive(Debug, Clone)]
+pub struct MatchArm { pub variant: String, pub bindings: Vec<String>, pub body: Block, pub span: Span }
+#[derive(Debug, Clone)]
+pub struct Expr { pub kind: ExprKind, pub span: Span, pub depth: usize }
+#[derive(Debug, Clone)]
+pub enum ExprKind {
+    Int(i32), Boolean(bool), String(String), Var(String), This,
+    Field { base: Box<Expr>, name: String },
+    Call { name: String, args: Vec<Expr> },
+    MethodCall { receiver: Box<Expr>, name: String, args: Vec<Expr> },
+    New { class: String, type_args: Vec<Type>, args: Vec<Expr> },
+    Variant { class: String, type_args: Vec<Type>, variant: String, args: Vec<Expr> },
+    Unary { op: UnaryOp, expr: Box<Expr> },
+    Binary { op: BinaryOp, left: Box<Expr>, right: Box<Expr> },
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UnaryOp { Neg, Not, Plus }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BinaryOp { Add, Sub, Mul, Div, Rem, Eq, Ne, Lt, Le, Gt, Ge, And, Or }

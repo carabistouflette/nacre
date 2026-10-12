@@ -1,0 +1,589 @@
+// Save files use exactly three LF-terminated ASCII lines:
+// SUDOKU1, 81 clue digits (0 means no clue), and 81 move digits (0 means no move).
+// A move digit must be zero wherever the clue grid is nonzero. The loaded board
+// is validated before either the clue or current board is replaced.
+class Sudoku {
+    private List<int> cells = new List<int>();
+    private List<int> clues = new List<int>();
+
+    public Sudoku(String puzzle) {
+        Text digits = new Text(puzzle);
+        this.cells.reserve(81);
+        this.clues.reserve(81);
+        int i = 0;
+        while (i < digits.byteLength()) {
+            int value = digits.byteAt(i) - 48;
+            this.cells.add(value);
+            this.clues.add(value);
+            i = i + 1;
+        }
+    }
+
+    // Exclude the selected cell so replacing a move checks every other value.
+    private readonly boolean canPlace(borrow List<int> board, int index, int value) {
+        int row = index / 9;
+        int column = index % 9;
+        int i = 0;
+        while (i < 9) {
+            int rowCell = row * 9 + i;
+            int columnCell = i * 9 + column;
+            if (rowCell != index && board.get(rowCell) == value) {
+                return false;
+            }
+            if (columnCell != index && board.get(columnCell) == value) {
+                return false;
+            }
+            int boxCell = (row / 3 * 3 + i / 3) * 9 + column / 3 * 3 + i % 3;
+            if (boxCell != index && board.get(boxCell) == value) {
+                return false;
+            }
+            i = i + 1;
+        }
+        return true;
+    }
+
+    private readonly boolean isValidBoard(borrow List<int> board) {
+        if (board.size() != 81) {
+            return false;
+        }
+        int i = 0;
+        while (i < 81) {
+            int value = board.get(i);
+            if (value < 0 || value > 9) {
+                return false;
+            }
+            if (value != 0 && !this.canPlace(board, i, value)) {
+                return false;
+            }
+            i = i + 1;
+        }
+        return true;
+    }
+
+    private readonly boolean isValidGameState() {
+        if (this.cells.size() != 81 || this.clues.size() != 81) {
+            return false;
+        }
+        if (!this.isValidBoard(this.clues) || !this.isValidBoard(this.cells)) {
+            return false;
+        }
+        int i = 0;
+        while (i < 81) {
+            int clue = this.clues.get(i);
+            if (clue != 0 && this.cells.get(i) != clue) {
+                return false;
+            }
+            i = i + 1;
+        }
+        return true;
+    }
+
+    // Validate every current cell without relying on a precomputed solution.
+    public readonly boolean isValid() {
+        return this.isValidBoard(this.cells);
+    }
+
+    // Completion is a property of the current grid, not a stored solution.
+    public readonly boolean isComplete() {
+        if (!this.isValidGameState()) {
+            return false;
+        }
+        int i = 0;
+        while (i < 81) {
+            if (this.cells.get(i) == 0) {
+                return false;
+            }
+            i = i + 1;
+        }
+        return true;
+    }
+
+    // Every failed branch restores its empty cell; clues and player moves are untouched.
+    private boolean search(int start) {
+        int index = start;
+        while (index < 81) {
+            if (this.cells.get(index) == 0) {
+                int value = 1;
+                while (value <= 9) {
+                    if (this.canPlace(this.cells, index, value)) {
+                        this.cells.set(index, value);
+                        if (this.search(index + 1)) {
+                            return true;
+                        }
+                        this.cells.set(index, 0);
+                    }
+                    value = value + 1;
+                }
+                return false;
+            }
+            index = index + 1;
+        }
+        return true;
+    }
+
+    public boolean solve() {
+        if (!this.isValidGameState()) {
+            return false;
+        }
+        return this.search(0);
+    }
+
+    public readonly void show() {
+        Text line = new Text("");
+        int row = 0;
+        println("+-------+-------+-------+");
+        while (row < 9) {
+            line.clear();
+            line.append("| ");
+            int column = 0;
+            while (column < 9) {
+                int value = this.cells.get(row * 9 + column);
+                if (value == 0) {
+                    line.append(".");
+                } else {
+                    line.appendInt(value);
+                }
+                line.append(" ");
+                if (column % 3 == 2) {
+                    line.append("| ");
+                }
+                column = column + 1;
+            }
+            line.print();
+            if (row % 3 == 2) {
+                println("+-------+-------+-------+");
+            }
+            row = row + 1;
+        }
+    }
+
+    private readonly int skipSpaces(borrow Text line, int position) {
+        int length = line.byteLength();
+        while (position < length) {
+            int value = line.byteAt(position);
+            if (value != 32 && value != 9) {
+                return position;
+            }
+            position = position + 1;
+        }
+        return position;
+    }
+
+    private readonly int tokenEnd(borrow Text line, int position) {
+        int length = line.byteLength();
+        while (position < length) {
+            int value = line.byteAt(position);
+            if (value == 32 || value == 9) {
+                return position;
+            }
+            position = position + 1;
+        }
+        return position;
+    }
+
+    private Result<int,Text> parseIntegerToken(borrow Text line, int start, int end) {
+        Result<Text,Text> part = line.sliceBytes(start, end);
+        match (part) {
+            Ok(token) { return token.parseInt(); }
+            Err(error) { return new Result<int,Text>.Err(error); }
+        }
+    }
+
+    private readonly boolean noArguments(borrow Text line, int position) {
+        return this.skipSpaces(line, position) == line.byteLength();
+    }
+
+    private void reportError(Text error) {
+        Console.print("Error: ");
+        Console.printText(error);
+        println("");
+    }
+
+    private void handleSet(borrow Text line, int position) {
+        int rowStart = this.skipSpaces(line, position);
+        int rowEnd = this.tokenEnd(line, rowStart);
+        int columnStart = this.skipSpaces(line, rowEnd);
+        int columnEnd = this.tokenEnd(line, columnStart);
+        int valueStart = this.skipSpaces(line, columnEnd);
+        int valueEnd = this.tokenEnd(line, valueStart);
+        if (rowStart == rowEnd || columnStart == columnEnd || valueStart == valueEnd || !this.noArguments(line, valueEnd)) {
+            println("Usage: set ROW COLUMN VALUE");
+            return;
+        }
+
+        int row = 0;
+        int column = 0;
+        int value = 0;
+        boolean parsed = true;
+        Result<int,Text> rowResult = this.parseIntegerToken(line, rowStart, rowEnd);
+        match (rowResult) {
+            Ok(number) { row = number; }
+            Err(error) { this.reportError(error); parsed = false; }
+        }
+        if (parsed) {
+            Result<int,Text> columnResult = this.parseIntegerToken(line, columnStart, columnEnd);
+            match (columnResult) {
+                Ok(number) { column = number; }
+                Err(error) { this.reportError(error); parsed = false; }
+            }
+        }
+        if (parsed) {
+            Result<int,Text> valueResult = this.parseIntegerToken(line, valueStart, valueEnd);
+            match (valueResult) {
+                Ok(number) { value = number; }
+                Err(error) { this.reportError(error); parsed = false; }
+            }
+        }
+        if (!parsed) {
+            return;
+        }
+        if (!this.setValue(row, column, value)) {
+            println("Move rejected: check the coordinates, clue, value, and Sudoku rules.");
+            return;
+        }
+        this.show();
+        if (this.isComplete()) {
+            println("Solved!");
+        }
+    }
+
+    private void handleClear(borrow Text line, int position) {
+        int rowStart = this.skipSpaces(line, position);
+        int rowEnd = this.tokenEnd(line, rowStart);
+        int columnStart = this.skipSpaces(line, rowEnd);
+        int columnEnd = this.tokenEnd(line, columnStart);
+        if (rowStart == rowEnd || columnStart == columnEnd || !this.noArguments(line, columnEnd)) {
+            println("Usage: clear ROW COLUMN");
+            return;
+        }
+
+        int row = 0;
+        int column = 0;
+        boolean parsed = true;
+        Result<int,Text> rowResult = this.parseIntegerToken(line, rowStart, rowEnd);
+        match (rowResult) {
+            Ok(number) { row = number; }
+            Err(error) { this.reportError(error); parsed = false; }
+        }
+        if (parsed) {
+            Result<int,Text> columnResult = this.parseIntegerToken(line, columnStart, columnEnd);
+            match (columnResult) {
+                Ok(number) { column = number; }
+                Err(error) { this.reportError(error); parsed = false; }
+            }
+        }
+        if (!parsed) {
+            return;
+        }
+        if (!this.clearValue(row, column)) {
+            println("Cell cannot be cleared: check the coordinates and make sure it is not a clue.");
+            return;
+        }
+        this.show();
+    }
+
+    private void handleFileCommand(borrow Text line, int position, boolean loading) {
+        int pathStart = this.skipSpaces(line, position);
+        // The remainder of the command is the path, including embedded spaces.
+        int pathEnd = line.byteLength();
+        if (pathStart == pathEnd) {
+            if (loading) {
+                println("Usage: load PATH");
+            } else {
+                println("Usage: save PATH");
+            }
+            return;
+        }
+        Result<Text,Text> pathResult = line.sliceBytes(pathStart, pathEnd);
+        match (pathResult) {
+            Ok(path) {
+                if (loading) {
+                    this.loadFile(path);
+                } else {
+                    this.saveFile(path);
+                }
+            }
+            Err(error) { this.reportError(error); }
+        }
+    }
+
+    private boolean setValue(int row, int column, int value) {
+        if (!this.isValidGameState() || row < 1 || row > 9 || column < 1 || column > 9 || value < 1 || value > 9) {
+            return false;
+        }
+        int index = (row - 1) * 9 + column - 1;
+        if (this.clues.get(index) != 0 || !this.canPlace(this.cells, index, value)) {
+            return false;
+        }
+        this.cells.set(index, value);
+        return true;
+    }
+
+    private boolean clearValue(int row, int column) {
+        if (!this.isValidGameState() || row < 1 || row > 9 || column < 1 || column > 9) {
+            return false;
+        }
+        int index = (row - 1) * 9 + column - 1;
+        if (this.clues.get(index) != 0) {
+            return false;
+        }
+        this.cells.set(index, 0);
+        return true;
+    }
+
+    private void reset() {
+        if (this.cells.size() != 81 || this.clues.size() != 81) {
+            return;
+        }
+        int i = 0;
+        while (i < 81) {
+            this.cells.set(i, this.clues.get(i));
+            i = i + 1;
+        }
+    }
+
+    private Result<boolean,Text> loadContent(borrow Text content) {
+        if (content.byteLength() != 172) {
+            return new Result<boolean,Text>.Err(new Text("Save must contain exactly three lines and 81 digits per grid."));
+        }
+        Result<Text,Text> headerResult = content.sliceBytes(0, 8);
+        boolean validHeader = false;
+        match (headerResult) {
+            Ok(header) { validHeader = header.equalsString("SUDOKU1\n"); }
+            Err(error) { return new Result<boolean,Text>.Err(error); }
+        }
+        if (!validHeader || content.byteAt(89) != 10 || content.byteAt(171) != 10) {
+            return new Result<boolean,Text>.Err(new Text("Invalid Sudoku save header or line endings."));
+        }
+
+        List<int> nextClues = new List<int>();
+        List<int> nextCells = new List<int>();
+        nextClues.reserve(81);
+        nextCells.reserve(81);
+        int i = 0;
+        while (i < 81) {
+            int clueByte = content.byteAt(8 + i);
+            int moveByte = content.byteAt(90 + i);
+            if (clueByte < 48 || clueByte > 57 || moveByte < 48 || moveByte > 57) {
+                return new Result<boolean,Text>.Err(new Text("Save grids must contain only ASCII digits 0 through 9."));
+            }
+            int clue = clueByte - 48;
+            int move = moveByte - 48;
+            if (clue != 0 && move != 0) {
+                return new Result<boolean,Text>.Err(new Text("A saved move cannot replace an immutable clue."));
+            }
+            nextClues.add(clue);
+            if (clue == 0) {
+                nextCells.add(move);
+            } else {
+                nextCells.add(clue);
+            }
+            i = i + 1;
+        }
+        if (!this.isValidBoard(nextClues)) {
+            return new Result<boolean,Text>.Err(new Text("Saved clues conflict in a row, column, or box."));
+        }
+        if (!this.isValidBoard(nextCells)) {
+            return new Result<boolean,Text>.Err(new Text("Saved moves conflict in a row, column, or box."));
+        }
+
+        // Commit only after the entire file and resulting board passed validation.
+        // Owned fields stay fixed; reuse their already-reserved primitive buffers.
+        this.clues.clear();
+        this.cells.clear();
+        i = 0;
+        while (i < 81) {
+            this.clues.add(nextClues.get(i));
+            this.cells.add(nextCells.get(i));
+            i = i + 1;
+        }
+        return new Result<boolean,Text>.Ok(true);
+    }
+
+    public void loadFile(Text path) {
+        Result<Text,Text> fileResult = Files.readText(path);
+        match (fileResult) {
+            Ok(content) {
+                Result<boolean,Text> loaded = this.loadContent(content);
+                match (loaded) {
+                    Ok(success) {
+                        if (success) {
+                            println("Game loaded.");
+                            this.show();
+                            if (this.isComplete()) {
+                                println("Solved!");
+                            }
+                        }
+                    }
+                    Err(error) { this.reportError(error); }
+                }
+            }
+            Err(error) { this.reportError(error); }
+        }
+    }
+
+    private Result<boolean,Text> saveFileContent(borrow Text path) {
+        if (!this.isValidGameState()) {
+            return new Result<boolean,Text>.Err(new Text("Cannot save an invalid Sudoku board."));
+        }
+        Text content = new Text("SUDOKU1\n");
+        int i = 0;
+        while (i < 81) {
+            content.appendInt(this.clues.get(i));
+            i = i + 1;
+        }
+        content.append("\n");
+        i = 0;
+        while (i < 81) {
+            if (this.clues.get(i) == 0) {
+                content.appendInt(this.cells.get(i));
+            } else {
+                content.appendInt(0);
+            }
+            i = i + 1;
+        }
+        content.append("\n");
+        return Files.writeTextAtomic(path, content);
+    }
+
+    private void saveFile(Text path) {
+        Result<boolean,Text> saved = this.saveFileContent(path);
+        match (saved) {
+            Ok(success) {
+                if (success) {
+                    println("Game saved.");
+                } else {
+                    println("Save failed.");
+                }
+            }
+            Err(error) { this.reportError(error); }
+        }
+    }
+
+    private void printHelp() {
+        println("Commands: set ROW COLUMN VALUE, clear ROW COLUMN, show, reset, solve, load PATH, save PATH, help, quit.");
+        println("Rows and columns are numbered 1-9; use 1-9 for values. Paths use the rest of the line, without quotes.");
+    }
+
+    private boolean handleLine(Text line) {
+        int start = this.skipSpaces(line, 0);
+        if (start == line.byteLength()) {
+            println("Enter a command or type help.");
+            return false;
+        }
+        int end = this.tokenEnd(line, start);
+        int arguments = this.skipSpaces(line, end);
+        Result<Text,Text> commandResult = line.sliceBytes(start, end);
+        boolean quit = false;
+        match (commandResult) {
+            Ok(command) {
+                if (command.equalsString("quit")) {
+                    if (this.noArguments(line, end)) {
+                        quit = true;
+                    } else {
+                        println("Usage: quit");
+                    }
+                } else if (command.equalsString("help")) {
+                    if (this.noArguments(line, end)) {
+                        this.printHelp();
+                    } else {
+                        println("Usage: help");
+                    }
+                } else if (command.equalsString("show")) {
+                    if (this.noArguments(line, end)) {
+                        this.show();
+                        if (this.isComplete()) {
+                            println("Solved!");
+                        }
+                    } else {
+                        println("Usage: show");
+                    }
+                } else if (command.equalsString("set")) {
+                    this.handleSet(line, arguments);
+                } else if (command.equalsString("clear")) {
+                    this.handleClear(line, arguments);
+                } else if (command.equalsString("load")) {
+                    this.handleFileCommand(line, arguments, true);
+                } else if (command.equalsString("save")) {
+                    this.handleFileCommand(line, arguments, false);
+                } else if (command.equalsString("reset")) {
+                    if (this.noArguments(line, end)) {
+                        this.reset();
+                        this.show();
+                    } else {
+                        println("Usage: reset");
+                    }
+                } else if (command.equalsString("solve")) {
+                    if (!this.noArguments(line, end)) {
+                        println("Usage: solve");
+                    } else if (!this.solve()) {
+                        println("No solution was found; the board is unchanged.");
+                    } else {
+                        this.show();
+                        if (this.isComplete()) {
+                            println("Solved!");
+                        }
+                    }
+                } else {
+                    println("Unknown command. Type help for commands.");
+                }
+            }
+            Err(error) { this.reportError(error); }
+        }
+        return quit;
+    }
+
+    public void play() {
+        boolean running = true;
+        while (running) {
+            Console.print("> ");
+            Result<Option<Text>,Text> input = Console.readLine();
+            match (input) {
+                Ok(optionalLine) {
+                    match (optionalLine) {
+                        Some(line) {
+                            if (this.handleLine(line)) {
+                                running = false;
+                            }
+                        }
+                        None { running = false; }
+                    }
+                }
+                Err(error) {
+                    this.reportError(error);
+                    // A broken input stream cannot be retried indefinitely.
+                    running = false;
+                }
+            }
+        }
+    }
+}
+
+void main() {
+    // Rows: 530070000 / 600195000 / 098000060 / 800060003 / 400803001 /
+    //       700020006 / 060000280 / 000419005 / 000080079
+    Sudoku game = new Sudoku("530070000600195000098000060800060003400803001700020006060000280000419005000080079");
+    if (!game.isValid()) {
+        println("The built-in Sudoku puzzle is invalid.");
+        return;
+    }
+    int argumentCount = Args.count();
+    if (argumentCount > 1) {
+        println("Usage: nacre run examples/sudoku.ncr -- [initial-save-file]");
+        return;
+    }
+    if (argumentCount == 1) {
+        Result<Text,Text> pathResult = Args.get(0);
+        match (pathResult) {
+            Ok(path) { game.loadFile(path); }
+            Err(error) {
+                Console.print("Error: ");
+                Console.printText(error);
+                println("");
+            }
+        }
+    }
+    println("Sudoku: rows and columns are numbered 1-9.");
+    game.show();
+    game.play();
+}

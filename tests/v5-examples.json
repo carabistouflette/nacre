@@ -1,0 +1,18 @@
+{
+  "collections": {
+    "stdout": "Somme = 42\n20\n12\n1\n",
+    "allocations": 4
+  },
+  "owned_list": {
+    "stdout": "Alice\nAlice\ntrue\n",
+    "allocations": 4
+  },
+  "owned_tree": {
+    "stdout": "3\n",
+    "allocations": 7
+  },
+  "dynamic_text": {
+    "stdout": "Bonjour ! Réponse = 42\ntrue\ntrue\nBonjour ! Réponse = 42\n",
+    "allocations": 5
+  }
+}

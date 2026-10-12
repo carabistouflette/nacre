@@ -1,0 +1,17 @@
+class Counter {
+    int value = 0;
+    void add(int amount) { value = value + amount; }
+    readonly int getValue() { return value; }
+}
+void main() {
+    Counter counter = new Counter();
+    int i = 0;
+    while (i < 5) {
+        borrow mut Counter editor = counter;
+        i = i + 1;
+        if (i == 2) { continue; }
+        if (i == 5) { break; }
+        editor.add(i);
+    }
+    println(counter.getValue());
+}

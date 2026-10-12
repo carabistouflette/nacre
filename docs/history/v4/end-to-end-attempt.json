@@ -1,0 +1,14 @@
+{
+  "scope": "attempt to compile and test actual Rust project",
+  "command": [
+    "cargo",
+    "test",
+    "--offline",
+    "--locked"
+  ],
+  "rustc": null,
+  "cargo": null,
+  "platform": "Linux-6.18.44-x86_64-with-glibc2.41",
+  "status": "not_run_missing_toolchain",
+  "error": "[Errno 2] No such file or directory: 'cargo'"
+}

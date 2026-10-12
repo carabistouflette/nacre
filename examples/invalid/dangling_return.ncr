@@ -1,0 +1,6 @@
+class Counter {}
+borrow Counter bad() { // E3004 : les retours empruntes sont interdits en V3.
+    Counter counter = new Counter();
+    return counter;
+}
+void main() {}
