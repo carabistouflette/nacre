@@ -1,0 +1,419 @@
+class Reader {
+    private borrow Text source;
+    private int cursor;
+
+    public Reader(borrow Text source) {
+        this.source = source;
+        this.cursor = 0;
+    }
+
+    private readonly boolean isBoundary(int position) {
+        int size = this.source.byteLength();
+        if (position == 0 || position == size) { return true; }
+        int value = this.source.byteAt(position);
+        return value < 128 || value > 191;
+    }
+
+    public Result<int,Text> readNumber() {
+        int size = this.source.byteLength();
+        int value = 0;
+        int digits = 0;
+        while (this.cursor < size) {
+            int byteValue = this.source.byteAt(this.cursor);
+            if (byteValue == 10) {
+                this.cursor = this.cursor + 1;
+                if (digits == 0) {
+                    return new Result<int,Text>.Err(new Text("Expected non-negative decimal metadata."));
+                }
+                return new Result<int,Text>.Ok(value);
+            }
+            if (byteValue < 48 || byteValue > 57) {
+                return new Result<int,Text>.Err(new Text("Invalid decimal metadata in lending-desk file."));
+            }
+            int digit = byteValue - 48;
+            if (value > 214748364 || (value == 214748364 && digit > 7)) {
+                return new Result<int,Text>.Err(new Text("Decimal metadata overflows the supported integer range."));
+            }
+            value = value * 10 + digit;
+            digits = digits + 1;
+            this.cursor = this.cursor + 1;
+        }
+        return new Result<int,Text>.Err(new Text("Lending-desk file ends inside numeric metadata."));
+    }
+
+    public Result<int,Text> readTag() {
+        int size = this.source.byteLength();
+        if (this.cursor >= size) {
+            return new Result<int,Text>.Err(new Text("Lending-desk file ends before a record tag."));
+        }
+        int value = this.source.byteAt(this.cursor);
+        this.cursor = this.cursor + 1;
+        if (this.cursor >= size || this.source.byteAt(this.cursor) != 10) {
+            return new Result<int,Text>.Err(new Text("Record tags must be one byte followed by LF."));
+        }
+        this.cursor = this.cursor + 1;
+        return new Result<int,Text>.Ok(value);
+    }
+
+    public Result<Text,Text> readField(int byteCount) {
+        int size = this.source.byteLength();
+        if (byteCount < 0 || this.cursor > size || byteCount > size - this.cursor) {
+            return new Result<Text,Text>.Err(new Text("Lending-desk file ends inside a length-prefixed field."));
+        }
+        int start = this.cursor;
+        int end = start + byteCount;
+        if (!this.isBoundary(start) || !this.isBoundary(end)) {
+            return new Result<Text,Text>.Err(new Text("A field length does not end on a UTF-8 boundary."));
+        }
+        this.cursor = end;
+        return this.source.sliceBytes(start, end);
+    }
+
+    public boolean consumeLineFeed() {
+        if (this.cursor >= this.source.byteLength() || this.source.byteAt(this.cursor) != 10) {
+            return false;
+        }
+        this.cursor = this.cursor + 1;
+        return true;
+    }
+
+    public readonly boolean atEnd() {
+        return this.cursor == this.source.byteLength();
+    }
+}
+
+Result<DeskState,Text> parseDesk(borrow Text content) {
+    Reader reader = new Reader(content);
+    Result<int,Text> versionResult = reader.readNumber();
+    int version = 0;
+    match (versionResult) {
+        Ok(value) { version = value; }
+        Err(error) { return new Result<DeskState,Text>.Err(error); }
+    }
+    if (version != 1) {
+        return new Result<DeskState,Text>.Err(new Text("Unsupported lending-desk format version."));
+    }
+
+    Result<int,Text> dayResult = reader.readNumber();
+    int day = 0;
+    match (dayResult) {
+        Ok(value) { day = value; }
+        Err(error) { return new Result<DeskState,Text>.Err(error); }
+    }
+    Result<int,Text> nextResourceResult = reader.readNumber();
+    int nextResourceId = 0;
+    match (nextResourceResult) {
+        Ok(value) { nextResourceId = value; }
+        Err(error) { return new Result<DeskState,Text>.Err(error); }
+    }
+    Result<int,Text> nextMemberResult = reader.readNumber();
+    int nextMemberId = 0;
+    match (nextMemberResult) {
+        Ok(value) { nextMemberId = value; }
+        Err(error) { return new Result<DeskState,Text>.Err(error); }
+    }
+    Result<int,Text> resourceCountResult = reader.readNumber();
+    int resourceCount = 0;
+    match (resourceCountResult) {
+        Ok(value) { resourceCount = value; }
+        Err(error) { return new Result<DeskState,Text>.Err(error); }
+    }
+    Result<int,Text> memberCountResult = reader.readNumber();
+    int memberCount = 0;
+    match (memberCountResult) {
+        Ok(value) { memberCount = value; }
+        Err(error) { return new Result<DeskState,Text>.Err(error); }
+    }
+    if (nextResourceId <= 0 || nextMemberId <= 0) {
+        return new Result<DeskState,Text>.Err(new Text("Next IDs must be positive."));
+    }
+
+    DeskState candidate = new DeskState();
+    int maximumResourceId = 0;
+    int index = 0;
+    while (index < resourceCount) {
+        Result<int,Text> idResult = reader.readNumber();
+        int id = 0;
+        match (idResult) {
+            Ok(value) { id = value; }
+            Err(error) { return new Result<DeskState,Text>.Err(error); }
+        }
+        if (id <= 0 || candidate.hasResource(id)) {
+            return new Result<DeskState,Text>.Err(new Text("Resource IDs must be positive and unique."));
+        }
+        if (id > maximumResourceId) { maximumResourceId = id; }
+
+        Result<int,Text> kindResult = reader.readTag();
+        int kind = 0;
+        match (kindResult) {
+            Ok(value) { kind = value; }
+            Err(error) { return new Result<DeskState,Text>.Err(error); }
+        }
+        if (kind != 66 && kind != 84) {
+            return new Result<DeskState,Text>.Err(new Text("Unknown resource kind tag."));
+        }
+
+        Result<int,Text> labelLengthResult = reader.readNumber();
+        int labelLength = 0;
+        match (labelLengthResult) {
+            Ok(value) { labelLength = value; }
+            Err(error) { return new Result<DeskState,Text>.Err(error); }
+        }
+        Result<Text,Text> labelResult = reader.readField(labelLength);
+        Text label;
+        match (labelResult) {
+            Ok(value) { label = value; }
+            Err(error) { return new Result<DeskState,Text>.Err(error); }
+        }
+        if (!reader.consumeLineFeed()) {
+            return new Result<DeskState,Text>.Err(new Text("Resource label field must be followed by LF."));
+        }
+
+        Result<int,Text> detailsLengthResult = reader.readNumber();
+        int detailsLength = 0;
+        match (detailsLengthResult) {
+            Ok(value) { detailsLength = value; }
+            Err(error) { return new Result<DeskState,Text>.Err(error); }
+        }
+        Result<Text,Text> detailsResult = reader.readField(detailsLength);
+        Text details;
+        match (detailsResult) {
+            Ok(value) { details = value; }
+            Err(error) { return new Result<DeskState,Text>.Err(error); }
+        }
+        if (!reader.consumeLineFeed()) {
+            return new Result<DeskState,Text>.Err(new Text("Resource details field must be followed by LF."));
+        }
+
+        Result<int,Text> daysResult = reader.readNumber();
+        int days = 0;
+        match (daysResult) {
+            Ok(value) { days = value; }
+            Err(error) { return new Result<DeskState,Text>.Err(error); }
+        }
+        if (days <= 0) {
+            return new Result<DeskState,Text>.Err(new Text("Lending periods must be positive."));
+        }
+
+        Result<int,Text> statusResult = reader.readTag();
+        int status = 0;
+        match (statusResult) {
+            Ok(value) { status = value; }
+            Err(error) { return new Result<DeskState,Text>.Err(error); }
+        }
+        Availability state;
+        if (status == 65) {
+            state = new Availability.Available();
+        } else if (status == 76) {
+            Result<int,Text> borrowerResult = reader.readNumber();
+            int borrowerId = 0;
+            match (borrowerResult) {
+                Ok(value) { borrowerId = value; }
+                Err(error) { return new Result<DeskState,Text>.Err(error); }
+            }
+            Result<int,Text> dueResult = reader.readNumber();
+            int dueDay = 0;
+            match (dueResult) {
+                Ok(value) { dueDay = value; }
+                Err(error) { return new Result<DeskState,Text>.Err(error); }
+            }
+            if (borrowerId <= 0) {
+                return new Result<DeskState,Text>.Err(new Text("Loan member IDs must be positive."));
+            }
+            state = new Availability.Lent(borrowerId, dueDay);
+        } else if (status == 77) {
+            Result<int,Text> reasonLengthResult = reader.readNumber();
+            int reasonLength = 0;
+            match (reasonLengthResult) {
+                Ok(value) { reasonLength = value; }
+                Err(error) { return new Result<DeskState,Text>.Err(error); }
+            }
+            Result<Text,Text> reasonResult = reader.readField(reasonLength);
+            Text reason;
+            match (reasonResult) {
+                Ok(value) { reason = value; }
+                Err(error) { return new Result<DeskState,Text>.Err(error); }
+            }
+            if (!reader.consumeLineFeed()) {
+                return new Result<DeskState,Text>.Err(new Text("Maintenance reason field must be followed by LF."));
+            }
+            if (reason.isEmpty()) {
+                return new Result<DeskState,Text>.Err(new Text("Maintenance reasons cannot be empty."));
+            }
+            state = new Availability.Maintenance(reason);
+        } else {
+            return new Result<DeskState,Text>.Err(new Text("Unknown availability state tag."));
+        }
+
+        if (kind == 66) {
+            Book book = new Book(label, details, days);
+            book.setAvailability(state);
+            Loanable resource = book;
+            candidate.addResource(id, resource);
+        } else {
+            Tool tool = new Tool(label, details, days);
+            tool.setAvailability(state);
+            Loanable resource = tool;
+            candidate.addResource(id, resource);
+        }
+        index = index + 1;
+    }
+
+    int maximumMemberId = 0;
+    index = 0;
+    while (index < memberCount) {
+        Result<int,Text> idResult = reader.readNumber();
+        int id = 0;
+        match (idResult) {
+            Ok(value) { id = value; }
+            Err(error) { return new Result<DeskState,Text>.Err(error); }
+        }
+        if (id <= 0 || candidate.hasMember(id)) {
+            return new Result<DeskState,Text>.Err(new Text("Member IDs must be positive and unique."));
+        }
+        if (id > maximumMemberId) { maximumMemberId = id; }
+
+        Result<int,Text> nameLengthResult = reader.readNumber();
+        int nameLength = 0;
+        match (nameLengthResult) {
+            Ok(value) { nameLength = value; }
+            Err(error) { return new Result<DeskState,Text>.Err(error); }
+        }
+        Result<Text,Text> nameResult = reader.readField(nameLength);
+        Text name;
+        match (nameResult) {
+            Ok(value) { name = value; }
+            Err(error) { return new Result<DeskState,Text>.Err(error); }
+        }
+        if (!reader.consumeLineFeed()) {
+            return new Result<DeskState,Text>.Err(new Text("Member name field must be followed by LF."));
+        }
+
+        Result<int,Text> noteFlagResult = reader.readTag();
+        int noteFlag = 0;
+        match (noteFlagResult) {
+            Ok(value) { noteFlag = value; }
+            Err(error) { return new Result<DeskState,Text>.Err(error); }
+        }
+        if (noteFlag != 48 && noteFlag != 49) {
+            return new Result<DeskState,Text>.Err(new Text("Member note flag must be exactly 0 or 1."));
+        }
+        Option<Text> note;
+        if (noteFlag == 48) {
+            note = new Option<Text>.None();
+        } else {
+            Result<int,Text> noteLengthResult = reader.readNumber();
+            int noteLength = 0;
+            match (noteLengthResult) {
+                Ok(value) { noteLength = value; }
+                Err(error) { return new Result<DeskState,Text>.Err(error); }
+            }
+            Result<Text,Text> noteResult = reader.readField(noteLength);
+            Text noteText;
+            match (noteResult) {
+                Ok(value) { noteText = value; }
+                Err(error) { return new Result<DeskState,Text>.Err(error); }
+            }
+            if (!reader.consumeLineFeed()) {
+                return new Result<DeskState,Text>.Err(new Text("Member note field must be followed by LF."));
+            }
+            note = new Option<Text>.Some(noteText);
+        }
+        Member member = new Member(name, note);
+        candidate.addMember(id, member);
+        index = index + 1;
+    }
+
+    if (nextResourceId <= maximumResourceId || nextMemberId <= maximumMemberId) {
+        return new Result<DeskState,Text>.Err(new Text("Next IDs must be greater than every stored ID."));
+    }
+    if (!reader.atEnd()) {
+        return new Result<DeskState,Text>.Err(new Text("Lending-desk file contains trailing data."));
+    }
+    candidate.setPersistenceMetadata(day, nextResourceId, nextMemberId);
+    if (!candidate.hasValidRelationships()) {
+        return new Result<DeskState,Text>.Err(new Text("Resource availability refers to an unknown member or invalid state."));
+    }
+    return new Result<DeskState,Text>.Ok(candidate);
+}
+
+Text encodeDesk(borrow DeskState state) {
+    Text output = new Text("");
+    output.appendInt(1);
+    output.append("\n");
+    output.appendInt(state.logicalDay());
+    output.append("\n");
+    output.appendInt(state.nextResourceId());
+    output.append("\n");
+    output.appendInt(state.nextMemberId());
+    output.append("\n");
+    output.appendInt(state.resourceCount());
+    output.append("\n");
+    output.appendInt(state.memberCount());
+    output.append("\n");
+
+    int index = 0;
+    while (index < state.resourceCount()) {
+        int id = state.resourceIdAt(index);
+        borrow Loanable resource = state.getResourceRef(id);
+        output.appendInt(id);
+        output.append("\n");
+        if (resource.kindCode() == 66) { output.append("B\n"); }
+        else { output.append("T\n"); }
+        borrow Text label = resource.getLabel();
+        output.appendInt(label.byteLength());
+        output.append("\n");
+        output.appendText(label);
+        output.append("\n");
+        borrow Text details = resource.getDetails();
+        output.appendInt(details.byteLength());
+        output.append("\n");
+        output.appendText(details);
+        output.append("\n");
+        output.appendInt(resource.lendingDays());
+        output.append("\n");
+        match (resource.getAvailability()) {
+            Available { output.append("A\n"); }
+            Lent(memberId, dueDay) {
+                output.append("L\n");
+                output.appendInt(memberId);
+                output.append("\n");
+                output.appendInt(dueDay);
+                output.append("\n");
+            }
+            Maintenance(reason) {
+                output.append("M\n");
+                output.appendInt(reason.byteLength());
+                output.append("\n");
+                output.appendText(reason);
+                output.append("\n");
+            }
+        }
+        index = index + 1;
+    }
+
+    index = 0;
+    while (index < state.memberCount()) {
+        int id = state.memberIdAt(index);
+        borrow Member member = state.getMemberRef(id);
+        borrow Text name = member.getName();
+        output.appendInt(id);
+        output.append("\n");
+        output.appendInt(name.byteLength());
+        output.append("\n");
+        output.appendText(name);
+        output.append("\n");
+        match (member.getNote()) {
+            None { output.append("0\n"); }
+            Some(note) {
+                output.append("1\n");
+                output.appendInt(note.byteLength());
+                output.append("\n");
+                output.appendText(note);
+                output.append("\n");
+            }
+        }
+        index = index + 1;
+    }
+    return output;
+}

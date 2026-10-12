@@ -1,0 +1,11 @@
+class Box {
+    void increment() {}
+}
+
+void main() {
+    Map<int, Box> values = new Map<int, Box>();
+    values.put(1, new Box());
+    borrow mut Box exclusive = values.getMut(1);
+    println(values.size());
+    exclusive.increment();
+}

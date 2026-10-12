@@ -1,0 +1,40 @@
+void main() {
+    Map<int,int> numbers = new Map<int,int>();
+    match (numbers.put(-2147483648, 10)) { None {} Some(previous) { println(previous); } }
+    match (numbers.put(2147483647, 20)) { None {} Some(previous) { println(previous); } }
+    match (numbers.tryGet(-2147483648)) {
+        Some(value) { println(value); }
+        None { println("Missing key."); }
+    }
+    match (numbers.tryGet(0)) {
+        None { println("Absent key preserves the map."); }
+        Some(value) { println(value); }
+    }
+    println(numbers.size());
+
+    Map<int,Text> labels = new Map<int,Text>();
+    match (labels.put(-1, new Text("Ω"))) { None {} Some(previous) { previous.print(); } }
+    {
+        borrow mut Text label = labels.getMut(-1);
+        label.append("!");
+    }
+    {
+        borrow Text label = labels.getRef(-1);
+        label.print();
+    }
+    match (labels.put(-1, new Text("Replacement"))) {
+        Some(previous) { previous.print(); }
+        None { println("Inserted a new key."); }
+    }
+    match (labels.tryRemove(-1)) {
+        Some(removed) { removed.print(); }
+        None { println("No label to remove."); }
+    }
+    match (labels.tryRemove(-1)) {
+        None { println("Already absent."); }
+        Some(removed) { removed.print(); }
+    }
+    println(labels.isEmpty());
+    numbers.clear();
+    println(numbers.size());
+}

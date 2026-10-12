@@ -85,11 +85,13 @@ pub enum CallTarget { Function(usize), Println }
 
 /// Trusted standard-library storage, never exposed as source fields.
 #[derive(Debug, Clone, Copy)]
-pub enum NativeClass { List(Type), Text, Console, Files, Args }
+pub enum NativeClass { List(Type), Map(Type, Type), Text, Console, Files, Args }
 #[derive(Debug, Clone, Copy)]
 pub enum NativeMethod {
     ListNew, ListAdd, ListSize, ListCapacity, ListIsEmpty, ListGet, ListGetRef, ListGetMut,
     ListSet, ListPop, ListRemove, ListTryGet, ListTryPop, ListTryRemove, ListClear, ListReserve,
+    MapNew, MapContainsKey, MapSize, MapIsEmpty, MapPut, MapTryRemove, MapTryGet,
+    MapGetRef, MapGetMut, MapClear,
     TextNew, TextAppend, TextAppendInt, TextAppendBoolean, TextAppendText,
     TextByteLength, TextByteAt, TextIsEmpty, TextClear, TextPrint,
     TextClone, TextEquals, TextEqualsString, TextParseInt, TextSliceBytes,

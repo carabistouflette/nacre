@@ -1,0 +1,23 @@
+class ReaderView {
+    private borrow Text source;
+
+    public ReaderView(borrow Text source) {
+        this.source = source;
+    }
+
+    public readonly int byteLength() {
+        return this.source.byteLength();
+    }
+}
+
+ReaderView escapeView() {
+    Text input = new Text("local parse input");
+    ReaderView view = new ReaderView(input);
+    // Rejected: this borrowed reader view cannot outlive its input Text.
+    return move(view);
+}
+
+void main() {
+    ReaderView escaped = escapeView();
+    println(escaped.byteLength());
+}

@@ -1,16 +1,16 @@
-# Nacre V8 — lexical traversal and recoverable collections
+# Nacre V9 — integer-keyed maps and a complete lending desk
 
 Nacre is an experimental Rust compiler with a Java-like syntax and the pipeline
 **Nacre → C11 → GCC/Clang → native executable**. No JVM, garbage collector, or
-reference counting is used. Cargo package/CLI: `nacre` **0.9.0**; source files:
+reference counting is used. Cargo package/CLI: `nacre` **0.10.0**; source files:
 `.ncr`; project marker: `nacre.json`. Rust **1.74** is the declared minimum.
 
-V8 adds list `for` traversal, recoverable `tryGet`/`tryPop`/`tryRemove`, and
-contact-book search, phone filtering, and confirmed batch removal. Receiver-bound
-borrowed returns, owned-field replacement, and borrowed enum matching remain
-available. Borrow lifetimes stay lexical and alias domains conservative.
+V9 adds `Map<int,V>` with recoverable ownership transfer and receiver-bound
+references, plus a multi-file lending desk demonstrating interfaces, generic
+catalogs, enums, local parsing views, lexical traversal, validated loading, and
+atomic saving. Borrow lifetimes stay lexical and alias domains conservative.
 
-The bounded milestone contract and explicit exclusions are in [V8.md](docs/V8.md).
+The bounded milestone contract and explicit exclusions are in [V9.md](docs/V9.md).
 
 ## Start
 
@@ -29,6 +29,11 @@ output and allocation balance. It is a smoke check, not a general safety proof.
 
 ## Interactive applications
 
+- [Lending desk](docs/LENDING_DESK.md): books/tools implementing one interface,
+  generic resource/member catalogs, availability states, lending/return,
+  maintenance, editing, safe removal, a logical day, and validated persistence.
+  Its [feature matrix](docs/LENDING_DESK_FEATURES.md) maps major language features
+  to real source functions rather than forcing every operator into one program.
 - [Contact book](docs/CONTACT_BOOK.md): list/show, add/edit/remove, name search,
   phone filtering, confirmed batch removal, validated load, atomic save, help,
   and quit. Traversal borrows contacts; edits replace their owned fields. Phone
@@ -37,6 +42,7 @@ output and allocation balance. It is a smoke check, not a general safety proof.
   validated load, and atomic saves that preserve clues separately from moves.
 
 ```sh
+nacre run examples/lending_desk --memory-stats
 nacre run examples/contact_book.ncr --memory-stats
 nacre run examples/sudoku.ncr --memory-stats
 ```
@@ -160,12 +166,13 @@ nominal classes/interfaces/enums before typing and remain invariant.
 
 ## Standard library
 
-`List`, `Text`, `Option`, `Result`, `Console`, `Files`, and `Args` are reserved and
+`List`, `Map`, `Text`, `Option`, `Result`, `Console`, `Files`, and `Args` are reserved and
 preinjected without imports. [STDLIB.md](docs/STDLIB.md) is the API reference.
 
 | API | Contract |
 |---|---|
-| `List<T>` | add, size, capacity, isEmpty, set, pop, remove, clear, reserve. Primitive elements retain copied get; affine nominal elements expose checked getRef/getMut. |
+| `List<T>` | Copied/shared/exclusive traversal, copied get/tryGet, borrowed getRef/getMut, recoverable tryPop/tryRemove, and strict mutation/extraction. |
+| `Map<int,V>` | Stable signed integer keys; put returns a previous owner or None, tryRemove transfers a value, copied tryGet and affine getRef/getMut, whole-map loans, size/presence queries and clear. |
 | `Text` | Owned UTF-8 bytes, including NUL; append operations, byte access, clone, comparison, print, strict int32 parseInt, and boundary-checked owned sliceBytes. Distinct from static String. |
 | `Console` | UTF-8 line input with explicit EOF; String/Text output. Errors are owned Result values. |
 | `Files` | UTF-8 readText, non-atomic writeText, and writeTextAtomic. |
@@ -177,9 +184,9 @@ with `rename`. Atomic visibility is not power-loss durability: no `fsync` promis
 Replacement uses `mkstemp` permissions, and replacing a symlink changes its entry,
 not its referent. Ordinary `writeText` can leave a partial/truncated file on error.
 
-Pop/remove return owners and fail fatally for invalid indices/empty lists. Native
-allocation failure and checked arithmetic runtime failures are fatal; there is no
-exception unwinding. Recoverable console/file/parse results use normal cleanup.
+Strict list pop/remove and missing borrowed map access fail fatally. Recoverable
+try operations return inline options. Allocation failure and checked arithmetic
+runtime failures remain fatal; no exception unwinding is provided.
 
 ## CLI and projects
 
@@ -209,8 +216,8 @@ require a C compiler. See [PROJECTS.md](docs/PROJECTS.md).
 
 ## VS Code and Zed
 
-Packages **0.4.0**, grammar **0.3.0**, and 20 snippets cover copied/shared/exclusive
-list traversal and recoverable removal alongside V7 borrowing constructs.
+Packages **0.5.0**, grammar **0.4.0**, and 24 snippets cover integer maps,
+copied/shared/exclusive traversal, and recoverable collection operations.
 Both clients launch `nacre lsp` and use the real compiler for diagnostics.
 
 ```sh
@@ -222,7 +229,7 @@ npm --prefix editors/vscode test
 npm --prefix editors/vscode run package
 ```
 
-Install `editors/vscode/nacre-0.4.0.vsix`; configure `nacre.serverPath` if the
+Install `editors/vscode/nacre-0.5.0.vsix`; configure `nacre.serverPath` if the
 compiler is not on PATH. The `Nacre: Restart Language Server` command supports
 recovery after failed startup and serializes lifecycle operations.
 
@@ -256,15 +263,16 @@ seed corpora. Preserve crash artifacts for reproduction. Finite successful runs
 are evidence, not a general fuzz-safety proof.
 
 [VALIDATION.md](docs/VALIDATION.md) records observed compiler/native/editor/CI
-evidence and unverified platform boundaries. V8 compiler/native/fuzz checks and
-both actual desktop editor acceptance runs pass; CI evidence is recorded there.
-Obsolete identity artifacts and historical reports were removed at user request,
-without relabeling their captured outputs.
+evidence and unverified platform boundaries. V9 local results include 989 tests
+and 30 dedicated sanitized generated-program runs.
+[Actual desktop acceptance](docs/v9-editor-verification.json) passes in VS Code
+and Zed, including unsaved overlays, loan diagnostics and restart recovery.
 
 ## Boundaries and design notes
 
-No modules/packages/imports or separate compilation, arrays `T[]`, maps, borrowed
-iterators, NLL/lifetime parameters, network API, threads, FFI, inheritance,
+No modules/packages/imports or separate compilation, arrays `T[]`, non-int map
+keys, map traversal, first-class borrowed iterators, NLL/lifetime parameters,
+network API, threads, FFI, inheritance,
 overloading, or direct LLVM backend. Very deep owned trees may exhaust the C
 stack during recursive destruction. Untrusted programs are not sandboxed.
 Resource limits on compiler/LSP input are not a security certification.

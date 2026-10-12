@@ -1,0 +1,7 @@
+void main() {
+    Map<int,Text> values = new Map<int,Text>();
+    match (values.put(1, new Text("stable"))) { None {} Some(previous) {} }
+    borrow Text value = values.getRef(1);
+    match (values.tryRemove(1)) { None {} Some(removed) {} }
+    value.print();
+}

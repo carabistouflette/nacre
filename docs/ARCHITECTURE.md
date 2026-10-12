@@ -1,4 +1,4 @@
-# Architecture Nacre V8
+# Architecture Nacre V9
 
 Cette note décrit l'implémentation source livrée. Le périmètre de validation
 du compilateur Rust et de ses programmes générés est documenté dans
@@ -190,9 +190,11 @@ ne sont pas un substitut à cette validation.
 
 ## Classes natives et mémoire des collections
 
-`ast::Class.native` n'est jamais produit par le parser. Le prelude interne
-associe ce marqueur à `List<T>` et `Text`. La spécialisation remplace le type
-d'élément puis le checker résout `ir::NativeClass` et les `NativeMethod`.
+`ast::Class.native` is never produced by source parsing. Trusted prelude injection
+marks List<T>, Map<K,V>, Text and the static runtime APIs. Specialization resolves
+collection parameters; V9 requires Map keys to be int before ordinary checking.
+The checker resolves native classes and typed methods without granting native
+privileges to a user-defined spelling.
 Unused native classes are not materialized. Copied `get` is removed for affine
 elements; `getRef`/`getMut` are removed for primitive elements before typing.
 Borrowed accessors derive their checked object/enum/interface ABI from typed IR.
@@ -208,6 +210,19 @@ l'élément détermine son destructeur, y compris un destructeur dynamique pour 
 interfaces. Les opérations `pop`/`remove` retirent l'élément avant de transférer sa
 représentation à l'appelant. Le texte contient un buffer d'octets possédé ; aucune
 vue de ce buffer n'est retournée comme `String` statique.
+
+Map storage is a single buffer of entries containing int keys, a stored value,
+and occupancy. Entry struct definitions follow complete ordinary/interface/enum
+layouts and precede drop bodies, so inline values have their real C size.
+Unsigned hashing/open addressing supports every signed key. Checked growth
+raw-relocates owners; backward-shift deletion repairs probe chains without
+tombstones or allocations. Replacement returns the previous owner rather than
+dropping it. Borrowed lookup returns object pointers, enum slot addresses, or
+interface fat pointers according to the concrete value layout.
+
+The complete map is one alias domain. Native argument sequencing and existing
+projected-receiver freezing remain in force; no per-key disjointness or iterator
+lifetime model is added. Native code remains part of the trusted base.
 
 Le backend injecte aux appels natifs deux arguments cachés ligne/colonne et
 substitue leurs identifiants numériques dans les templates C. Les buffers

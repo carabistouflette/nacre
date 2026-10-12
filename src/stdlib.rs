@@ -5,7 +5,7 @@ use crate::ir::{NativeClass as C, NativeMethod as M};
 
 pub fn inject(program: &mut a::Program) -> Result<(), Diagnostic> {
     for class in &program.classes {
-        if matches!(class.name.as_str(), "List" | "Text" | "Option" | "Result" | "Console" | "Files" | "Args") {
+        if matches!(class.name.as_str(), "List" | "Map" | "Text" | "Option" | "Result" | "Console" | "Files" | "Args") {
             return Err(Diagnostic::new(class.span,
                 format!("[E5001] `{}` est un type reserve de la bibliotheque standard", class.name)));
         }
@@ -18,6 +18,7 @@ pub fn inject(program: &mut a::Program) -> Result<(), Diagnostic> {
         class.is_builtin = true;
         class.native = Some(match class.name.as_str() {
             "List" => NativeClass::List(Type::Named("T".to_owned())),
+            "Map" => NativeClass::Map(Type::Named("K".to_owned()), Type::Named("V".to_owned())),
             "Text" => NativeClass::Text,
             "Console" => NativeClass::Console,
             "Files" => NativeClass::Files,
@@ -31,7 +32,7 @@ pub fn inject(program: &mut a::Program) -> Result<(), Diagnostic> {
 
 pub fn method(class: C, name: &str, constructor: bool) -> M {
     if constructor {
-        return match class { C::List(_) => M::ListNew, C::Text => M::TextNew,
+        return match class { C::List(_) => M::ListNew, C::Map(_, _) => M::MapNew, C::Text => M::TextNew,
             C::Console | C::Files | C::Args => unreachable!("static native class has no constructor") };
     }
     match (class, name) {
@@ -50,6 +51,15 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
         (C::List(_), "tryRemove") => M::ListTryRemove,
         (C::List(_), "clear") => M::ListClear,
         (C::List(_), "reserve") => M::ListReserve,
+        (C::Map(_, _), "containsKey") => M::MapContainsKey,
+        (C::Map(_, _), "size") => M::MapSize,
+        (C::Map(_, _), "isEmpty") => M::MapIsEmpty,
+        (C::Map(_, _), "put") => M::MapPut,
+        (C::Map(_, _), "tryRemove") => M::MapTryRemove,
+        (C::Map(_, _), "tryGet") => M::MapTryGet,
+        (C::Map(_, _), "getRef") => M::MapGetRef,
+        (C::Map(_, _), "getMut") => M::MapGetMut,
+        (C::Map(_, _), "clear") => M::MapClear,
         (C::Text, "append") => M::TextAppend,
         (C::Text, "appendInt") => M::TextAppendInt,
         (C::Text, "appendBoolean") => M::TextAppendBoolean,

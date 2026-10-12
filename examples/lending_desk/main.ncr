@@ -1,0 +1,21 @@
+void main() {
+    println("Nacre lending desk. Type help for commands.");
+    Desk desk = new Desk();
+    int argumentCount = Args.count();
+    if (argumentCount > 1) {
+        println("Usage: nacre run examples/lending_desk -- [initial-save-file]");
+        return;
+    }
+    if (argumentCount == 1) {
+        Result<Text,Text> pathResult = Args.get(0);
+        match (pathResult) {
+            Ok(path) { desk.loadPath(path); }
+            Err(error) {
+                Console.print("Error: ");
+                Console.printText(error);
+                println("");
+            }
+        }
+    }
+    desk.run();
+}

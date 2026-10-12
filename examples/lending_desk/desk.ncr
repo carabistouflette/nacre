@@ -1,0 +1,651 @@
+enum Command {
+    AddBook;
+    AddTool;
+    AddMember;
+    List;
+    Members;
+    Show;
+    Lend;
+    Return;
+    Maintenance;
+    Rename;
+    Remove;
+    RemoveMember;
+    Advance;
+    Load;
+    Save;
+    Help;
+    Quit;
+    Empty;
+    Unknown;
+}
+
+Command parseCommand(borrow Text text) {
+    if (text.equalsString("add-book")) { return new Command.AddBook(); }
+    if (text.equalsString("add-tool")) { return new Command.AddTool(); }
+    if (text.equalsString("add-member")) { return new Command.AddMember(); }
+    if (text.equalsString("list")) { return new Command.List(); }
+    if (text.equalsString("members")) { return new Command.Members(); }
+    if (text.equalsString("show")) { return new Command.Show(); }
+    if (text.equalsString("lend")) { return new Command.Lend(); }
+    if (text.equalsString("return")) { return new Command.Return(); }
+    if (text.equalsString("maintenance")) { return new Command.Maintenance(); }
+    if (text.equalsString("rename")) { return new Command.Rename(); }
+    if (text.equalsString("remove")) { return new Command.Remove(); }
+    if (text.equalsString("remove-member")) { return new Command.RemoveMember(); }
+    if (text.equalsString("advance")) { return new Command.Advance(); }
+    if (text.equalsString("load")) { return new Command.Load(); }
+    if (text.equalsString("save")) { return new Command.Save(); }
+    if (text.equalsString("help")) { return new Command.Help(); }
+    if (text.equalsString("quit")) { return new Command.Quit(); }
+    if (text.isEmpty()) { return new Command.Empty(); }
+    return new Command.Unknown();
+}
+
+class Desk {
+    private DeskState state;
+    private boolean inputAvailable;
+
+    public Desk() {
+        this.state = new DeskState();
+        this.inputAvailable = true;
+    }
+
+    private void reportError(borrow Text error) {
+        Console.print("Error: ");
+        Console.printText(error);
+        println("");
+    }
+
+    private Option<Text> prompt(String label) {
+        Console.print(label);
+        Result<Option<Text>,Text> result = Console.readLine();
+        match (result) {
+            Ok(optionalLine) {
+                match (optionalLine) {
+                    Some(line) { return new Option<Text>.Some(line); }
+                    None {
+                        this.inputAvailable = false;
+                        println("");
+                        return new Option<Text>.None();
+                    }
+                }
+            }
+            Err(error) {
+                this.reportError(error);
+                this.inputAvailable = false;
+                return new Option<Text>.None();
+            }
+        }
+    }
+
+    private Option<int> promptInteger(String label, boolean positive) {
+        Option<Text> entered = this.prompt(label);
+        match (entered) {
+            Some(text) {
+                match (text.parseInt()) {
+                    Ok(value) {
+                        if (value < 0 || (positive && value == 0)) {
+                            println("Values must be non-negative; IDs must also be positive.");
+                            return new Option<int>.None();
+                        }
+                        return new Option<int>.Some(value);
+                    }
+                    Err(error) {
+                        this.reportError(error);
+                        return new Option<int>.None();
+                    }
+                }
+            }
+            None { return new Option<int>.None(); }
+        }
+    }
+
+    private void printPreview(borrow Loanable resource) {
+        if (resource.kindCode() == 66) { Console.print("Adding book: "); }
+        else { Console.print("Adding tool: "); }
+        Console.printText(resource.getLabel());
+        Console.print(" — ");
+        Console.printText(resource.getDetails());
+        println("");
+        Console.print("Lending period (days): ");
+        println(resource.lendingDays());
+    }
+
+    private readonly void printStatus(borrow Loanable resource) {
+        match (resource.getAvailability()) {
+            Available { println("Availability: available"); }
+            Lent(memberId, dueDay) {
+                Console.print("Availability: lent to member #");
+                println(memberId);
+                Console.print("Due on logical day ");
+                println(dueDay);
+                if (this.state.hasMember(memberId)) {
+                    borrow Member member = this.state.getMemberRef(memberId);
+                    Console.print("Borrower: ");
+                    Console.printText(member.getName());
+                    println("");
+                }
+            }
+            Maintenance(reason) {
+                Console.print("Availability: maintenance — ");
+                Console.printText(reason);
+                println("");
+            }
+        }
+    }
+
+    private readonly void displayResource(int id) {
+        borrow Loanable resource = this.state.getResourceRef(id);
+        Console.print("Resource #");
+        println(id);
+        if (resource.kindCode() == 66) { println("Kind: book"); }
+        else { println("Kind: tool"); }
+        Console.print("Label: ");
+        Console.printText(resource.getLabel());
+        println("");
+        Console.print("Details: ");
+        Console.printText(resource.getDetails());
+        println("");
+        Console.print("Lending period (days): ");
+        println(resource.lendingDays());
+        this.printStatus(resource);
+    }
+
+    private readonly void listResources() {
+        if (this.state.resourceCount() == 0) {
+            println("The catalog is empty.");
+            return;
+        }
+        for (int id : this.state.resourceIdsRef()) {
+            this.displayResource(id);
+        }
+    }
+
+    private readonly void displayMember(int id) {
+        borrow Member member = this.state.getMemberRef(id);
+        Console.print("Member #");
+        println(id);
+        Console.print("Name: ");
+        Console.printText(member.getName());
+        println("");
+        match (member.getNote()) {
+            None { println("Note: (none)"); }
+            Some(note) {
+                Console.print("Note: ");
+                Console.printText(note);
+                println("");
+            }
+        }
+    }
+
+    private readonly void listMembers() {
+        if (this.state.memberCount() == 0) {
+            println("There are no members.");
+            return;
+        }
+        for (int id : this.state.memberIdsRef()) {
+            this.displayMember(id);
+        }
+    }
+
+    private void addBook() {
+        if (this.state.nextResourceId() >= 2147483647) {
+            println("Resource IDs are exhausted.");
+            return;
+        }
+        Option<Text> labelInput = this.prompt("Book title: ");
+        match (labelInput) {
+            Some(label) {
+                Option<Text> authorInput = this.prompt("Author: ");
+                match (authorInput) {
+                    Some(author) {
+                        Option<int> daysInput = this.promptInteger("Lending period in days: ", false);
+                        match (daysInput) {
+                            Some(days) {
+                                if (days == 0) {
+                                    println("A lending period must be positive.");
+                                    return;
+                                }
+                                Book book = new Book(label, author, days);
+                                this.printPreview(book);
+                                Option<int> allocated = this.state.allocateResourceId();
+                                match (allocated) {
+                                    Some(id) {
+                                        Loanable resource = book;
+                                        this.state.addResource(id, resource);
+                                        Console.print("Book added as resource #");
+                                        println(id);
+                                    }
+                                    None { println("Resource IDs are exhausted."); }
+                                }
+                            }
+                            None {}
+                        }
+                    }
+                    None {}
+                }
+            }
+            None {}
+        }
+    }
+
+    private void addTool() {
+        if (this.state.nextResourceId() >= 2147483647) {
+            println("Resource IDs are exhausted.");
+            return;
+        }
+        Option<Text> labelInput = this.prompt("Tool name: ");
+        match (labelInput) {
+            Some(label) {
+                Option<Text> detailsInput = this.prompt("Tool category/details: ");
+                match (detailsInput) {
+                    Some(details) {
+                        Option<int> daysInput = this.promptInteger("Lending period in days: ", false);
+                        match (daysInput) {
+                            Some(days) {
+                                if (days == 0) {
+                                    println("A lending period must be positive.");
+                                    return;
+                                }
+                                Tool tool = new Tool(label, details, days);
+                                this.printPreview(tool);
+                                Option<int> allocated = this.state.allocateResourceId();
+                                match (allocated) {
+                                    Some(id) {
+                                        Loanable resource = tool;
+                                        this.state.addResource(id, resource);
+                                        Console.print("Tool added as resource #");
+                                        println(id);
+                                    }
+                                    None { println("Resource IDs are exhausted."); }
+                                }
+                            }
+                            None {}
+                        }
+                    }
+                    None {}
+                }
+            }
+            None {}
+        }
+    }
+
+    private void addMember() {
+        if (this.state.nextMemberId() >= 2147483647) {
+            println("Member IDs are exhausted.");
+            return;
+        }
+        Option<Text> nameInput = this.prompt("Member name: ");
+        match (nameInput) {
+            Some(name) {
+                Option<Text> noteInput = this.prompt("Note (leave blank for none): ");
+                match (noteInput) {
+                    Some(noteText) {
+                        Option<Text> note;
+                        if (noteText.isEmpty()) { note = new Option<Text>.None(); }
+                        else { note = new Option<Text>.Some(noteText); }
+                        Member member = new Member(name, note);
+                        Option<int> allocated = this.state.allocateMemberId();
+                        match (allocated) {
+                            Some(id) {
+                                this.state.addMember(id, member);
+                                Console.print("Member added as #");
+                                println(id);
+                            }
+                            None { println("Member IDs are exhausted."); }
+                        }
+                    }
+                    None {}
+                }
+            }
+            None {}
+        }
+    }
+
+    private void showResource() {
+        Option<int> requested = this.promptInteger("Resource ID: ", true);
+        match (requested) {
+            Some(id) {
+                if (this.state.hasResource(id)) { this.displayResource(id); }
+                else { println("No resource has that ID."); }
+            }
+            None {}
+        }
+    }
+
+    private void lendResource() {
+        Option<int> resourceInput = this.promptInteger("Resource ID: ", true);
+        match (resourceInput) {
+            Some(resourceId) {
+                Option<int> memberInput = this.promptInteger("Member ID: ", true);
+                match (memberInput) {
+                    Some(memberId) {
+                        if (!this.state.hasResource(resourceId)) {
+                            println("No resource has that ID.");
+                            return;
+                        }
+                        if (!this.state.hasMember(memberId)) {
+                            println("No member has that ID.");
+                            return;
+                        }
+                        boolean available = false;
+                        int days = 0;
+                        {
+                            borrow Loanable resource = this.state.getResourceRef(resourceId);
+                            days = resource.lendingDays();
+                            match (resource.getAvailability()) {
+                                Available { available = true; }
+                                Lent(currentMember, dueDay) { available = false; }
+                                Maintenance(reason) { available = false; }
+                            }
+                        }
+                        if (!available) {
+                            println("Only an available resource can be lent.");
+                            return;
+                        }
+                        int today = this.state.logicalDay();
+                        if (today > 2147483647 - days) {
+                            println("The due day would overflow; no loan was recorded.");
+                            return;
+                        }
+                        int dueDay = today + days;
+                        {
+                            borrow mut Loanable resource = this.state.getResourceMut(resourceId);
+                            resource.setAvailability(new Availability.Lent(memberId, dueDay));
+                        }
+                        Console.print("Lent resource #");
+                        println(resourceId);
+                        Console.print("Lent to member #");
+                        println(memberId);
+                        Console.print("Due on logical day ");
+                        println(dueDay);
+                    }
+                    None {}
+                }
+            }
+            None {}
+        }
+    }
+
+    private void returnResource() {
+        Option<int> requested = this.promptInteger("Resource ID: ", true);
+        match (requested) {
+            Some(id) {
+                if (!this.state.hasResource(id)) {
+                    println("No resource has that ID.");
+                    return;
+                }
+                boolean lent = false;
+                {
+                    borrow Loanable resource = this.state.getResourceRef(id);
+                    match (resource.getAvailability()) {
+                        Available {}
+                        Lent(memberId, dueDay) { lent = true; }
+                        Maintenance(reason) {}
+                    }
+                }
+                if (!lent) {
+                    println("Only a lent resource can be returned.");
+                    return;
+                }
+                {
+                    borrow mut Loanable resource = this.state.getResourceMut(id);
+                    resource.setAvailability(new Availability.Available());
+                }
+                Console.print("Returned resource #");
+                println(id);
+            }
+            None {}
+        }
+    }
+
+    private void setMaintenance() {
+        Option<int> requested = this.promptInteger("Resource ID: ", true);
+        match (requested) {
+            Some(id) {
+                if (!this.state.hasResource(id)) {
+                    println("No resource has that ID.");
+                    return;
+                }
+                Option<Text> reasonInput = this.prompt("Maintenance reason (blank releases to available): ");
+                match (reasonInput) {
+                    Some(reason) {
+                        boolean lent = false;
+                        {
+                            borrow Loanable resource = this.state.getResourceRef(id);
+                            match (resource.getAvailability()) {
+                                Available {}
+                                Lent(memberId, dueDay) { lent = true; }
+                                Maintenance(currentReason) {}
+                            }
+                        }
+                        if (lent) {
+                            println("A lent resource cannot enter or leave maintenance.");
+                            return;
+                        }
+                        Availability replacement;
+                        if (reason.isEmpty()) { replacement = new Availability.Available(); }
+                        else { replacement = new Availability.Maintenance(reason); }
+                        {
+                            borrow mut Loanable resource = this.state.getResourceMut(id);
+                            resource.setAvailability(replacement);
+                        }
+                        println("Resource availability updated.");
+                    }
+                    None {}
+                }
+            }
+            None {}
+        }
+    }
+
+    private void renameResource() {
+        Option<int> requested = this.promptInteger("Resource ID: ", true);
+        match (requested) {
+            Some(id) {
+                if (!this.state.hasResource(id)) {
+                    println("No resource has that ID.");
+                    return;
+                }
+                Option<Text> modeInput = this.prompt("Rename mode (replace/append): ");
+                match (modeInput) {
+                    Some(mode) {
+                        boolean replace = mode.equalsString("replace");
+                        boolean append = mode.equalsString("append");
+                        if (!replace && !append) {
+                            println("Enter replace or append.");
+                            return;
+                        }
+                        Option<Text> labelInput = this.prompt("Label text: ");
+                        match (labelInput) {
+                            Some(labelText) {
+                                {
+                                    borrow mut Loanable resource = this.state.getResourceMut(id);
+                                    if (replace) {
+                                        resource.setLabel(labelText);
+                                    } else {
+                                        borrow mut Text label = resource.getLabelMut();
+                                        label.appendText(labelText);
+                                    }
+                                }
+                                println("Resource label updated.");
+                            }
+                            None {}
+                        }
+                    }
+                    None {}
+                }
+            }
+            None {}
+        }
+    }
+
+    private void removeResource() {
+        Option<int> requested = this.promptInteger("Resource ID: ", true);
+        match (requested) {
+            Some(id) {
+                if (!this.state.hasResource(id)) {
+                    println("No resource has that ID.");
+                    return;
+                }
+                boolean lent = false;
+                {
+                    borrow Loanable resource = this.state.getResourceRef(id);
+                    match (resource.getAvailability()) {
+                        Available {}
+                        Lent(memberId, dueDay) { lent = true; }
+                        Maintenance(reason) {}
+                    }
+                }
+                if (lent) {
+                    println("A lent resource cannot be removed.");
+                    return;
+                }
+                match (this.state.removeResource(id)) {
+                    Some(removed) {
+                        Console.print("Removed resource #");
+                        println(id);
+                    }
+                    None { println("No resource has that ID."); }
+                }
+            }
+            None {}
+        }
+    }
+
+    private void removeMember() {
+        Option<int> requested = this.promptInteger("Member ID: ", true);
+        match (requested) {
+            Some(id) {
+                if (!this.state.hasMember(id)) {
+                    println("No member has that ID.");
+                    return;
+                }
+                if (this.state.hasActiveLoanFor(id)) {
+                    println("A member with an active loan cannot be removed.");
+                    return;
+                }
+                match (this.state.removeMember(id)) {
+                    Some(removed) {
+                        Console.print("Removed member #");
+                        println(id);
+                    }
+                    None { println("No member has that ID."); }
+                }
+            }
+            None {}
+        }
+    }
+
+    private void advanceDay() {
+        Option<int> amountInput = this.promptInteger("Days to advance: ", false);
+        match (amountInput) {
+            Some(amount) {
+                int today = this.state.logicalDay();
+                if (today > 2147483647 - amount) {
+                    println("The logical day would overflow; the desk was not changed.");
+                    return;
+                }
+                this.state.setLogicalDay(today + amount);
+                Console.print("Logical day is now ");
+                println(this.state.logicalDay());
+            }
+            None {}
+        }
+    }
+
+    public void loadPath(borrow Text path) {
+        Result<Text,Text> readResult = Files.readText(path);
+        match (readResult) {
+            Ok(content) {
+                Result<DeskState,Text> parsed = parseDesk(content);
+                match (parsed) {
+                    Ok(candidate) {
+                        this.state = candidate;
+                        println("Lending desk loaded.");
+                    }
+                    Err(error) { this.reportError(error); }
+                }
+            }
+            Err(error) { this.reportError(error); }
+        }
+    }
+
+    private void savePath(borrow Text path) {
+        Text content = encodeDesk(this.state);
+        Result<boolean,Text> written = Files.writeTextAtomic(path, content);
+        match (written) {
+            Ok(success) {
+                if (success) { println("Lending desk saved."); }
+                else { println("The lending desk was not saved."); }
+            }
+            Err(error) { this.reportError(error); }
+        }
+    }
+
+    private void handleFileCommand(boolean loading) {
+        Option<Text> pathInput = this.prompt("File path: ");
+        match (pathInput) {
+            Some(path) {
+                if (path.isEmpty()) {
+                    println("A file path is required.");
+                } else if (loading) {
+                    this.loadPath(path);
+                } else {
+                    this.savePath(path);
+                }
+            }
+            None {}
+        }
+    }
+
+    private void printHelp() {
+        println("Commands: add-book, add-tool, add-member, list, members, show, lend, return, maintenance, rename, remove, remove-member, advance, load, save, help, quit.");
+        println("Enter each command on its own line; the following prompts collect its data.");
+        println("Resource and member IDs are positive, stable, and never reused. The logical day starts at 0.");
+        println("Maintenance requires a reason; an empty reason releases an available or maintained resource.");
+        println("Rename asks for replace or append. Lent resources cannot be removed or maintained.");
+        println("Load builds and validates a complete candidate before replacing the active desk.");
+        println("For load and save, enter an unquoted full path; spaces and Unicode are accepted.");
+    }
+
+    private void handleCommand(borrow Text text) {
+        Command command = parseCommand(text);
+        match (command) {
+            AddBook { this.addBook(); }
+            AddTool { this.addTool(); }
+            AddMember { this.addMember(); }
+            List { this.listResources(); }
+            Members { this.listMembers(); }
+            Show { this.showResource(); }
+            Lend { this.lendResource(); }
+            Return { this.returnResource(); }
+            Maintenance { this.setMaintenance(); }
+            Rename { this.renameResource(); }
+            Remove { this.removeResource(); }
+            RemoveMember { this.removeMember(); }
+            Advance { this.advanceDay(); }
+            Load { this.handleFileCommand(true); }
+            Save { this.handleFileCommand(false); }
+            Help { this.printHelp(); }
+            Quit {
+                println("Goodbye.");
+                this.inputAvailable = false;
+            }
+            Empty { println("Enter a command or type help."); }
+            Unknown { println("Unknown command. Type help for commands."); }
+        }
+    }
+
+    public void run() {
+        while (this.inputAvailable) {
+            Option<Text> commandInput = this.prompt("lending-desk> ");
+            match (commandInput) {
+                Some(command) { this.handleCommand(command); }
+                None { this.inputAvailable = false; }
+            }
+        }
+    }
+}
+

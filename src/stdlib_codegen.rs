@@ -3,12 +3,19 @@
 use crate::codegen::ctype;
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
 
-pub fn fields(program: &t::Program, class: C) -> String {
+pub fn fields(program: &t::Program, class: C, class_id: usize) -> String {
     match class {
         C::List(element) => format!("    {} *items;\n    int32_t length;\n    int32_t capacity;\n", ctype(program, element)),
+        C::Map(_, _) => format!("    struct ncr_map_entry_{class_id} *entries;\n    int32_t length;\n    int32_t capacity;\n"),
         C::Text => "    unsigned char *bytes;\n    int32_t length;\n    int32_t capacity;\n".to_owned(),
         C::Console | C::Files | C::Args => "    unsigned char ncr_static_class;\n".to_owned(),
     }
+}
+pub fn map_entry_definition(program: &t::Program, class_id: usize, value: Type) -> String {
+    format!(
+        "struct ncr_map_entry_{class_id} {{\n    int32_t key;\n    {} value;\n    bool occupied;\n}};\n",
+        ctype(program, value),
+    )
 }
 fn drop_element(ty: Type, expression: &str) -> String {
     match ty {
@@ -21,6 +28,9 @@ pub fn drop_fields(class: C) -> String {
         C::List(element) => format!(
             "    while (p->length > 0) {{\n        --p->length;\n        {}\n    }}\n    ncr_deallocate(p->items);\n",
             drop_element(element, "p->items[p->length]")),
+        C::Map(_, value) => format!(
+            "    for (int32_t index = 0; index < p->capacity; ++index) {{\n        if (p->entries[index].occupied) {{\n            {}\n        }}\n    }}\n    ncr_deallocate(p->entries);\n",
+            drop_element(value, "p->entries[index].value")),
         C::Text => "    ncr_deallocate(p->bytes);\n".to_owned(),
         C::Console | C::Files | C::Args => String::new(),
     }
@@ -31,7 +41,7 @@ fn zero(program: &t::Program, ty: Type) -> String {
         Type::Boolean => "false".to_owned(),
         Type::String => "(ncr_string){NULL, 0}".to_owned(),
         Type::Object(id) => crate::codegen::object_zero(program, id),
-        _ => unreachable!("checked list element"),
+        _ => unreachable!("checked native collection value"),
     }
 }
 fn marker(method: M) -> &'static str {
@@ -44,6 +54,11 @@ fn marker(method: M) -> &'static str {
         M::ListRemove => "@LIST_REMOVE@", M::ListTryGet => "@LIST_TRY_GET@",
         M::ListTryPop => "@LIST_TRY_POP@", M::ListTryRemove => "@LIST_TRY_REMOVE@",
         M::ListClear => "@LIST_CLEAR@", M::ListReserve => "@LIST_RESERVE@",
+        M::MapNew => "@MAP_NEW@", M::MapContainsKey => "@MAP_CONTAINS_KEY@",
+        M::MapSize => "@MAP_SIZE@", M::MapIsEmpty => "@MAP_IS_EMPTY@",
+        M::MapPut => "@MAP_PUT@", M::MapTryRemove => "@MAP_TRY_REMOVE@",
+        M::MapTryGet => "@MAP_TRY_GET@", M::MapGetRef => "@MAP_GET_REF@",
+        M::MapGetMut => "@MAP_GET_MUT@", M::MapClear => "@MAP_CLEAR@",
         M::TextNew => "@TEXT_NEW@",
         M::TextAppend => "@TEXT_APPEND@", M::TextAppendInt => "@TEXT_APPEND_INT@",
         M::TextAppendBoolean => "@TEXT_APPEND_BOOLEAN@", M::TextAppendText => "@TEXT_APPEND_TEXT@",
@@ -292,7 +307,7 @@ fn option_tags(program: &t::Program, function: &t::Function, element: Type) -> (
     let (some_tag, some) = variant(program, option, "Some");
     assert!(none.fields.is_empty(), "Option None must have no payload");
     assert!(matches!(some.fields.as_slice(), [field] if *field == element),
-        "Option Some payload must match its List element type");
+        "Option Some payload must match its collection value type");
     (none_tag, some_tag)
 }
 
@@ -333,7 +348,80 @@ fn try_owned_list_methods(program: &t::Program, list_class: usize, element: Type
         .replace("@STRICT_POP_CALL@", &format!("ncr_fn_{}", pop.id))
         .replace("@STRICT_REMOVE_CALL@", &format!("ncr_fn_{}", remove.id))
 }
+fn map_native_function(
+    program: &t::Program,
+    map_class: usize,
+    is: impl Fn(M) -> bool,
+) -> Option<&t::Function> {
+    program.functions.iter().find(|function| {
+        function.receiver == Some(map_class) && function.native.is_some_and(&is)
+    })
+}
 
+fn borrowed_map_method(program: &t::Program, function: &t::Function, value_class: usize) -> String {
+    let Type::Borrow { class, .. } = function.return_type else {
+        unreachable!("native Map borrowed accessor must return a typed borrow")
+    };
+    assert_eq!(class, value_class, "Map borrow result must match its value type");
+    let borrowed_value = if program.classes[value_class].is_interface {
+        "p->entries[index].value"
+    } else if program.classes[value_class].variants.is_some() {
+        "&p->entries[index].value"
+    } else {
+        "p->entries[index].value"
+    };
+    include_str!("../stdlib/map_get_borrowed.c.in")
+        .replace("@RETURN_TYPE@", &ctype(program, function.return_type))
+        .replace("@MAP_METHOD@", marker(function.native.expect("native Map accessor")))
+        .replace("@BORROWED_VALUE@", borrowed_value)
+}
+
+fn borrowed_map_methods(program: &t::Program, map_class: usize, value: Type) -> String {
+    let Type::Object(value_class) = value else { return String::new(); };
+    let mut methods = String::new();
+    for function in program.functions.iter().filter(|function| {
+        function.receiver == Some(map_class)
+            && matches!(function.native, Some(M::MapGetRef | M::MapGetMut))
+    }) {
+        methods.push_str(&borrowed_map_method(program, function, value_class));
+    }
+    methods
+}
+
+fn try_get_map_method(program: &t::Program, map_class: usize, value: Type) -> String {
+    let Some(function) = map_native_function(program, map_class, |method| matches!(method, M::MapTryGet))
+    else { return String::new(); };
+    assert!(matches!(value, Type::Int | Type::Boolean | Type::String),
+        "Map tryGet must be pruned for non-copy values");
+    let (none_tag, some_tag) = option_tags(program, function, value);
+    include_str!("../stdlib/map_try_get.c.in")
+        .replace("@OPTION_TYPE@", &ctype(program, function.return_type))
+        .replace("@NONE_TAG@", &none_tag.to_string())
+        .replace("@SOME_TAG@", &some_tag.to_string())
+        .replace("@ELEMENT@", &ctype(program, value))
+}
+
+fn map_implementation(program: &t::Program, map_class: usize, key: Type, value: Type) -> String {
+    assert_eq!(key, Type::Int, "Map keys are compiler-validated int values");
+    let put = map_native_function(program, map_class, |method| matches!(method, M::MapPut))
+        .expect("compiler-owned Map.put method is present");
+    let remove = map_native_function(program, map_class, |method| matches!(method, M::MapTryRemove))
+        .expect("compiler-owned Map.tryRemove method is present");
+    assert_eq!(put.return_type, remove.return_type,
+        "Map.put and tryRemove must return the same Option specialization");
+    let (none_tag, some_tag) = option_tags(program, put, value);
+    let borrowed = borrowed_map_methods(program, map_class, value);
+    let try_get = try_get_map_method(program, map_class, value);
+    include_str!("../stdlib/map.c.in")
+        .replace("@ENTRY_TYPE@", &format!("struct ncr_map_entry_{map_class}"))
+        .replace("@ELEMENT@", &ctype(program, value))
+        .replace("@DROP_VALUE@", &drop_element(value, "p->entries[index].value"))
+        .replace("@OPTION_TYPE@", &ctype(program, put.return_type))
+        .replace("@NONE_TAG@", &none_tag.to_string())
+        .replace("@SOME_TAG@", &some_tag.to_string())
+        .replace("@TRY_GET_METHOD@", &try_get)
+        .replace("@BORROWED_GETTERS@", &borrowed)
+}
 
 pub fn implementations(program: &t::Program) -> String {
     let text = text_class(program);
@@ -356,6 +444,7 @@ pub fn implementations(program: &t::Program) -> String {
                     .replace("@ZERO@", &zero(program, element))
                     .replace("@DROP_AT_INDEX@", &drop_element(element, "p->items[index]"))
             }
+            C::Map(key, value) => map_implementation(program, class.id, key, value),
             C::Text => text_method_placeholders(
                 include_str!("../stdlib/text.c.in").to_owned(), program, class.id),
             C::Console | C::Files | C::Args => continue,

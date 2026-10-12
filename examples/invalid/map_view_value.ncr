@@ -1,0 +1,10 @@
+class Box {}
+
+class BoxView {
+    borrow Box target;
+    BoxView(borrow Box target) { this.target = target; }
+}
+
+void main() {
+    Map<int, BoxView> values = new Map<int, BoxView>();
+}

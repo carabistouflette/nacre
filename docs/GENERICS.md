@@ -1,4 +1,4 @@
-# Generic specialization — V8
+# Generic specialization — V9
 
 ## Modèle choisi
 
@@ -145,12 +145,12 @@ Les spans source sont conservés, mais les notes de spécialisation ne couvrent 
 encore tous les diagnostics des passes ultérieures.
 
 
-## Templates de bibliothèque V5
+## Native collection templates
 
-`List<T>` est un template nominal réservé. Ses spécialisations et `Text` sont
-créés à la demande ; un programme qui ne les utilise pas n'émet pas leur stockage
-ou leurs méthodes. Les requêtes natives entrent dans la limite de 64 requêtes
-de spécialisation ; la limite des 128 classes utilisateur les exclut.
+List<T> and Map<K,V> are reserved nominal templates, specialized on demand along
+with Text and the sum types used by their signatures. Unused native classes are
+not emitted. Native requests share the existing specialization bounds and do
+not count as user-defined concrete classes.
 
 The copied native `get` and `tryGet` methods exist only for `int`, `boolean`, and
 `String`. Nominal elements expose shared/exclusive `getRef`/`getMut`; all supported
@@ -158,4 +158,11 @@ elements expose owned `tryPop`/`tryRemove` with inline specialized `Option<T>`.
 For-each header and collection types are substituted before ordinary checking.
 An empty `List<Node>` permits finite owned recursion, unlike a required
 `Node next` field without a base case. `List<T>` remains invariant.
+
+V9 Map has exactly two arguments and accepts only int keys. Value methods are
+pruned before ordinary checking: copied primitives retain tryGet, while nominal
+values retain getRef/getMut. Put/tryRemove return specialized inline Option<V>
+for every supported value representation. Borrows/local views cannot be values.
+Map<int,Dog> is not Map<int,Animal>; an individual owned or borrowed upcast still
+obeys the ordinary interface rules.
 Les contrats et limites de cette bibliothèque sont dans [STDLIB.md](STDLIB.md).

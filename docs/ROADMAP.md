@@ -1,54 +1,54 @@
-# After V8
+# After V9
 
-## Shipped foundation
+## Shipped capabilities
 
-Nacre retains ownership/definite initialization, generic nominal classes,
-interfaces and inline enums, recoverable UTF-8 console/file APIs, native arguments,
-multifile source bundles, diagnostic stdio LSP, Sudoku, and VS Code/Zed support.
-V7 added receiver-derived borrowed returns, affine list element references,
-owned-field replacement, borrowed enum matching, and atomic contact persistence.
+Nacre retains affine ownership/definite initialization, generic nominal classes,
+interfaces and inline enums, receiver-derived borrowed returns, owned-field
+replacement, borrowed matching, lexical list traversal, recoverable extraction,
+UTF-8 console/files, native arguments, source bundles, LSP and editor support.
 
-V8 adds copied/shared/exclusive lexical list traversal, recoverable copied lookup
-and owned extraction, plus contact-book search, phone filtering, and confirmed
-batch removal. [V8.md](V8.md) defines the exact milestone and exclusions.
+V9 adds Map<int,V> with full signed integer keys, transferred replacement/removal,
+shared/exclusive value references and one-buffer open-addressed storage. The
+multi-file lending desk gives the major feature families a coherent application:
+polymorphic resources, generic catalogs, availability states, member relationships,
+local parsing views, recoverable commands and validated atomic persistence.
+[V9.md](V9.md) fixes the exact milestone and exclusions.
 
-## Maintain correctness before expanding scope
+## Correctness gates
 
-- Keep adversarial ownership/loan tests and actual GCC/Clang sanitizer execution.
 - Preserve receiver-origin contracts across generic/interface dispatch.
-- Keep projected receivers stable while evaluating arguments/RHS expressions;
-  ancestor mutation must not free a pending child pointer.
-- Preserve whole-loop root loans and per-iteration cleanup through nested loops,
-  `continue`, `break`, and `return`.
-- Failed recoverable extraction must preserve contents, order, size, and capacity;
-  success transfers exactly one cleanup obligation without an option allocation.
-- Exercise malformed LSP framing, unsaved overlays, editor restarts, and input
-  bounds. Finite campaigns and passing suites are not general safety proofs.
-- Keep atomic visibility distinct from crash durability and publish only portable
-  curated sources, never workstation configuration or private evidence locations.
+- Keep root-wide map loans through use of returned values; keys do not grant
+  disjoint alias domains. Existing-key replacement and absent removal remain
+  modifying calls under static borrowing rules.
+- Test full signed keys, collision-chain deletion/reinsertion, growth and
+  replacement/extraction with object, inline-enum and interface ownership.
+- Raw relocation must not destroy values. Returned previous/removed owners carry
+  one cleanup obligation; vacated slots carry none.
+- Keep projected receiver freezing, lexical traversal cleanup and adversarial
+  invalidation regressions, plus actual GCC/Clang sanitizer runs.
+- Cross-validate persistence relationships and IDs before replacing live state.
+- Keep bounded compiler/LSP fuzzing and actual editor diagnostics/overlay checks.
+- Publish portable curated sources, not host configuration, caches or private UI
+  evidence locations. Atomic visibility is not crash durability.
 
-## Deliberately conservative model
+## Deliberately unchanged
 
-Loans end at lexical boundaries, not their last use. A root and all its owned
-fields share one alias domain; list indices are not analyzed as disjoint.
-Returned references require a receiver-derived origin. Local views remain
-non-movable/non-exportable. Traversal is loop syntax, not a transferable iterator
-object. Arbitrary field extraction and partial moves remain unsupported.
+Loans end lexically, not at last use. Owners and all transitively owned fields
+share a root; local views stay non-movable/non-exportable. List traversal does
+not imply transferable iterator objects. Partial moves remain unsupported.
+Maps promise neither traversal/order nor adversarial hash-flooding resistance.
+Programs remain outside a sandbox; finite passing campaigns are not a proof.
 
-Any lifetime/projection refinement must establish explicit function and interface
-contracts, joins/loops/cleanup behavior, and adversarial invalidation rejections
-before relaxing these rules. V8 does not promise such a refinement.
+## Possible later milestones, not commitments
 
-## Possible later work, not V8 commitments
+- Text/string/custom map keys after key ownership, equality and lookup contracts.
+- Map traversal and first-class borrowed iterators after explicit invalidation,
+  lifetime and movement/export designs.
+- Independently specified fallible allocation and cleanup on recovery; no
+  exception unwinding is currently promised.
+- Profile-driven compiler/native performance, not speculative backend rewrites.
+- Independent review of compiler/runtime input and trust boundaries.
 
-- Maps with explicit key equality/hashing, ownership, and invalidation contracts.
-- First-class borrowed iterators, only after a design for their lifetime and
-  movement/export behavior; current lexical traversal does not imply that design.
-- Separately designed fallible allocation; no exception unwinding is promised.
-- Measured compiler/native performance using reproducible profiles.
-- Independent review of compiler/runtime trust boundaries and untrusted-input
-  resistance. Programs remain outside any sandbox.
-
-Modules, threads, FFI, inheritance, non-lexical lifetimes, lifetime parameters,
-and a direct LLVM backend remain excluded. Future discussion is not an unfinished
-implementation or an implicit commitment in this release.
+NLL, lifetime parameters, disjoint-entry borrowing, modules, threads, FFI,
+inheritance and a direct LLVM backend remain excluded. They require separate
+language contracts rather than incremental weakening of V9 checks.

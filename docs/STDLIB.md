@@ -1,6 +1,6 @@
-# Standard Library V8
+# Standard Library V9
 
-`List`, `Text`, `Option`, `Result`, `Console`, `Files`, and `Args` are reserved
+`List`, `Map`, `Text`, `Option`, `Result`, `Console`, `Files`, and `Args` are reserved
 and pre-injected without imports. The two sum types use the ordinary enum
 representation; native methods belong to the trusted base. Specializations are
 emitted on demand with all their signatures. The scope of real validation is
@@ -66,6 +66,43 @@ fatal; no `Option<borrow T>` method is exposed.
 is evaluated once and borrowed for the whole loop. Element bindings end each
 iteration, while structural mutation through another alias stays forbidden.
 See [V8.md](V8.md) for traversal and recoverable-operation contracts.
+
+## Map<int,V>
+
+`new Map<int,V>()` creates an empty dictionary. V9 accepts only signed `int`
+keys, including zero, negative values, INT32_MIN and INT32_MAX. Value types follow
+List ownership rules; borrows and local views cannot be stored. Generic types
+remain invariant. There is no map traversal, custom hashing, or text-key API.
+
+| Method | Contract |
+|---|---|
+| `readonly int size()` | Live key/value pairs. |
+| `readonly boolean isEmpty()` | Whether the live count is zero. |
+| `readonly boolean containsKey(int key)` | Presence query with no retained reference. |
+| `Option<V> put(int key, V value)` | Copies a primitive or consumes an owner; returns None for a new key or Some of the previous value for replacement. |
+| `Option<V> tryRemove(int key)` | Removes/transfers the value in Some, or returns None without mutation. |
+| `readonly Option<V> tryGet(int key)` | Copies int/boolean/String into Some; absent key returns None. Only copied value specializations expose it. |
+| `readonly borrow V getRef(int key)` | Shared affine-value reference; absent key is fatal. |
+| `borrow mut V getMut(int key)` | Exclusive affine-value reference; absent key is fatal. |
+| `void clear()` | Destroys remaining values once and retains reusable entry storage. |
+
+Options are inline wrappers. Replacement transfers the previous cleanup
+obligation rather than destroying that value. Existing-key replacement never
+grows the buffer; unsuccessful removal/lookup preserves contents and size.
+Insertion alone may allocate for growth; allocation/size failure remains fatal.
+
+Storage is one entry buffer with open addressing and backward-shift deletion.
+Growth relocates representations without destroying owners; deleted slots no
+longer own a value. Expected lookup/update is constant time, with linear
+worst-case collision chains. No hash-flooding resistance is promised.
+
+References borrow the entire map root, not an independent key. A conflicting
+put, removal, clear, movement, replacement or destruction is forbidden while
+either reference is active, even if the call would be a no-op. Exclusive value
+access blocks independent map reads. Objects return stored pointers, inline
+enums return slot addresses, and interfaces retain their borrowed fat-pointer
+ABI. Bounds/presence observations do not grant a reference or lifetime refinement.
+See [V9.md](V9.md) for the exact milestone contract.
 
 ## Text
 

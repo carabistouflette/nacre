@@ -93,6 +93,11 @@ function sourceForSnippet(name, body) {
       return `void main() {\nList<int> numbers = new List<int>();\nnumbers.add(1);\n${body}\n}\n`;
     case 'Recoverable list removal':
       return `void main() {\nList<int> items = new List<int>();\nitems.add(1);\n${body}\n}\n`;
+    case 'Shared map value':
+    case 'Exclusive map value':
+      return `class Contact {}\nvoid main() {\nMap<int,Contact> entries = new Map<int,Contact>();\nmatch (entries.put(1, new Contact())) { None {} Some(previous) {} }\n${body}\n}\n`;
+    case 'Recoverable map removal':
+      return `void main() {\nMap<int,int> entries = new Map<int,int>();\nmatch (entries.put(1, 7)) { None {} Some(previous) {} }\n${body}\n}\n`;
     default:
       return `void main() {\n${body}\n}\n`;
   }
@@ -259,6 +264,17 @@ async function main() {
   assertHasScope(scopesAt(traversal, 0, 'int'), 'storage.type.primitive.nacre', 'copied traversal type');
   assertHasScope(scopesAt(traversal, 1, 'borrow'), 'storage.modifier.ownership.nacre', 'shared traversal modifier');
   assertHasScope(scopesAt(traversal, 2, 'mut'), 'storage.modifier.ownership.nacre', 'exclusive traversal modifier');
+
+  const integerMap = tokenize(grammar, [
+    'Map<int,Text> entries = new Map<int,Text>();',
+    'borrow mut Text value = entries.getMut(-1);',
+    'match (entries.tryRemove(1)) { Some(previous) {} None {} }'
+  ].join('\n'));
+  assertHasScope(scopesAt(integerMap, 0, 'Map'), 'entity.name.type.nacre', 'map nominal generic type');
+  assertHasScope(scopesAt(integerMap, 0, 'int'), 'storage.type.primitive.nacre', 'map integer key type');
+  assertHasScope(scopesAt(integerMap, 1, 'borrow'), 'storage.modifier.ownership.nacre', 'map borrowed accessor result');
+  assertHasScope(scopesAt(integerMap, 1, 'getMut'), 'entity.name.function.member.nacre', 'map exclusive lookup method');
+  assertHasScope(scopesAt(integerMap, 2, 'tryRemove'), 'entity.name.function.member.nacre', 'map recoverable extraction method');
   const snippets = JSON.parse(fs.readFileSync(path.join(extensionRoot, 'snippets/nacre.json'), 'utf8'));
   for (const [name, snippet] of Object.entries(snippets)) {
     assert(typeof snippet.prefix === 'string' && snippet.prefix.length > 0, `snippet ${name} has no prefix`);

@@ -7,7 +7,7 @@ pub enum Visibility { Public, Private }
 #[derive(Debug, Clone)]
 pub struct Program { pub functions: Vec<Function>, pub classes: Vec<Class> }
 #[derive(Debug, Clone)]
-pub enum NativeClass { List(Type), Text, Console, Files, Args }
+pub enum NativeClass { List(Type), Map(Type, Type), Text, Console, Files, Args }
 #[derive(Debug, Clone)]
 pub struct Variant { pub name: String, pub fields: Vec<Type>, pub span: Span }
 #[derive(Debug, Clone)]

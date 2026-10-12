@@ -104,6 +104,7 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
         tables.classes[id].native = match &class.native {
             Some(a::NativeClass::Text) => Some(t::NativeClass::Text),
             Some(a::NativeClass::List(_)) => Some(t::NativeClass::List(Type::Void)),
+            Some(a::NativeClass::Map(_, _)) => Some(t::NativeClass::Map(Type::Void, Type::Void)),
             Some(a::NativeClass::Console) => Some(t::NativeClass::Console),
             Some(a::NativeClass::Files) => Some(t::NativeClass::Files),
             Some(a::NativeClass::Args) => Some(t::NativeClass::Args),
@@ -111,8 +112,17 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
         };
     }
     for (id, class) in program.classes.iter().enumerate() {
-        if let Some(a::NativeClass::List(element)) = &class.native {
-            tables.classes[id].native = Some(t::NativeClass::List(tables.resolve_type(element, class.span)?));
+        match &class.native {
+            Some(a::NativeClass::List(element)) => {
+                tables.classes[id].native = Some(t::NativeClass::List(tables.resolve_type(element, class.span)?));
+            }
+            Some(a::NativeClass::Map(key, value)) => {
+                tables.classes[id].native = Some(t::NativeClass::Map(
+                    tables.resolve_type(key, class.span)?,
+                    tables.resolve_type(value, class.span)?,
+                ));
+            }
+            _ => {}
         }
         let variants = class.variants.as_ref().map(|variants| {
             variants.iter().map(|variant| Ok(t::Variant {
@@ -158,10 +168,21 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
     }
     for (info, value) in tables.classes.iter_mut().zip(has_borrow) { info.has_borrow = value; }
     for (id, class) in program.classes.iter().enumerate() {
-        if let Some(t::NativeClass::List(element)) = tables.classes[id].native {
-            if tables.is_view(element) || matches!(element, Type::Void | Type::Borrow { .. }) {
-                return Err(Diagnostic::new(class.span, "[E5003] List<T> exige une valeur copiable ou un objet possede; les vues locales et les emprunts sont interdits"));
+        match tables.classes[id].native {
+            Some(t::NativeClass::List(element)) => {
+                if tables.is_view(element) || matches!(element, Type::Void | Type::Borrow { .. }) {
+                    return Err(Diagnostic::new(class.span, "[E5003] List<T> exige une valeur copiable ou un objet possede; les vues locales et les emprunts sont interdits"));
+                }
             }
+            Some(t::NativeClass::Map(key, value)) => {
+                if key != Type::Int {
+                    return Err(Diagnostic::new(class.span, "[E5004] Map<K, V> exige int comme type de cle"));
+                }
+                if tables.is_view(value) || matches!(value, Type::Void | Type::Borrow { .. }) {
+                    return Err(Diagnostic::new(class.span, "[E5005] Map<int, V> exige une valeur possedee sans emprunt ni vue locale"));
+                }
+            }
+            _ => {}
         }
     }
     for class in &program.classes {
@@ -271,7 +292,7 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
         }
     }
     // Ordinary objects still require mandatory fields. Enums are alternatives:
-    // one finite variant is a real base case, while native List<T> is empty.
+    // one finite variant is a real base case; native List<T> and Map<K,V> are empty.
     let mut productive = vec![false; program.classes.len()];
     loop {
         let mut changed = false;

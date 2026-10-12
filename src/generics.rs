@@ -149,14 +149,31 @@ impl Expander {
         }
     }
     fn class(&mut self, class: &mut a::Class, env: &Environment) -> Result<(), Diagnostic> {
-        if let Some(a::NativeClass::List(element)) = &mut class.native {
-            *element = self.ty(element, env, class.span, 0)?;
-            // Primitive elements copy; nominal elements require receiver-bound loans.
-            if matches!(element, Type::Int | Type::Boolean | Type::String) {
-                class.methods.retain(|method| !matches!(method.name.as_str(), "getRef" | "getMut"));
-            } else {
-                class.methods.retain(|method| !matches!(method.name.as_str(), "get" | "tryGet"));
+        match &mut class.native {
+            Some(a::NativeClass::List(element)) => {
+                *element = self.ty(element, env, class.span, 0)?;
+                // Primitive elements copy; nominal elements require receiver-bound loans.
+                if matches!(element, Type::Int | Type::Boolean | Type::String) {
+                    class.methods.retain(|method| !matches!(method.name.as_str(), "getRef" | "getMut"));
+                } else {
+                    class.methods.retain(|method| !matches!(method.name.as_str(), "get" | "tryGet"));
+                }
             }
+            Some(a::NativeClass::Map(key, value)) => {
+                *key = self.ty(key, env, class.span, 0)?;
+                *value = self.ty(value, env, class.span, 0)?;
+                if !matches!(key, Type::Int) {
+                    return Err(Diagnostic::new(class.span, "[E5004] Map<K, V> exige int comme type de cle"));
+                }
+                // Primitive values copy; nominal values are only exposed through
+                // receiver-bound loans, never through a copied Option payload.
+                if matches!(value, Type::Int | Type::Boolean | Type::String) {
+                    class.methods.retain(|method| !matches!(method.name.as_str(), "getRef" | "getMut"));
+                } else {
+                    class.methods.retain(|method| method.name != "tryGet");
+                }
+            }
+            _ => {}
         }
         for interface in &mut class.implements { *interface = self.ty(interface, env, class.span, 0)?; }
         if let Some(variants) = &mut class.variants {

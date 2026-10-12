@@ -1,4 +1,4 @@
-# Ownership and lexical borrowing — Nacre V8
+# Ownership and lexical borrowing — Nacre V9
 
 Nacre separates owning values from shared/exclusive access. Ordinary objects
 own their heap allocation; enums are affine inline values; interfaces use an
@@ -130,6 +130,23 @@ alias domain.
 `tryPop` and `tryRemove` are modifying methods even on an empty list or invalid
 index, so active loans still reject them. Recoverable runtime failure does not
 relax static ownership requirements. `tryGet` copies primitives only.
+
+## Map value references
+
+`Map<int,V>` affine values expose shared `getRef(key)` and exclusive `getMut(key)`.
+The result derives from the complete map root, with the same object/inline-enum/
+interface representation rules as List access. Missing keys remain fatal;
+`containsKey` is a copied presence observation, not a retained loan.
+
+References block conflicting put, tryRemove, clear, movement, destruction, and
+ancestor-field replacement. Different keys do not grant independent alias
+domains. Even an absent removal or existing-key replacement is a modifying
+method. Primitive values use copied `tryGet` instead of references.
+
+Maps stored beside another field share their containing owner's root. Shared
+traversal of an ID list may coexist with shared map lookup, but not mutation of
+that sibling map. End those scopes before mutation; there is no NLL or early
+release operation. A Catalog in the lending example follows this rule explicitly.
 
 ## Replacing owned fields
 

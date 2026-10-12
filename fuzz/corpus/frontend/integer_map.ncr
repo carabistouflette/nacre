@@ -1,0 +1,12 @@
+void main() {
+    Map<int,Option<Text>> entries = new Map<int,Option<Text>>();
+    match (entries.put(-1, new Option<Text>.Some(new Text("Ω")))) { None {} Some(previous) {} }
+    {
+        borrow mut Option<Text> entry = entries.getMut(-1);
+        match (entry) { None {} Some(text) { text.append("!"); } }
+    }
+    match (entries.tryRemove(-1)) {
+        None {}
+        Some(entry) { match (entry) { None {} Some(text) { text.print(); } } }
+    }
+}

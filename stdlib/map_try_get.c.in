@@ -1,0 +1,7 @@
+static @OPTION_TYPE@ @MAP_TRY_GET@(ncr_obj_@ID@ *p, int32_t key, size_t line, size_t column) {
+    (void)line; (void)column;
+    int32_t index = ncr_map_find_@ID@(p, key);
+    if (index < 0) { return (@OPTION_TYPE@){ .tag = @NONE_TAG@ }; }
+    @ELEMENT@ value = p->entries[index].value;
+    return (@OPTION_TYPE@){ .tag = @SOME_TAG@, .data.v@SOME_TAG@.f0 = value };
+}

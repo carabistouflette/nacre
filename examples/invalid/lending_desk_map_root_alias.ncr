@@ -1,0 +1,14 @@
+void main() {
+    Map<int,Text> labels = new Map<int,Text>();
+    match (labels.put(1, new Text("first"))) {
+        None {}
+        Some(previous) {}
+    }
+    borrow Text selected = labels.getRef(1);
+    // Rejected: any put invalidates the complete map root while selected borrows it.
+    match (labels.put(2, new Text("second"))) {
+        None {}
+        Some(previous) {}
+    }
+    println(selected.byteLength());
+}

@@ -186,5 +186,40 @@
       "}"
     ],
     "description": "Remove an element without aborting on an invalid index"
+  },
+  "Integer-keyed map": {
+    "prefix": "map",
+    "body": [
+      "Map<int,${1:Text}> ${2:entries} = new Map<int,${1:Text}>();"
+    ],
+    "description": "Own values under stable signed integer keys"
+  },
+  "Shared map value": {
+    "prefix": "mapref",
+    "body": [
+      "borrow ${1:Contact} ${2:contact} = ${3:entries}.getRef(${4:1});"
+    ],
+    "description": "Borrow an affine map value while retaining a whole-map shared loan"
+  },
+  "Exclusive map value": {
+    "prefix": "mapmut",
+    "body": [
+      "borrow mut ${1:Contact} ${2:contact} = ${3:entries}.getMut(${4:1});"
+    ],
+    "description": "Mutate an affine map value under an exclusive whole-map loan"
+  },
+  "Recoverable map removal": {
+    "prefix": "mapremove",
+    "body": [
+      "match (${1:entries}.tryRemove(${2:1})) {",
+      "    Some(${3:value}) {",
+      "        ${4}",
+      "    }",
+      "    None {",
+      "        $0",
+      "    }",
+      "}"
+    ],
+    "description": "Transfer a map value or preserve the map when its key is absent"
   }
 }

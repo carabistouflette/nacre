@@ -1,0 +1,198 @@
+class Catalog<T> {
+    private Map<int,T> entries;
+    private List<int> order;
+
+    public Catalog() {
+        this.entries = new Map<int,T>();
+        this.order = new List<int>();
+    }
+
+    public readonly int size() {
+        return this.order.size();
+    }
+
+    public readonly boolean containsKey(int id) {
+        return this.entries.containsKey(id);
+    }
+
+    public readonly int idAt(int index) {
+        return this.order.get(index);
+    }
+
+    public readonly borrow List<int> idsRef() {
+        return this.order;
+    }
+
+    public readonly borrow T getRef(int id) {
+        return this.entries.getRef(id);
+    }
+
+    public borrow mut T getMut(int id) {
+        return this.entries.getMut(id);
+    }
+
+    public Option<T> put(int id, T value) {
+        boolean existed = this.entries.containsKey(id);
+        Option<T> previous = this.entries.put(id, value);
+        if (!existed) {
+            this.order.add(id);
+        }
+        return previous;
+    }
+
+    public Option<T> remove(int id) {
+        if (!this.entries.containsKey(id)) {
+            return new Option<T>.None();
+        }
+        int index = 0;
+        while (index < this.order.size() && this.order.get(index) != id) {
+            index = index + 1;
+        }
+        if (index == this.order.size()) {
+            return new Option<T>.None();
+        }
+        Option<T> removed = this.entries.tryRemove(id);
+        match (this.order.tryRemove(index)) {
+            None {}
+            Some(removedId) {}
+        }
+        return removed;
+    }
+
+}
+
+class DeskState {
+    private Catalog<Loanable> resources;
+    private Catalog<Member> members;
+    private int day;
+    private int nextResourceId;
+    private int nextMemberId;
+
+    public DeskState() {
+        this.resources = new Catalog<Loanable>();
+        this.members = new Catalog<Member>();
+        this.day = 0;
+        this.nextResourceId = 1;
+        this.nextMemberId = 1;
+    }
+
+    public readonly int logicalDay() { return this.day; }
+    public readonly int nextResourceId() { return this.nextResourceId; }
+    public readonly int nextMemberId() { return this.nextMemberId; }
+    public readonly int resourceCount() { return this.resources.size(); }
+    public readonly int memberCount() { return this.members.size(); }
+    public readonly boolean hasResource(int id) { return this.resources.containsKey(id); }
+    public readonly boolean hasMember(int id) { return this.members.containsKey(id); }
+    public readonly int resourceIdAt(int index) { return this.resources.idAt(index); }
+    public readonly int memberIdAt(int index) { return this.members.idAt(index); }
+    public readonly borrow List<int> resourceIdsRef() { return this.resources.idsRef(); }
+    public readonly borrow List<int> memberIdsRef() { return this.members.idsRef(); }
+
+    public readonly borrow Loanable getResourceRef(int id) {
+        return this.resources.getRef(id);
+    }
+
+    public borrow mut Loanable getResourceMut(int id) {
+        return this.resources.getMut(id);
+    }
+
+    public readonly borrow Member getMemberRef(int id) {
+        return this.members.getRef(id);
+    }
+
+    public void addResource(int id, Loanable resource) {
+        match (this.resources.put(id, resource)) {
+            None {}
+            Some(previous) {}
+        }
+    }
+
+    public void addMember(int id, Member member) {
+        match (this.members.put(id, member)) {
+            None {}
+            Some(previous) {}
+        }
+    }
+
+    public Option<Loanable> removeResource(int id) {
+        return this.resources.remove(id);
+    }
+
+    public Option<Member> removeMember(int id) {
+        return this.members.remove(id);
+    }
+
+    public Option<int> allocateResourceId() {
+        if (this.nextResourceId >= 2147483647) {
+            return new Option<int>.None();
+        }
+        int id = this.nextResourceId;
+        this.nextResourceId = id + 1;
+        return new Option<int>.Some(id);
+    }
+
+    public Option<int> allocateMemberId() {
+        if (this.nextMemberId >= 2147483647) {
+            return new Option<int>.None();
+        }
+        int id = this.nextMemberId;
+        this.nextMemberId = id + 1;
+        return new Option<int>.Some(id);
+    }
+
+    public void setPersistenceMetadata(int day, int nextResourceId, int nextMemberId) {
+        this.day = day;
+        this.nextResourceId = nextResourceId;
+        this.nextMemberId = nextMemberId;
+    }
+
+    public void setLogicalDay(int day) {
+        this.day = day;
+    }
+
+    public readonly boolean hasActiveLoanFor(int memberId) {
+        int index = 0;
+        while (index < this.resources.size()) {
+            int resourceId = this.resources.idAt(index);
+            boolean found = false;
+            {
+                borrow Loanable resource = this.resources.getRef(resourceId);
+                match (resource.getAvailability()) {
+                    Available {}
+                    Lent(borrowerId, dueDay) {
+                        if (borrowerId == memberId) { found = true; }
+                    }
+                    Maintenance(reason) {}
+                }
+            }
+            if (found) { return true; }
+            index = index + 1;
+        }
+        return false;
+    }
+
+    public readonly boolean hasValidRelationships() {
+        int index = 0;
+        while (index < this.resources.size()) {
+            int resourceId = this.resources.idAt(index);
+            boolean valid = true;
+            {
+                borrow Loanable resource = this.resources.getRef(resourceId);
+                match (resource.getAvailability()) {
+                    Available {}
+                    Lent(memberId, dueDay) {
+                        if (memberId <= 0 || dueDay < 0 || !this.members.containsKey(memberId)) {
+                            valid = false;
+                        }
+                    }
+                    Maintenance(reason) {
+                        if (reason.isEmpty()) { valid = false; }
+                    }
+                }
+            }
+            if (!valid) { return false; }
+            index = index + 1;
+        }
+        return true;
+    }
+}

@@ -1,66 +1,79 @@
-# Nacre V8 / 0.9.0 — observed release verification
+# Nacre V9 / 0.10.0 — observed release verification
 
-This records executed checks, not a safety certification. The bounded feature
-contract and explicit exclusions are in [V8.md](V8.md). Portable machine-readable
-local evidence is in [v8-validation.json](v8-validation.json).
+Executed evidence is not a safety certification. [V9.md](V9.md) defines the
+bounded milestone and exclusions; [v9-validation.json](v9-validation.json)
+records portable local results. The lending workflow and exact format are in
+[LENDING_DESK.md](LENDING_DESK.md), with the major feature-to-function matrix in
+[LENDING_DESK_FEATURES.md](LENDING_DESK_FEATURES.md).
 
 ## Compiler and native execution
 
 | Check | Observed result |
 |---|---|
-| Feature-enabled Rust suite | 973 passed across 30 suites; two LLVM tests ignored by the ordinary suite |
-| New V8 regressions | 11 behavioral tests for traversal, recoverable extraction, search/filtering and batch persistence |
+| Feature-enabled Rust suite | 989 passed across 32 suites; two LLVM tests ignored by the ordinary suite |
+| V9 behavioral regressions | 16 map/lending tests, including affine collision-chain deletion |
 | Clippy | All targets, fuzzing feature, `-D warnings`: passed |
 | Minimum Rust | 1.74.0 locked/offline all-target compilation: passed |
 | Standard generated native validation | 414 successful GCC/Clang ASan/UBSan runs; 14 expected fatal runs; 420 invalid-source rejections |
 | LLVM | 11 emission/round-trip cases; both ordinarily ignored tests explicitly executed |
-| Dedicated V8 generated programs | 12 successful GCC/Clang ASan/UBSan runs, all reported `live=0` |
-| Traversal allocation probe | Two additional sanitized generated runs: copied/shared/exclusive and empty traversal added zero language allocations |
-| Trusted C-template fixtures | 50,000 randomized list operations per positive run, O2 and ASan/UBSan under both compilers; all reported `live=0` |
-| Packaging audit | 59 `include_str!` paths checked; 975 declared Rust tests counted, not executed by this audit |
+| Dedicated V9 generated programs | 30 successful GCC/Clang ASan/UBSan runs, all reported `live=0` |
+| Packaging audit | 62 `include_str!` paths checked; 991 declared Rust tests counted, not executed by this audit |
 
-The generated-program scenarios exercise primitive traversal, interface dispatch,
-inline enum element references, recoverable removal/pop, optional payload cleanup,
-Unicode contact search, phone filtering, cancellation and confirmed reverse batch
-removal, save/reload, and malformed-load rollback. Failure cases include a UTF-8
-field boundary, decimal overflow, trailing data, and extreme invalid positions.
+Map scenarios exercise full signed keys, absent lookup/removal, duplicate
+replacement, growth, collision-chain head/middle/tail removal and reinsertion,
+object/inline-enum/interface ownership, borrowed references and ancestor/root
+invalidation. Affine backward-shift deletion was identified as a missing
+high-risk case by read-only review; explicit representation-specific behavior
+coverage was added and passed. Review found no concrete implementation defect,
+but that source-level result is not a substitute for native execution.
 
-EOF at batch confirmation was exercised with a read-only post-loop observer in
-a throwaway source copy, proving the in-memory book remained unchanged. The
-ordinary contact scenarios execute the shipped source. Allocation probes observe
-the actual generated traversal through an instrumented output checkpoint; they
-are distinct from the C-template fixture's allocation-delta assertions.
+Permanent generated-program allocation tests compare insertion baselines with
+lookup/replacement/removal/clear/reuse and sweep replacement at sizes 1 through
+1024. No absolute buffer capacity/default allocation count is pinned. These
+operations add no allocation; insertion/growth and user-created payloads can.
 
-Positive memory reports balance allocations/frees. Traversal structural mutation
-rejects with `E3001`; rejected programs do not proceed to unsafe native execution.
+Lending scenarios cover polymorphic books/tools, member relationships,
+availability transitions, guarded removal, owned label replacement and exclusive
+borrowed append, logical-day overflow, stable IDs/order, optional startup loading,
+Unicode/path-with-spaces snapshots and candidate rollback. Malformed cases
+include overflowing metadata, trailing data, UTF-8 field boundaries, missing
+borrowers and duplicate IDs. EOF during resource creation and lending is checked
+with a read-only post-run observer in a throwaway copied source bundle; ordinary
+scenarios use the shipped bundle unchanged.
 
-## Reproduce the maintained checks
+Positive memory reports balance allocations/frees. Rejected companions fail for
+map aliasing (`E3001`), movement (`E3002`), local view values (`E5005`), local-view
+escape (`E3007`) or borrowed-owner transfer, rather than a parser failure.
 
-From the repository root:
+## Maintained commands
+
+From the repository root, with locked dependencies already cached for offline
+commands:
 
 ```sh
 cargo test --offline --locked --features fuzzing --no-fail-fast
 cargo clippy --offline --locked --all-targets --features fuzzing -- -D warnings
 cargo +1.74.0 check --offline --locked --all-targets
-python3 scripts/test_stdlib_support.py --cc gcc --cc clang
 python3 scripts/validate.py --cc gcc --cc clang --sanitizers --llvm
+python3 scripts/test_stdlib_support.py --cc gcc --cc clang
 python3 scripts/audit_package.py
-cargo run --offline --locked -- run examples/collections_v8.ncr --memory-stats
-cargo run --offline --locked -- run examples/contact_book.ncr --memory-stats
+cargo run --offline --locked -- run examples/maps_v9.ncr --memory-stats
+cargo run --offline --locked -- run examples/lending_desk --memory-stats
 ```
 
-Offline commands assume their locked dependencies are already cached. The
-standard native validator re-executes the suite for each selected C compiler.
-The C-template harness is explicitly not a substitute for actual Rust-generated
-programs. Throwaway probes were removed after execution.
+The standard native validator re-executes the suite for each selected C compiler.
+The standalone fixture checks exact trusted C templates and 50,000 randomized
+list operations per positive run; it is explicitly not generated-program proof.
+Both compilers pass O2 and ASan/UBSan with balanced reports. Throwaway observer
+sources are removed after execution.
 
 ## Fuzzing
 
-Real bounded campaigns executed 461,326 frontend inputs and 3,035,925 LSP framing
+Real bounded campaigns executed 377,150 frontend inputs and 2,941,757 LSP framing
 inputs, each for 31 seconds, without observed crashes or timeouts. The frontend
-starts from five intentional seeds including V8 traversal; framing uses eight.
-Mutated corpus copies are isolated and removed. Peak RSS was 426 MiB/frontend and
-316 MiB/framing. Finite campaigns are not a general fuzz-safety proof.
+starts from six intentional seeds including maps and traversal; framing uses
+eight. Corpus mutations are isolated and removed. Peak RSS was 420 MiB/frontend
+and 359 MiB/framing. Finite campaigns are not a general safety proof.
 
 ```sh
 cargo install cargo-fuzz --version 0.13.2 --locked
@@ -69,43 +82,38 @@ python3 scripts/fuzz_smoke.py
 
 ## Editor packages and desktop evidence
 
-Packages are VS Code/Zed 0.4.0 and grammar 0.3.0. All 20 snippets compile against
-the real compiler. The grammar parses 39 examples, executes all four Zed queries,
-and passes the locked WASI build. These headless checks do not certify actual
-syntax colors or interactive client lifecycle behavior.
+Packages are VS Code/Zed 0.5.0 and grammar 0.4.0. All 24 snippets compile against
+the real compiler. The grammar parses 45 examples, executes all four Zed queries,
+and passes the locked WASI build. Headless checks do not certify actual syntax
+colors or interactive client lifecycle behavior.
 
-Both actual desktop applications passed V8 acceptance: VS Code 1.141.0 and Zed
-1.23.3, with Nacre extension 0.4.0 and compiler 0.9.0. The checks cover new syntax
-colors, live traversal `E3001` and clearing, unsaved cross-file rename/undo,
-restart/recovery, save/close/reopen, and real VS Code `foreachref` completion.
-Portable acceptance evidence is in
-[v8-editor-verification.json](v8-editor-verification.json); parent inspected the
-actual screenshots. Xvfb/software rendering and desktop-service setup warnings
-are reported separately, not hidden or treated as compiler/editor failures.
+The actual V8 desktop baseline remains in
+[v8-editor-verification.json](v8-editor-verification.json). Actual V9 acceptance
+passes in official VS Code 1.141.0 and Zed 1.23.2+stable, with Nacre 0.5.0
+extensions and compiler 0.10.0. [v9-editor-verification.json](v9-editor-verification.json)
+records map colors, live loan rejection/clearing, unsaved cross-file declaration
+edits/undo, restart recovery, save/reopen, the clean lending bundle and VS Code
+mapref completion insertion. Parent inspected retained syntax/snippet and live
+diagnostic screenshots. All owned temporary desktop resources were cleaned up.
 
-## Remote CI
+## Remote CI baseline
 
-The complete V8 workflow passed on source commit `96d5030`:
+The complete V8 source workflow passed before V9 implementation:
 [run 38303938675](https://github.com/carabistouflette/nacre/actions/runs/38303938675).
-All six jobs succeeded: Rust 1.74.0/stable × GCC/Clang, editor packaging/WASI,
-and real nightly fuzzing. The Clang jobs explicitly execute the ignored LLVM
-tests. Non-fatal runner notices concern Node action-runtime deprecation and the
-upcoming `ubuntu-latest` image migration, not test failures.
-
-The earlier V7 cleanup baseline also passed:
-[run 38295939217](https://github.com/carabistouflette/nacre/actions/runs/38295939217).
+This is baseline evidence, not a V9 workflow claim.
 
 ## Boundaries and publication
 
-Loan lifetimes are lexical and roots conservative. V8 traversal is loop syntax,
-not a first-class iterator API. No maps, NLL, lifetime parameters, disjoint-index
-borrowing, arbitrary partial moves, fallible allocation, exception unwinding,
-modules, threads, FFI, inheritance, or direct LLVM backend are provided.
-Very deep owned trees can exhaust the C cleanup stack. Untrusted programs are
-not sandboxed. Linux is observed; native Windows/macOS are not certified.
+Loan lifetimes are lexical and roots conservative. V9 maps accept only int keys
+and provide no map traversal or per-key alias domains. No custom hashing, NLL,
+lifetime parameters, first-class borrowed iterators, arbitrary partial moves,
+fallible allocation, exception unwinding, modules, threads, FFI, inheritance, or
+direct LLVM backend are provided. Very deep owned trees can exhaust the C cleanup
+stack. Runtime hash tables do not promise hash-flooding resistance. Untrusted
+programs are not sandboxed; native Windows/macOS are not certified.
 Atomic replacement promises visibility, not crash durability or old permissions.
 
 Published summaries omit workstation paths, process IDs, session-local artifact
-references, and private screenshot locations. Desktop proof remains outside the
-source publication. Obsolete identity artifacts/reports were deleted rather than
-relabeling captured output; the original MIT attribution is retained as required.
+references and private screenshot locations. Curated UI proof stays outside Git;
+owned desktop downloads/profiles/workspaces/caches are removed. The original MIT
+attribution is retained as required, not relabeled.

@@ -1,0 +1,15 @@
+class Box {
+    readonly int read() { return 1; }
+}
+
+class Shelf {
+    Map<int, Box> values = new Map<int, Box>();
+}
+
+void main() {
+    Shelf shelf = new Shelf();
+    shelf.values.put(1, new Box());
+    borrow Box shared = shelf.values.getRef(1);
+    shelf.values = new Map<int, Box>();
+    println(shared.read());
+}

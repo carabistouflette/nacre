@@ -1,0 +1,32 @@
+{
+  "release": "Nacre 0.10.0",
+  "status": "passed",
+  "scope": "Observed local compiler, generated native programs, fuzzing, grammar and packaging; actual desktop and remote CI are recorded separately",
+  "compiler_suite": {"passed": 989, "suites": 32, "ignored": 2, "features": ["fuzzing"], "new_v9_regressions": 16},
+  "clippy": "all targets, fuzzing feature, -D warnings passed",
+  "msrv": "Rust 1.74.0 locked offline all-target check passed",
+  "native_validation": {"compilers": ["gcc", "clang"], "sanitizers": ["ASan", "UBSan"], "successful_runs": 414, "expected_fatal_runs": 14, "invalid_source_rejections": 420, "llvm_round_trips": 11, "ignored_llvm_tests_executed": true, "all_reported_live_zero": true},
+  "v9_generated_native_smoke": {
+    "compilers": ["gcc", "clang"],
+    "sanitizers": ["ASan", "UBSan"],
+    "successful_runs": 30,
+    "cases_per_compiler": ["primitive signed-key boundaries/replacement/absence", "collision-chain head/middle/tail deletion and reinsertion", "growth and deletion reuse", "owned object/inline-enum/interface transfer and borrowed access", "affine collision deletion and survivor lookup/clear", "map example", "lending domain rules and persistence", "optional startup round trip", "overflow load rollback", "trailing-data rollback", "UTF-8 boundary rollback", "missing-borrower rollback", "duplicate-resource rollback", "EOF incomplete resource preserves state", "EOF incomplete lending preserves state"],
+    "allocation_balances_per_compiler": [6, 2, 10, 100, 60, 8, 170, 54, 66, 92, 73, 79, 79, 12, 44],
+    "all_reported_live_zero": true,
+    "eof_instrumentation": "Read-only post-run state observer added to a throwaway copied bundle; ordinary scenarios use shipped sources"
+  },
+  "map_allocation_contract": {"replacement_lookup_removal_clear_and_reuse_delta": 0, "replacement_growth_boundary_sweep": "Counts 1 through 1024; allocation totals match insertion-only baseline without pinning buffer defaults", "scope": "Permanent actual generated-program regressions"},
+  "rejected_companions": {"map_root_aliasing": "E3001", "map_exclusive_independent_read": "E3001", "map_movement": "E3002", "map_view_values": "E5005", "lending_view_escape": "E3007", "borrowed_owner_transfer": "type/ownership rejection"},
+  "static_review": {"map_implementation_defects_found": 0, "lending_implementation_defects_found": 0, "high_risk_coverage_gap": "Affine backward-shift deletion was missing; object/enum/interface regression added and passed", "scope": "Read-only source review, not a replacement for runtime proof"},
+  "trusted_template_fixture": {"scope": "Exact shipped C templates instantiated by Python, not generated-program verification", "randomized_list_operations": 50000, "compilers": ["GCC 16.2.1", "Clang 23.1.1"], "profiles": ["O2", "ASan/UBSan"], "allocations_and_frees_per_positive_run": 13592, "all_reported_live_zero": true},
+  "fuzz": {
+    "frontend": {"inputs": 377150, "seconds": 31, "coverage": 5481, "features": 18687, "peak_rss_mb": 420, "seed_files": 6},
+    "lsp_frames": {"inputs": 2941757, "seconds": 31, "coverage": 940, "features": 3759, "peak_rss_mb": 359, "seed_files": 8},
+    "observed_crashes": 0,
+    "observed_timeouts": 0,
+    "scope": "Real bounded campaigns with isolated intentional seed copies; not a general safety proof"
+  },
+  "editor_packages": {"vscode": "0.5.0", "zed": "0.5.0", "grammar": "0.4.0", "snippets_compiled": 24, "examples_parsed": 45, "queries_executed": 4, "locked_wasi_build": "passed"},
+  "package_audit": {"status": "passed", "include_str_paths": 62, "declared_rust_tests_not_executed_by_audit": 991},
+  "publication_policy": "Curated portable sources only: no workstation paths, process IDs, credentials, session-local artifact references, private proof locations, profiles or caches"
+}

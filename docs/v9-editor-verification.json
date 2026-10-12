@@ -1,0 +1,26 @@
+{
+  "release": "Nacre 0.10.0",
+  "status": "passed",
+  "scope": "Actual official desktop applications under isolated X11/Xvfb, not headless grammar substitutes",
+  "compiler": "nacre 0.10.0",
+  "extension_version": "0.5.0",
+  "grammar_version": "0.4.0",
+  "vscode": {
+    "observed_version": "1.141.0",
+    "commit": "2a59476c9bfcb90b3ddc372c36762471b7dfad1c",
+    "extension": "nacre.nacre@0.5.0",
+    "verified": ["Map generic/type and put/tryGet/tryRemove/getRef/getMut syntax colors", "mapref completion selected and inserted through actual completion UI", "live E3001 for tryRemove inside named getRef loan", "diagnostic clearing after moving removal outside loan scope", "unsaved cross-file Counter getter declaration rename produces unknown-method diagnostic on borrowed map value; undo clears it", "Nacre language-server restart recovers active E3001; correction clears it", "save/close/reopen returns clean diagnostics", "copied lending model and desk open as Nacre with no Problems"],
+    "host_notes": ["Initial metadata invocation launched Electron with inherited Wayland; stopped and acceptance performed on isolated X11", "Optional desktop portal/media/accessibility services were unavailable without blocking acceptance", "New-keyring prompt canceled without entering credentials"]
+  },
+  "zed": {
+    "observed_package_version": "1.23.2-1",
+    "observed_application_version": "1.23.2+stable",
+    "extension": "Nacre 0.5.0 dev extension installed through Extensions UI",
+    "verified": ["Map generic/type and put/tryGet/tryRemove/getRef/getMut syntax colors", "live E3001 for tryRemove inside named getRef loan", "diagnostic clearing after moving removal outside loan scope", "unsaved cross-file Counter getter declaration rename produces unknown-method diagnostic on unchanged borrowed map-value consumer; undo clears it", "save/close/reopen clean; full editor restart restarts server and recovers clean diagnostics", "copied lending model and desk associated with Nacre and clean; application log records workspace LSP startup"],
+    "host_notes": ["llvmpipe software renderer used", "Optional portal/systemd/RTKit/secrets service warnings did not block acceptance", "Isolated HOME initially lacked toolchain discovery; selecting existing Rustup toolchain enabled extension build"]
+  },
+  "rename_semantics": "Manual unsaved declaration edit and undo exercise cross-file overlays; LSP rename refactoring is not implemented or claimed",
+  "visual_inspection": "Parent inspected actual VS Code map syntax and expanded mapref screenshots, and actual Zed map syntax and live E3001 screenshots",
+  "cleanup": "Owned editors, language servers, isolated Xvfb/private desktop services, downloads, profiles, extension builds, workspaces and caches stopped or removed; unrelated user resources preserved",
+  "publication": "Curated screenshots and original GUI proof retained outside Git; no workstation paths, process IDs, display identifiers, private proof locations or credentials in this summary"
+}

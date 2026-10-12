@@ -1,0 +1,22 @@
+class Payload {
+    private Text label;
+
+    public Payload(Text label) {
+        this.label = label;
+    }
+
+    public readonly borrow Text getLabel() {
+        return this.label;
+    }
+}
+
+void acceptOwner(Payload value) {
+    println(value.getLabel().byteLength());
+}
+
+void main() {
+    Payload owner = new Payload(new Text("owned resource"));
+    borrow Payload view = owner;
+    // Rejected: an owner-taking parameter cannot consume a borrowed view.
+    acceptOwner(view);
+}

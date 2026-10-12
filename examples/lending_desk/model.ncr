@@ -1,0 +1,107 @@
+enum Availability {
+    Available;
+    Lent(int, int);
+    Maintenance(Text);
+}
+
+interface Loanable {
+    readonly borrow Text getLabel();
+    borrow mut Text getLabelMut();
+    readonly borrow Text getDetails();
+    readonly borrow Availability getAvailability();
+    readonly int kindCode();
+    readonly int lendingDays();
+    void setLabel(Text label);
+    void setAvailability(Availability state);
+}
+
+class ResourceData {
+    private Text label;
+    private Availability availability;
+
+    public ResourceData(Text label) {
+        this.label = label;
+        this.availability = new Availability.Available();
+    }
+
+    public readonly borrow Text getLabel() {
+        return this.label;
+    }
+
+    public borrow mut Text getLabelMut() {
+        return this.label;
+    }
+
+    public readonly borrow Availability getAvailability() {
+        return this.availability;
+    }
+
+
+    public void setLabel(Text label) {
+        this.label = label;
+    }
+
+    public void setAvailability(Availability state) {
+        this.availability = state;
+    }
+}
+
+class Book implements Loanable {
+    private ResourceData data;
+    private Text author;
+    private int days;
+
+    public Book(Text label, Text author, int days) {
+        this.data = new ResourceData(label);
+        this.author = author;
+        this.days = days;
+    }
+
+    public readonly borrow Text getLabel() { return this.data.getLabel(); }
+    public borrow mut Text getLabelMut() { return this.data.getLabelMut(); }
+    public readonly borrow Text getDetails() { return this.author; }
+    public readonly borrow Availability getAvailability() { return this.data.getAvailability(); }
+    public readonly int kindCode() { return 66; }
+    public readonly int lendingDays() { return this.days; }
+    public void setLabel(Text label) { this.data.setLabel(label); }
+    public void setAvailability(Availability state) { this.data.setAvailability(state); }
+}
+
+class Tool implements Loanable {
+    private ResourceData data;
+    private Text category;
+    private int days;
+
+    public Tool(Text label, Text category, int days) {
+        this.data = new ResourceData(label);
+        this.category = category;
+        this.days = days;
+    }
+
+    public readonly borrow Text getLabel() { return this.data.getLabel(); }
+    public borrow mut Text getLabelMut() { return this.data.getLabelMut(); }
+    public readonly borrow Text getDetails() { return this.category; }
+    public readonly borrow Availability getAvailability() { return this.data.getAvailability(); }
+    public readonly int kindCode() { return 84; }
+    public readonly int lendingDays() { return this.days; }
+    public void setLabel(Text label) { this.data.setLabel(label); }
+    public void setAvailability(Availability state) { this.data.setAvailability(state); }
+}
+
+class Member {
+    private Text name;
+    private Option<Text> note;
+
+    public Member(Text name, Option<Text> note) {
+        this.name = name;
+        this.note = note;
+    }
+
+    public readonly borrow Text getName() {
+        return this.name;
+    }
+
+    public readonly borrow Option<Text> getNote() {
+        return this.note;
+    }
+}

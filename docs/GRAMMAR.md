@@ -1,4 +1,4 @@
-# Grammar V8
+# Grammar V9
 
 Grammaire indicative du sous-ensemble implémenté. Les contraintes sémantiques
 ci-dessous font partie du langage. Identifiants ASCII ; sources et chaînes UTF-8 ;
@@ -196,9 +196,11 @@ statiques, sans concaténation ni construction dynamique.
 
 ## Bibliothèque native et plusieurs fichiers
 
-`List<T>`, `Text`, `Console`, `Files`, `Args`, `Option<T>` et `Result<T,E>`
-sont des noms réservés préinjectés, pas de nouveaux mots-clés.
+`List<T>`, `Map<int,V>`, `Text`, `Console`, `Files`, `Args`, `Option<T>` et
+`Result<T,E>` sont des noms réservés préinjectés, pas de nouveaux mots-clés.
 Leurs contrats sont décrits dans [STDLIB.md](STDLIB.md).
+V9 Map has two explicit generic arguments, but only int keys are supported.
+Ordinary generic syntax applies; map iteration is not added to list `for`.
 `String` reste statique ; `Text` est la valeur possédée modifiable. La syntaxe
 `T[]` et l'indexation `xs[i]` restent absentes.
 

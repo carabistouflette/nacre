@@ -29,6 +29,20 @@ class List<T> {
     public void clear() {}
     public void reserve(int capacity) {}
 }
+
+class Map<K, V> {
+    public Map() {}
+    public readonly boolean containsKey(int key) {}
+    public readonly int size() {}
+    public readonly boolean isEmpty() {}
+    public Option<V> put(int key, V value) {}
+    public Option<V> tryRemove(int key) {}
+    public readonly Option<V> tryGet(int key) {}
+    public readonly borrow V getRef(int key) {}
+    public borrow mut V getMut(int key) {}
+    public void clear() {}
+}
+
 class Text {
     public Text(String initial) {}
     public void append(String value) {}

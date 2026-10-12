@@ -1,5 +1,26 @@
 # Nacre changelog
 
+## V9 / 0.10.0
+
+- Map<int,V> supports all signed int32 keys and the existing copied/owned value
+  representations. Put transfers the previous value in an inline Option;
+  tryRemove transfers a present value and preserves an absent map.
+- Primitive map values expose tryGet; affine values expose receiver-bound
+  shared/exclusive getRef/getMut. Whole-map/root loans retain lexical alias rules.
+- One-buffer open addressing uses unsigned hashing, checked growth, and
+  backward-shift deletion without tombstones. Relocation transfers ownership;
+  replacement and removal do not allocate wrappers or destroy returned owners.
+- The complete multi-file lending desk uses polymorphic books/tools, generic
+  catalogs, stable IDs, availability states, member relationships, local parsing
+  views, recoverable commands, logical-day overflow guards and atomic persistence.
+- A feature-to-function matrix and rejected companions document the safety
+  boundaries. Affine collision-chain deletion has explicit object/enum/interface
+  regressions, in addition to primitive growth and replacement coverage.
+- Editor packages 0.5.0, grammar 0.4.0 and 24 snippets cover map access and transfer.
+  Generated C identifies the compiler package version rather than a pinned banner.
+- Text/custom keys, map traversal, lifetime refinements, fallible allocation,
+  exception unwinding and new backends remain excluded; see docs/V9.md.
+
 ## V8 / 0.9.0
 
 - List `for` traversal copies primitive elements or explicitly borrows affine

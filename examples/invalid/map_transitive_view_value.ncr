@@ -1,0 +1,14 @@
+class Box {}
+
+class BoxView {
+    borrow Box target;
+    BoxView(borrow Box target) { this.target = target; }
+}
+
+class Holder {
+    BoxView nested;
+}
+
+void main() {
+    Map<int, Holder> values = new Map<int, Holder>();
+}

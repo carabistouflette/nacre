@@ -256,7 +256,7 @@
         },
         {
           "name": "support.type.builtin.nacre",
-          "match": "\\b(?:String|List|Text)\\b"
+          "match": "\\b(?:String|List|Map|Text)\\b"
         }
       ]
     },

@@ -1,0 +1,8 @@
+class Box {}
+
+void main() {
+    Map<int, Box> values = new Map<int, Box>();
+    Box owned = new Box();
+    borrow Box shared = owned;
+    values.put(1, shared);
+}

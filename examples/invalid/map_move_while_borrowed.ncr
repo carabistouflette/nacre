@@ -1,0 +1,11 @@
+class Box {
+    readonly int read() { return 1; }
+}
+
+void main() {
+    Map<int, Box> values = new Map<int, Box>();
+    values.put(1, new Box());
+    borrow Box shared = values.getRef(1);
+    Map<int, Box> moved = move(values);
+    println(shared.read());
+}
