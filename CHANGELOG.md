@@ -1,5 +1,13 @@
 # Nacre changelog
 
+## Unreleased
+
+- CI maintenance: update [checkout to 7.0.1](https://github.com/actions/checkout/releases/tag/v7.0.1),
+  [setup-node to 7.1.0](https://github.com/actions/setup-node/releases/tag/v7.1.0),
+  and [setup-python to 7.0.0](https://github.com/actions/setup-python/releases/tag/v7.0.0).
+  These actions use Node 24 instead of deprecated Node 20; language semantics,
+  test matrices and selected Node/Python toolchain versions are unchanged.
+
 ## 0.11.0
 
 - Built-in integer-map traversal binds copied keys and copied primitive or
