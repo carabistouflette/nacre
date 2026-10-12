@@ -64,6 +64,16 @@ impl Tables {
     fn is_view(&self, ty: Type) -> bool {
         ty.object_class().is_some_and(|id| self.classes[id].has_borrow)
     }
+    fn map_key_binding_type(&self, key: a::MapKeyKind) -> Type {
+        match key {
+            a::MapKeyKind::Int => Type::Int,
+            a::MapKeyKind::Text => {
+                let class = self.classes.iter().position(|class| matches!(class.native, Some(t::NativeClass::Text)))
+                    .expect("native Text class accompanies Map<Text, V>");
+                Type::Borrow { class, mutable: false }
+            }
+        }
+    }
     fn add_signature(&mut self, f: &a::Function, owner: Option<usize>, kind: Kind) -> Result<usize, Diagnostic> {
         if matches!(f.name.as_str(), "println" | "move" | "drop") { return Err(Diagnostic::new(f.span, format!("`{}` est une fonction integree reservee", f.name))); }
         let params: Vec<Type> = f.params.iter().map(|p| self.resolve_type(&p.ty, p.span)).collect::<Result<_, _>>()?;
@@ -104,7 +114,10 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
         tables.classes[id].native = match &class.native {
             Some(a::NativeClass::Text) => Some(t::NativeClass::Text),
             Some(a::NativeClass::List(_)) => Some(t::NativeClass::List(Type::Void)),
-            Some(a::NativeClass::Map(_, _)) => Some(t::NativeClass::Map(Type::Void, Type::Void)),
+            Some(a::NativeClass::Map { key_kind: Some(key_kind), .. }) =>
+                Some(t::NativeClass::Map(*key_kind, Type::Void)),
+            Some(a::NativeClass::Map { .. }) =>
+                return Err(Diagnostic::new(class.span, "[E5004] Map<K, V> key classification is missing")),
             Some(a::NativeClass::Console) => Some(t::NativeClass::Console),
             Some(a::NativeClass::Files) => Some(t::NativeClass::Files),
             Some(a::NativeClass::Args) => Some(t::NativeClass::Args),
@@ -116,10 +129,11 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
             Some(a::NativeClass::List(element)) => {
                 tables.classes[id].native = Some(t::NativeClass::List(tables.resolve_type(element, class.span)?));
             }
-            Some(a::NativeClass::Map(key, value)) => {
+            Some(a::NativeClass::Map { value, .. }) => {
+                let Some(t::NativeClass::Map(key_kind, _)) = tables.classes[id].native
+                    else { unreachable!("specialized native Map key metadata"); };
                 tables.classes[id].native = Some(t::NativeClass::Map(
-                    tables.resolve_type(key, class.span)?,
-                    tables.resolve_type(value, class.span)?,
+                    key_kind, tables.resolve_type(value, class.span)?,
                 ));
             }
             _ => {}
@@ -174,13 +188,8 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
                     return Err(Diagnostic::new(class.span, "[E5003] List<T> exige une valeur copiable ou un objet possede; les vues locales et les emprunts sont interdits"));
                 }
             }
-            Some(t::NativeClass::Map(key, value)) => {
-                if key != Type::Int {
-                    return Err(Diagnostic::new(class.span, "[E5004] Map<K, V> exige int comme type de cle"));
-                }
-                if tables.is_view(value) || matches!(value, Type::Void | Type::Borrow { .. }) {
-                    return Err(Diagnostic::new(class.span, "[E5005] Map<int, V> exige une valeur possedee sans emprunt ni vue locale"));
-                }
+            Some(t::NativeClass::Map(_, value)) if tables.is_view(value) || matches!(value, Type::Void | Type::Borrow { .. }) => {
+                return Err(Diagnostic::new(class.span, "[E5005] Map<K, V> requires an owned value without a borrow or local view"));
             }
             _ => {}
         }
@@ -646,20 +655,20 @@ impl Checker<'_> {
         let value = if place.is_none() { Some(self.expression(collection)?) } else { None };
         let source_type = if let Some(place) = &place { place.ty } else { value.as_ref().unwrap().ty };
         let source_class = source_type.object_class()
-            .ok_or_else(|| Diagnostic::new(collection.span, "la collection doit etre une List<T> ou Map<int, V> nommee ou empruntee"))?;
+            .ok_or_else(|| Diagnostic::new(collection.span, "collection must be a named or borrowed List<T> or Map<K, V>"))?;
         match self.tables.classes[source_class].native {
-            Some(t::NativeClass::Map(_, map_value)) => {
+            Some(t::NativeClass::Map(_, _)) => {
                 if key.is_none() {
-                    return Err(Diagnostic::new(header_span, "Map<int, V> exige deux bindings typés: clé et valeur"));
+                    return Err(Diagnostic::new(header_span, "Map<K, V> requires two typed bindings: key and value"));
                 }
-                return self.for_each_map(stmt, place, value, source_type, source_class, map_value);
+                return self.for_each_map(stmt, place, value, source_type, source_class);
             }
             Some(t::NativeClass::List(_)) => {
                 if key.is_some() {
                     return Err(Diagnostic::new(header_span, "List<T> conserve son unique binding d'element"));
                 }
             }
-            _ => return Err(Diagnostic::new(collection.span, "la collection d'une boucle for-each doit etre une List<T> ou Map<int, V>")),
+            _ => return Err(Diagnostic::new(collection.span, "for-each collection must be a List<T> or Map<K, V>")),
         }
         let list_class = source_class;
         let Some(t::NativeClass::List(element_type)) = self.tables.classes[list_class].native else {
@@ -770,15 +779,19 @@ impl Checker<'_> {
     }
 
     fn for_each_map(&mut self, stmt: &a::Stmt, place: Option<Place>, value: Option<t::Expr>,
-                    source_type: Type, map_class: usize, map_value: Type) -> Result<t::Stmt, Diagnostic> {
+                    source_type: Type, map_class: usize) -> Result<t::Stmt, Diagnostic> {
+        let Some(t::NativeClass::Map(map_key, map_value)) = self.tables.classes[map_class].native
+            else { unreachable!("checked map traversal class"); };
         let a::StmtKind::ForEach { ty: header, name, key: Some((key_header, key_name)),
                                   collection, body, header_span } = &stmt.kind
             else { unreachable!("checked two-binding map traversal"); };
         let header_span = *header_span;
         let span = stmt.span;
+        let key_binding_type = self.tables.map_key_binding_type(map_key);
         let key_type = self.tables.resolve_type(key_header, header_span)?;
-        if key_type != Type::Int {
-            return Err(Diagnostic::new(header_span, "Map traversal exige un binding de clé `int`"));
+        if key_type != key_binding_type {
+            return Err(Diagnostic::new(header_span, format!(
+                "incompatible map key binding type: expected {}", self.tables.type_name(key_binding_type))));
         }
         let (value_binding_type, exclusive) = self.traversal_binding(header, map_value, header_span)?;
         let map_type = Type::Borrow { class: map_class, mutable: exclusive };
@@ -793,17 +806,18 @@ impl Checker<'_> {
             let map_id = self.declare(&map_name, map_type, span)?;
             let cursor_id = self.declare(&cursor_name, Type::Int, span)?;
             let capacity_id = self.declare(&format!("$nacre_for_capacity_{unique}"), Type::Int, span)?;
-            let key_id = self.declare(key_name, Type::Int, header_span)?;
+            let key_id = self.declare(key_name, key_binding_type, header_span)?;
             let value_id = self.declare(name, value_binding_type, header_span)?;
 
             let map_place = Place { kind: PlaceKind::Var(map_id), ty: map_type };
             let cursor_place = Place { kind: PlaceKind::Var(cursor_id), ty: Type::Int };
             let typed_expr = |kind, ty, expr_span| t::Expr { kind, ty, span: expr_span };
             let cursor_read = || typed_expr(t::ExprKind::Read(cursor_place.clone()), Type::Int, span);
-            let slot = |kind, ty| typed_expr(t::ExprKind::MapSlot {
+            let slot = |kind, ty, pair| typed_expr(t::ExprKind::MapSlot {
                 map: map_place.clone(),
                 index: Box::new(cursor_read()),
                 kind,
+                pair,
             }, ty, collection.span);
             let advance = || t::Stmt::Assign {
                 target: cursor_place.clone(),
@@ -821,11 +835,11 @@ impl Checker<'_> {
                     kind: PlaceKind::Var(capacity_id), ty: Type::Int,
                 }), Type::Int, collection.span)),
             }, Type::Boolean, span);
-            let map_slot_occupied = slot(t::MapSlotKind::Occupied, Type::Boolean);
-            let key_value = slot(t::MapSlotKind::Key, Type::Int);
-            let entry_value = slot(t::MapSlotKind::Value, value_binding_type);
+            let map_slot_occupied = slot(t::MapSlotKind::Occupied, Type::Boolean, None);
+            let key_value = slot(t::MapSlotKind::Key, key_binding_type, Some(key_id));
+            let entry_value = slot(t::MapSlotKind::Value, value_binding_type, Some(key_id));
             let mut occupied_body = vec![
-                t::Stmt::Let { id: key_id, ty: Type::Int, value: Some(key_value) },
+                t::Stmt::Let { id: key_id, ty: key_binding_type, value: Some(key_value) },
                 t::Stmt::Let { id: value_id, ty: value_binding_type, value: Some(entry_value) },
                 advance(),
             ];

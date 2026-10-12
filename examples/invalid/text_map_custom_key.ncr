@@ -1,0 +1,4 @@
+class AccountId {}
+void main() {
+    Map<AccountId, int> entries = new Map<AccountId, int>();
+}

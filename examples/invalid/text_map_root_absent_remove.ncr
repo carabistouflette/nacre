@@ -1,0 +1,7 @@
+void main() {
+    Map<Text, int> entries = new Map<Text, int>();
+    borrow Map<Text, int> shared = entries;
+    Text absent = new Text("not present");
+    entries.tryRemove(absent);
+    println(shared.size());
+}

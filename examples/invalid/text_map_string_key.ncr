@@ -1,0 +1,3 @@
+void main() {
+    Map<String, int> entries = new Map<String, int>();
+}

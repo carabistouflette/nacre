@@ -1,0 +1,5 @@
+void main() {
+    Map<Text, int> entries = new Map<Text, int>();
+    entries.put(new Text("stored"), 1);
+    for (Text key, int value : entries) { key.print(); }
+}

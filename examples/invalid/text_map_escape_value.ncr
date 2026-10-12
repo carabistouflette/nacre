@@ -1,0 +1,16 @@
+class Parcel {
+    readonly int count() { return 1; }
+}
+class LocalStore {
+    readonly borrow Parcel escaped() {
+        Map<Text, Parcel> entries = new Map<Text, Parcel>();
+        entries.put(new Text("local"), new Parcel());
+        Text query = new Text("local");
+        return entries.getRef(query);
+    }
+}
+void main() {
+    LocalStore store = new LocalStore();
+    borrow Parcel value = store.escaped();
+    println(value.count());
+}

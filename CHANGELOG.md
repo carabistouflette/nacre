@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Text map keys are owned, queried by shared borrow without allocation, compared
+  by exact UTF-8 bytes and immutable during paired key/value traversal. Integer
+  and text keys share storage algorithms; cached text hashes avoid repeated work.
+- Reviewed fixes centralize key classification and the hash finalizer, skip
+  hashing empty-map queries, and preserve readonly keys with mutable values
+  without weakening root-wide loans. Named inventory exercises the public API.
 - CI maintenance: update [checkout to 7.0.1](https://github.com/actions/checkout/releases/tag/v7.0.1),
   [setup-node to 7.1.0](https://github.com/actions/setup-node/releases/tag/v7.1.0),
   and [setup-python to 7.0.0](https://github.com/actions/setup-python/releases/tag/v7.0.0).

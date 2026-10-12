@@ -18,7 +18,11 @@ pub fn inject(program: &mut a::Program) -> Result<(), Diagnostic> {
         class.is_builtin = true;
         class.native = Some(match class.name.as_str() {
             "List" => NativeClass::List(Type::Named("T".to_owned())),
-            "Map" => NativeClass::Map(Type::Named("K".to_owned()), Type::Named("V".to_owned())),
+            "Map" => NativeClass::Map {
+                key: Type::Named("K".to_owned()),
+                value: Type::Named("V".to_owned()),
+                key_kind: None,
+            },
             "Text" => NativeClass::Text,
             "Console" => NativeClass::Console,
             "Files" => NativeClass::Files,

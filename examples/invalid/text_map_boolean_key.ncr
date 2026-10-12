@@ -1,0 +1,3 @@
+void main() {
+    Map<boolean, int> entries = new Map<boolean, int>();
+}

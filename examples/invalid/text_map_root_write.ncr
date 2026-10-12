@@ -1,0 +1,6 @@
+void main() {
+    Map<Text, int> entries = new Map<Text, int>();
+    borrow Map<Text, int> shared = entries;
+    entries.put(new Text("new"), 2);
+    println(shared.size());
+}

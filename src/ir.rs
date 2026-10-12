@@ -1,6 +1,6 @@
 //! Resolved, typed, structured IR. Moves and explicit drops are visible.
 //! ownership.rs lowers this into an analysis CFG; codegen inserts lexical drops.
-use crate::ast::{BinaryOp, UnaryOp};
+use crate::ast::{BinaryOp, MapKeyKind, UnaryOp};
 use crate::diagnostic::Span;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -71,9 +71,10 @@ pub struct Expr { pub kind: ExprKind, pub ty: Type, pub span: Span }
 pub enum ExprKind {
     Int(i32), Boolean(bool), String(String), Read(Place), Move(usize),
     Borrow { place: Place, mutable: bool },
-    /// Compiler-only direct storage access for built-in Map traversal.
+    /// Compiler-only capacity read for a structurally frozen map.
     MapCapacity(Place),
-    MapSlot { map: Place, index: Box<Expr>, kind: MapSlotKind },
+    /// Compiler-only direct Map slot access; `pair` links key/value slots to one loop loan.
+    MapSlot { map: Place, index: Box<Expr>, kind: MapSlotKind, pair: Option<usize> },
     Drop(Box<Expr>),
     /// Allocation-free interface upcast, preserving owned or borrowed status.
     Upcast { value: Box<Expr>, interface: usize, concrete: usize },
@@ -90,7 +91,7 @@ pub enum CallTarget { Function(usize), Println }
 
 /// Trusted standard-library storage, never exposed as source fields.
 #[derive(Debug, Clone, Copy)]
-pub enum NativeClass { List(Type), Map(Type, Type), Text, Console, Files, Args }
+pub enum NativeClass { List(Type), Map(MapKeyKind, Type), Text, Console, Files, Args }
 #[derive(Debug, Clone, Copy)]
 pub enum NativeMethod {
     ListNew, ListAdd, ListSize, ListCapacity, ListIsEmpty, ListGet, ListGetRef, ListGetMut,

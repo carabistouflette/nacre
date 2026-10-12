@@ -1,7 +1,17 @@
 //! The native standard-library templates are part of the trusted C backend.
 //! All source calls still pass normal type, ownership and borrowing checks.
+use crate::ast::MapKeyKind;
 use crate::codegen::ctype;
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
+
+const MAP_HASH_FINALIZER: &str = concat!(
+    "    value ^= value >> 16;\n",
+    "    value *= UINT32_C(0x7feb352d);\n",
+    "    value ^= value >> 15;\n",
+    "    value *= UINT32_C(0x846ca68b);\n",
+    "    value ^= value >> 16;\n",
+    "    return value;\n",
+);
 
 pub fn fields(program: &t::Program, class: C, class_id: usize) -> String {
     match class {
@@ -11,10 +21,26 @@ pub fn fields(program: &t::Program, class: C, class_id: usize) -> String {
         C::Console | C::Files | C::Args => "    unsigned char ncr_static_class;\n".to_owned(),
     }
 }
-pub fn map_entry_definition(program: &t::Program, class_id: usize, value: Type) -> String {
+fn map_key_type(program: &t::Program, key: MapKeyKind) -> Type {
+    match key {
+        MapKeyKind::Int => Type::Int,
+        MapKeyKind::Text => Type::Object(text_class(program).expect("native Text class accompanies Map<Text, V>")),
+    }
+}
+fn drop_map_key(program: &t::Program, key: MapKeyKind, expression: &str) -> String {
+    match key {
+        MapKeyKind::Int => String::new(),
+        MapKeyKind::Text => format!(
+            "ncr_drop_{}({expression});",
+            text_class(program).expect("native Text class accompanies Map<Text, V>"),
+        ),
+    }
+}
+pub fn map_entry_definition(program: &t::Program, class_id: usize, key: MapKeyKind, value: Type) -> String {
+    let hash = if key == MapKeyKind::Text { "    uint32_t hash;\n" } else { "" };
     format!(
-        "struct ncr_map_entry_{class_id} {{\n    int32_t key;\n    {} value;\n    bool occupied;\n}};\n",
-        ctype(program, value),
+        "struct ncr_map_entry_{class_id} {{\n    {} key;\n{}    {} value;\n    bool occupied;\n}};\n",
+        ctype(program, map_key_type(program, key)), hash, ctype(program, value),
     )
 }
 pub(crate) fn map_borrowed_value(program: &t::Program, borrow_type: Type, stored: &str) -> String {
@@ -46,13 +72,14 @@ fn drop_element(ty: Type, expression: &str) -> String {
         _ => "/* Copy value: no destructor. */".to_owned(),
     }
 }
-pub fn drop_fields(class: C) -> String {
+pub fn drop_fields(program: &t::Program, class: C) -> String {
     match class {
         C::List(element) => format!(
             "    while (p->length > 0) {{\n        --p->length;\n        {}\n    }}\n    ncr_deallocate(p->items);\n",
             drop_element(element, "p->items[p->length]")),
-        C::Map(_, value) => format!(
-            "    for (int32_t index = 0; index < p->capacity; ++index) {{\n        if (p->entries[index].occupied) {{\n            {}\n        }}\n    }}\n    ncr_deallocate(p->entries);\n",
+        C::Map(key, value) => format!(
+            "    for (int32_t index = 0; index < p->capacity; ++index) {{\n        if (p->entries[index].occupied) {{\n            {}\n            {}\n        }}\n    }}\n    ncr_deallocate(p->entries);\n",
+            drop_map_key(program, key, "p->entries[index].key"),
             drop_element(value, "p->entries[index].value")),
         C::Text => "    ncr_deallocate(p->bytes);\n".to_owned(),
         C::Console | C::Files | C::Args => String::new(),
@@ -390,6 +417,7 @@ fn borrowed_map_method(program: &t::Program, function: &t::Function, value_class
     include_str!("../stdlib/map_get_borrowed.c.in")
         .replace("@RETURN_TYPE@", &ctype(program, function.return_type))
         .replace("@MAP_METHOD@", marker(function.native.expect("native Map accessor")))
+        .replace("@QUERY_TYPE@", &ctype(program, function.params.first().expect("Map accessor key parameter").1))
         .replace("@BORROWED_VALUE@", &borrowed_value)
 }
 
@@ -413,24 +441,69 @@ fn try_get_map_method(program: &t::Program, map_class: usize, value: Type) -> St
     let (none_tag, some_tag) = option_tags(program, function, value);
     include_str!("../stdlib/map_try_get.c.in")
         .replace("@OPTION_TYPE@", &ctype(program, function.return_type))
+        .replace("@QUERY_TYPE@", &ctype(program, function.params.first().expect("Map.tryGet key parameter").1))
         .replace("@NONE_TAG@", &none_tag.to_string())
         .replace("@SOME_TAG@", &some_tag.to_string())
         .replace("@ELEMENT@", &ctype(program, value))
 }
 
-fn map_implementation(program: &t::Program, map_class: usize, key: Type, value: Type) -> String {
-    assert_eq!(key, Type::Int, "Map keys are compiler-validated int values");
+fn map_implementation(program: &t::Program, map_class: usize, key: MapKeyKind, value: Type) -> String {
+    let key_type = map_key_type(program, key);
     let put = map_native_function(program, map_class, |method| matches!(method, M::MapPut))
         .expect("compiler-owned Map.put method is present");
+    assert_eq!(put.params.first().expect("Map.put key parameter").1, key_type,
+        "Map.put must take an owned key");
+    let contains = map_native_function(program, map_class, |method| matches!(method, M::MapContainsKey))
+        .expect("compiler-owned Map.containsKey method is present");
+    let query_type = contains.params.first().expect("Map.containsKey key parameter").1;
     let remove = map_native_function(program, map_class, |method| matches!(method, M::MapTryRemove))
         .expect("compiler-owned Map.tryRemove method is present");
+    assert_eq!(remove.params.first().expect("Map.tryRemove key parameter").1, query_type,
+        "Map query methods must share the specialized key ABI");
     assert_eq!(put.return_type, remove.return_type,
         "Map.put and tryRemove must return the same Option specialization");
     let (none_tag, some_tag) = option_tags(program, put, value);
     let borrowed = borrowed_map_methods(program, map_class, value);
     let try_get = try_get_map_method(program, map_class, value);
+    let (hash_query_prefix, key_equal, old_hash, scan_hash, store_hash) = match key {
+        MapKeyKind::Int => (
+            "    uint32_t value = (uint32_t)key;\n",
+            "entry->key == key",
+            "ncr_map_hash_@ID@(old->key)",
+            "ncr_map_hash_@ID@(entry->key)",
+            "",
+        ),
+        MapKeyKind::Text => (
+            concat!(
+                "    uint32_t value = UINT32_C(2166136261);\n",
+                "    for (int32_t index = 0; index < key->length; ++index) {\n",
+                "        value ^= (uint32_t)key->bytes[index];\n",
+                "        value *= UINT32_C(16777619);\n",
+                "    }\n",
+                "    value ^= (uint32_t)key->length;\n",
+            ),
+            concat!(
+                "entry->hash == hash && ",
+                "entry->key->length == key->length && ",
+                "(key->length == 0 || memcmp(entry->key->bytes, key->bytes, (size_t)key->length) == 0)",
+            ),
+            "old->hash",
+            "entry->hash",
+            "p->entries[target].hash = hash;",
+        ),
+    };
     include_str!("../stdlib/map.c.in")
         .replace("@ENTRY_TYPE@", &format!("struct ncr_map_entry_{map_class}"))
+        .replace("@KEY_TYPE@", &ctype(program, key_type))
+        .replace("@QUERY_TYPE@", &ctype(program, query_type))
+        .replace("@HASH_QUERY_PREFIX@", hash_query_prefix)
+        .replace("@HASH_FINALIZER@", MAP_HASH_FINALIZER)
+        .replace("@KEY_EQUAL@", key_equal)
+        .replace("@OLD_HASH@", old_hash)
+        .replace("@SCAN_HASH@", scan_hash)
+        .replace("@STORE_HASH@", store_hash)
+        .replace("@DROP_DUPLICATE_KEY@", &drop_map_key(program, key, "key"))
+        .replace("@DROP_KEY_AT_INDEX@", &drop_map_key(program, key, "p->entries[index].key"))
         .replace("@ELEMENT@", &ctype(program, value))
         .replace("@DROP_VALUE@", &drop_element(value, "p->entries[index].value"))
         .replace("@OPTION_TYPE@", &ctype(program, put.return_type))

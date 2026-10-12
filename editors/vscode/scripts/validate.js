@@ -96,6 +96,12 @@ function sourceForSnippet(name, body) {
     case 'Shared map traversal':
     case 'Exclusive map traversal':
       return `class Contact {}\nvoid main() {\nMap<int,Contact> entries = new Map<int,Contact>();\n${body}\n}\n`;
+    case 'Text-keyed map':
+      return `void main() {\n${body}\n}\n`;
+    case 'Shared text key with copied value':
+      return `void main() {\nMap<Text,int> counts = new Map<Text,int>();\ncounts.put(new Text("pear"), 4);\nText query = new Text("pear");\nif (counts.containsKey(query)) { println("found"); }\nmatch (counts.tryGet(query)) { Some(existing) { println(existing); } None {} }\n${body}\n}\n`;
+    case 'Mutable value with shared text key':
+      return `class Counter {\n    int value;\n    Counter(int value) { this.value = value; }\n    public void increment() { this.value = this.value + 1; }\n}\nvoid main() {\nMap<Text,Counter> counters = new Map<Text,Counter>();\ncounters.put(new Text("pear"), new Counter(1));\n${body}\n}\n`;
     case 'Recoverable list removal':
       return `void main() {\nList<int> items = new List<int>();\n${body}\n}\n`;
     case 'Shared map value':
@@ -139,6 +145,33 @@ function validateSnippetsWithCompiler(snippets) {
       });
       assert.ifError(result.error);
       assert.equal(result.status, 0, `snippet ${name} failed nacre check:\n${result.stderr || result.stdout}`);
+    }
+    const invalidTextKeySources = [
+      {
+        name: 'mutable text map key',
+        source: `void main() {\nMap<Text,int> entries = new Map<Text,int>();\nentries.put(new Text("pear"), 1);\nfor (borrow mut Text key, int value : entries) {}\n}\n`
+      },
+      {
+        name: 'owned text map key',
+        source: `void main() {\nMap<Text,int> entries = new Map<Text,int>();\nentries.put(new Text("pear"), 1);\nfor (Text key, int value : entries) {}\n}\n`
+      },
+      {
+        name: 'assignment to shared text map key',
+        source: `void main() {\nMap<Text,int> entries = new Map<Text,int>();\nentries.put(new Text("pear"), 1);\nfor (borrow Text key, int value : entries) { key = new Text("plum"); }\n}\n`
+      }
+    ];
+    for (const { name, source } of invalidTextKeySources) {
+      const sourcePath = path.join(temporaryDirectory, `${name.replace(/[^a-z0-9]+/g, '-')}.ncr`);
+      fs.writeFileSync(sourcePath, source);
+      const result = spawnSync(compiler, ['check', sourcePath], {
+        cwd: repositoryRoot,
+        encoding: 'utf8'
+      });
+      assert.ifError(result.error);
+      assert(
+        Number.isInteger(result.status) && result.status !== 0,
+        `compiler accepted ${name}:\n${result.stderr || result.stdout}`
+      );
     }
   } finally {
     fs.rmSync(temporaryDirectory, { recursive: true, force: true });
@@ -293,6 +326,31 @@ async function main() {
   assertHasScope(scopesAt(mapTraversal, 2, 'Contact'), 'entity.name.type.nacre', 'exclusive map value type');
   assertLacksScope(scopesAt(mapTraversal, 1, 'Contact'), 'variable.other', 'shared map value type');
   assertLacksScope(scopesAt(mapTraversal, 2, 'Contact'), 'variable.other', 'exclusive map value type');
+  const textMapTraversal = tokenize(grammar, [
+    'for (borrow Text key, int count : counts) {}',
+    'for (borrow Text key, borrow Counter value : counters) {}',
+    'for (borrow Text key, borrow mut Counter value : counters) {} // borrow mut Text key',
+    'println("borrow mut Text key");'
+  ].join('\n'));
+  for (let line = 0; line < 3; line += 1) {
+    assertHasScope(scopesAt(textMapTraversal, line, 'for'), 'keyword.control.nacre', 'text-key traversal keyword');
+    assertHasScope(scopesAt(textMapTraversal, line, 'key'), 'variable.other.nacre', 'text map key binding');
+    assertLacksScope(scopesAt(textMapTraversal, line, 'key'), 'storage.modifier', 'readonly text map key binding');
+    assertHasScope(scopesAt(textMapTraversal, line, line === 0 ? 'count' : 'value'), 'variable.other.nacre', 'text map value binding');
+  }
+  assertHasScope(scopesAt(textMapTraversal, 0, 'borrow'), 'storage.modifier.ownership.nacre', 'shared Text key modifier');
+  assertHasScope(scopesAt(textMapTraversal, 0, 'Text'), 'support.type.builtin.nacre', 'Text map key type');
+  assertHasScope(scopesAt(textMapTraversal, 0, 'int'), 'storage.type.primitive.nacre', 'copied Text map value type');
+  assertHasScope(scopesAt(textMapTraversal, 1, 'borrow', 1), 'storage.modifier.ownership.nacre', 'shared borrowed map value modifier');
+  assertHasScope(scopesAt(textMapTraversal, 1, 'Counter'), 'entity.name.type.nacre', 'shared borrowed map value type');
+  assertHasScope(scopesAt(textMapTraversal, 2, 'borrow', 1), 'storage.modifier.ownership.nacre', 'exclusive borrowed map value modifier');
+  assertHasScope(scopesAt(textMapTraversal, 2, 'mut'), 'storage.modifier.ownership.nacre', 'exclusive borrowed map value mut modifier');
+  assertHasScope(scopesAt(textMapTraversal, 2, 'Counter'), 'entity.name.type.nacre', 'exclusive borrowed map value type');
+  assertLacksScope(scopesAt(textMapTraversal, 2, 'borrow', 2), 'storage.modifier', 'commented ownership word');
+  assertLacksScope(scopesAt(textMapTraversal, 2, 'mut', 1), 'storage.modifier', 'commented mut word');
+  assertLacksScope(scopesAt(textMapTraversal, 3, 'borrow'), 'storage.modifier', 'string ownership word');
+  assertLacksScope(scopesAt(textMapTraversal, 3, 'mut'), 'storage.modifier', 'string mut word');
+
 
   const integerMap = tokenize(grammar, [
     'Map<int,Text> entries = new Map<int,Text>();',

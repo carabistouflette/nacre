@@ -10,8 +10,28 @@ Implementation and review must respect the
 [Rust Design Patterns design principles](https://rust-unofficial.github.io/patterns/additional_resources/design-principles.html):
 composition, focused responsibilities, encapsulation, explicit contracts,
 side-effect-free queries, DRY/KISS and predictable behavior. Prefer existing
-representations and shared cleanup paths over speculative abstractions. Document
-necessary tradeoffs, including commands that return transferred owners.
+representations and shared cleanup paths over speculative abstractions.
+When implementation or review encounters a violation, record concrete evidence
+and a bounded remediation. Fix relevant issues with the current change; plan
+unrelated debt separately. Resolve conflicting contracts explicitly rather than
+merely label avoidable violations as tradeoffs.
+
+## Encountered design remediation
+
+- Map-key support was independently restricted in generic specialization,
+  native type checking and C generation. Centralize key classification and pass
+  checked metadata downstream; do not add another repeated int-or-Text whitelist.
+- Existing probing/insertion recomputed a key hash, and growth/deletion derived
+  bucket homes by rehashing stored keys. Hash each operation's query once; cache
+  stored Text hashes so string bytes are not repeatedly scanned. Keep one map
+  algorithm with narrow key operations rather than duplicate storage code.
+- Stale rejection-fixture comments described all non-int keys as unsupported.
+  Update the contract comments and reject genuinely unsupported keys while adding
+  positive Text coverage; do not preserve obsolete restrictions through tests.
+- Typed map-header grammar already supported borrowed nominal key syntax, but
+  editor checks only exercised integer keys. Extend corpus/query/tokenizer and
+  compiler contract checks for Text keys and mutable values; reuse the existing
+  grammar production rather than introduce a parallel syntax.
 
 ## Recently shipped: built-in map traversal
 

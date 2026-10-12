@@ -1,0 +1,8 @@
+class Parcel {
+    void increment() {}
+}
+void main() {
+    Map<Text, Parcel> entries = new Map<Text, Parcel>();
+    entries.put(new Text("parcel"), new Parcel());
+    for (borrow Text key, borrow mut Parcel parcel : entries) { entries.size(); parcel.increment(); }
+}

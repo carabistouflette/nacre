@@ -159,11 +159,20 @@ impl Expander {
                     class.methods.retain(|method| !matches!(method.name.as_str(), "get" | "tryGet"));
                 }
             }
-            Some(a::NativeClass::Map(key, value)) => {
+            Some(a::NativeClass::Map { key, value, key_kind }) => {
                 *key = self.ty(key, env, class.span, 0)?;
                 *value = self.ty(value, env, class.span, 0)?;
-                if !matches!(key, Type::Int) {
-                    return Err(Diagnostic::new(class.span, "[E5004] Map<K, V> exige int comme type de cle"));
+                let kind = a::MapKeyKind::classify(key)
+                    .ok_or_else(|| Diagnostic::new(class.span, "[E5004] Map<K, V> requires int or owned Text keys"))?;
+                *key_kind = Some(kind);
+                if let Some(query_type) = kind.query_type() {
+                    for method in &mut class.methods {
+                        if matches!(method.name.as_str(), "containsKey" | "tryRemove" | "tryGet" | "getRef" | "getMut") {
+                            let key_param = method.params.first_mut()
+                                .expect("compiler-owned Map query takes its key as first parameter");
+                            key_param.ty = query_type.clone();
+                        }
+                    }
                 }
                 // Primitive values copy; nominal values are only exposed through
                 // receiver-bound loans, never through a copied Option payload.

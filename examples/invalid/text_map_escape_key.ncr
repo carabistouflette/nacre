@@ -1,0 +1,14 @@
+class LocalIndex {
+    private Text fallback = new Text("fallback");
+    readonly borrow Text escaped() {
+        Map<Text, int> entries = new Map<Text, int>();
+        entries.put(new Text("local"), 1);
+        for (borrow Text key, int value : entries) { return key; }
+        return this.fallback;
+    }
+}
+void main() {
+    LocalIndex index = new LocalIndex();
+    borrow Text key = index.escaped();
+    key.print();
+}

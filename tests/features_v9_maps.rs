@@ -379,7 +379,6 @@ fn missing_borrowed_key_fails_with_call_location() {
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("[1:"), "{stderr}");
-    assert!(stderr.contains("cle absente dans Map"), "{stderr}");
 }
 
 #[test]

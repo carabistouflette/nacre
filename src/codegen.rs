@@ -132,8 +132,8 @@ fn class_support(program: &t::Program) -> String {
     // Map entries embed V by value, so define them only after all object, enum,
     // interface, and vtable layouts are complete, but before native drop bodies.
     for class in &program.classes {
-        if let Some(t::NativeClass::Map(_, value)) = class.native {
-            out.push_str(&crate::stdlib_codegen::map_entry_definition(program, class.id, value));
+        if let Some(t::NativeClass::Map(key, value)) = class.native {
+            out.push_str(&crate::stdlib_codegen::map_entry_definition(program, class.id, key, value));
         }
     }
     for class in &program.classes {
@@ -160,7 +160,7 @@ fn class_support(program: &t::Program) -> String {
             for (id, ty) in class.fields.iter().enumerate().rev() {
                 if let Type::Object(child) = ty { out.push_str(&format!("    ncr_drop_{child}(p->ncr_f_{id});\n")); }
             }
-            if let Some(native) = class.native { out.push_str(&crate::stdlib_codegen::drop_fields(native)); }
+            if let Some(native) = class.native { out.push_str(&crate::stdlib_codegen::drop_fields(program, native)); }
             out.push_str("    ncr_deallocate(p);\n");
         }
         out.push_str("}\n");
@@ -428,7 +428,7 @@ impl Emitter<'_> {
                 let capacity = crate::stdlib_codegen::map_capacity_expression(&map);
                 self.bind(expr.ty, &capacity)
             }
-            E::MapSlot { map, index, kind } => {
+            E::MapSlot { map, index, kind, .. } => {
                 let index = self.expression(index);
                 let map = place_text(map);
                 let slot = crate::stdlib_codegen::map_slot_expression(

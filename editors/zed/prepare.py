@@ -51,7 +51,7 @@ def main():
     )
     # JSON strings are valid TOML basic strings, including escaped paths.
     manifest = '\n'.join([
-        'id = "nacre"', 'name = "Nacre"', 'version = "0.6.0"',
+        'id = "nacre"', 'name = "Nacre"', 'version = "0.7.0"',
         'schema_version = 1', 'authors = ["Nacre contributors"]',
         'description = "Nacre highlighting and language server support"',
         'snippets = ["./snippets/nacre.json"]',

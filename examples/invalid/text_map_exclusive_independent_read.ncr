@@ -1,0 +1,11 @@
+class Parcel {
+    void increment() {}
+}
+void main() {
+    Map<Text, Parcel> entries = new Map<Text, Parcel>();
+    entries.put(new Text("parcel"), new Parcel());
+    Text query = new Text("parcel");
+    borrow mut Parcel parcel = entries.getMut(query);
+    entries.size();
+    parcel.increment();
+}

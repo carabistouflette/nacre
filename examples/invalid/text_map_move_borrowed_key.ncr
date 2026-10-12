@@ -1,0 +1,6 @@
+void main() {
+    Map<Text, int> source = new Map<Text, int>();
+    Map<Text, int> destination = new Map<Text, int>();
+    source.put(new Text("stored"), 1);
+    for (borrow Text key, int value : source) { destination.put(key, value); }
+}

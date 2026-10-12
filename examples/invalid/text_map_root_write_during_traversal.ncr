@@ -1,0 +1,5 @@
+void main() {
+    Map<Text, int> entries = new Map<Text, int>();
+    entries.put(new Text("first"), 1);
+    for (borrow Text key, int value : entries) { entries.put(new Text("second"), value); }
+}

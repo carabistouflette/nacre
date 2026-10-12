@@ -1,0 +1,74 @@
+class StockItem {
+    private Text label;
+    private int units;
+
+    StockItem(Text label, int quantity) {
+        this.label = label;
+        this.units = quantity;
+    }
+
+    public readonly int quantity() { return this.units; }
+    public readonly boolean labelIs(borrow Text candidate) { return this.label.equals(candidate); }
+    public void receive(int amount) { this.units = this.units + amount; }
+}
+
+class Inventory {
+    private Map<Text, StockItem> products = new Map<Text, StockItem>();
+
+    public void register(Text sku, Text label, int quantity) {
+        this.products.put(sku, new StockItem(label, quantity));
+    }
+
+    public readonly boolean contains(borrow Text sku) {
+        return this.products.containsKey(sku);
+    }
+
+    public readonly int quantityFor(borrow Text sku) {
+        borrow StockItem item = this.products.getRef(sku);
+        return item.quantity();
+    }
+
+    public readonly boolean labelMatches(borrow Text sku, borrow Text label) {
+        borrow StockItem item = this.products.getRef(sku);
+        return item.labelIs(label);
+    }
+
+    public void restock(borrow Text sku, int amount) {
+        borrow mut StockItem item = this.products.getMut(sku);
+        item.receive(amount);
+    }
+
+    public readonly int totalUnits() {
+        int total = 0;
+        for (borrow Text sku, borrow StockItem item : this.products) {
+            total = total + item.quantity();
+        }
+        return total;
+    }
+
+    public readonly int activeSkuCount() {
+        int count = 0;
+        for (borrow Text sku, borrow StockItem item : this.products) {
+            if (sku.byteLength() > 0 && item.quantity() > 0) {
+                count = count + 1;
+            }
+        }
+        return count;
+    }
+}
+
+void main() {
+    Inventory inventory = new Inventory();
+    inventory.register(new Text("coffee"), new Text("Coffee beans"), 12);
+    inventory.register(new Text("tea"), new Text("Jasmine tea"), 5);
+
+    Text coffeeSku = new Text("coffee");
+    Text coffeeLabel = new Text("Coffee beans");
+    println(inventory.contains(coffeeSku));
+    println(inventory.labelMatches(coffeeSku, coffeeLabel));
+    println(inventory.quantityFor(coffeeSku));
+
+    inventory.restock(coffeeSku, 3);
+    println(inventory.totalUnits());
+    println(inventory.activeSkuCount());
+}

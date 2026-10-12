@@ -32,14 +32,14 @@ class List<T> {
 
 class Map<K, V> {
     public Map() {}
-    public readonly boolean containsKey(int key) {}
+    public readonly boolean containsKey(K key) {}
     public readonly int size() {}
     public readonly boolean isEmpty() {}
-    public Option<V> put(int key, V value) {}
-    public Option<V> tryRemove(int key) {}
-    public readonly Option<V> tryGet(int key) {}
-    public readonly borrow V getRef(int key) {}
-    public borrow mut V getMut(int key) {}
+    public Option<V> put(K key, V value) {}
+    public Option<V> tryRemove(K key) {}
+    public readonly Option<V> tryGet(K key) {}
+    public readonly borrow V getRef(K key) {}
+    public borrow mut V getMut(K key) {}
     public void clear() {}
 }
 

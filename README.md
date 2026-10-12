@@ -2,7 +2,7 @@
 
 Nacre is an experimental Rust compiler with a Java-like syntax and the pipeline
 **Nacre → C11 → GCC/Clang → native executable**. No JVM, garbage collector, or
-reference counting is used. Cargo package/CLI: `nacre` **0.11.0**; source files:
+reference counting is used. Cargo package/CLI: `nacre` **0.12.0**; source files:
 `.ncr`; project marker: `nacre.json`. Rust **1.74** is the declared minimum.
 
 Nacre provides `Map<int,V>` with recoverable ownership transfer and receiver-bound
@@ -243,7 +243,7 @@ require a C compiler. See [PROJECTS.md](docs/PROJECTS.md).
 
 ## VS Code and Zed
 
-Packages **0.6.0**, grammar **0.5.0**, and 27 snippets cover integer maps,
+Packages **0.7.0**, grammar **0.6.0**, and 30 snippets cover integer/text maps,
 copied/shared/exclusive traversal, and recoverable collection operations.
 Both clients launch `nacre lsp` and use the real compiler for diagnostics.
 
@@ -256,7 +256,7 @@ npm --prefix editors/vscode test
 npm --prefix editors/vscode run package
 ```
 
-Install `editors/vscode/nacre-0.6.0.vsix`; configure `nacre.serverPath` if the
+Install `editors/vscode/nacre-0.7.0.vsix`; configure `nacre.serverPath` if the
 compiler is not on PATH. The `Nacre: Restart Language Server` command supports
 recovery after failed startup and serializes lifecycle operations.
 

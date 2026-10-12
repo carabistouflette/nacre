@@ -235,6 +235,35 @@
     ],
     "description": "Mutate affine map values under an exclusive whole-map loan"
   },
+  "Text-keyed map": {
+    "prefix": "textmap",
+    "body": [
+      "Map<Text,int> ${1:counts} = new Map<Text,int>();"
+    ],
+    "description": "Declare a map that owns exact Text keys"
+  },
+  "Shared text key with copied value": {
+    "prefix": "textmapfor",
+    "body": [
+      "for (borrow Text ${1:key}, int ${2:count} : ${3:counts}) {",
+      "    ${1:key}.print();",
+      "    println(${2:count});",
+      "    $0",
+      "}"
+    ],
+    "description": "Read an owned Text key and copy its primitive value"
+  },
+  "Mutable value with shared text key": {
+    "prefix": "textmapforeachmut",
+    "body": [
+      "for (borrow Text ${1:key}, borrow mut Counter ${2:counter} : ${3:counters}) {",
+      "    ${1:key}.print();",
+      "    ${2:counter}.increment();",
+      "    $0",
+      "}"
+    ],
+    "description": "Keep the Text key shared while mutating its borrowed value"
+  },
   "Recoverable map removal": {
     "prefix": "mapremove",
     "body": [

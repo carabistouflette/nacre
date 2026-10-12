@@ -47,6 +47,8 @@ struct Analyzer<'a> {
     loans: Vec<Loan>,
     bindings: HashMap<usize, Origin>,
     views: HashMap<usize, Vec<Option<Origin>>>,
+    // Map row projections share one scoped origin, not independent slot loans.
+    map_pairs: Vec<(usize, Origin)>,
     guards: Vec<Guard>,
     trace: String,
     work: usize,
@@ -59,7 +61,7 @@ impl<'a> Analyzer<'a> {
             else { None }
         }).collect();
         Self { program, function, source, loans: Vec::new(), bindings,
-            views: HashMap::new(), guards: Vec::new(), trace: String::new(), work: 0 }
+            views: HashMap::new(), map_pairs: Vec::new(), guards: Vec::new(), trace: String::new(), work: 0 }
     }
 
     fn label(&self, root: Root) -> String {
@@ -189,6 +191,7 @@ impl<'a> Analyzer<'a> {
     }
     fn block(&mut self, block: &t::Block) -> Result<(), Diagnostic> {
         let mark = self.loans.len();
+        let pair_mark = self.map_pairs.len();
         let mut declared = Vec::new();
         for stmt in block {
             self.statement(stmt)?;
@@ -197,6 +200,7 @@ impl<'a> Analyzer<'a> {
         // References cannot escape this scope; release their static loans
         // before validating reverse-declaration-order owner cleanup.
         self.end_since(mark, &HashSet::new(), "scope exit");
+        self.map_pairs.truncate(pair_mark);
         for (id, ty) in declared.into_iter().rev() {
             if ty.is_object() {
                 self.access(Origin { root: Root::Local(id), via: None }, Access::Destroy,
@@ -352,10 +356,22 @@ impl<'a> Analyzer<'a> {
             E::Read(place) => self.borrow(place, mutable, expr.span, label),
             E::Upcast { value, .. } => self.reference(value, label),
             E::Call { .. } => Ok(self.call(expr, Some(label))?.expect("borrowed method has receiver")),
-            E::MapSlot { map, index, .. } => {
+            E::MapSlot { map, index, pair, .. } => {
                 self.expression(index)?;
                 self.projections(map, expr.span)?;
-                self.loan(self.origin(map), mutable, expr.span, label)
+                let parent = self.origin(map);
+                if let Some(pair) = pair {
+                    if let Some((_, origin)) = self.map_pairs.iter().rev().find(|(id, _)| id == pair) {
+                        return Ok(*origin);
+                    }
+                    // The value binding controls pair mutability; its key stays a shared typed view.
+                    let mutable = matches!(map.ty, Type::Borrow { mutable: true, .. });
+                    let origin = self.loan(parent, mutable, expr.span, label)?;
+                    self.map_pairs.push((*pair, origin));
+                    Ok(origin)
+                } else {
+                    self.loan(parent, mutable, expr.span, label)
+                }
             }
             _ => unreachable!("borrowed values are places, upcasts, receiver calls, or Map traversal slots"),
         }

@@ -126,6 +126,55 @@ void main() {
         assert {"for", "borrow", "mut"}.issubset(set(captured_text.get("keyword", [])))
         assert not {"item", "key", "value"} & set(captured_text.get("type", []))
         print("Verified list/map binding captures for key/value types, names, borrow modes, and lexical scope.")
+        text_map_traversal = b'''void main() {
+    for (borrow Text key, int count : counts) {}
+    for (borrow Text key, borrow Counter shared : counters) {}
+    for (borrow Text key, borrow mut Counter writable : counters) {}
+    // borrow mut Text key
+    println("borrow mut Text key");
+}'''
+        tree = parser.parse(text_map_traversal)
+        assert not tree.root_node.has_error, tree.root_node
+        binding_query = Query(language, """
+            (for_statement
+              key_type: (borrowed_type) @key_type
+              key: (identifier) @key_name
+              value_type: (_) @value_type
+              value: (identifier) @value_name)
+        """)
+        bindings = QueryCursor(binding_query).captures(tree.root_node)
+        binding_text = {
+            capture: [text_map_traversal[node.start_byte:node.end_byte].decode() for node in nodes]
+            for capture, nodes in bindings.items()
+        }
+        assert binding_text.get("key_type") == ["borrow Text"] * 3, binding_text
+        assert binding_text.get("key_name") == ["key"] * 3, binding_text
+        assert sorted(binding_text.get("value_type", [])) == sorted(["int", "borrow Counter", "borrow mut Counter"]), binding_text
+        assert sorted(binding_text.get("value_name", [])) == ["count", "shared", "writable"], binding_text
+
+        captures = QueryCursor(queries["highlights"]).captures(tree.root_node)
+        captured_text = {
+            capture: [text_map_traversal[node.start_byte:node.end_byte].decode() for node in nodes]
+            for capture, nodes in captures.items()
+        }
+        assert sorted(captured_text.get("variable.parameter", [])) == sorted([
+            "key", "count", "key", "shared", "key", "writable"
+        ]), captured_text.get("variable.parameter")
+        assert captured_text.get("type", []).count("Text") == 3
+        assert captured_text.get("type", []).count("Counter") == 2
+        assert captured_text.get("type.builtin", []).count("int") == 1
+        assert {"borrow", "mut"}.issubset(set(captured_text.get("keyword", [])))
+        assert not {"key", "count", "shared", "writable"} & set(captured_text.get("type", []))
+        for capture in ["comment", "string"]:
+            contents = [
+                (node.start_byte, node.end_byte)
+                for node in captures.get(capture, [])
+            ]
+            for node in captures.get("keyword", []):
+                assert not any(start <= node.start_byte < end for start, end in contents), (
+                    f"keyword {text_map_traversal[node.start_byte:node.end_byte]!r} leaked into {capture}"
+                )
+        print("Verified shared Text key/copy and borrowed value modes, query captures, and comment/string scope isolation.")
         print(f"Zed smoke: {count} examples parsed without errors; all {len(queries)} queries executed.")
         print("Verified ownership keywords, enum/match syntax, variant construction, consuming bindings, string/comment isolation, escapes, types, properties, and Sudoku outline.")
 

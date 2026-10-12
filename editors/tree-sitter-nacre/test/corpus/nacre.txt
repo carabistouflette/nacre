@@ -97,3 +97,45 @@ void main() {
         (identifier)
         (identifier)
         (block)))))
+
+==================
+Text-key map traversal headers
+==================
+void main() {
+    for (borrow Text key, int count : counts) {}
+    for (borrow Text key, borrow Counter shared : counters) {}
+    for (borrow Text key, borrow mut Counter writable : counters) {}
+}
+---
+(source_file
+  (function_declaration
+    (primitive_type)
+    (identifier)
+    (parameter_list)
+    (block
+      (for_statement
+        (borrowed_type
+          (type_identifier))
+        (identifier)
+        (primitive_type)
+        (identifier)
+        (identifier)
+        (block))
+      (for_statement
+        (borrowed_type
+          (type_identifier))
+        (identifier)
+        (borrowed_type
+          (type_identifier))
+        (identifier)
+        (identifier)
+        (block))
+      (for_statement
+        (borrowed_type
+          (type_identifier))
+        (identifier)
+        (borrowed_type
+          (type_identifier))
+        (identifier)
+        (identifier)
+        (block)))))

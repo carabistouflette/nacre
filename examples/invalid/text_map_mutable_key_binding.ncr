@@ -1,0 +1,5 @@
+void main() {
+    Map<Text, int> entries = new Map<Text, int>();
+    entries.put(new Text("stored"), 1);
+    for (borrow mut Text key, int value : entries) { key.clear(); }
+}

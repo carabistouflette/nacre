@@ -2,7 +2,7 @@
   "name": "nacre",
   "displayName": "Nacre",
   "description": "Syntax highlighting, language editing support, snippets, and language server support for Nacre.",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "publisher": "nacre",
   "license": "MIT",
   "main": "./dist/extension.js",

@@ -3,11 +3,30 @@ use crate::diagnostic::Span;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Type { Int, Boolean, String, Void, Named(String), Applied { name: String, args: Vec<Type> }, Borrow { name: String, args: Vec<Type>, mutable: bool } }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MapKeyKind { Int, Text }
+impl MapKeyKind {
+    /// The complete set of source-level Map key types, classified at specialization.
+    pub fn classify(ty: &Type) -> Option<Self> {
+        match ty {
+            Type::Int => Some(Self::Int),
+            Type::Named(name) if name == "Text" => Some(Self::Text),
+            _ => None,
+        }
+    }
+    /// Text lookups borrow their key; integer query parameters already copy.
+    pub fn query_type(self) -> Option<Type> {
+        match self {
+            Self::Int => None,
+            Self::Text => Some(Type::Borrow { name: "Text".to_owned(), args: Vec::new(), mutable: false }),
+        }
+    }
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Visibility { Public, Private }
 #[derive(Debug, Clone)]
 pub struct Program { pub functions: Vec<Function>, pub classes: Vec<Class> }
 #[derive(Debug, Clone)]
-pub enum NativeClass { List(Type), Map(Type, Type), Text, Console, Files, Args }
+pub enum NativeClass { List(Type), Map { key: Type, value: Type, key_kind: Option<MapKeyKind> }, Text, Console, Files, Args }
 #[derive(Debug, Clone)]
 pub struct Variant { pub name: String, pub fields: Vec<Type>, pub span: Span }
 #[derive(Debug, Clone)]
