@@ -13,7 +13,7 @@ side-effect-free queries, DRY/KISS and predictable behavior. Prefer existing
 representations and shared cleanup paths over speculative abstractions. Document
 necessary tradeoffs, including commands that return transferred owners.
 
-## Current work: built-in map traversal
+## Recently shipped: built-in map traversal
 
 [MAP_TRAVERSAL.md](MAP_TRAVERSAL.md) defines copied/shared/exclusive two-binding
 loops over integer maps. Keep whole-root lexical loans, direct storage scanning,

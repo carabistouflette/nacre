@@ -108,10 +108,17 @@ records and validates relationships before replacing live state.
 
 ## Remote source workflow
 
-The previous exact source workflow passed for 0.10.0:
-[run 38312906936](https://github.com/carabistouflette/nacre/actions/runs/38312906936).
-That historical run is not a 0.11.0 claim. Release evidence records the exact
-source commit and workflow; evidence-only follow-ups do not relabel source hashes.
+All six jobs passed for source commit
+`3799b28f099582054d5c1320c2fee814c8b97c7c`:
+[run 38320069934](https://github.com/carabistouflette/nacre/actions/runs/38320069934).
+The matrix covers Rust 1.74/stable × GCC/Clang, editors/locked WASI, and real
+nightly fuzzing. Evidence-only follow-ups change docs/checksums, not executable
+sources. Non-failing hosted warnings concern Node 20 action deprecation and the
+upcoming ubuntu-latest image migration.
+
+The historical 0.10.0 workflow remains
+[run 38312906936](https://github.com/carabistouflette/nacre/actions/runs/38312906936);
+it is not relabeled as current-release evidence.
 
 ## Boundaries and publication
 
