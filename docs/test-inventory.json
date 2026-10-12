@@ -3,20 +3,20 @@
   "rust_tests_executed": false,
   "explicitly_ignored_llvm_tests": 2,
   "counts": {
-    "tests/borrowing_diagnostics.rs": 12,
-    "tests/borrowing_frontend.rs": 133,
+    "tests/borrowing_diagnostics.rs": 8,
+    "tests/borrowing_frontend.rs": 132,
     "tests/borrowing_native.rs": 46,
-    "tests/cli.rs": 28,
+    "tests/cli.rs": 25,
     "tests/features_v4_frontend.rs": 109,
-    "tests/features_v4_native.rs": 53,
+    "tests/features_v4_native.rs": 54,
     "tests/features_v4_tools.rs": 19,
     "tests/features_v5_frontend.rs": 73,
     "tests/features_v5_native.rs": 44,
     "tests/flow_diagnostics.rs": 8,
     "tests/frontend.rs": 68,
     "tests/native.rs": 25,
-    "tests/objects_frontend.rs": 96,
-    "tests/objects_native.rs": 40,
+    "tests/objects_frontend.rs": 94,
+    "tests/objects_native.rs": 41,
     "tests/ownership_frontend.rs": 81,
     "tests/ownership_native.rs": 41,
     "tests/project_v5.rs": 33,
@@ -25,8 +25,11 @@
     "tests/lsp_v6.rs": 1,
     "tests/sums_v6.rs": 6,
     "tests/io_v6.rs": 13,
+    "tests/atomic_files.rs": 6,
+    "tests/features_v7.rs": 18,
     "src/ownership.rs": 4,
-    "src/project.rs": 2
+    "src/project.rs": 2,
+    "src/lsp.rs": 5
   },
-  "total": 943
+  "total": 964
 }

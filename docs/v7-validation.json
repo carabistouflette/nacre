@@ -11,8 +11,7 @@
     "features": [
       "fuzzing"
     ],
-    "command": "cargo test --offline --locked --features fuzzing --no-fail-fast",
-    "log": "artifact://545"
+    "command": "cargo test --offline --locked --features fuzzing --no-fail-fast"
   },
   "clippy": "all targets, fuzzing feature, -D warnings passed",
   "msrv": "Rust 1.74.0 all-target locked offline check passed",
@@ -93,7 +92,6 @@
     },
     "observed_crashes": 0,
     "observed_timeouts": 0,
-    "log": "artifact://482",
     "scope": "Real bounded compiler/frontend and framing campaigns, not a general safety proof"
   },
   "editor_packages": {

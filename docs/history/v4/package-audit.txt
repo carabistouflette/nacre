@@ -1,9 +1,0 @@
-V2 test sources are in sync.
-V3 test sources are in sync.
-V4 test sources are in sync.
-{
-  "scope": "packaging checks only",
-  "status": "passed",
-  "include_str_paths": 40,
-  "declared_rust_tests_not_executed": 766
-}

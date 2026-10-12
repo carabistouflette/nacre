@@ -12,7 +12,7 @@ complete contact-book application using atomic persistence.
 
 V6 stabilization was completed first: actual VS Code/Zed acceptance, private
 remote CI, real bounded frontend/framing fuzzing, atomic saves, and the clean
-Nacre cutover. Captured historical reports retain their original outputs.
+Nacre cutover. Obsolete identity artifacts and reports are removed.
 
 ## Maintain correctness before expanding scope
 

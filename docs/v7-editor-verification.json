@@ -1,0 +1,21 @@
+{
+  "release": "Nacre 0.8.0",
+  "status": "passed",
+  "scope": "Actual desktop applications, not headless tokenizer substitutes",
+  "compiler": {"observed_version": "nacre 0.8.0", "repository_binary": "target/debug/nacre"},
+  "vscode": {
+    "observed_version": "1.141.0",
+    "commit": "2a59476c9bfcb90b3ddc372c36762471b7dfad1c",
+    "extension": "nacre.nacre@0.3.0",
+    "source_package": "editors/vscode/nacre-0.3.0.vsix",
+    "verified": ["V7 syntax colors and .ncr language association", "E3001 for remove during a live element borrow", "diagnostic clearing after shortening lexical scope", "unsaved cross-file getter rename and restoration", "server replacement on restart", "valid source close/reopen", "bmatch snippet insertion through completion UI"]
+  },
+  "zed": {
+    "observed_version": "1.23.2+stable.369.c0199504b9cce79bc27524950022ed701bc3ebd5",
+    "extension": "Nacre v0.3.0 (dev)",
+    "source_distribution": "editors/zed/dist/nacre",
+    "verified": ["V7 shared/exclusive getters, list references, field replacement, and borrowed enum colors", "E3001 for remove during a live element borrow", "diagnostic clearing after shortening lexical scope", "unsaved cross-file getter rename and restoration", "server replacement on restart", "valid source save/close/reopen"],
+    "host_limitations": ["Xvfb/software renderer used", "isolated desktop services produced host warnings", "glyph-render warnings occurred but source and diagnostics remained readable"]
+  },
+  "note": "This is a path-independent summary of observed Nacre verification. Legacy reports were removed at the user's request rather than rewriting captured output."
+}

@@ -221,11 +221,11 @@ framing targets with bounded time/input/memory and isolated copies of intentiona
 seed corpora. Preserve crash artifacts for reproduction. Finite successful runs
 are evidence, not a general fuzz-safety proof.
 
-[VALIDATION.md](docs/VALIDATION.md) separates observed release evidence from
-historical reports and unverified platforms. Actual V6 stabilization exercised
-both desktop editors and a complete private GitHub Actions matrix before V7
-implementation. Current V7 runtime/compiler/editor results are recorded there
-as each complete verification finishes.
+[VALIDATION.md](docs/VALIDATION.md) records observed compiler/native/editor/CI
+evidence and unverified platform boundaries. Nacre stabilization finished before
+V7 implementation; the complete V7 workflow and both real desktop editors pass.
+Obsolete identity artifacts and historical reports were removed at user request,
+without relabeling their captured outputs.
 
 ## Boundaries and design notes
 
@@ -238,5 +238,5 @@ Resource limits on compiler/LSP input are not a security certification.
 Additional references: [architecture](docs/ARCHITECTURE.md),
 [grammar](docs/GRAMMAR.md), [generics](docs/GENERICS.md),
 [interfaces](docs/INTERFACES.md), [roadmap](docs/ROADMAP.md), and
-[changelog](CHANGELOG.md). Original legal attribution and captured historical
-outputs are preserved. License: [MIT](LICENSE).
+[changelog](CHANGELOG.md). Original mandatory legal attribution is preserved.
+License: [MIT](LICENSE).

@@ -4,7 +4,6 @@
     "version": "0.7.1"
   },
   "scope": "Observed local generated native-program validation; does not certify GUI or remote CI",
-  "command": "python3 scripts/validate.py --cc gcc --cc clang --sanitizers --llvm --report /tmp/nacre-native-stabilization.json",
   "compilers": [
     "gcc",
     "clang"
@@ -18,7 +17,6 @@
     "llvm_round_trips": 11,
     "all_reported_live_zero": true
   },
-  "full_console_log": "artifact://306",
   "targeted_runtime_repair": {
     "interface_fixture_gcc_and_clang_plain_and_sanitized": "passed",
     "interface_fixture_allocations_per_run": 50004,

@@ -1,6 +1,0 @@
-{
-  "scope": "limited brace scan of simple Rust format literals ONLY",
-  "rust_compiled": false,
-  "literals_checked": 177,
-  "status": "passed"
-}
