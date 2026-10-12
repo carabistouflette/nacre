@@ -1,0 +1,71 @@
+{
+  "release": "Nacre 0.9.0",
+  "status": "passed",
+  "scope": "Observed local compiler, generated native programs, trusted-template fixtures, fuzzing, grammar and packaging; desktop acceptance is recorded separately",
+  "compiler_suite": {
+    "passed": 973,
+    "suites": 30,
+    "ignored": 2,
+    "features": ["fuzzing"],
+    "new_v8_regressions": 11,
+    "command": "cargo test --offline --locked --features fuzzing --no-fail-fast"
+  },
+  "clippy": "all targets, fuzzing feature, -D warnings passed",
+  "msrv": "Rust 1.74.0 locked offline all-target check passed",
+  "native_validation": {
+    "compilers": ["gcc", "clang"],
+    "sanitizers": ["ASan", "UBSan"],
+    "successful_runs": 414,
+    "expected_fatal_runs": 14,
+    "invalid_source_rejections": 420,
+    "llvm_round_trips": 11,
+    "all_reported_live_zero": true,
+    "ignored_llvm_tests_executed": true
+  },
+  "v8_generated_native_smoke": {
+    "compilers": ["gcc", "clang"],
+    "sanitizers": ["ASan", "UBSan"],
+    "successful_runs": 12,
+    "cases_per_compiler": ["copied/shared/exclusive collection traversal and recoverable extraction", "interface dispatch and inline enum traversal/extraction", "contact search, phone filtering, confirmed/cancelled batch removal and Unicode save/reload", "numeric-overflow load rollback", "trailing-data load rollback", "EOF at batch confirmation preserves the in-memory book"],
+    "allocation_balances_per_compiler": [8, 8, 203, 52, 53, 20],
+    "all_reported_live_zero": true,
+    "traversal_mutation_rejection": "E3001",
+    "instrumentation": "The EOF scenario adds a read-only post-loop observer to a throwaway source copy; ordinary application scenarios use the shipped source unchanged"
+  },
+  "traversal_allocation_probe": {
+    "scope": "Actual generated copied/shared/exclusive and empty-loop code with an instrumented integer-output checkpoint observing the memory counter",
+    "compilers": ["gcc", "clang"],
+    "sanitizers": ["ASan", "UBSan"],
+    "allocation_delta": 0,
+    "allocations_and_frees_per_run": 7,
+    "all_reported_live_zero": true
+  },
+  "trusted_template_fixture": {
+    "scope": "Exact shipped C templates instantiated by Python, not a substitute for generated-program verification",
+    "randomized_list_operations": 50000,
+    "compilers": ["GCC 16.2.1", "Clang 23.1.1"],
+    "profiles": ["O2", "ASan/UBSan"],
+    "allocations_and_frees_per_positive_run": 13592,
+    "strict_fatal_cases_per_compiler": 8,
+    "fallible_operation_allocation_delta": 0,
+    "all_reported_live_zero": true
+  },
+  "fuzz": {
+    "frontend": {"inputs": 461326, "seconds": 31, "coverage": 5324, "features": 17652, "peak_rss_mb": 426, "seed_files": 5},
+    "lsp_frames": {"inputs": 3035925, "seconds": 31, "coverage": 960, "features": 3735, "peak_rss_mb": 316, "seed_files": 8},
+    "observed_crashes": 0,
+    "observed_timeouts": 0,
+    "scope": "Real bounded campaigns with isolated seed copies; not a general safety proof"
+  },
+  "editor_packages": {
+    "vscode": "0.4.0",
+    "zed": "0.4.0",
+    "grammar": "0.3.0",
+    "snippets_compiled": 20,
+    "examples_parsed": 39,
+    "queries_executed": 4,
+    "locked_wasi_build": "passed"
+  },
+  "package_audit": {"status": "passed", "include_str_paths": 59, "declared_rust_tests_not_executed_by_audit": 975},
+  "publication_policy": "No workstation paths, process IDs, session-local artifact references, private evidence locations, caches, profiles or credentials"
+}

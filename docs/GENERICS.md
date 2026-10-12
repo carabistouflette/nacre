@@ -1,8 +1,8 @@
-# Generic specialization — V7
+# Generic specialization — V8
 
 ## Modèle choisi
 
-V7 specializes explicitly instantiated class, interface, and enum templates
+Nacre specializes explicitly instantiated class, interface, and enum templates
 without runtime type erasure. This is neither Java's generic implementation nor
 Rust's bounded trait system.
 
@@ -152,8 +152,10 @@ créés à la demande ; un programme qui ne les utilise pas n'émet pas leur sto
 ou leurs méthodes. Les requêtes natives entrent dans la limite de 64 requêtes
 de spécialisation ; la limite des 128 classes utilisateur les exclut.
 
-La méthode native `get` est supprimée pour les éléments propriétaires ; elle
-n'existe que pour les trois types copiables `int`, `boolean`, `String`. Un
-`List<Node>` vide rend possible une récursion de type possédée finie, contrairement
-à un champ obligatoire `Node next` sans cas de base. `List<T>` est invariant.
+The copied native `get` and `tryGet` methods exist only for `int`, `boolean`, and
+`String`. Nominal elements expose shared/exclusive `getRef`/`getMut`; all supported
+elements expose owned `tryPop`/`tryRemove` with inline specialized `Option<T>`.
+For-each header and collection types are substituted before ordinary checking.
+An empty `List<Node>` permits finite owned recursion, unlike a required
+`Node next` field without a base case. `List<T>` remains invariant.
 Les contrats et limites de cette bibliothèque sont dans [STDLIB.md](STDLIB.md).

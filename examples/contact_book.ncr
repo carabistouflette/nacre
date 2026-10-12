@@ -15,6 +15,35 @@ class Contact {
         return this.phone;
     }
 
+    public readonly boolean hasPhone() {
+        match (borrow this.phone) {
+            None { return false; }
+            Some(phone) { return true; }
+        }
+    }
+
+    // Both strings are valid UTF-8. A complete query cannot begin with a
+    // continuation byte, so an exact byte match also begins at a boundary.
+    public readonly boolean matchesName(borrow Text query) {
+        int querySize = query.byteLength();
+        int nameSize = this.name.byteLength();
+        if (querySize > nameSize) { return false; }
+        int start = 0;
+        while (start <= nameSize - querySize) {
+            int offset = 0;
+            boolean matches = true;
+            while (offset < querySize && matches) {
+                if (this.name.byteAt(start + offset) != query.byteAt(offset)) {
+                    matches = false;
+                }
+                offset = offset + 1;
+            }
+            if (matches) { return true; }
+            start = start + 1;
+        }
+        return false;
+    }
+
     public void setName(Text name) {
         this.name = name;
     }
@@ -171,10 +200,9 @@ class ContactBook {
         return true;
     }
 
-    private readonly void displayContact(int index) {
-        borrow Contact contact = this.contacts.getRef(index);
+    private readonly void displayValue(borrow Contact contact, int position) {
         Text line = new Text("");
-        line.appendInt(index + 1);
+        line.appendInt(position);
         line.append(". ");
         line.appendText(contact.getName());
         line.append(" | phone: ");
@@ -187,15 +215,106 @@ class ContactBook {
         line.print();
     }
 
+    private readonly void displayContact(int index) {
+        this.displayValue(this.contacts.getRef(index), index + 1);
+    }
+
     private readonly void listContacts() {
         if (this.contacts.isEmpty()) {
             println("The contact book is empty.");
             return;
         }
-        int index = 0;
-        while (index < this.contacts.size()) {
-            this.displayContact(index);
-            index = index + 1;
+        int position = 0;
+        for (borrow Contact contact : this.contacts) {
+            position = position + 1;
+            this.displayValue(contact, position);
+        }
+    }
+
+    private readonly int displayMatching(borrow Text query) {
+        int position = 0;
+        int found = 0;
+        for (borrow Contact contact : this.contacts) {
+            position = position + 1;
+            if (contact.matchesName(query)) {
+                this.displayValue(contact, position);
+                found = found + 1;
+            }
+        }
+        return found;
+    }
+
+    private void searchContacts() {
+        match (this.prompt("Name contains: ")) {
+            Some(query) {
+                if (this.displayMatching(query) == 0) { println("No matching contacts."); }
+            }
+            None {}
+        }
+    }
+
+    private void filterContacts() {
+        match (this.prompt("Phone filter (with/without): ")) {
+            Some(filter) {
+                if (!filter.equalsString("with") && !filter.equalsString("without")) {
+                    println("Enter with or without.");
+                    return;
+                }
+                boolean withPhone = filter.equalsString("with");
+                int position = 0;
+                int found = 0;
+                for (borrow Contact contact : this.contacts) {
+                    position = position + 1;
+                    if (contact.hasPhone() == withPhone) {
+                        this.displayValue(contact, position);
+                        found = found + 1;
+                    }
+                }
+                if (found == 0) { println("No matching contacts."); }
+            }
+            None {}
+        }
+    }
+
+    private void removeMatching() {
+        match (this.prompt("Name contains: ")) {
+            Some(query) {
+                int matches = this.displayMatching(query);
+                if (matches == 0) {
+                    println("No matching contacts.");
+                    return;
+                }
+                match (this.prompt("Remove these contacts? Type yes to confirm: ")) {
+                    Some(confirmation) {
+                        if (!confirmation.equalsString("yes")) {
+                            println("Batch removal cancelled.");
+                            return;
+                        }
+                    }
+                    None { return; }
+                }
+                int index = this.contacts.size();
+                int removedCount = 0;
+                while (index > 0) {
+                    index = index - 1;
+                    boolean selected = false;
+                    {
+                        borrow Contact contact = this.contacts.getRef(index);
+                        selected = contact.matchesName(query);
+                    }
+                    // Reverse removal preserves both unvisited positions and
+                    // survivor order. The selection borrow has already ended.
+                    if (selected) {
+                        match (this.contacts.tryRemove(index)) {
+                            Some(removed) { removedCount = removedCount + 1; }
+                            None {}
+                        }
+                    }
+                }
+                Console.print("Contacts removed: ");
+                println(removedCount);
+            }
+            None {}
         }
     }
 
@@ -272,9 +391,13 @@ class ContactBook {
         Option<int> requested = this.promptPosition();
         match (requested) {
             Some(position) {
-                if (this.validPosition(position)) {
-                    Contact removed = this.contacts.remove(position - 1);
-                    println("Contact removed.");
+                if (position < 1) {
+                    println("No contact exists at that position.");
+                } else {
+                    match (this.contacts.tryRemove(position - 1)) {
+                        Some(removed) { println("Contact removed."); }
+                        None { println("No contact exists at that position."); }
+                    }
                 }
             }
             None {}
@@ -438,9 +561,11 @@ class ContactBook {
     }
 
     private void printHelp() {
-        println("Commands: list, show, add, edit, remove, load, save, help, quit.");
+        println("Commands: list, show, add, edit, remove, search, filter, remove-matching, load, save, help, quit.");
         println("Each command is entered on its own line; prompts collect its additional data.");
         println("Contact positions start at 1. A blank phone response means no phone number.");
+        println("Search is case-sensitive. A blank search matches all names.");
+        println("Batch removal previews matches and requires an exact yes confirmation.");
         println("For load and save, enter the full path on the next line; spaces are accepted.");
     }
 
@@ -455,6 +580,12 @@ class ContactBook {
             this.editContact();
         } else if (command.equalsString("remove")) {
             this.removeContact();
+        } else if (command.equalsString("search")) {
+            this.searchContacts();
+        } else if (command.equalsString("filter")) {
+            this.filterContacts();
+        } else if (command.equalsString("remove-matching")) {
+            this.removeMatching();
         } else if (command.equalsString("load")) {
             this.handleFileCommand(true);
         } else if (command.equalsString("save")) {

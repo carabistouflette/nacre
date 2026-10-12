@@ -1,4 +1,4 @@
-# Grammar V7
+# Grammar V8
 
 Grammaire indicative du sous-ensemble implémenté. Les contraintes sémantiques
 ci-dessous font partie du langage. Identifiants ASCII ; sources et chaînes UTF-8 ;
@@ -36,6 +36,7 @@ statement     = type identifier [ "=" expression ] ";"
               | callOrNew ";"
               | "if" "(" expression ")" block [ "else" ( block | ifStatement ) ]
               | "while" "(" expression ")" block
+              | "for" "(" type identifier ":" expression ")" block
               | "return" [ expression ] ";"
               | "break" ";" | "continue" ";" | matchStatement | block ;
 matchStatement = "match" "(" expression ")" "{" matchArm { matchArm } "}" ;
@@ -70,6 +71,11 @@ shift operator exists. Builtins include `println(expr)`,
 `System.out.println(expr)`, `move(owner)`, and `drop(owner)`. Borrowing is inferred
 from an expected borrowed type or written as `borrow place` / `borrow mut place`,
 not a function call.
+
+List `for` headers explicitly copy primitive elements or borrow nominal elements
+with `borrow` / `borrow mut`. Collections are evaluated once, cannot be temporary
+owners, and stay borrowed for the complete loop. This is not a C-style `for`
+statement or a first-class iterator API. See [V8.md](V8.md).
 
 ## Déclarations et interfaces
 

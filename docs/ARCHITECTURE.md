@@ -1,4 +1,4 @@
-# Architecture Nacre V7
+# Architecture Nacre V8
 
 Cette note décrit l'implémentation source livrée. Le périmètre de validation
 du compilateur Rust et de ses programmes générés est documenté dans
@@ -52,6 +52,20 @@ sémantique est décrite dans [GENERICS.md](GENERICS.md).
 Des bornes sur la profondeur, le nombre et la longueur des instances limitent
 les expansions récursives. Ce n'est pas une inférence de paramètres, ni un
 système de contraintes génériques avec bornes de type.
+
+V8 `ForEach` AST nodes preserve the header type, collection, body, and source
+spans. The checker evaluates the collection once, creates an unspellable hidden
+borrow/cursor binding, and lowers to the existing typed block/while IR. A small
+statement prefix binds the element and advances the cursor before the original
+body is checked by reference, not cloned. Existing flow, borrowing, and C cleanup
+passes therefore govern loop joins and exits; no iterator object is introduced.
+
+Recoverable list intrinsics return inline `Option<T>` layouts obtained from
+ordinary specialization. Native enum IDs/tags are looked up, not fixed in the
+backend. Successful extraction reuses strict transfer/slot-clearing operations;
+invalid boundaries return `None` before touching storage. List element validity
+is checked before compiler-generated Option payloads, preserving primary
+list-view diagnostics.
 
 ## IR nominale et interfaces
 

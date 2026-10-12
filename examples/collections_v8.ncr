@@ -1,0 +1,34 @@
+void main() {
+    List<int> numbers = new List<int>();
+    numbers.add(1);
+    numbers.add(2);
+    numbers.add(3);
+    for (int number : numbers) {
+        if (number == 2) { continue; }
+        println(number);
+    }
+    match (numbers.tryGet(-1)) {
+        None { println("No negative index."); }
+        Some(number) { println(number); }
+    }
+    match (numbers.tryRemove(1)) {
+        Some(number) { println(number); }
+        None { println("No such element."); }
+    }
+    for (int number : numbers) { println(number); }
+
+    List<Text> labels = new List<Text>();
+    labels.add(new Text("Alpha"));
+    labels.add(new Text("Ωmega"));
+    for (borrow mut Text label : labels) { label.append("!"); }
+    for (borrow Text label : labels) { label.print(); }
+    match (labels.tryPop()) {
+        Some(label) { label.print(); }
+        None { println("No last label."); }
+    }
+    labels.clear();
+    match (labels.tryPop()) {
+        None { println("Empty list preserved."); }
+        Some(label) { label.print(); }
+    }
+}

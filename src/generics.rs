@@ -155,7 +155,7 @@ impl Expander {
             if matches!(element, Type::Int | Type::Boolean | Type::String) {
                 class.methods.retain(|method| !matches!(method.name.as_str(), "getRef" | "getMut"));
             } else {
-                class.methods.retain(|method| method.name != "get");
+                class.methods.retain(|method| !matches!(method.name.as_str(), "get" | "tryGet"));
             }
         }
         for interface in &mut class.implements { *interface = self.ty(interface, env, class.span, 0)?; }
@@ -195,6 +195,11 @@ impl Expander {
                     if let Some(block) = else_block { self.block(block, env)?; }
                 }
                 S::While { condition, body } => { self.expression(condition, env)?; self.block(body, env)?; }
+                S::ForEach { ty, collection, body, .. } => {
+                    *ty = self.ty(ty, env, stmt.span, 0)?;
+                    self.expression(collection, env)?;
+                    self.block(body, env)?;
+                }
                 S::Match { value, arms } => {
                     self.expression(value, env)?;
                     for arm in arms { self.block(&mut arm.body, env)?; }

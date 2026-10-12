@@ -89,7 +89,7 @@ pub enum NativeClass { List(Type), Text, Console, Files, Args }
 #[derive(Debug, Clone, Copy)]
 pub enum NativeMethod {
     ListNew, ListAdd, ListSize, ListCapacity, ListIsEmpty, ListGet, ListGetRef, ListGetMut,
-    ListSet, ListPop, ListRemove, ListClear, ListReserve,
+    ListSet, ListPop, ListRemove, ListTryGet, ListTryPop, ListTryRemove, ListClear, ListReserve,
     TextNew, TextAppend, TextAppendInt, TextAppendBoolean, TextAppendText,
     TextByteLength, TextByteAt, TextIsEmpty, TextClear, TextPrint,
     TextClone, TextEquals, TextEqualsString, TextParseInt, TextSliceBytes,

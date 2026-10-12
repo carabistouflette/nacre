@@ -1,0 +1,24 @@
+{
+  "release": "Nacre 0.9.0",
+  "status": "passed",
+  "scope": "Actual official desktop applications under Xvfb, not headless grammar substitutes",
+  "compiler": "nacre 0.9.0",
+  "extension_version": "0.4.0",
+  "grammar_version": "0.3.0",
+  "vscode": {
+    "observed_version": "1.141.0",
+    "commit": "2a59476c9bfcb90b3ddc372c36762471b7dfad1c",
+    "extension": "nacre.nacre@0.4.0",
+    "verified": ["V8 for/borrow/mut/colon syntax colors and tryGet/tryRemove/tryPop highlighting", "live E3001 for structural mutation inside shared traversal", "diagnostic clearing after removing mutation and legal removal after traversal", "unsaved cross-file getter rename and undo inside a for body", "language-server restart and diagnostic recovery", "save/close/reopen with clean final sources", "foreachref snippet inserted through the real completion UI"],
+    "host_notes": ["Working native session forced X11 after an inherited Wayland launch produced no X11 window", "Private desktop portal/accessibility/media-service warnings did not prevent acceptance", "Initial pre-portable app launch accessed existing shared storage; cleanup preserved unrelated existing user data, and the successful session used portable data paths"]
+  },
+  "zed": {
+    "observed_version": "1.23.3",
+    "build": "96a1b1b5389efff473fc2306f7f8c690f2e1a417",
+    "extension": "Nacre 0.4.0 dev extension installed through UI",
+    "verified": ["V8 for/borrow/mut/colon syntax colors and tryGet/tryRemove/tryPop highlighting", "live E3001 for structural mutation inside shared traversal", "diagnostic clearing after removing mutation", "unsaved cross-file getter rename and undo inside a for body", "language-server restart and diagnostic recovery", "save/close/reopen with clean final sources"],
+    "host_notes": ["Mesa llvmpipe/software rendering used under Xvfb", "Private desktop portal/accessibility/media-service warnings did not prevent acceptance", "Initial isolated HOME lacked a Rustup default; dev-extension installation succeeded using the host toolchain"]
+  },
+  "visual_inspection": "Parent inspected actual VS Code syntax and expanded snippet screenshots, and actual Zed syntax and E3001 screenshots",
+  "publication": "Curated UI proof is retained outside Git; this report contains no workstation paths, process IDs or private evidence locations"
+}

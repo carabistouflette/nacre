@@ -1,0 +1,10 @@
+static @OPTION_TYPE@ @LIST_TRY_POP@(ncr_obj_@ID@ *p, size_t line, size_t column) {
+    if (p->length == 0) { return (@OPTION_TYPE@){ .tag = @NONE_TAG@ }; }
+    @ELEMENT@ value = @STRICT_POP_CALL@(p, line, column);
+    return (@OPTION_TYPE@){ .tag = @SOME_TAG@, .data.v@SOME_TAG@.f0 = value };
+}
+static @OPTION_TYPE@ @LIST_TRY_REMOVE@(ncr_obj_@ID@ *p, @INDEX_TYPE@ index, size_t line, size_t column) {
+    if (index < 0 || index >= p->length) { return (@OPTION_TYPE@){ .tag = @NONE_TAG@ }; }
+    @ELEMENT@ value = @STRICT_REMOVE_CALL@(p, index, line, column);
+    return (@OPTION_TYPE@){ .tag = @SOME_TAG@, .data.v@SOME_TAG@.f0 = value };
+}

@@ -44,6 +44,7 @@ pub enum StmtKind {
     Expr(Expr),
     If { condition: Expr, then_block: Block, else_block: Option<Block> },
     While { condition: Expr, body: Block },
+    ForEach { ty: Type, name: String, collection: Expr, body: Block, header_span: Span },
     Match { value: Expr, arms: Vec<MatchArm> },
     Return(Option<Expr>), Break, Continue, Block(Block),
 }

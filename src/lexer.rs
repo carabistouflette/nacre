@@ -6,8 +6,8 @@ pub enum TokenKind {
     Ident(String), Number(String), String(String),
     Class, Enum, Match, Interface, Implements, Public, Private, Static, New, This, Borrow, Mut, Readonly,
     Int, Boolean, StringType, Void,
-    If, Else, While, Return, Break, Continue, True, False,
-    LParen, RParen, LBrace, RBrace, Comma, Semicolon, Dot,
+    If, Else, While, For, Return, Break, Continue, True, False,
+    LParen, RParen, LBrace, RBrace, Comma, Colon, Semicolon, Dot,
     Plus, Minus, Star, Slash, Percent,
     Equal, EqualEqual, Bang, BangEqual, Less, LessEqual, Greater, GreaterEqual,
     AndAnd, OrOr, Eof,
@@ -37,10 +37,11 @@ pub fn lex(source: &str) -> Result<Vec<Token>, Diagnostic> {
                 "int" => TokenKind::Int, "boolean" => TokenKind::Boolean,
                 "String" => TokenKind::StringType, "void" => TokenKind::Void,
                 "if" => TokenKind::If, "else" => TokenKind::Else,
-                "while" => TokenKind::While, "return" => TokenKind::Return,
+                "while" => TokenKind::While, "for" => TokenKind::For,
+                "return" => TokenKind::Return,
                 "break" => TokenKind::Break, "continue" => TokenKind::Continue,
                 "true" => TokenKind::True, "false" => TokenKind::False,
-                "extends" | "for" | "null" |
+                "extends" | "null" |
                 "super" | "import" | "package" | "final" | "throw" |
                 "try" | "catch" | "switch" | "long" | "double" | "float" | "char" => {
                     return Err(Diagnostic::new(Span::new(start, lexer.pos), format!("`{word}` n'est pas encore pris en charge en V5")));
@@ -58,7 +59,7 @@ pub fn lex(source: &str) -> Result<Vec<Token>, Diagnostic> {
                 '"' => TokenKind::String(lexer.string(start)?),
                 '(' => TokenKind::LParen, ')' => TokenKind::RParen,
                 '{' => TokenKind::LBrace, '}' => TokenKind::RBrace,
-                ',' => TokenKind::Comma, ';' => TokenKind::Semicolon, '.' => TokenKind::Dot,
+                ',' => TokenKind::Comma, ':' => TokenKind::Colon, ';' => TokenKind::Semicolon, '.' => TokenKind::Dot,
                 '+' | '-' if lexer.peek() == Some(c) => {
                     lexer.bump();
                     return Err(Diagnostic::new(Span::new(start, lexer.pos), format!("`{c}{c}` n'est pas pris en charge: utiliser une affectation comme `i = i + 1`")));

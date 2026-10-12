@@ -145,5 +145,46 @@
       "}"
     ],
     "description": "Exhaustively inspect an Option without consuming it"
+  },
+  "Copied list traversal": {
+    "prefix": "foreach",
+    "body": [
+      "for (${1:int} ${2:value} : ${3:numbers}) {",
+      "    $0",
+      "}"
+    ],
+    "description": "Traverse copied primitive elements under a shared list loan"
+  },
+  "Shared list traversal": {
+    "prefix": "foreachref",
+    "body": [
+      "for (borrow ${1:Contact} ${2:contact} : ${3:contacts}) {",
+      "    $0",
+      "}"
+    ],
+    "description": "Traverse affine elements without extracting ownership"
+  },
+  "Exclusive list traversal": {
+    "prefix": "foreachmut",
+    "body": [
+      "for (borrow mut ${1:Contact} ${2:contact} : ${3:contacts}) {",
+      "    $0",
+      "}"
+    ],
+    "description": "Mutate affine elements while the whole list is exclusively borrowed"
+  },
+  "Recoverable list removal": {
+    "prefix": "tryremove",
+    "body": [
+      "match (${1:items}.tryRemove(${2:0})) {",
+      "    Some(${3:value}) {",
+      "        ${4}",
+      "    }",
+      "    None {",
+      "        $0",
+      "    }",
+      "}"
+    ],
+    "description": "Remove an element without aborting on an invalid index"
   }
 }

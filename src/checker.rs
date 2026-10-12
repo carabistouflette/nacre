@@ -157,6 +157,13 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
         if !changed { break; }
     }
     for (info, value) in tables.classes.iter_mut().zip(has_borrow) { info.has_borrow = value; }
+    for (id, class) in program.classes.iter().enumerate() {
+        if let Some(t::NativeClass::List(element)) = tables.classes[id].native {
+            if tables.is_view(element) || matches!(element, Type::Void | Type::Borrow { .. }) {
+                return Err(Diagnostic::new(class.span, "[E5003] List<T> exige une valeur copiable ou un objet possede; les vues locales et les emprunts sont interdits"));
+            }
+        }
+    }
     for class in &program.classes {
         for field in &class.fields {
             if tables.is_view(tables.resolve_type(&field.ty, field.span)?) {
@@ -172,13 +179,6 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
                             "[E6003] un payload d'enum ne peut pas etre un emprunt ni contenir une vue"));
                     }
                 }
-            }
-        }
-    }
-    for (id, class) in program.classes.iter().enumerate() {
-        if let Some(t::NativeClass::List(element)) = tables.classes[id].native {
-            if tables.is_view(element) || matches!(element, Type::Void | Type::Borrow { .. }) {
-                return Err(Diagnostic::new(class.span, "[E5003] List<T> exige une valeur copiable ou un objet possede; les vues locales et les emprunts sont interdits"));
             }
         }
     }
@@ -391,6 +391,20 @@ struct Checker<'a> {
     return_type: Type, initialized: Vec<bool>,
     parameter_ids: Vec<usize>, field_sources: Vec<Option<usize>>,
 }
+
+fn synthetic_expr(kind: a::ExprKind, span: Span) -> a::Expr {
+    let depth = 1 + match &kind {
+        a::ExprKind::Binary { left, right, .. } => left.depth.max(right.depth),
+        a::ExprKind::Unary { expr, .. } | a::ExprKind::Borrow { expr, .. } => expr.depth,
+        a::ExprKind::Call { args, .. } | a::ExprKind::New { args, .. } | a::ExprKind::Variant { args, .. } =>
+            args.iter().map(|arg| arg.depth).max().unwrap_or(0),
+        a::ExprKind::MethodCall { receiver, args, .. } =>
+            receiver.depth.max(args.iter().map(|arg| arg.depth).max().unwrap_or(0)),
+        a::ExprKind::Field { base, .. } => base.depth,
+        _ => 0,
+    };
+    a::Expr { kind, span, depth }
+}
 impl Checker<'_> {
     fn lookup(&self, name: &str) -> Option<usize> {
         self.scopes.iter().rev().find_map(|s| s.get(name).copied())
@@ -424,10 +438,13 @@ impl Checker<'_> {
         } else { Ok(()) }
     }
     fn block(&mut self, block: &a::Block) -> Result<(t::Block, bool), Diagnostic> {
+        self.block_with_prefix(&[], block)
+    }
+    fn block_with_prefix(&mut self, prefix: &[a::Stmt], block: &a::Block) -> Result<(t::Block, bool), Diagnostic> {
         self.scopes.push(HashMap::new()); self.block_depth += 1;
         let result = (|| {
             let mut out = Vec::new(); let mut stops = false;
-            for stmt in block {
+            for stmt in prefix.iter().chain(block.iter()) {
                 if stops { return Err(Diagnostic::new(stmt.span, "instruction inaccessible apres return, break ou continue")); }
                 let (stmt, terminal) = self.statement(stmt)?;
                 out.push(stmt); stops = terminal;
@@ -530,6 +547,9 @@ impl Checker<'_> {
                 self.loop_depth -= 1;
                 (t::Stmt::While { condition, body }, false)
             }
+            S::ForEach { ty, name, collection, body, header_span } => {
+                (self.for_each(ty, name, collection, body, *header_span, stmt.span)?, false)
+            }
             S::Match { value, arms } => {
                 let value = self.expression(value)?;
                 let class = value.ty.object_class()
@@ -595,6 +615,125 @@ impl Checker<'_> {
             S::Block(block) => { let (block, stops) = self.block(block)?; (t::Stmt::Block(block), stops) }
         })
     }
+
+    fn for_each(&mut self, header: &a::Type, name: &str, collection: &a::Expr, body: &a::Block,
+                header_span: Span, span: Span) -> Result<t::Stmt, Diagnostic> {
+        let place = self.place(collection, false).ok();
+        let value = if place.is_none() { Some(self.expression(collection)?) } else { None };
+        let source_type = if let Some(place) = &place { place.ty } else { value.as_ref().unwrap().ty };
+        let list_class = source_type.object_class()
+            .ok_or_else(|| Diagnostic::new(collection.span, "la collection d'une boucle for-each doit etre une List<T> nommee ou empruntee"))?;
+        let Some(t::NativeClass::List(element_type)) = self.tables.classes[list_class].native else {
+            return Err(Diagnostic::new(collection.span, "la collection d'une boucle for-each doit etre une List<T>"));
+        };
+        let header_type = self.tables.resolve_type(header, header_span)?;
+        let (exclusive, getter) = match element_type {
+            Type::Int | Type::Boolean | Type::String => {
+                if header_type != element_type {
+                    return Err(Diagnostic::new(header_span, format!(
+                        "type d'element incompatible: List<{}> exige le meme type copiable dans l'entete",
+                        self.tables.type_name(element_type))));
+                }
+                (false, "get")
+            }
+            Type::Object(element_class) => {
+                let Type::Borrow { class: header_class, mutable } = header_type else {
+                    return Err(Diagnostic::new(header_span,
+                        "[E5004] un element affine de List<T> doit etre lie par `borrow T` ou `borrow mut T`"));
+                };
+                if header_class != element_class {
+                    return Err(Diagnostic::new(header_span, format!(
+                        "type d'emprunt incompatible: attendu {}, trouve {}",
+                        self.tables.type_name(Type::Borrow { class: element_class, mutable }),
+                        self.tables.type_name(header_type))));
+                }
+                (mutable, if mutable { "getMut" } else { "getRef" })
+            }
+            _ => return Err(Diagnostic::new(collection.span, "type d'element non pris en charge dans List<T>")),
+        };
+        if matches!(source_type, Type::Object(_)) && place.is_none() {
+            return Err(Diagnostic::new(collection.span,
+                "une collection possedee temporaire ne peut pas etre parcourue; utiliser un emplacement stable ou un emprunt existant"));
+        }
+        if exclusive && matches!(source_type, Type::Borrow { mutable: false, .. }) {
+            return Err(Diagnostic::new(collection.span,
+                "[E3003] un parcours mutable exige un emprunt exclusif de la liste"));
+        }
+        let list_type = Type::Borrow { class: list_class, mutable: exclusive };
+        let frozen_value = if let Some(place) = place {
+            if matches!(place.kind, PlaceKind::This) { self.require_initialized(collection.span)?; }
+            if exclusive { self.require_mutable(&place, collection.span)?; }
+            t::Expr { kind: t::ExprKind::Borrow { place, mutable: exclusive },
+                ty: list_type, span: collection.span }
+        } else {
+            let mut value = value.unwrap();
+            let Type::Borrow { class, mutable } = value.ty else {
+                return Err(Diagnostic::new(collection.span,
+                    "une collection possedee temporaire ne peut pas etre parcourue; utiliser un emplacement stable ou un emprunt existant"));
+            };
+            if exclusive && !mutable {
+                return Err(Diagnostic::new(collection.span,
+                    "[E3003] un parcours mutable exige un emprunt exclusif de la liste"));
+            }
+            if class != list_class {
+                return Err(Diagnostic::new(collection.span, "type d'emprunt de liste incompatible"));
+            }
+            value.ty = list_type;
+            value
+        };
+
+        self.scopes.push(HashMap::new());
+        self.block_depth += 1;
+        let result = (|| {
+            let unique = self.variables.len();
+            let list_name = format!("$nacre_for_list_{unique}");
+            let cursor_name = format!("$nacre_for_index_{unique}");
+            let list_id = self.declare(&list_name, list_type, span)?;
+            let cursor_id = self.declare(&cursor_name, Type::Int, span)?;
+            let mut lowered = vec![
+                t::Stmt::Let { id: list_id, ty: list_type, value: Some(frozen_value) },
+                t::Stmt::Let { id: cursor_id, ty: Type::Int,
+                    value: Some(t::Expr { kind: t::ExprKind::Int(0), ty: Type::Int, span }) },
+            ];
+
+            let cursor = synthetic_expr(a::ExprKind::Var(cursor_name.clone()), span);
+            let size_receiver = synthetic_expr(a::ExprKind::Var(list_name.clone()), span);
+            let size = synthetic_expr(a::ExprKind::MethodCall {
+                receiver: Box::new(size_receiver), name: "size".to_owned(), args: Vec::new(),
+            }, collection.span);
+            let condition = synthetic_expr(a::ExprKind::Binary {
+                op: B::Lt, left: Box::new(cursor), right: Box::new(size),
+            }, span);
+
+            let element_receiver = synthetic_expr(a::ExprKind::Var(list_name), span);
+            let element_index = synthetic_expr(a::ExprKind::Var(cursor_name.clone()), span);
+            let element_value = synthetic_expr(a::ExprKind::MethodCall {
+                receiver: Box::new(element_receiver), name: getter.to_owned(), args: vec![element_index],
+            }, collection.span);
+            let element = a::Stmt { kind: a::StmtKind::Let {
+                ty: header.clone(), name: name.to_owned(), value: Some(element_value),
+            }, span: header_span };
+            let increment = synthetic_expr(a::ExprKind::Binary {
+                op: B::Add,
+                left: Box::new(synthetic_expr(a::ExprKind::Var(cursor_name.clone()), span)),
+                right: Box::new(synthetic_expr(a::ExprKind::Int(1), span)),
+            }, span);
+            let advance = a::Stmt { kind: a::StmtKind::Assign {
+                target: synthetic_expr(a::ExprKind::Var(cursor_name), span), value: increment,
+            }, span };
+            let condition = self.expression(&condition)?;
+            self.require(Type::Boolean, condition.ty, condition.span)?;
+            self.loop_depth += 1;
+            let checked_body = self.block_with_prefix(&[element, advance], body);
+            self.loop_depth -= 1;
+            lowered.push(t::Stmt::While { condition, body: checked_body?.0 });
+            Ok(t::Stmt::Block(lowered))
+        })();
+        self.block_depth -= 1;
+        self.scopes.pop();
+        result
+    }
+
     fn this_place(&self, span: Span) -> Result<Place, Diagnostic> {
         let id = self.receiver.ok_or_else(|| Diagnostic::new(span, "this ou membre d'instance inaccessible depuis une fonction ou methode static"))?;
         Ok(Place { kind: PlaceKind::This, ty: Type::Object(id) })

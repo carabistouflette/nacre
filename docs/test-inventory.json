@@ -27,9 +27,12 @@
     "tests/io_v6.rs": 13,
     "tests/atomic_files.rs": 6,
     "tests/features_v7.rs": 18,
+    "tests/features_v8_lists.rs": 2,
+    "tests/features_v8_traversal.rs": 7,
+    "tests/contact_book_v8.rs": 2,
     "src/ownership.rs": 4,
     "src/project.rs": 2,
     "src/lsp.rs": 5
   },
-  "total": 964
+  "total": 975
 }

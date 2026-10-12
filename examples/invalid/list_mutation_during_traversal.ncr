@@ -1,0 +1,7 @@
+void main() {
+    List<int> numbers = new List<int>();
+    numbers.add(1);
+    for (int number : numbers) {
+        numbers.add(number);
+    }
+}

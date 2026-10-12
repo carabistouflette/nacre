@@ -41,8 +41,10 @@ fn marker(method: M) -> &'static str {
         M::ListIsEmpty => "@LIST_IS_EMPTY@", M::ListGet => "@LIST_GET@",
         M::ListGetRef => "@LIST_GET_REF@", M::ListGetMut => "@LIST_GET_MUT@",
         M::ListSet => "@LIST_SET@", M::ListPop => "@LIST_POP@",
-        M::ListRemove => "@LIST_REMOVE@", M::ListClear => "@LIST_CLEAR@",
-        M::ListReserve => "@LIST_RESERVE@", M::TextNew => "@TEXT_NEW@",
+        M::ListRemove => "@LIST_REMOVE@", M::ListTryGet => "@LIST_TRY_GET@",
+        M::ListTryPop => "@LIST_TRY_POP@", M::ListTryRemove => "@LIST_TRY_REMOVE@",
+        M::ListClear => "@LIST_CLEAR@", M::ListReserve => "@LIST_RESERVE@",
+        M::TextNew => "@TEXT_NEW@",
         M::TextAppend => "@TEXT_APPEND@", M::TextAppendInt => "@TEXT_APPEND_INT@",
         M::TextAppendBoolean => "@TEXT_APPEND_BOOLEAN@", M::TextAppendText => "@TEXT_APPEND_TEXT@",
         M::TextByteLength => "@TEXT_BYTE_LENGTH@", M::TextByteAt => "@TEXT_BYTE_AT@",
@@ -273,6 +275,65 @@ fn borrowed_list_methods(program: &t::Program, list_class: usize, element: Type)
     }
     methods
 }
+fn list_native_function(
+    program: &t::Program,
+    list_class: usize,
+    is: impl Fn(M) -> bool,
+) -> Option<&t::Function> {
+    program.functions.iter().find(|function| {
+        function.receiver == Some(list_class)
+            && function.native.is_some_and(&is)
+    })
+}
+
+fn option_tags(program: &t::Program, function: &t::Function, element: Type) -> (usize, usize) {
+    let option = result_id(function);
+    let (none_tag, none) = variant(program, option, "None");
+    let (some_tag, some) = variant(program, option, "Some");
+    assert!(none.fields.is_empty(), "Option None must have no payload");
+    assert!(matches!(some.fields.as_slice(), [field] if *field == element),
+        "Option Some payload must match its List element type");
+    (none_tag, some_tag)
+}
+
+fn try_get_list_method(program: &t::Program, list_class: usize, element: Type) -> String {
+    let Some(function) = list_native_function(program, list_class, |method| matches!(method, M::ListTryGet))
+    else { return String::new(); };
+    assert!(matches!(element, Type::Int | Type::Boolean | Type::String),
+        "List tryGet must be pruned for non-copy elements");
+    let (none_tag, some_tag) = option_tags(program, function, element);
+    let index_type = function.params.first().expect("List tryGet index parameter").1;
+    include_str!("../stdlib/list_try_get.c.in")
+        .replace("@OPTION_TYPE@", &ctype(program, function.return_type))
+        .replace("@INDEX_TYPE@", &ctype(program, index_type))
+        .replace("@NONE_TAG@", &none_tag.to_string())
+        .replace("@SOME_TAG@", &some_tag.to_string())
+        .replace("@ELEMENT@", &ctype(program, element))
+}
+
+fn try_owned_list_methods(program: &t::Program, list_class: usize, element: Type) -> String {
+    let try_pop = list_native_function(program, list_class, |method| matches!(method, M::ListTryPop))
+        .expect("compiler-owned List.tryPop method is present");
+    let try_remove = list_native_function(program, list_class, |method| matches!(method, M::ListTryRemove))
+        .expect("compiler-owned List.tryRemove method is present");
+    assert_eq!(try_pop.return_type, try_remove.return_type,
+        "List.tryPop and tryRemove must return the same Option specialization");
+    let pop = list_native_function(program, list_class, |method| matches!(method, M::ListPop))
+        .expect("compiler-owned List.pop method is present");
+    let remove = list_native_function(program, list_class, |method| matches!(method, M::ListRemove))
+        .expect("compiler-owned List.remove method is present");
+    let (none_tag, some_tag) = option_tags(program, try_pop, element);
+    let index_type = try_remove.params.first().expect("List.tryRemove index parameter").1;
+    include_str!("../stdlib/list_try_owned.c.in")
+        .replace("@OPTION_TYPE@", &ctype(program, try_pop.return_type))
+        .replace("@INDEX_TYPE@", &ctype(program, index_type))
+        .replace("@NONE_TAG@", &none_tag.to_string())
+        .replace("@SOME_TAG@", &some_tag.to_string())
+        .replace("@ELEMENT@", &ctype(program, element))
+        .replace("@STRICT_POP_CALL@", &format!("ncr_fn_{}", pop.id))
+        .replace("@STRICT_REMOVE_CALL@", &format!("ncr_fn_{}", remove.id))
+}
+
 
 pub fn implementations(program: &t::Program) -> String {
     let text = text_class(program);
@@ -284,9 +345,13 @@ pub fn implementations(program: &t::Program) -> String {
             C::List(element) => {
                 let getter = if element.is_object() { "" } else { include_str!("../stdlib/list_get.c.in") };
                 let borrowed_getters = borrowed_list_methods(program, class.id, element);
+                let try_get = try_get_list_method(program, class.id, element);
+                let try_owned = try_owned_list_methods(program, class.id, element);
                 include_str!("../stdlib/list.c.in")
                     .replace("@GET_METHOD@", getter)
                     .replace("@BORROWED_GETTERS@", &borrowed_getters)
+                    .replace("@TRY_GET_METHOD@", &try_get)
+                    .replace("@TRY_OWNED_METHODS@", &try_owned)
                     .replace("@ELEMENT@", &ctype(program, element))
                     .replace("@ZERO@", &zero(program, element))
                     .replace("@DROP_AT_INDEX@", &drop_element(element, "p->items[index]"))

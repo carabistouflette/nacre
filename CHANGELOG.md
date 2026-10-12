@@ -1,5 +1,23 @@
 # Nacre changelog
 
+## V8 / 0.9.0
+
+- List `for` traversal copies primitive elements or explicitly borrows affine
+  elements shared/exclusively. The collection is evaluated once and loaned for
+  the whole loop; each element binding ends at its iteration boundary.
+- Existing block/while cleanup handles nested loops, `continue`, `break`, and
+  `return`, without an iterator allocation or cloning the user-body AST.
+- `tryGet` copies primitive elements into inline `Option<T>`; `tryPop` and
+  `tryRemove` transfer every supported owned representation. Failure preserves
+  the list; success clears the vacated slot and transfers cleanup exactly once.
+- Contact-book substring search, phone filtering, and confirmed batch removal
+  exercise traversal and recoverable extraction. Unicode persistence and
+  candidate-load rollback retain the existing version-1 file format.
+- Editor packages 0.4.0, grammar 0.3.0, and 20 snippets include V8 traversal and
+  recoverable removal. The explicit milestone and exclusions are in `docs/V8.md`.
+- First-class iterators, maps, lifetime refinements, fallible allocation, exception
+  unwinding, and new backends remain outside this release.
+
 ## V7 / 0.8.0
 
 - Instance methods and interface contracts return shared/exclusive borrows proven

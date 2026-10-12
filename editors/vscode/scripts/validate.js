@@ -86,7 +86,13 @@ function sourceForSnippet(name, body) {
     case 'Receiver-bound borrowed getter':
       return `class Host {\nText value = new Text("value");\n${body}\n}\nvoid main() {}\n`;
     case 'Exclusive list element':
+    case 'Shared list traversal':
+    case 'Exclusive list traversal':
       return `class Contact {}\nvoid main() {\nList<Contact> contacts = new List<Contact>();\ncontacts.add(new Contact());\n${body}\n}\n`;
+    case 'Copied list traversal':
+      return `void main() {\nList<int> numbers = new List<int>();\nnumbers.add(1);\n${body}\n}\n`;
+    case 'Recoverable list removal':
+      return `void main() {\nList<int> items = new List<int>();\nitems.add(1);\n${body}\n}\n`;
     default:
       return `void main() {\n${body}\n}\n`;
   }
@@ -240,6 +246,19 @@ async function main() {
   assertHasScope(scopesAt(ownershipInMatch, 0, 'borrow'), 'storage.modifier.ownership.nacre', 'borrow keyword in a file with match arms');
   assertHasScope(scopesAt(ownershipInMatch, 0, 'mut'), 'storage.modifier.ownership.nacre', 'mut keyword in a file with match arms');
 
+
+  const traversal = tokenize(grammar, [
+    'for (int value : numbers) {}',
+    'for (borrow Contact contact : contacts) {}',
+    'for (borrow mut Contact contact : contacts) {}'
+  ].join('\n'));
+  for (let line = 0; line < traversal.length; line += 1) {
+    assertHasScope(scopesAt(traversal, line, 'for'), 'keyword.control.nacre', 'list traversal keyword');
+    assertHasScope(scopesAt(traversal, line, ':'), 'punctuation.separator.nacre', 'traversal separator');
+  }
+  assertHasScope(scopesAt(traversal, 0, 'int'), 'storage.type.primitive.nacre', 'copied traversal type');
+  assertHasScope(scopesAt(traversal, 1, 'borrow'), 'storage.modifier.ownership.nacre', 'shared traversal modifier');
+  assertHasScope(scopesAt(traversal, 2, 'mut'), 'storage.modifier.ownership.nacre', 'exclusive traversal modifier');
   const snippets = JSON.parse(fs.readFileSync(path.join(extensionRoot, 'snippets/nacre.json'), 'utf8'));
   for (const [name, snippet] of Object.entries(snippets)) {
     assert(typeof snippet.prefix === 'string' && snippet.prefix.length > 0, `snippet ${name} has no prefix`);

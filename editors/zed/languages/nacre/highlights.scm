@@ -14,7 +14,7 @@
 (call_expression function: (identifier) @function)
 (call_expression function: (member_expression property: (identifier) @function))
  [("enum") ("match") ("class") ("interface") ("implements") ("public") ("private") ("static")
- ("readonly") ("borrow") ("mut") ("new") ("if") ("else") ("while")
+ ("readonly") ("borrow") ("mut") ("new") ("if") ("else") ("while") ("for")
  ("return") ("break") ("continue")] @keyword
 (this_expression) @variable.special
 (boolean_literal) @boolean
@@ -24,4 +24,4 @@
 (comment) @comment
 ["+" "-" "*" "/" "%" "=" "==" "!" "!=" "<" "<=" ">" ">=" "&&" "||"] @operator
 ["(" ")" "{" "}"] @punctuation.bracket
-[";" "," "."] @punctuation.delimiter
+[";" "," "." ":"] @punctuation.delimiter

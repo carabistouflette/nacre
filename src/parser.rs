@@ -322,6 +322,19 @@ impl Parser {
                 let body = self.block()?;
                 StmtKind::While { condition, body }
             }
+            K::For => {
+                self.bump();
+                self.expect(&K::LParen, "`(`")?;
+                let header_start = self.current().span;
+                let ty = self.ty(false)?;
+                let (name, name_span) = self.ident()?;
+                let header_span = header_start.join(name_span);
+                self.expect(&K::Colon, "`:` apres le type et le nom de l'element")?;
+                let collection = self.expression()?;
+                self.expect(&K::RParen, "`)`")?;
+                let body = self.block()?;
+                StmtKind::ForEach { ty, name, collection, body, header_span }
+            }
             K::Match => {
                 self.bump();
                 self.expect(&K::LParen, "`(`")?;

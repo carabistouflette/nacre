@@ -1,4 +1,4 @@
-# Ownership and lexical borrowing — Nacre V7
+# Ownership and lexical borrowing — Nacre V8
 
 Nacre separates owning values from shared/exclusive access. Ordinary objects
 own their heap allocation; enums are affine inline values; interfaces use an
@@ -114,6 +114,22 @@ While a conflicting element loan exists, `add`, `set`, `pop`, `remove`, `clear`,
 `reserve`, replacement, movement, and destruction are rejected. A mutable element
 loan also blocks independent list reads. Even a no-op reserve is a modifying
 operation; different indices do not grant independent mutable domains.
+
+## Lexical list traversal
+
+`for (borrow T item : list)` holds a shared loan on the complete collection root.
+`for (borrow mut T item : list)` holds an exclusive loan and permits mutation
+through `item`, not independent access through `list` or its ancestor. Primitive
+headers copy values but still freeze the list structurally for the loop.
+The collection expression is evaluated once; temporary owned lists are rejected.
+Each iteration ends its element binding before advancing. `continue`, `break`,
+and `return` perform the same scoped cleanup as ordinary blocks and loops.
+Traversal introduces no heap-allocated iterator, early release, or index-disjoint
+alias domain.
+
+`tryPop` and `tryRemove` are modifying methods even on an empty list or invalid
+index, so active loans still reject them. Recoverable runtime failure does not
+relax static ownership requirements. `tryGet` copies primitives only.
 
 ## Replacing owned fields
 

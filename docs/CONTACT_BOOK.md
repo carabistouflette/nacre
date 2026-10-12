@@ -22,6 +22,9 @@ The program starts with an empty in-memory book. Type a command on its own line:
 | `add` | Prompt for a name and phone number; an empty phone line means no phone. |
 | `edit` | Prompt for a position, replacement name, and replacement phone; an empty phone line clears the phone number. |
 | `remove` | Prompt for a position and remove that contact. |
+| `search` | Prompt for a case-sensitive name substring and display matching contacts at their original positions. An empty query matches all names. |
+| `filter` | Prompt for `with` or `without` and show contacts with or without a phone number. |
+| `remove-matching` | Preview a name-substring selection; remove it only after exact `yes` confirmation. Survivors retain their order. |
 | `load` | Prompt for a file path and load a saved book. |
 | `save` | Prompt for a file path and atomically save the book. |
 | `help` | Print the command summary. |
@@ -31,6 +34,13 @@ Prompts accept the next complete input line. In particular, enter paths without
 quotes: spaces and Unicode characters are accepted. Invalid positions, malformed
 save data, and ordinary file errors are reported without discarding the current
 book. End-of-file or a console read error exits the interactive loop.
+
+Search compares valid UTF-8 byte sequences, without slicing or allocating
+temporary names. It does not normalize text or fold case. Preview and filtering
+use shared list traversal. Batch removal ends those loans before editing the
+list, walks selected positions in reverse, and uses `tryRemove`; cancellation,
+invalid confirmation, and EOF at confirmation do not change the book. The
+single-contact remove command also recovers from invalid positions.
 
 ## Persistence format
 

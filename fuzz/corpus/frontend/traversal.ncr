@@ -1,0 +1,8 @@
+void main() {
+    List<Text> words = new List<Text>();
+    words.add(new Text("Ω"));
+    for (borrow mut Text word : words) { word.append("!"); }
+    for (borrow Text word : words) { word.print(); }
+    match (words.tryRemove(-1)) { None {} Some(word) { word.print(); } }
+    match (words.tryPop()) { None {} Some(word) { word.print(); } }
+}

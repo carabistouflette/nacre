@@ -232,7 +232,7 @@
         },
         {
           "name": "keyword.control.nacre",
-          "match": "\\b(?:enum|match|if|else|while|return|break|continue)\\b"
+          "match": "\\b(?:enum|match|if|else|while|for|return|break|continue)\\b"
         },
         {
           "name": "keyword.other.nacre",
@@ -346,7 +346,7 @@
       "patterns": [
         {
           "name": "punctuation.separator.nacre",
-          "match": "[;,\\.]"
+          "match": "[;,:\\.]"
         },
         {
           "name": "punctuation.section.group.nacre",

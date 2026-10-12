@@ -1,18 +1,16 @@
-# After V7
+# After V8
 
 ## Shipped foundation
 
-Nacre V7 retains ownership/definite initialization, generic nominal classes,
+Nacre retains ownership/definite initialization, generic nominal classes,
 interfaces and inline enums, recoverable UTF-8 console/file APIs, native arguments,
 multifile source bundles, diagnostic stdio LSP, Sudoku, and VS Code/Zed support.
+V7 added receiver-derived borrowed returns, affine list element references,
+owned-field replacement, borrowed enum matching, and atomic contact persistence.
 
-V7 adds receiver-derived borrowed returns, checked shared/exclusive references
-into affine lists, typed owned-field replacement, borrowed enum matching, and a
-complete contact-book application using atomic persistence.
-
-V6 stabilization was completed first: actual VS Code/Zed acceptance, private
-remote CI, real bounded frontend/framing fuzzing, atomic saves, and the clean
-Nacre cutover. Obsolete identity artifacts and reports are removed.
+V8 adds copied/shared/exclusive lexical list traversal, recoverable copied lookup
+and owned extraction, plus contact-book search, phone filtering, and confirmed
+batch removal. [V8.md](V8.md) defines the exact milestone and exclusions.
 
 ## Maintain correctness before expanding scope
 
@@ -20,34 +18,37 @@ Nacre cutover. Obsolete identity artifacts and reports are removed.
 - Preserve receiver-origin contracts across generic/interface dispatch.
 - Keep projected receivers stable while evaluating arguments/RHS expressions;
   ancestor mutation must not free a pending child pointer.
+- Preserve whole-loop root loans and per-iteration cleanup through nested loops,
+  `continue`, `break`, and `return`.
+- Failed recoverable extraction must preserve contents, order, size, and capacity;
+  success transfers exactly one cleanup obligation without an option allocation.
 - Exercise malformed LSP framing, unsaved overlays, editor restarts, and input
   bounds. Finite campaigns and passing suites are not general safety proofs.
-- Preserve clear atomic visibility vs. crash-durability semantics and actual
-  error recovery, without unchecked pointers or message-string classification.
+- Keep atomic visibility distinct from crash durability and publish only portable
+  curated sources, never workstation configuration or private evidence locations.
 
-## Deliberately conservative current model
+## Deliberately conservative model
 
 Loans end at lexical boundaries, not their last use. A root and all its owned
 fields share one alias domain; list indices are not analyzed as disjoint.
 Returned references require a receiver-derived origin. Local views remain
-non-movable/non-exportable. Arbitrary field extraction and partial moves are not
-provided; replacement always preserves a fully typed owned value.
+non-movable/non-exportable. Traversal is loop syntax, not a transferable iterator
+object. Arbitrary field extraction and partial moves remain unsupported.
 
-Any later lifetime/projection refinement must establish explicit function and
-interface contracts, joins/loops/cleanup behavior, and adversarial invalidation
-rejections before relaxing these rules. No such refinement is promised by V7.
+Any lifetime/projection refinement must establish explicit function and interface
+contracts, joins/loops/cleanup behavior, and adversarial invalidation rejections
+before relaxing these rules. V8 does not promise such a refinement.
 
-## Possible later work, not V7 commitments
+## Possible later work, not V8 commitments
 
-- Borrowed iterators/maps and additional everyday APIs, only after specifying
-  ownership and invalidation behavior.
-- Separately designed fallible allocation and recoverable versions of currently
-  fatal bounds/pop operations; no exception unwinding is currently promised.
-- Measured compiler/native performance work, using reproducible profiles rather
-  than speculative backends or abstraction layers.
-- Independent review of language/runtime trust boundaries and untrusted input
+- Maps with explicit key equality/hashing, ownership, and invalidation contracts.
+- First-class borrowed iterators, only after a design for their lifetime and
+  movement/export behavior; current lexical traversal does not imply that design.
+- Separately designed fallible allocation; no exception unwinding is promised.
+- Measured compiler/native performance using reproducible profiles.
+- Independent review of compiler/runtime trust boundaries and untrusted-input
   resistance. Programs remain outside any sandbox.
 
 Modules, threads, FFI, inheritance, non-lexical lifetimes, lifetime parameters,
-and a direct LLVM backend were excluded from V7. Future discussion of them must
-not be mistaken for an unfinished implementation in this release.
+and a direct LLVM backend remain excluded. Future discussion is not an unfinished
+implementation or an implicit commitment in this release.

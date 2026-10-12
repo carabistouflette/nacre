@@ -1,4 +1,4 @@
-# Standard Library V7
+# Standard Library V8
 
 `List`, `Text`, `Option`, `Result`, `Console`, `Files`, and `Args` are reserved
 and pre-injected without imports. The two sum types use the ordinary enum
@@ -22,11 +22,14 @@ implemented by `Dog`.
 | `readonly int capacity()` | Current buffer capacity. |
 | `readonly boolean isEmpty()` | Whether `size() == 0`. |
 | `readonly T get(int index)` | Copies an element of `int`, `boolean`, or `String`; checks bounds. |
+| `readonly Option<T> tryGet(int index)` | Copies an `int`, `boolean`, or `String` into `Some`; invalid indices return `None` without mutation. |
 | `readonly borrow T getRef(int index)` | Returns a shared borrow of an affine nominal element; checks bounds and does not allocate or transfer ownership. |
 | `borrow mut T getMut(int index)` | Returns an exclusive borrow of an affine nominal element; checks bounds and does not allocate or transfer ownership. |
 | `void set(int index, T value)` | Replaces an element and destroys the old owned value; checks bounds. |
 | `T pop()` | Removes and transfers ownership of the last element; fatal if the list is empty. |
 | `T remove(int index)` | Removes an element, preserves order, and transfers ownership; checks bounds. |
+| `Option<T> tryPop()` | Transfers the last element into `Some`; an empty list returns `None`. |
+| `Option<T> tryRemove(int index)` | Transfers the indexed element into `Some`, preserving survivor order; invalid indices return `None`. |
 | `void clear()` | Destroys remaining elements and retains the buffer. |
 | `void reserve(int capacity)` | Ensures at least this capacity without changing the size; a negative value is fatal. |
 
@@ -51,6 +54,18 @@ Call arguments retain the language's receiver reservations: `xs.add(xs.get(0))`
 for `List<int>` evaluates the copied argument before mutation. A named shared
 borrow prevents mutation of the same owner until the end of its lexical scope;
 the same rule prevents moving it during that scope.
+
+Recoverable methods return inline options without allocating. Failed extraction
+does not change contents, size, or capacity. Successful extraction clears the
+vacated slot and transfers exactly one cleanup obligation. Existing strict
+methods still fail fatally at invalid boundaries. Allocation failure remains
+fatal; no `Option<borrow T>` method is exposed.
+
+`for (int item : numbers)` copies primitive elements; nominal elements use
+`for (borrow T item : list)` or `for (borrow mut T item : list)`. The collection
+is evaluated once and borrowed for the whole loop. Element bindings end each
+iteration, while structural mutation through another alias stays forbidden.
+See [V8.md](V8.md) for traversal and recoverable-operation contracts.
 
 ## Text
 

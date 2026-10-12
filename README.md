@@ -1,13 +1,16 @@
-# Nacre V7 — native ownership and receiver-bound borrowing
+# Nacre V8 — lexical traversal and recoverable collections
 
 Nacre is an experimental Rust compiler with a Java-like syntax and the pipeline
 **Nacre → C11 → GCC/Clang → native executable**. No JVM, garbage collector, or
-reference counting is used. Cargo package/CLI: `nacre` **0.8.0**; source files:
+reference counting is used. Cargo package/CLI: `nacre` **0.9.0**; source files:
 `.ncr`; project marker: `nacre.json`. Rust **1.74** is the declared minimum.
 
-V7 adds receiver-bound borrowed returns, shared/exclusive list element access,
-typed replacement of owned fields, borrowed enum matching, and an interactive
-contact book. Borrow lifetimes remain lexical and alias domains conservative.
+V8 adds list `for` traversal, recoverable `tryGet`/`tryPop`/`tryRemove`, and
+contact-book search, phone filtering, and confirmed batch removal. Receiver-bound
+borrowed returns, owned-field replacement, and borrowed enum matching remain
+available. Borrow lifetimes stay lexical and alias domains conservative.
+
+The bounded milestone contract and explicit exclusions are in [V8.md](docs/V8.md).
 
 ## Start
 
@@ -26,9 +29,9 @@ output and allocation balance. It is a smoke check, not a general safety proof.
 
 ## Interactive applications
 
-- [Contact book](docs/CONTACT_BOOK.md): list/show, add, edit, remove, validated
-  load, atomic save, help, and quit. Consultation borrows list elements; editing
-  replaces their owned fields without extracting/reinserting contacts. Phone
+- [Contact book](docs/CONTACT_BOOK.md): list/show, add/edit/remove, name search,
+  phone filtering, confirmed batch removal, validated load, atomic save, help,
+  and quit. Traversal borrows contacts; edits replace their owned fields. Phone
   display borrows an `Option<Text>` payload. Unicode and paths with spaces work.
 - [Sudoku](examples/sudoku.ncr): immutable clues, validated moves, solving,
   validated load, and atomic saves that preserve clues separately from moves.
@@ -41,6 +44,37 @@ nacre run examples/sudoku.ncr --memory-stats
 Memory statistics appear on stderr as
 `NACRE_MEMORY allocations=N frees=N live=0`; object allocations and owned buffers
 are both counted.
+
+## V8 list traversal and recovery
+
+```java
+void main() {
+    List<int> numbers = new List<int>();
+    numbers.add(1);
+    numbers.add(2);
+    for (int number : numbers) { println(number); }
+    match (numbers.tryRemove(5)) {
+        Some(number) { println(number); }
+        None { println("No such element; the list is unchanged."); }
+    }
+}
+```
+
+Nominal elements use `for (borrow T item : list)` or
+`for (borrow mut T item : list)`. The list stays loaned for the complete loop;
+each element binding ends at its iteration boundary. Structural mutation through
+another alias is rejected, even for copied primitive traversal. This is not a
+first-class iterator or an NLL feature.
+
+`tryGet` exists for copied primitives only. `tryPop` and `tryRemove` transfer
+any supported element into an inline `Option<T>` without a wrapper allocation;
+invalid boundaries return `None` without mutation. Existing strict operations
+retain their fatal-boundary behavior. Run the complete
+[collection example](examples/collections_v8.ncr) with:
+
+```sh
+nacre run examples/collections_v8.ncr --memory-stats
+```
 
 ## Ownership and borrowed access
 
@@ -175,8 +209,8 @@ require a C compiler. See [PROJECTS.md](docs/PROJECTS.md).
 
 ## VS Code and Zed
 
-Packages **0.3.0**, grammar **0.2.0**, and 16 snippets cover borrowed getters,
-exclusive list access, and borrowed enum matching alongside existing constructs.
+Packages **0.4.0**, grammar **0.3.0**, and 20 snippets cover copied/shared/exclusive
+list traversal and recoverable removal alongside V7 borrowing constructs.
 Both clients launch `nacre lsp` and use the real compiler for diagnostics.
 
 ```sh
@@ -188,7 +222,7 @@ npm --prefix editors/vscode test
 npm --prefix editors/vscode run package
 ```
 
-Install `editors/vscode/nacre-0.3.0.vsix`; configure `nacre.serverPath` if the
+Install `editors/vscode/nacre-0.4.0.vsix`; configure `nacre.serverPath` if the
 compiler is not on PATH. The `Nacre: Restart Language Server` command supports
 recovery after failed startup and serializes lifecycle operations.
 
@@ -222,8 +256,8 @@ seed corpora. Preserve crash artifacts for reproduction. Finite successful runs
 are evidence, not a general fuzz-safety proof.
 
 [VALIDATION.md](docs/VALIDATION.md) records observed compiler/native/editor/CI
-evidence and unverified platform boundaries. Nacre stabilization finished before
-V7 implementation; the complete V7 workflow and both real desktop editors pass.
+evidence and unverified platform boundaries. V8 compiler/native/fuzz checks and
+both actual desktop editor acceptance runs pass; CI evidence is recorded there.
 Obsolete identity artifacts and historical reports were removed at user request,
 without relabeling their captured outputs.
 

@@ -14,10 +14,17 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
-LIST = 'NEW ADD SIZE CAPACITY IS_EMPTY GET GET_REF GET_MUT SET POP REMOVE CLEAR RESERVE'.split()
+LIST = 'NEW ADD SIZE CAPACITY IS_EMPTY GET GET_REF GET_MUT SET POP REMOVE TRY_GET TRY_POP TRY_REMOVE CLEAR RESERVE'.split()
 TEXT = 'NEW APPEND APPEND_INT APPEND_BOOLEAN APPEND_TEXT BYTE_LENGTH BYTE_AT IS_EMPTY CLEAR PRINT CLONE EQUALS EQUALS_STRING PARSE_INT SLICE_BYTES'.split()
 
+def option_code(cid, element):
+    return f'''typedef struct ncr_obj_{cid} {{
+        int32_t tag;
+        union {{ struct {{ unsigned char ncr_empty; }} v0; struct {{ {element} f0; }} v1; }} data;
+    }} ncr_obj_{cid};\n'''
+
 def list_code(cid, element, zero, drop='', copy=True, borrow_type='', borrow_element=''):
+    option_id = 300 + cid
     fields = f'typedef struct ncr_obj_{cid} {{ {element} *items; int32_t length; int32_t capacity; }} ncr_obj_{cid};\n'
     destructor = f'''static void ncr_drop_{cid}(ncr_obj_{cid} *p) {{
         if (p == NULL) return;
@@ -26,6 +33,18 @@ def list_code(cid, element, zero, drop='', copy=True, borrow_type='', borrow_ele
     }}\n'''
     body = (ROOT/'stdlib/list.c.in').read_text()
     body = body.replace('@GET_METHOD@', (ROOT/'stdlib/list_get.c.in').read_text() if copy else '')
+    try_get = (ROOT/'stdlib/list_try_get.c.in').read_text() if copy else ''
+    try_owned = (ROOT/'stdlib/list_try_owned.c.in').read_text()
+    for marker, value in {
+        '@OPTION_TYPE@': f'ncr_obj_{option_id}', '@INDEX_TYPE@': 'int32_t',
+        '@NONE_TAG@': '0', '@SOME_TAG@': '1',
+        '@STRICT_POP_CALL@': f'list{cid}_pop',
+        '@STRICT_REMOVE_CALL@': f'list{cid}_remove',
+    }.items():
+        try_get = try_get.replace(marker, value)
+        try_owned = try_owned.replace(marker, value)
+    body = body.replace('@TRY_GET_METHOD@', try_get)
+    body = body.replace('@TRY_OWNED_METHODS@', try_owned)
     borrowed = ''
     if borrow_type:
         helper = (ROOT/'stdlib/list_get_borrowed.c.in').read_text()
@@ -40,7 +59,7 @@ def list_code(cid, element, zero, drop='', copy=True, borrow_type='', borrow_ele
     replacements.update({f'@LIST_{x}@':f'list{cid}_{x.lower()}' for x in LIST})
     for k,v in replacements.items(): body=body.replace(k,v)
     assert not re.search(r'@[A-Z_]+@', body)
-    return fields+destructor+body
+    return fields + option_code(option_id, element) + destructor + body
 
 def text_code(cid):
     parse_id, slice_id = cid + 100, cid + 200
@@ -122,6 +141,91 @@ int main(void) {
     ncr_drop_0(xs);
     NEW_LIST(1, bs);list1_add(bs,true,1,1);list1_add(bs,false,1,1);assert(list1_remove(bs,0,1,1));assert(!list1_pop(bs,1,1));ncr_drop_1(bs);
     NEW_LIST(2, ss);list2_add(ss,STR("a\0b"),1,1);ncr_string z=list2_get(ss,0,1,1);assert(z.length==3&&z.data[1]==0);ncr_drop_2(ss);
+    NEW_LIST(1, bool_try);
+    list1_add(bool_try, true, 1, 1); list1_add(bool_try, false, 1, 1);
+    ncr_obj_301 bool_copy = list1_try_get(bool_try, 0, 1, 1);
+    assert(bool_copy.tag == 1 && bool_copy.data.v1.f0);
+    ncr_drop_1(bool_try);
+    NEW_LIST(2, string_try);
+    list2_add(string_try, STR("a\0b"), 1, 1);
+    ncr_obj_302 string_copy = list2_try_get(string_try, 0, 1, 1);
+    assert(string_copy.tag == 1 && string_copy.data.v1.f0.length == 3 && string_copy.data.v1.f0.data[1] == 0);
+    ncr_drop_2(string_try);
+    NEW_LIST(0, fallible);
+    for (int32_t i = 1; i <= 5; ++i) list0_add(fallible, i * 10, 1, 1);
+    int32_t fallible_capacity = list0_capacity(fallible, 1, 1);
+    size_t allocations_before_try = ncr_allocations;
+    ncr_obj_300 absent = list0_try_get(fallible, -1, 1, 1); assert(absent.tag == 0);
+    absent = list0_try_get(fallible, 5, 1, 1); assert(absent.tag == 0);
+    absent = list0_try_get(fallible, INT32_MAX, 1, 1); assert(absent.tag == 0);
+    absent = list0_try_remove(fallible, -1, 1, 1); assert(absent.tag == 0);
+    absent = list0_try_remove(fallible, 5, 1, 1); assert(absent.tag == 0);
+    absent = list0_try_remove(fallible, INT32_MAX, 1, 1); assert(absent.tag == 0);
+    assert(list0_size(fallible, 1, 1) == 5 && list0_capacity(fallible, 1, 1) == fallible_capacity);
+    for (int32_t i = 0; i < 5; ++i) assert(list0_get(fallible, i, 1, 1) == (i + 1) * 10);
+    ncr_obj_300 removed = list0_try_remove(fallible, 0, 1, 1);
+    assert(removed.tag == 1 && removed.data.v1.f0 == 10);
+    removed = list0_try_remove(fallible, 1, 1, 1);
+    assert(removed.tag == 1 && removed.data.v1.f0 == 30);
+    removed = list0_try_remove(fallible, 2, 1, 1);
+    assert(removed.tag == 1 && removed.data.v1.f0 == 50);
+    assert(list0_size(fallible, 1, 1) == 2 && list0_get(fallible, 0, 1, 1) == 20 && list0_get(fallible, 1, 1, 1) == 40);
+    removed = list0_try_pop(fallible, 1, 1); assert(removed.tag == 1 && removed.data.v1.f0 == 40);
+    removed = list0_try_pop(fallible, 1, 1); assert(removed.tag == 1 && removed.data.v1.f0 == 20);
+    absent = list0_try_pop(fallible, 1, 1); assert(absent.tag == 0);
+    absent = list0_try_remove(fallible, 0, 1, 1); assert(absent.tag == 0);
+    absent = list0_try_remove(fallible, INT32_MAX, 1, 1); assert(absent.tag == 0);
+    assert(list0_capacity(fallible, 1, 1) == fallible_capacity);
+    assert(ncr_allocations == allocations_before_try);
+    ncr_drop_0(fallible);
+    NEW_LIST(3, owned_try);
+    for (int32_t i = 0; i < 5; ++i) list3_add(owned_try, item_new(i), 1, 1);
+    allocations_before_try = ncr_allocations;
+    ncr_obj_303 missing_owned = list3_try_remove(owned_try, INT32_MAX, 1, 1);
+    assert(missing_owned.tag == 0 && list3_size(owned_try, 1, 1) == 5);
+    ncr_obj_303 transferred = list3_try_remove(owned_try, 0, 1, 1);
+    assert(transferred.tag == 1 && transferred.data.v1.f0->n == 0); item_drop(transferred.data.v1.f0);
+    transferred = list3_try_remove(owned_try, 1, 1, 1);
+    assert(transferred.tag == 1 && transferred.data.v1.f0->n == 2); item_drop(transferred.data.v1.f0);
+    transferred = list3_try_remove(owned_try, 2, 1, 1);
+    assert(transferred.tag == 1 && transferred.data.v1.f0->n == 4); item_drop(transferred.data.v1.f0);
+    transferred = list3_try_pop(owned_try, 1, 1);
+    assert(transferred.tag == 1 && transferred.data.v1.f0->n == 3); item_drop(transferred.data.v1.f0);
+    transferred = list3_try_pop(owned_try, 1, 1);
+    assert(transferred.tag == 1 && transferred.data.v1.f0->n == 1); item_drop(transferred.data.v1.f0);
+    missing_owned = list3_try_pop(owned_try, 1, 1); assert(missing_owned.tag == 0);
+    assert(ncr_allocations == allocations_before_try);
+    ncr_drop_3(owned_try);
+    NEW_LIST(5, enum_try);
+    for (int32_t i = 0; i < 5; ++i) list5_add(enum_try, (Sum){.tag=0, .data.v0.f0=item_new(i)}, 1, 1);
+    ncr_obj_305 enum_result = list5_try_remove(enum_try, 0, 1, 1);
+    assert(enum_result.tag == 1 && enum_result.data.v1.f0.tag == 0 && enum_result.data.v1.f0.data.v0.f0->n == 0);
+    sum_drop(enum_result.data.v1.f0);
+    enum_result = list5_try_remove(enum_try, 1, 1, 1);
+    assert(enum_result.tag == 1 && enum_result.data.v1.f0.data.v0.f0->n == 2);
+    sum_drop(enum_result.data.v1.f0);
+    enum_result = list5_try_remove(enum_try, 2, 1, 1);
+    assert(enum_result.tag == 1 && enum_result.data.v1.f0.data.v0.f0->n == 4);
+    sum_drop(enum_result.data.v1.f0);
+    enum_result = list5_try_pop(enum_try, 1, 1);
+    assert(enum_result.tag == 1 && enum_result.data.v1.f0.data.v0.f0->n == 3);
+    sum_drop(enum_result.data.v1.f0);
+    ncr_drop_5(enum_try);
+    NEW_LIST(4, iface_try);
+    for (int32_t i = 0; i < 5; ++i) list4_add(iface_try, (Iface){item_new(i), erase_drop}, 1, 1);
+    ncr_obj_304 iface_result = list4_try_remove(iface_try, 0, 1, 1);
+    assert(iface_result.tag == 1 && ((Item *)iface_result.data.v1.f0.data)->n == 0);
+    iface_drop(iface_result.data.v1.f0);
+    iface_result = list4_try_remove(iface_try, 1, 1, 1);
+    assert(iface_result.tag == 1 && ((Item *)iface_result.data.v1.f0.data)->n == 2);
+    iface_drop(iface_result.data.v1.f0);
+    iface_result = list4_try_remove(iface_try, 2, 1, 1);
+    assert(iface_result.tag == 1 && ((Item *)iface_result.data.v1.f0.data)->n == 4);
+    iface_drop(iface_result.data.v1.f0);
+    iface_result = list4_try_pop(iface_try, 1, 1);
+    assert(iface_result.tag == 1 && ((Item *)iface_result.data.v1.f0.data)->n == 3);
+    iface_drop(iface_result.data.v1.f0);
+    ncr_drop_4(iface_try);
     NEW_LIST(3, owned);
     for(int32_t i=0;i<10000;++i)list3_add(owned,item_new(i),1,1);
     for(int32_t i=9999;i>=9000;--i){Item *p=list3_pop(owned,1,1);assert(p->n==i);item_drop(p);}
