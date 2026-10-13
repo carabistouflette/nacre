@@ -564,11 +564,11 @@ void main() {
 fn regex_reports_resource_exhaustion_instead_of_a_miss() {
     let output = execute(r#"
 void main() {
-    Text pattern = new Text("(*NO_AUTO_POSSESS)(*NO_START_OPT)(a+)+$");
+    Text pattern = new Text("(*LIMIT_MATCH=100)(*NO_AUTO_POSSESS)(*NO_START_OPT)(a+)+$");
     match (Regex.compile(pattern)) {
         Err(error) { println("resource pattern rejected"); drop(error); }
         Ok(regex) {
-            Text subject = new Text("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa!");
+            Text subject = new Text("aaaaaaaaaaaaaaaaaaaa!");
             match (regex.matches(subject)) {
                 Err(error) { println("matches reported resource exhaustion"); drop(error); }
                 Ok(value) { println("matches hid resource exhaustion"); println(value); }
