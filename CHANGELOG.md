@@ -14,6 +14,9 @@
 - Equivalent Nacre/Rust collection benchmarks validate checksums, separate
   allocation instrumentation from timing, and isolate measured child RSS from
   the Python launcher through a native supervisor.
+- Math exposes defined IEEE behavior and fallible signed-minimum absolute values.
+  Unique-owned SplitMix64 Random supports deterministic reseeding, unbiased bounds
+  and real OS entropy. Time clocks and sleeps return structured errors with checked units.
 
 - Postfix `?` unwraps trusted built-in `Result` values or returns the exact
   error payload after cleaning live locals and pending owned C temporaries.

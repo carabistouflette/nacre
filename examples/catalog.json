@@ -2,6 +2,14 @@
   "examples": [
     {
       "category": "language",
+      "source": "examples/language/math_random_time.ncr",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["17", "1024", "5", "negative sleep rejected"]
+    },
+    {
+      "category": "language",
       "source": "examples/language/generic_factories.ncr",
       "stdin": "",
       "args": [],

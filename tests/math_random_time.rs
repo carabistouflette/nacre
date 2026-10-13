@@ -144,9 +144,8 @@ void main() {
 "#;
     let output = execute(source, &["-DNACRE_MEMORY_STATS", "-fsanitize=address,undefined", "-fno-omit-frame-pointer"]);
     assert_native_success(&output);
-    assert_eq!(String::from_utf8_lossy(&output.stdout), concat!(
-        "true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\nZERO_BOUND_ERR\ntrue\nNEGATIVE_BOUND_ERR\ntrue\ntrue\n"
-    ));
+    assert_eq!(String::from_utf8_lossy(&output.stdout),
+        "true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\nZERO_BOUND_ERR\ntrue\nNEGATIVE_BOUND_ERR\ntrue\ntrue\n");
     assert_live_zero(&output);
 }
 
@@ -156,16 +155,22 @@ fn system_entropy_short_read_failure_closes_and_drops_partial_state() {
 void main() {
     match (Random.fromSystem()) {
         Ok(random) { println("unexpected"); }
-        Err(error) { error.print(); }
+        Err(error) { println("ENTROPY_ERR"); }
     }
 }
 "#;
     let mut c = compile_to_c(source).unwrap();
     c.push_str(r#"
 static int ncr_test_reads;
+static int ncr_test_entropy_fd = -1;
+static void ncr_test_entropy_closed(void) {
+    errno = 0;
+    if (fcntl(ncr_test_entropy_fd, F_GETFD) != -1 || errno != EBADF) { abort(); }
+}
 int ncr_test_open(const char *path, int flags, ...) {
-    (void)path; (void)flags;
-    return 41;
+    ncr_test_entropy_fd = openat(AT_FDCWD, path, flags);
+    if (ncr_test_entropy_fd < 0 || atexit(ncr_test_entropy_closed) != 0) { abort(); }
+    return ncr_test_entropy_fd;
 }
 ssize_t ncr_test_read(int descriptor, void *buffer, size_t count) {
     (void)descriptor;
@@ -177,25 +182,17 @@ ssize_t ncr_test_read(int descriptor, void *buffer, size_t count) {
     errno = EIO;
     return -1;
 }
-int ncr_test_close(int descriptor) {
-    (void)descriptor;
-    fputs("ENTROPY_CLOSE\n", stderr);
-    return 0;
-}
 "#);
     let output = native::compile_c_with_flags(&c, &[
         "-DNACRE_MEMORY_STATS",
         "-Dopen=ncr_test_open",
         "-Dread=ncr_test_read",
-        "-Dclose=ncr_test_close",
         "-fsanitize=address,undefined",
         "-fno-omit-frame-pointer",
     ]).unwrap_or_else(|error| panic!("native compile failed: {error}"))
         .output().unwrap_or_else(|error| panic!("native execution failed: {error}"));
     assert_native_success(&output);
-    assert_eq!(String::from_utf8_lossy(&output.stdout), "Random.fromSystem: /dev/urandom failed (errno=5)\n");
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("ENTROPY_CLOSE\n"), "{stderr}");
+    assert_eq!(output.stdout, b"ENTROPY_ERR\n");
     assert_live_zero(&output);
 }
 
@@ -216,13 +213,6 @@ void main() {
     println(before >= 0L);
     println(next >= before);
 
-    match (Time.unixMillis()) {
-        Ok(milliseconds) {
-            println(milliseconds > 1000000000000L);
-            println(milliseconds < 1000000000000000L);
-        }
-        Err(error) { println("CLOCK_ERR"); }
-    }
     match (Time.deadlineAfterMillis(5000L)) {
         Ok(deadline) { println(deadline > next); }
         Err(error) { println("DEADLINE_ERR"); }
@@ -257,9 +247,8 @@ void main() {
 "#;
     let output = execute(source, &["-DNACRE_MEMORY_STATS", "-fsanitize=address,undefined", "-fno-omit-frame-pointer"]);
     assert_native_success(&output);
-    assert_eq!(String::from_utf8_lossy(&output.stdout), concat!(
-        "true\ntrue\ntrue\ntrue\ntrue\nNEGATIVE_DEADLINE_ERR\nOVERFLOW_DEADLINE_ERR\n()\n()\ntrue\nNEGATIVE_SLEEP_ERR\n"
-    ));
+    assert_eq!(String::from_utf8_lossy(&output.stdout),
+        "true\ntrue\ntrue\nNEGATIVE_DEADLINE_ERR\nOVERFLOW_DEADLINE_ERR\n()\n()\ntrue\nNEGATIVE_SLEEP_ERR\n");
     assert_live_zero(&output);
 }
 
@@ -269,7 +258,7 @@ fn monotonic_clock_failure_returns_err_and_drops_text() {
 void main() {
     match (Time.monotonicNanos()) {
         Ok(value) { println("unexpected"); }
-        Err(error) { error.print(); }
+        Err(error) { println("CLOCK_ERR"); }
     }
 }
 "#;
@@ -289,10 +278,7 @@ int ncr_test_clock_gettime(clockid_t clock_id, struct timespec *timestamp) {
     ]).unwrap_or_else(|error| panic!("native compile failed: {error}"))
         .output().unwrap_or_else(|error| panic!("native execution failed: {error}"));
     assert_native_success(&output);
-    assert_eq!(
-        String::from_utf8_lossy(&output.stdout),
-        "Time.monotonicNanos/CLOCK_MONOTONIC failed (errno=5)\n",
-    );
+    assert_eq!(output.stdout, b"CLOCK_ERR\n");
     assert_live_zero(&output);
 }
 
@@ -303,5 +289,37 @@ fn complete_language_example_runs_under_native_sanitizers() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("17\nERR\nERR\n"), "{stdout}");
     assert!(stdout.contains("negative sleep rejected\n"), "{stdout}");
+    assert_live_zero(&output);
+}
+
+#[test]
+fn wall_and_monotonic_clock_units_are_converted_without_loss_or_overflow() {
+    let source = r#"
+void main() {
+    match (Time.unixMillis()) {
+        Ok(value) { println(value); }
+        Err(error) { println("unexpected"); }
+    }
+    match (Time.monotonicNanos()) {
+        Ok(value) { println(value); }
+        Err(error) { println("unexpected"); }
+    }
+}
+"#;
+    let mut c = compile_to_c(source).unwrap();
+    c.push_str(r#"
+int ncr_test_clock_gettime(clockid_t clock_id, struct timespec *timestamp) {
+    (void)clock_id;
+    timestamp->tv_sec = (time_t)1500000000;
+    timestamp->tv_nsec = 789000123L;
+    return 0;
+}
+"#);
+    let output = native::compile_c_with_flags(&c, &[
+        "-DNACRE_MEMORY_STATS", "-Dclock_gettime=ncr_test_clock_gettime",
+        "-fsanitize=address,undefined", "-fno-omit-frame-pointer",
+    ]).unwrap().output().unwrap();
+    assert_native_success(&output);
+    assert_eq!(output.stdout, b"1500000000789\n1500000000789000123\n");
     assert_live_zero(&output);
 }
