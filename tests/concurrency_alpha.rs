@@ -70,6 +70,150 @@ static int ncr_test_receiver_cond_wait(pthread_cond_t *condition, pthread_mutex_
     observed
 }
 
+fn barrier_generation_observer(c: &str) -> String {
+    let timed_wait = "pthread_cond_timedwait(&ncr_self->condition->condition, &control->mutex, &deadline)";
+    let broadcast = "pthread_cond_broadcast(&ncr_self->condition->condition)";
+    assert!(c.contains(timed_wait), "generated barrier condition wait was not found");
+    assert!(c.contains(broadcast), "generated barrier notification was not found");
+    let instrumented = c
+        .replace(
+            timed_wait,
+            "ncr_test_barrier_timedwait(&ncr_self->condition->condition, &control->mutex, &deadline)",
+        )
+        .replace(
+            broadcast,
+            "ncr_test_barrier_broadcast(&ncr_self->condition->condition)",
+        );
+    let mut observed = r#"
+#define _GNU_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#include <pthread.h>
+#include <sched.h>
+#include <stdatomic.h>
+#include <stdbool.h>
+#include <time.h>
+static atomic_flag ncr_test_delayed_waiter = ATOMIC_FLAG_INIT;
+static _Atomic bool ncr_test_next_generation_broken = false;
+static _Atomic unsigned ncr_test_barrier_broadcasts = 0;
+static int ncr_test_barrier_timedwait(pthread_cond_t *condition, pthread_mutex_t *mutex,
+        const struct timespec *deadline) {
+    int error = pthread_cond_timedwait(condition, mutex, deadline);
+    if (error == 0 &&
+            !atomic_flag_test_and_set_explicit(&ncr_test_delayed_waiter, memory_order_relaxed)) {
+        error = pthread_mutex_unlock(mutex);
+        if (error != 0) { return error; }
+        while (!atomic_load_explicit(&ncr_test_next_generation_broken, memory_order_acquire)) {
+            (void)sched_yield();
+        }
+        error = pthread_mutex_lock(mutex);
+    }
+    return error;
+}
+static int ncr_test_barrier_broadcast(pthread_cond_t *condition) {
+    int error = pthread_cond_broadcast(condition);
+    if (error == 0 &&
+            atomic_fetch_add_explicit(&ncr_test_barrier_broadcasts, 1, memory_order_relaxed) == 1) {
+        atomic_store_explicit(&ncr_test_next_generation_broken, true, memory_order_release);
+    }
+    return error;
+}
+"#
+    .to_owned();
+    observed.push_str(&instrumented);
+    observed
+}
+
+fn fail_future_condition_initialization(c: &str) -> String {
+    let initializer = "pthread_cond_init(&node->condition, &attributes)";
+    assert!(c.contains(initializer), "generated condition initialization was not found");
+    let instrumented = c.replace(
+        initializer,
+        "ncr_test_fail_condition_init(&node->condition, &attributes)",
+    );
+    let mut observed = r#"
+#define _GNU_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#include <errno.h>
+#include <pthread.h>
+static int ncr_test_fail_condition_init(pthread_cond_t *condition,
+        const pthread_condattr_t *attributes) {
+    (void)condition;
+    (void)attributes;
+    return EAGAIN;
+}
+"#
+    .to_owned();
+    observed.push_str(&instrumented);
+    observed
+}
+
+fn fail_second_pool_worker_creation(c: &str) -> String {
+    let create = "return pthread_create(thread, NULL, start, context);";
+    let wait = "pthread_cond_wait(&state->ready->condition, &control->mutex)";
+    let broadcast = "pthread_cond_broadcast(&state->ready->condition)";
+    assert!(c.contains(create), "generated pthread creation helper was not found");
+    assert!(c.contains(wait), "generated pool worker wait was not found");
+    assert!(c.contains(broadcast), "generated pool condition broadcast was not found");
+    let instrumented = c
+        .replace(create, "return ncr_test_pool_thread_create(thread, start, context);")
+        .replace(
+            wait,
+            "ncr_test_pool_cond_wait(&state->ready->condition, &control->mutex)",
+        )
+        .replace(
+            broadcast,
+            "ncr_test_pool_broadcast(&state->ready->condition)",
+        );
+    let mut observed = r#"
+#define _GNU_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#include <errno.h>
+#include <pthread.h>
+#include <sched.h>
+#include <stdatomic.h>
+#include <stdbool.h>
+#include <time.h>
+static _Atomic unsigned ncr_test_create_count = 0;
+static _Atomic bool ncr_test_worker_waiting = false;
+static _Atomic bool ncr_test_second_create_failed = false;
+static _Atomic bool ncr_test_cleanup_broadcast = false;
+static int ncr_test_pool_thread_create(pthread_t *thread, void *(*start)(void *),
+        void *context) {
+    unsigned call = atomic_fetch_add_explicit(&ncr_test_create_count, 1, memory_order_relaxed);
+    if (call == 0) { return pthread_create(thread, NULL, start, context); }
+    if (call == 1) {
+        while (!atomic_load_explicit(&ncr_test_worker_waiting, memory_order_acquire)) {
+            (void)sched_yield();
+        }
+        atomic_store_explicit(&ncr_test_second_create_failed, true, memory_order_release);
+    }
+    return EAGAIN;
+}
+static int ncr_test_pool_cond_wait(pthread_cond_t *condition, pthread_mutex_t *mutex) {
+    atomic_store_explicit(&ncr_test_worker_waiting, true, memory_order_release);
+    while (!atomic_load_explicit(&ncr_test_second_create_failed, memory_order_acquire)) {
+        (void)sched_yield();
+    }
+    const struct timespec pause = { .tv_sec = 0, .tv_nsec = 1000000L };
+    for (unsigned attempt = 0; attempt < 100 &&
+            !atomic_load_explicit(&ncr_test_cleanup_broadcast, memory_order_acquire); ++attempt) {
+        (void)nanosleep(&pause, NULL);
+    }
+    return pthread_cond_wait(condition, mutex);
+}
+static int ncr_test_pool_broadcast(pthread_cond_t *condition) {
+    int error = pthread_cond_broadcast(condition);
+    if (error == 0) {
+        atomic_store_explicit(&ncr_test_cleanup_broadcast, true, memory_order_release);
+    }
+    return error;
+}
+"#
+    .to_owned();
+    observed.push_str(&instrumented);
+    observed
+}
+
 struct NativeWaitProcess {
     child: Child,
     stdin: Option<ChildStdin>,
@@ -1135,13 +1279,16 @@ Result<Unit, Text> exercise() {
     if (negativePermits) { println("negative permits rejected"); }
 
     CountDownLatch latch = CountDownLatch.create(2L)?;
-    println(latch.wait(0L)?);
-    latch.countDown()?;
-    println(latch.count());
-    latch.countDown()?;
-    latch.countDown()?;
-    println(latch.count());
-    println(latch.wait(0L)?);
+    CountDownLatch sharedLatch = latch.cloneHandle()?;
+    drop(latch);
+    println(sharedLatch.wait(0L)?);
+    sharedLatch.countDown()?;
+    println(sharedLatch.count());
+    sharedLatch.countDown()?;
+    sharedLatch.countDown()?;
+    println(sharedLatch.count());
+    println(sharedLatch.wait(0L)?);
+    drop(sharedLatch);
     boolean negativeCount = false;
     match (CountDownLatch.create(-1L)) {
         Ok(value) { drop(value); }
@@ -1163,6 +1310,34 @@ void main() {
         &output,
         "4\n7\n7\n11\n13\n-2\n-7\nfalse\ntrue\ntrue\nfalse\nfalse\ntrue\ntrue\nfalse\nnegative release rejected\nnegative permits rejected\nfalse\n1\n0\ntrue\nnegative latch rejected\n",
     );
+}
+
+#[test]
+fn concurrency_dependencies_are_requested_during_transitive_generic_expansion() {
+    let source = r#"
+class AtomicProbe<T> {
+    public static Result<int, Text> run() {
+        AtomicInt counter = AtomicInt.create(40)?;
+        counter.fetchAdd(2);
+        return new Result<int, Text>.Ok(counter.load());
+    }
+}
+
+class ForwardProbe<T> {
+    public static Result<int, Text> run() {
+        return AtomicProbe<T>.run();
+    }
+}
+
+void main() {
+    match (ForwardProbe<int>.run()) {
+        Ok(value) { println(value); }
+        Err(error) { error.print(); }
+    }
+}
+"#;
+    let output = execute(source, &["-DNACRE_MEMORY_STATS"]);
+    assert_clean(&output, "42\n");
 }
 
 #[test]
@@ -1211,14 +1386,17 @@ Result<Unit, Text> exercise() {
 
     AtomicInt arrivals = AtomicInt.create(0)?;
     Barrier workerBarrier = barrier.cloneHandle()?;
+    Barrier mainBarrier = barrier.cloneHandle()?;
     AtomicInt workerArrivals = arrivals.cloneHandle()?;
+    drop(barrier);
     Thread<Unit> worker = Thread<Unit>.spawn(new BarrierWaitTask(workerBarrier, workerArrivals))?;
-    match (barrier.wait(1000L)) {
+    match (mainBarrier.wait(1000L)) {
         Ok(index) { int previous = arrivals.fetchAdd(1); }
         Err(error) { return new Result<Unit, Text>.Err(error); }
     }
     worker.join()?;
     if (arrivals.load() == 2) { println("barrier passed"); }
+    drop(mainBarrier);
     return new Result<Unit, Text>.Ok(());
 }
 
@@ -1234,6 +1412,77 @@ void main() {
         &output,
         "zero parties rejected\nunbroken barrier reset rejected\nbarrier generation timed out\nbarrier generation broken\nbarrier passed\n",
     );
+}
+
+#[test]
+fn successful_barrier_generation_is_not_broken_by_a_later_timeout() {
+    let source = r#"
+class BoundaryTask implements Task<Unit> {
+    private Barrier barrier;
+    private AtomicInt outcome;
+    public BoundaryTask(Barrier barrier, AtomicInt outcome) {
+        this.barrier = barrier;
+        this.outcome = outcome;
+    }
+    public Unit run() {
+        int state = 0;
+        match (this.barrier.wait(5000L)) {
+            Ok(index) { state = 2; }
+            Err(error) { drop(error); }
+        }
+        boolean nextGenerationBroken = false;
+        match (this.barrier.wait(0L)) {
+            Ok(index) {}
+            Err(error) { nextGenerationBroken = true; drop(error); }
+        }
+        if (nextGenerationBroken) { state = state + 1; }
+        this.outcome.store(state);
+        return ();
+    }
+}
+
+Result<Unit, Text> exercise() {
+    Barrier barrier = Barrier.create(2)?;
+    AtomicInt outcome = AtomicInt.create(0)?;
+    AtomicInt workerOutcome = outcome.cloneHandle()?;
+    Barrier workerBarrier = barrier.cloneHandle()?;
+    Thread<Unit> worker = Thread<Unit>.spawn(new BoundaryTask(workerBarrier, workerOutcome))?;
+
+    int state = 0;
+    match (barrier.wait(5000L)) {
+        Ok(index) { state = 2; }
+        Err(error) { drop(error); }
+    }
+    boolean nextGenerationBroken = false;
+    match (barrier.wait(0L)) {
+        Ok(index) {}
+        Err(error) { nextGenerationBroken = true; drop(error); }
+    }
+    worker.join()?;
+    boolean resetSucceeded = false;
+    match (barrier.reset()) {
+        Ok(unit) { resetSucceeded = true; }
+        Err(error) { drop(error); }
+    }
+    println(state == 2 && nextGenerationBroken && outcome.load() == 3 && resetSucceeded);
+    return new Result<Unit, Text>.Ok(());
+}
+
+void main() {
+    match (exercise()) {
+        Ok(unit) {}
+        Err(error) { error.print(); }
+    }
+}
+"#;
+    let c = compile_to_c(source)
+        .unwrap_or_else(|error| panic!("{}", error.render("concurrency_alpha.ncr", source)));
+    let c = barrier_generation_observer(&c);
+    let output = native::compile_c_with_flags(&c, &["-DNACRE_MEMORY_STATS"])
+        .unwrap_or_else(|error| panic!("native compile failed: {error}"))
+        .output()
+        .unwrap_or_else(|error| panic!("native execution failed: {error}"));
+    assert_clean(&output, "true\n");
 }
 
 #[test]
@@ -1275,18 +1524,30 @@ Result<Unit, Text> exercise() {
         Ok(value) { println("unexpected unrelated guard"); }
         Err(error) { rejected = true; drop(error); }
     }
-    if (rejected) { println("condition rejected unrelated guard"); }
     drop(unrelatedGuard);
     Mutex<int> producerMutex = mutex.cloneHandle()?;
+    Mutex<int> waiterMutex = mutex.cloneHandle()?;
     Condition<int> producerCondition = condition.cloneHandle()?;
+    Condition<int> waiterCondition = condition.cloneHandle()?;
+    drop(condition);
+    drop(mutex);
+    Guard<int> guard = waiterMutex.lock()?;
     Thread<Unit> worker = Thread<Unit>.spawn(new SignalTask(producerMutex, producerCondition))?;
-    Guard<int> guard = mutex.lock()?;
     while (guard.read() == 0) {
-        boolean notified = condition.wait(guard, 1000L)?;
+        boolean notified = waiterCondition.wait(guard, 1000L)?;
         if (!notified) { return new Result<Unit, Text>.Err(new Text("condition timed out")); }
     }
+    boolean observed = guard.read() == 1;
     drop(guard);
     worker.join()?;
+    drop(waiterMutex);
+    boolean conditionRetainedControl = false;
+    match (waiterCondition.signal()) {
+        Ok(unit) { conditionRetainedControl = true; }
+        Err(error) { drop(error); }
+    }
+    drop(waiterCondition);
+    println(rejected && observed && conditionRetainedControl);
     return new Result<Unit, Text>.Ok(());
 }
 
@@ -1298,7 +1559,7 @@ void main() {
 }
 "#;
     let output = execute(source, &["-DNACRE_MEMORY_STATS"]);
-    assert_clean(&output, "condition rejected unrelated guard\ncondition predicate observed\n");
+    assert_clean(&output, "true\n");
 }
 
 #[test]
@@ -1321,20 +1582,23 @@ class CooperativeTask implements CancelableTask<int> {
         boolean opened = this.gate.wait(2000L)?;
         if (!opened) { return new Result<int, Text>.Err(new Text("gate timed out")); }
         boolean cancelled = token.isCancelled()?;
-        if (cancelled) {
-            return new Result<int, Text>.Err(new Text("cooperative cancellation observed"));
-        }
-        return new Result<int, Text>.Ok(7);
+        if (cancelled) { return new Result<int, Text>.Ok(1); }
+        return new Result<int, Text>.Ok(0);
     }
 }
 
 class DropObservedTask implements CancelableTask<int> {
     private CountDownLatch started;
-    public DropObservedTask(CountDownLatch started) { this.started = started; }
+    private AtomicInt finished;
+    public DropObservedTask(CountDownLatch started, AtomicInt finished) {
+        this.started = started;
+        this.finished = finished;
+    }
     public Result<int, Text> run(borrow CancellationToken token) {
         this.started.countDown()?;
         boolean cancelled = token.isCancelled()?;
         while (!cancelled) { cancelled = token.isCancelled()?; }
+        this.finished.fetchAdd(1);
         return new Result<int, Text>.Ok(99);
     }
 }
@@ -1342,56 +1606,66 @@ class DropObservedTask implements CancelableTask<int> {
 Result<Unit, Text> exercise() {
     CancellationToken explicitToken = CancellationToken.create()?;
     CancellationToken tokenAlias = explicitToken.cloneHandle()?;
-    println(tokenAlias.isCancelled()?);
+    boolean tokenInitiallyCancelled = tokenAlias.isCancelled()?;
     explicitToken.request()?;
-    println(tokenAlias.isCancelled()?);
+    boolean tokenRequestShared = tokenAlias.isCancelled()?;
     drop(tokenAlias);
     drop(explicitToken);
 
     CountDownLatch gate = CountDownLatch.create(1L)?;
     CountDownLatch workerGate = gate.cloneHandle()?;
     Future<int> future = Future<int>.spawn(new GateTask(workerGate))?;
-    if (future.isDone()) { return new Result<Unit, Text>.Err(new Text("future completed before gate")); }
+    boolean unfinishedAtStart = !future.isDone();
     Option<int> poll = future.await(0L)?;
+    boolean pollTimedOut = false;
     match (poll) {
-        None { println("future poll timed out"); }
-        Some(value) { return new Result<Unit, Text>.Err(new Text("future completed before release")); }
+        None { pollTimedOut = true; }
+        Some(value) { return new Result<Unit, Text>.Err(new Text("future completed before gate release")); }
     }
     gate.countDown()?;
     Option<int> result = future.await(1000L)?;
+    int resultValue = -1;
     match (result) {
-        Some(value) { println(value); }
+        Some(value) { resultValue = value; }
         None { return new Result<Unit, Text>.Err(new Text("future did not complete")); }
     }
     boolean repeatRejected = false;
     match (future.await(1000L)) {
-        Ok(value) { println("unexpected repeat await"); }
+        Ok(value) {}
         Err(error) { repeatRejected = true; drop(error); }
     }
-    if (repeatRejected) { println("future result taken once"); }
-    if (future.isDone()) { println("future done"); }
+    boolean futureDone = future.isDone();
     drop(future);
+
     CountDownLatch dropStarted = CountDownLatch.create(1L)?;
     CountDownLatch workerDropStarted = dropStarted.cloneHandle()?;
-    Future<int> dropped = Future<int>.spawn(new DropObservedTask(workerDropStarted))?;
-    if (!dropStarted.wait(1000L)?) { return new Result<Unit, Text>.Err(new Text("drop task did not start")); }
+    AtomicInt finished = AtomicInt.create(0)?;
+    AtomicInt workerFinished = finished.cloneHandle()?;
+    Future<int> dropped = Future<int>.spawn(new DropObservedTask(workerDropStarted, workerFinished))?;
+    boolean dropTaskStarted = dropStarted.wait(1000L)?;
     drop(dropped);
-    println("future drop joined worker");
-
+    boolean dropJoinedWorker = finished.load() == 1;
+    drop(finished);
 
     CountDownLatch cancelGate = CountDownLatch.create(1L)?;
     CountDownLatch workerCancelGate = cancelGate.cloneHandle()?;
     Future<int> cancelled = Future<int>.spawn(new CooperativeTask(workerCancelGate))?;
     cancelled.cancel()?;
     cancelGate.countDown()?;
+    boolean cancellationObserved = false;
     match (cancelled.await(1000L)) {
-        Ok(value) { return new Result<Unit, Text>.Err(new Text("cooperative task ignored cancellation")); }
-        Err(error) {
-            error.print();
-            drop(error);
+        Ok(value) {
+            match (value) {
+                Some(result) { cancellationObserved = result == 1; }
+                None {}
+            }
         }
+        Err(error) { drop(error); }
     }
     drop(cancelled);
+    println(!tokenInitiallyCancelled && tokenRequestShared && unfinishedAtStart &&
+        pollTimedOut && resultValue == 42 && repeatRejected && futureDone &&
+        dropTaskStarted && dropJoinedWorker && cancellationObserved);
     return new Result<Unit, Text>.Ok(());
 }
 
@@ -1403,10 +1677,59 @@ void main() {
 }
 "#;
     let output = execute(source, &["-DNACRE_MEMORY_STATS"]);
-    assert_clean(
-        &output,
-        "false\ntrue\nfuture poll timed out\n42\nfuture result taken once\nfuture done\ncooperative cancellation observed\nfuture drop joined worker\n",
-    );
+    assert_clean(&output, "true\n");
+}
+
+#[test]
+fn failed_future_synchronization_setup_drops_the_consumed_task() {
+    let source = r#"
+class PayloadTask implements CancelableTask<int> {
+    private Text payload;
+    public PayloadTask(Text payload) { this.payload = payload; }
+    public Result<int, Text> run(borrow CancellationToken token) {
+        return new Result<int, Text>.Ok(this.payload.byteLength());
+    }
+}
+
+void main() {
+    boolean rejected = false;
+    match (Future<int>.spawn(new PayloadTask(new Text("owned")))) {
+        Ok(future) { drop(future); }
+        Err(error) { rejected = true; drop(error); }
+    }
+    println(rejected);
+}
+"#;
+    let c = compile_to_c(source)
+        .unwrap_or_else(|error| panic!("{}", error.render("concurrency_alpha.ncr", source)));
+    let c = fail_future_condition_initialization(&c);
+    let output = native::compile_c_with_flags(&c, &["-DNACRE_MEMORY_STATS"])
+        .unwrap_or_else(|error| panic!("native compile failed: {error}"))
+        .output()
+        .unwrap_or_else(|error| panic!("native execution failed: {error}"));
+    assert_clean(&output, "true\n");
+}
+
+#[test]
+fn partial_pool_startup_synchronizes_worker_shutdown() {
+    let source = r#"
+void main() {
+    boolean rejected = false;
+    match (ThreadPool<int>.create(2, 1L)) {
+        Ok(pool) { drop(pool); }
+        Err(error) { rejected = true; drop(error); }
+    }
+    println(rejected);
+}
+"#;
+    let c = compile_to_c(source)
+        .unwrap_or_else(|error| panic!("{}", error.render("concurrency_alpha.ncr", source)));
+    let c = fail_second_pool_worker_creation(&c);
+    let output = native::compile_c_with_flags(&c, &["-DNACRE_MEMORY_STATS"])
+        .unwrap_or_else(|error| panic!("native compile failed: {error}"))
+        .output()
+        .unwrap_or_else(|error| panic!("native execution failed: {error}"));
+    assert_clean(&output, "true\n");
 }
 
 #[test]

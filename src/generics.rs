@@ -114,16 +114,7 @@ pub fn expand(mut program: a::Program) -> Result<(a::Program, Vec<String>), Diag
             concrete.push(class);
         }
     }
-    if expander.requested.iter().any(|name| {
-        matches!(name.as_str(), "AtomicInt" | "AtomicLong" | "AtomicBoolean" |
-            "Semaphore" | "CountDownLatch" | "Barrier" | "CancellationToken")
-            || ["Future<", "ThreadPool<"].iter().any(|prefix| name.starts_with(prefix))
-    }) {
-        expander.ty(&Type::Applied {
-            name: "Mutex".to_owned(),
-            args: vec![Type::Unit],
-        }, &empty, Span::default(), 0)?;
-    }
+    expander.request_unit_mutex_if_needed(&empty, Span::default())?;
     while let Some(request) = expander.pending.pop_front() {
         let mut class = expander.definitions[&request.template].clone();
         let env: Environment = class.type_params.iter().cloned().zip(request.args).collect();
@@ -137,6 +128,7 @@ pub fn expand(mut program: a::Program) -> Result<(a::Program, Vec<String>), Diag
         }
         expander.class(&mut class, &env).map_err(|d| d.with_note(request.span,
             format!("specialization `{}` requested here", request.name)))?;
+        expander.request_unit_mutex_if_needed(&empty, request.span)?;
         concrete.push(class);
         if concrete.iter().filter(|c| !c.is_builtin).count() > 128 {
             return Err(Diagnostic::new(request.span, "[E4199] limit of 128 concrete types, including specializations"));
@@ -161,6 +153,21 @@ fn display_type(ty: &Type) -> String {
 }
 
 impl Expander {
+    fn request_unit_mutex_if_needed(&mut self, env: &Environment, span: Span) -> Result<(), Diagnostic> {
+        let required = self.requested.iter().any(|name| {
+            matches!(name.as_str(), "AtomicInt" | "AtomicLong" | "AtomicBoolean" |
+                "Semaphore" | "CountDownLatch" | "Barrier" | "CancellationToken")
+                || ["Future<", "ThreadPool<"].iter().any(|prefix| name.starts_with(prefix))
+        });
+        if required && !self.requested.contains("Mutex<Unit>") {
+            self.ty(&Type::Applied {
+                name: "Mutex".to_owned(),
+                args: vec![Type::Unit],
+            }, env, span, 0)?;
+        }
+        Ok(())
+    }
+
     fn ty(&mut self, ty: &Type, env: &Environment, span: Span, depth: usize) -> Result<Type, Diagnostic> {
         if depth > 32 { return Err(Diagnostic::new(span, "[E4199] generic type is too deep (limit 32)")); }
         match ty {

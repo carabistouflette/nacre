@@ -99,6 +99,12 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   cooperative cancellation, one-shot futures, and bounded/delayed thread pools.
   Pool rejection preserves the original task; workers are joined on shutdown and
   drop, while noncooperative task cancellation remains unbounded.
+
+- Condition-bearing synchronizer handles preserve their nodes across explicit clones;
+  a later barrier timeout cannot change an earlier generation's result, partial pool
+  startup publishes shutdown under the pool control mutex, and failed future setup drops
+  its consumed task. Generic native dependencies are registered during specialization.
+
 - Borrowed channel wakeup regressions synchronize closure after entry into the
   real condition wait, proving blocked receiver EOF and owned sender recovery.
 - Existing composition and lending examples use `ReadJob` and `DeskCommand`

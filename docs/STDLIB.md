@@ -1615,10 +1615,16 @@ negative counts and reports permit overflow. `CountDownLatch` accepts a
 nonnegative count; `countDown()` saturates at zero, while `wait(timeoutMs)` has the
 same boolean timeout convention as `Semaphore.acquire`.
 
+`cloneHandle()` on `Semaphore`, `CountDownLatch`, and `Barrier` shares the
+control and its wait-condition node. A cloned `Condition<T>` shares its original
+condition node and retains the associated mutex control.
+
 `Barrier.create` requires at least one party. Each generation returns a distinct
-arrival index. A timeout or zero-timeout arrival breaks that generation and wakes
-its other waiters with `Err`; `reset()` succeeds only after the broken generation's
-waiters have left. A spurious condition wake is not a predicate result.
+arrival index. A timeout or zero-timeout arrival breaks only that generation and
+wakes its other waiters with `Err`; a successfully released generation remains
+successful for its waiters even if a later generation breaks before they resume.
+`reset()` succeeds only after the broken generation's waiters have left. A spurious
+condition wake is not a predicate result.
 
 `Condition<T>` is created from a `Mutex<T>` and accepts only a `Guard<T>` belonging
 to that same mutex.
@@ -1661,6 +1667,9 @@ once; later completed awaits return an error. Dropping a standalone future reque
 cancellation and joins its worker, so drop may block until a noncooperative task
 finishes. Dropping a pool future does not join a worker; the pool owns queued and
 running work.
+
+`Future.spawn` consumes and drops its task if synchronization setup or worker
+creation fails.
 
 Thread-pool submissions reject immediately when the pool is closed or its bounded
 queue is full. Every `SubmitError` variant contains the original task for recovery.
