@@ -1,17 +1,56 @@
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
-use super::support::{has_placeholder, replace_placeholders, result_id, variant_id};
-
-fn class_id(program: &t::Program, is: impl Fn(C) -> bool) -> usize {
-    program.classes.iter().find(|class| class.native.is_some_and(&is))
-        .expect("TLS signature specializes required native class").id
-}
-fn class_id_if(program: &t::Program, is: impl Fn(C) -> bool) -> Option<usize> {
-    program.classes.iter().find(|class| class.native.is_some_and(&is)).map(|class| class.id)
-}
-
+use super::support::{
+    has_placeholder, native_class_id, native_class_id_if, native_function_if,
+    replace_placeholders, result_id, template_section, variant_id,
+};
 
 fn method_if(program: &t::Program, native: M) -> Option<&t::Function> {
-    program.functions.iter().find(|function| function.native == Some(native))
+    native_function_if(program, |candidate| candidate == native)
+}
+fn class_id(program: &t::Program, is: impl Fn(C) -> bool) -> usize {
+    native_class_id(program, is)
+}
+
+fn class_id_if(program: &t::Program, is: impl Fn(C) -> bool) -> Option<usize> {
+    native_class_id_if(program, is)
+}
+
+
+fn group<'a>(source: &'a str, name: &str) -> &'a str {
+    let (start, end) = match name {
+        "common" => ("/* TLS_GROUP common */", "/* TLS_GROUP_END common */"),
+        "ssl_release" => ("/* TLS_GROUP ssl_release */", "/* TLS_GROUP_END ssl_release */"),
+        "config_drop" => ("/* TLS_GROUP config_drop */", "/* TLS_GROUP_END config_drop */"),
+        "stream_drop" => ("/* TLS_GROUP stream_drop */", "/* TLS_GROUP_END stream_drop */"),
+        "client_host_ascii" => ("/* TLS_GROUP client_host_ascii */", "/* TLS_GROUP_END client_host_ascii */"),
+        "client_host" => ("/* TLS_GROUP client_host */", "/* TLS_GROUP_END client_host */"),
+        "stream_helpers" => ("/* TLS_GROUP stream_helpers */", "/* TLS_GROUP_END stream_helpers */"),
+        "config_core" => ("/* TLS_GROUP config_core */", "/* TLS_GROUP_END config_core */"),
+        "config_identity" => ("/* TLS_GROUP config_identity */", "/* TLS_GROUP_END config_identity */"),
+        "config_client" => ("/* TLS_GROUP config_client */", "/* TLS_GROUP_END config_client */"),
+        "config_client_with_ca" => ("/* TLS_GROUP config_client_with_ca */", "/* TLS_GROUP_END config_client_with_ca */"),
+        "config_client_with_identity" => ("/* TLS_GROUP config_client_with_identity */", "/* TLS_GROUP_END config_client_with_identity */"),
+        "config_server" => ("/* TLS_GROUP config_server */", "/* TLS_GROUP_END config_server */"),
+        "config_server_with_client_auth" => ("/* TLS_GROUP config_server_with_client_auth */", "/* TLS_GROUP_END config_server_with_client_auth */"),
+        "stream_dispose" => ("/* TLS_GROUP stream_dispose */", "/* TLS_GROUP_END stream_dispose */"),
+        "stream_read_core" => ("/* TLS_GROUP stream_read_core */", "/* TLS_GROUP_END stream_read_core */"),
+        "stream_write_core" => ("/* TLS_GROUP stream_write_core */", "/* TLS_GROUP_END stream_write_core */"),
+        "stream_text_query" => ("/* TLS_GROUP stream_text_query */", "/* TLS_GROUP_END stream_text_query */"),
+        "stream_connect" => ("/* TLS_GROUP stream_connect */", "/* TLS_GROUP_END stream_connect */"),
+        "stream_accept" => ("/* TLS_GROUP stream_accept */", "/* TLS_GROUP_END stream_accept */"),
+        "stream_read_some" => ("/* TLS_GROUP stream_read_some */", "/* TLS_GROUP_END stream_read_some */"),
+        "stream_read" => ("/* TLS_GROUP stream_read */", "/* TLS_GROUP_END stream_read */"),
+        "stream_write_some" => ("/* TLS_GROUP stream_write_some */", "/* TLS_GROUP_END stream_write_some */"),
+        "stream_write" => ("/* TLS_GROUP stream_write */", "/* TLS_GROUP_END stream_write */"),
+        "stream_write_all" => ("/* TLS_GROUP stream_write_all */", "/* TLS_GROUP_END stream_write_all */"),
+        "stream_cipher" => ("/* TLS_GROUP stream_cipher */", "/* TLS_GROUP_END stream_cipher */"),
+        "stream_protocol" => ("/* TLS_GROUP stream_protocol */", "/* TLS_GROUP_END stream_protocol */"),
+        "stream_peer_certificate" => ("/* TLS_GROUP stream_peer_certificate */", "/* TLS_GROUP_END stream_peer_certificate */"),
+        "stream_flush" => ("/* TLS_GROUP stream_flush */", "/* TLS_GROUP_END stream_flush */"),
+        "stream_close" => ("/* TLS_GROUP stream_close */", "/* TLS_GROUP_END stream_close */"),
+        _ => unreachable!("unknown TLS template group"),
+    };
+    template_section(source, start, end)
 }
 
 fn add(replacements: &mut Vec<(&'static str, String)>, key: &'static str, value: impl ToString) {
@@ -33,7 +72,6 @@ fn add_result_type(replacements: &mut Vec<(&'static str, String)>, key: &'static
     add(replacements, key, id);
 }
 
-
 fn add_ok_tag_for_program(
     program: &t::Program,
     replacements: &mut Vec<(&'static str, String)>,
@@ -47,16 +85,6 @@ fn param(function: &t::Function, index: usize) -> usize {
     function.params[index].0
 }
 
-fn has_any(program: &t::Program, methods: &[M]) -> bool {
-    program.functions.iter().any(|function| function.native.is_some_and(|method| methods.contains(&method)))
-}
-
-fn group(source: &str, name: &str) -> String {
-    let start = format!("/* TLS_GROUP {name} */");
-    let end = format!("/* TLS_GROUP_END {name} */");
-    source.split_once(&start).expect("TLS template group opener").1
-        .split_once(&end).expect("TLS template group closer").0.to_owned()
-}
 
 pub(super) fn fields(program: &t::Program, class: C, _class_id: usize) -> String {
     match class {
@@ -88,103 +116,116 @@ pub(super) fn drop_fields(program: &t::Program, class: C) -> String {
 }
 
 pub(crate) fn drop_helper_prototypes(program: &t::Program) -> String {
-    let has_config = program.classes.iter().any(|class| class.native == Some(C::TlsConfig));
-    let has_stream = program.classes.iter().any(|class| class.native == Some(C::TlsStream));
-    let has_websocket = program.classes.iter().any(|class| class.native == Some(C::WebSocket));
+    let config = class_id_if(program, |class| matches!(class, C::TlsConfig));
+    let stream = class_id_if(program, |class| matches!(class, C::TlsStream));
+    let websocket = class_id_if(program, |class| matches!(class, C::WebSocket));
     let mut out = String::new();
-    if has_stream || has_websocket {
+    if stream.is_some() || websocket.is_some() {
         out.push_str("static void ncr_tls_ssl_release(void *ssl);\n");
     }
-    if has_config {
-        let config = class_id(program, |native| matches!(native, C::TlsConfig));
+    if let Some(config) = config {
         out.push_str(&format!("static void ncr_tls_config_release(ncr_obj_{config} *config);\n"));
     }
-    if has_stream {
-        let stream = class_id(program, |native| matches!(native, C::TlsStream));
+    if let Some(stream) = stream {
         out.push_str(&format!("static int ncr_tls_stream_release(ncr_obj_{stream} *stream);\n"));
     }
     out
 }
 
 pub(super) fn implementation(program: &t::Program) -> String {
-    const CONFIG_METHODS: &[M] = &[
-        M::TlsConfigClient, M::TlsConfigClientWithCa, M::TlsConfigClientWithIdentity,
-        M::TlsConfigServer, M::TlsConfigServerWithClientAuth,
-    ];
-    const STREAM_METHODS: &[M] = &[
-        M::TlsStreamConnect, M::TlsStreamAccept,
-        M::TlsStreamReadSome, M::TlsStreamWriteSome, M::TlsStreamWriteAll,
-        M::TlsStreamCipher, M::TlsStreamProtocol, M::TlsStreamPeerCertificate,
-        M::TlsStreamClose, M::TlsStreamRead, M::TlsStreamWrite, M::TlsStreamFlush,
-    ];
-    const TLS_WEBSOCKET_METHODS: &[M] = &[M::WebSocketConnectTls];
-    const CLIENT_HOST_METHODS: &[M] = &[M::TlsStreamConnect];
-    const CLIENT_HOST_ASCII_METHODS: &[M] = &[M::TlsStreamConnect, M::WebSocketConnectTls];
+    let config_class = class_id_if(program, |native| matches!(native, C::TlsConfig));
+    let stream_class = class_id_if(program, |native| matches!(native, C::TlsStream));
+    let websocket_class = class_id_if(program, |native| matches!(native, C::WebSocket));
+    if config_class.is_none() && stream_class.is_none() && websocket_class.is_none() {
+        return String::new();
+    }
 
-    let has_config = program.classes.iter().any(|class| class.native == Some(C::TlsConfig));
-    let has_stream = program.classes.iter().any(|class| class.native == Some(C::TlsStream));
-    let has_websocket = program.classes.iter().any(|class| class.native == Some(C::WebSocket));
-    let has_secure_type = has_config || has_stream || has_websocket;
-    if !has_secure_type { return String::new(); }
+    let config_client = method_if(program, M::TlsConfigClient);
+    let config_client_with_ca = method_if(program, M::TlsConfigClientWithCa);
+    let config_client_with_identity = method_if(program, M::TlsConfigClientWithIdentity);
+    let config_server = method_if(program, M::TlsConfigServer);
+    let config_server_with_client_auth = method_if(program, M::TlsConfigServerWithClientAuth);
+    let stream_connect = method_if(program, M::TlsStreamConnect);
+    let stream_accept = method_if(program, M::TlsStreamAccept);
+    let stream_read_some = method_if(program, M::TlsStreamReadSome);
+    let stream_read = method_if(program, M::TlsStreamRead);
+    let stream_write_some = method_if(program, M::TlsStreamWriteSome);
+    let stream_write = method_if(program, M::TlsStreamWrite);
+    let stream_write_all = method_if(program, M::TlsStreamWriteAll);
+    let stream_cipher = method_if(program, M::TlsStreamCipher);
+    let stream_protocol = method_if(program, M::TlsStreamProtocol);
+    let stream_peer_certificate = method_if(program, M::TlsStreamPeerCertificate);
+    let stream_flush = method_if(program, M::TlsStreamFlush);
+    let stream_close = method_if(program, M::TlsStreamClose);
+    let websocket_connect_tls = method_if(program, M::WebSocketConnectTls);
 
-    let has_config_methods = has_any(program, CONFIG_METHODS);
-    let has_stream_methods = has_any(program, STREAM_METHODS);
-    let has_tls_helpers = has_stream_methods || has_any(program, TLS_WEBSOCKET_METHODS);
-    let has_client_host = has_any(program, CLIENT_HOST_METHODS);
-    let has_client_host_ascii = has_any(program, CLIENT_HOST_ASCII_METHODS);
+    let has_config = config_class.is_some();
+    let has_stream = stream_class.is_some();
+    let has_websocket = websocket_class.is_some();
+    let has_config_methods = config_client.is_some();
+    let has_stream_methods = stream_connect.is_some() || stream_accept.is_some();
+    let has_tls_helpers = has_stream_methods || websocket_connect_tls.is_some();
+    let has_client_host = stream_connect.is_some();
+    let has_client_host_ascii = has_client_host || websocket_connect_tls.is_some();
 
     let template = include_str!("../../stdlib/tls.c.in");
-    let mut body = template.split_once("/* TLS_GROUP common */")
-        .expect("TLS template common group").0.to_owned();
+    let mut body = String::new();
+    body.push_str(template.split_once("/* TLS_GROUP common */")
+        .expect("TLS template common group").0);
+
     if has_config_methods || has_stream_methods { body.push_str(&group(template, "common")); }
     if has_stream || has_websocket { body.push_str(&group(template, "ssl_release")); }
     if has_config { body.push_str(&group(template, "config_drop")); }
     if has_stream { body.push_str(&group(template, "stream_drop")); }
     if has_client_host_ascii { body.push_str(&group(template, "client_host_ascii")); }
     if has_client_host { body.push_str(&group(template, "client_host")); }
+    if has_tls_helpers { body.push_str(&group(template, "stream_helpers")); }
     if has_config_methods {
         body.push_str(&group(template, "config_core"));
-        if has_any(program, &[M::TlsConfigClientWithIdentity, M::TlsConfigServer, M::TlsConfigServerWithClientAuth]) {
+        if config_client_with_identity.is_some()
+            || config_server.is_some()
+            || config_server_with_client_auth.is_some()
+        {
             body.push_str(&group(template, "config_identity"));
         }
-        for (native, group_name) in [
-            (M::TlsConfigClient, "config_client"),
-            (M::TlsConfigClientWithCa, "config_client_with_ca"),
-            (M::TlsConfigClientWithIdentity, "config_client_with_identity"),
-            (M::TlsConfigServer, "config_server"),
-            (M::TlsConfigServerWithClientAuth, "config_server_with_client_auth"),
+        for (function, group_name) in [
+            (config_client, "config_client"),
+            (config_client_with_ca, "config_client_with_ca"),
+            (config_client_with_identity, "config_client_with_identity"),
+            (config_server, "config_server"),
+            (config_server_with_client_auth, "config_server_with_client_auth"),
         ] {
-            if method_if(program, native).is_some() { body.push_str(&group(template, group_name)); }
+            if function.is_some() { body.push_str(&group(template, group_name)); }
         }
     }
     if has_stream_methods {
-        if has_any(program, &[M::TlsStreamWriteSome, M::TlsStreamWrite, M::TlsStreamWriteAll]) {
+        if stream_write_some.is_some() || stream_write.is_some() || stream_write_all.is_some() {
             body.push_str(&group(template, "stream_dispose"));
         }
-        if has_any(program, &[M::TlsStreamReadSome, M::TlsStreamRead]) {
+        if stream_read_some.is_some() || stream_read.is_some() {
             body.push_str(&group(template, "stream_read_core"));
         }
-        if has_any(program, &[M::TlsStreamWriteSome, M::TlsStreamWrite]) {
+        if stream_write_some.is_some() || stream_write.is_some() {
             body.push_str(&group(template, "stream_write_core"));
         }
-        if has_any(program, &[M::TlsStreamCipher, M::TlsStreamProtocol]) {
+        if stream_cipher.is_some() || stream_protocol.is_some() {
             body.push_str(&group(template, "stream_text_query"));
         }
-        for (native, group_name) in [
-            (M::TlsStreamConnect, "stream_connect"),
-            (M::TlsStreamAccept, "stream_accept"),
-            (M::TlsStreamReadSome, "stream_read_some"),
-            (M::TlsStreamRead, "stream_read"),
-            (M::TlsStreamWriteSome, "stream_write_some"),
-            (M::TlsStreamWrite, "stream_write"),
-            (M::TlsStreamWriteAll, "stream_write_all"),
-            (M::TlsStreamCipher, "stream_cipher"),
-            (M::TlsStreamProtocol, "stream_protocol"),
-            (M::TlsStreamPeerCertificate, "stream_peer_certificate"),
-            (M::TlsStreamFlush, "stream_flush"),
-            (M::TlsStreamClose, "stream_close"),
+        for (function, group_name) in [
+            (stream_connect, "stream_connect"),
+            (stream_accept, "stream_accept"),
+            (stream_read_some, "stream_read_some"),
+            (stream_read, "stream_read"),
+            (stream_write_some, "stream_write_some"),
+            (stream_write, "stream_write"),
+            (stream_write_all, "stream_write_all"),
+            (stream_cipher, "stream_cipher"),
+            (stream_protocol, "stream_protocol"),
+            (stream_peer_certificate, "stream_peer_certificate"),
+            (stream_flush, "stream_flush"),
+            (stream_close, "stream_close"),
         ] {
-            if method_if(program, native).is_some() { body.push_str(&group(template, group_name)); }
+            if function.is_some() { body.push_str(&group(template, group_name)); }
         }
     }
 
@@ -206,27 +247,22 @@ pub(super) fn implementation(program: &t::Program) -> String {
         add(&mut replacements, "@TEXT_ID@", class_id(program, |native| matches!(native, C::Text)));
     }
     if has_config_methods {
-        let factory = CONFIG_METHODS.iter().find_map(|native| method_if(program, *native))
-            .expect("a TLS config method is active");
+        let factory = config_client.expect("TlsConfig.client is a native method");
         add_result_type(&mut replacements, "@CONFIG_RESULT_TYPE@", factory);
         add_result(&mut replacements, "@CONFIG_RESULT_ID@", factory);
         add_ok_tag_for_program(program, &mut replacements, "@CONFIG_OK_TAG@", factory);
-        for (native, marker) in [
-            (M::TlsConfigClient, "@TLS_CONFIG_CLIENT_FN@"),
-            (M::TlsConfigClientWithCa, "@TLS_CONFIG_CLIENT_WITH_CA_FN@"),
-            (M::TlsConfigClientWithIdentity, "@TLS_CONFIG_CLIENT_WITH_IDENTITY_FN@"),
-            (M::TlsConfigServer, "@TLS_CONFIG_SERVER_FN@"),
-            (M::TlsConfigServerWithClientAuth, "@TLS_CONFIG_SERVER_WITH_CLIENT_AUTH_FN@"),
-        ] {
-            if let Some(function) = method_if(program, native) {
-                add_function(&mut replacements, marker, function);
-            }
+        if let Some(function) = config_client { add_function(&mut replacements, "@TLS_CONFIG_CLIENT_FN@", function); }
+        if let Some(function) = config_client_with_ca { add_function(&mut replacements, "@TLS_CONFIG_CLIENT_WITH_CA_FN@", function); }
+        if let Some(function) = config_client_with_identity { add_function(&mut replacements, "@TLS_CONFIG_CLIENT_WITH_IDENTITY_FN@", function); }
+        if let Some(function) = config_server { add_function(&mut replacements, "@TLS_CONFIG_SERVER_FN@", function); }
+        if let Some(function) = config_server_with_client_auth {
+            add_function(&mut replacements, "@TLS_CONFIG_SERVER_WITH_CLIENT_AUTH_FN@", function);
         }
-        if let Some(function) = method_if(program, M::TlsConfigClientWithCa) {
+        if let Some(function) = config_client_with_ca {
             add(&mut replacements, "@PATH_ID@", class_id(program, |native| matches!(native, C::Path)));
             add(&mut replacements, "@CLIENT_WITH_CA_PATH_ID@", param(function, 0));
         }
-        if let Some(function) = method_if(program, M::TlsConfigClientWithIdentity) {
+        if let Some(function) = config_client_with_identity {
             add(&mut replacements, "@CERTIFICATE_ID@", class_id(program, |native| matches!(native, C::Certificate)));
             add(&mut replacements, "@CRYPTO_KEY_ID@", class_id(program, |native| matches!(native, C::CryptoKey)));
             add(&mut replacements, "@PATH_ID@", class_id(program, |native| matches!(native, C::Path)));
@@ -234,13 +270,13 @@ pub(super) fn implementation(program: &t::Program) -> String {
             add(&mut replacements, "@CLIENT_WITH_IDENTITY_KEY_ID@", param(function, 1));
             add(&mut replacements, "@CLIENT_WITH_IDENTITY_CA_ID@", param(function, 2));
         }
-        if let Some(function) = method_if(program, M::TlsConfigServer) {
+        if let Some(function) = config_server {
             add(&mut replacements, "@CERTIFICATE_ID@", class_id(program, |native| matches!(native, C::Certificate)));
             add(&mut replacements, "@CRYPTO_KEY_ID@", class_id(program, |native| matches!(native, C::CryptoKey)));
             add(&mut replacements, "@SERVER_CERT_ID@", param(function, 0));
             add(&mut replacements, "@SERVER_KEY_ID@", param(function, 1));
         }
-        if let Some(function) = method_if(program, M::TlsConfigServerWithClientAuth) {
+        if let Some(function) = config_server_with_client_auth {
             add(&mut replacements, "@CERTIFICATE_ID@", class_id(program, |native| matches!(native, C::Certificate)));
             add(&mut replacements, "@CRYPTO_KEY_ID@", class_id(program, |native| matches!(native, C::CryptoKey)));
             add(&mut replacements, "@PATH_ID@", class_id(program, |native| matches!(native, C::Path)));
@@ -258,8 +294,8 @@ pub(super) fn implementation(program: &t::Program) -> String {
         add(&mut replacements, "@CONFIG_MUTEX_ID@", mutex);
         add(&mut replacements, "@TEXT_ID@", class_id(program, |native| matches!(native, C::Text)));
 
-        let connect = method_if(program, M::TlsStreamConnect);
-        let accept = method_if(program, M::TlsStreamAccept);
+        let connect = stream_connect;
+        let accept = stream_accept;
         if let Some(stream_result) = connect.or(accept) {
             add_result_type(&mut replacements, "@STREAM_RESULT_TYPE@", stream_result);
             add_result(&mut replacements, "@STREAM_RESULT_ID@", stream_result);
@@ -281,11 +317,11 @@ pub(super) fn implementation(program: &t::Program) -> String {
             add(&mut replacements, "@ACCEPT_TIMEOUT_ID@", param(function, 2));
         }
 
-        let read_some = method_if(program, M::TlsStreamReadSome);
-        let read = method_if(program, M::TlsStreamRead);
-        let write_some = method_if(program, M::TlsStreamWriteSome);
-        let write = method_if(program, M::TlsStreamWrite);
-        let write_all = method_if(program, M::TlsStreamWriteAll);
+        let read_some = stream_read_some;
+        let read = stream_read;
+        let write_some = stream_write_some;
+        let write = stream_write;
+        let write_all = stream_write_all;
         let long_result = read_some.or(read).or(write_some).or(write);
         if let Some(function) = long_result {
             add_result_type(&mut replacements, "@LONG_RESULT_TYPE@", function);
@@ -328,17 +364,17 @@ pub(super) fn implementation(program: &t::Program) -> String {
             add(&mut replacements, "@WRITE_ALL_SOURCE_ID@", param(function, 0));
             add(&mut replacements, "@WRITE_ALL_TIMEOUT_ID@", param(function, 1));
         }
-        if let Some(function) = write_all.or_else(|| method_if(program, M::TlsStreamFlush)) {
+        if let Some(function) = write_all.or(stream_flush) {
             add_result_type(&mut replacements, "@UNIT_RESULT_TYPE@", function);
             add_result(&mut replacements, "@UNIT_RESULT_ID@", function);
             add_ok_tag_for_program(program, &mut replacements, "@UNIT_OK_TAG@", function);
         }
-        if let Some(function) = method_if(program, M::TlsStreamFlush) {
+        if let Some(function) = stream_flush {
             add_function(&mut replacements, "@TLS_STREAM_FLUSH_FN@", function);
         }
 
-        let cipher = method_if(program, M::TlsStreamCipher);
-        let protocol = method_if(program, M::TlsStreamProtocol);
+        let cipher = stream_cipher;
+        let protocol = stream_protocol;
         if let Some(function) = cipher.or(protocol) {
             add_result_type(&mut replacements, "@TEXT_RESULT_TYPE@", function);
             add_result(&mut replacements, "@TEXT_RESULT_ID@", function);
@@ -347,7 +383,7 @@ pub(super) fn implementation(program: &t::Program) -> String {
         if let Some(function) = cipher { add_function(&mut replacements, "@TLS_STREAM_CIPHER_FN@", function); }
         if let Some(function) = protocol { add_function(&mut replacements, "@TLS_STREAM_PROTOCOL_FN@", function); }
 
-        if let Some(function) = method_if(program, M::TlsStreamPeerCertificate) {
+        if let Some(function) = stream_peer_certificate {
             let peer_result = result_id(function);
             let Type::Object(option) = program.classes[peer_result].result
                 .expect("peer certificate Result layout").ok_type
@@ -361,7 +397,7 @@ pub(super) fn implementation(program: &t::Program) -> String {
             add(&mut replacements, "@PEER_OPTION_NONE_TAG@", variant_id(program, option, "None"));
             add_function(&mut replacements, "@TLS_STREAM_PEER_CERTIFICATE_FN@", function);
         }
-        if let Some(function) = method_if(program, M::TlsStreamClose) {
+        if let Some(function) = stream_close {
             add_result_type(&mut replacements, "@CLOSE_RESULT_TYPE@", function);
             add_result(&mut replacements, "@CLOSE_RESULT_ID@", function);
             add_ok_tag_for_program(program, &mut replacements, "@CLOSE_OK_TAG@", function);

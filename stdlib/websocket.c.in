@@ -20,6 +20,14 @@
 #define NCR_WS_HEADER_LIMIT 16384U
 #define NCR_WS_IO_CHUNK 4096U
 #define NCR_WS_CLOSE_PAYLOAD_LIMIT 125U
+
+static int ncr_ws_check_deadline(bool finite, int64_t deadline, bool *timed_out, int *failure) {
+    if (!finite) { return 1; }
+    int64_t now = 0;
+    if (!ncr_time_monotonic_value(&now, failure)) { return -1; }
+    if (now >= deadline) { *timed_out = true; return 0; }
+    return 1;
+}
 /* WEBSOCKET_GROUP_END constants */
 
 /* WEBSOCKET_GROUP connect_text */
@@ -168,6 +176,8 @@ static int ncr_ws_read_some(@WEBSOCKET_TYPE@ ws, unsigned char *destination, siz
     size_t *received, bool finite, int64_t deadline, bool *timed_out, int *failure) {
     *received = 0;
     if (maximum == 0) { return 1; }
+    int deadline_status = ncr_ws_check_deadline(finite, deadline, timed_out, failure);
+    if (deadline_status <= 0) { return deadline_status; }
     if (ws->read_buffer_offset == ws->read_buffer_length) {
         int status = ncr_ws_fill(ws, finite, deadline, timed_out, failure);
         if (status != 1) { return status; }
@@ -200,6 +210,8 @@ static bool ncr_ws_write_all(@WEBSOCKET_TYPE@ ws, const unsigned char *source, s
     bool finite, int64_t deadline, bool *timed_out, int *failure) {
     size_t offset = 0;
     while (offset < length) {
+        int deadline_status = ncr_ws_check_deadline(finite, deadline, timed_out, failure);
+        if (deadline_status <= 0) { return false; }
         if (ws->fd < 0 || ws->closed) { *failure = EBADF; return false; }
         if (ws->ssl != NULL) {
             @TLS_WRITE_BRANCH@
@@ -223,6 +235,8 @@ static bool ncr_ws_send_frame(@WEBSOCKET_TYPE@ ws, unsigned char opcode, bool fi
     const unsigned char *payload, size_t length, bool finite, int64_t deadline,
     bool *timed_out, int *failure) {
     if (length > (size_t)INT64_MAX || (length > 0 && payload == NULL)) { *failure = EINVAL; return false; }
+    int deadline_status = ncr_ws_check_deadline(finite, deadline, timed_out, failure);
+    if (deadline_status <= 0) { return false; }
     unsigned char mask[4];
     if (RAND_bytes(mask, (int)sizeof(mask)) != 1) { *failure = EIO; return false; }
     unsigned char header[14];
@@ -396,10 +410,10 @@ static bool ncr_ws_http_handshake(@WEBSOCKET_TYPE@ ws, const ncr_obj_@TEXT_ID@ *
 /* WEBSOCKET_GROUP_END http */
 
 /* WEBSOCKET_GROUP tls_shutdown */
-static bool ncr_ws_tls_shutdown(@WEBSOCKET_TYPE@ ws, int64_t timeout_ms,
+static bool ncr_ws_tls_shutdown(@WEBSOCKET_TYPE@ ws, bool finite, int64_t deadline,
     bool *timed_out, int *failure) {
-    (void)timeout_ms;
-    (void)timed_out;
+    int deadline_status = ncr_ws_check_deadline(finite, deadline, timed_out, failure);
+    if (deadline_status <= 0) { return false; }
     if (ws->ssl == NULL) { return true; }
     @TLS_SHUTDOWN_BRANCH@
 }
@@ -425,15 +439,14 @@ static bool ncr_ws_valid_close_code(int32_t code) {
 }
 
 static int ncr_ws_finish_peer_close(@WEBSOCKET_TYPE@ ws, const unsigned char *payload,
-    size_t length, int64_t timeout_ms, bool finite, int64_t deadline,
-    bool *timed_out, int *failure) {
+    size_t length, bool finite, int64_t deadline, bool *timed_out, int *failure) {
     if (!ws->closing) {
         if (!ncr_ws_send_frame(ws, 8U, true, payload, length, finite, deadline, timed_out, failure)) {
             ncr_ws_transport_cleanup(ws);
             return -1;
         }
     }
-    if (!ncr_ws_tls_shutdown(ws, timeout_ms, timed_out, failure)) {
+    if (!ncr_ws_tls_shutdown(ws, finite, deadline, timed_out, failure)) {
         ncr_ws_transport_cleanup(ws);
         return -1;
     }
@@ -455,9 +468,9 @@ static void ncr_ws_drop_accumulator(@BUFFER_TYPE@ buffer) {
 }
 
 /* Returns 1 with an owned message, 2 after an orderly peer close, 0 on timeout, and -1 on error. */
-static int ncr_ws_receive_inner(@WEBSOCKET_TYPE@ ws, int64_t timeout_ms,
-    bool finite, int64_t deadline, @BUFFER_TYPE@ *message_body, bool *message_text,
-    bool *timed_out, int *failure, size_t line, size_t column) {
+static int ncr_ws_receive_inner(@WEBSOCKET_TYPE@ ws, bool finite, int64_t deadline,
+    @BUFFER_TYPE@ *message_body, bool *message_text, bool *timed_out, int *failure,
+    size_t line, size_t column) {
     *message_body = NULL;
     *message_text = false;
     if (ws->closed || ws->fd < 0) { *failure = EBADF; return -1; }
@@ -465,6 +478,12 @@ static int ncr_ws_receive_inner(@WEBSOCKET_TYPE@ ws, int64_t timeout_ms,
     bool fragmented = false;
 
     for (;;) {
+        int deadline_status = ncr_ws_check_deadline(finite, deadline, timed_out, failure);
+        if (deadline_status <= 0) {
+            if (deadline_status < 0 || accumulated != NULL || fragmented) { ncr_ws_transport_cleanup(ws); }
+            ncr_ws_drop_accumulator(accumulated);
+            return deadline_status;
+        }
         unsigned char header[2];
         size_t header_bytes = 0;
         int status = ncr_ws_read_exact(ws, header, sizeof(header), &header_bytes,
@@ -534,7 +553,7 @@ static int ncr_ws_receive_inner(@WEBSOCKET_TYPE@ ws, int64_t timeout_ms,
                     || !ncr_ws_valid_utf8(control_payload + 2U, (size_t)payload_length - 2U)) { goto protocol_error; }
             }
             int close_status = ncr_ws_finish_peer_close(ws, control_payload, (size_t)payload_length,
-                timeout_ms, finite, deadline, timed_out, failure);
+                finite, deadline, timed_out, failure);
             ncr_ws_drop_accumulator(accumulated);
             return close_status == 1 ? 2 : -1;
         }
@@ -565,6 +584,12 @@ static int ncr_ws_receive_inner(@WEBSOCKET_TYPE@ ws, int64_t timeout_ms,
         }
         if (opcode == 0U) { fragmented = false; }
         if (*message_text && !ncr_ws_valid_utf8(accumulated->bytes, accumulated->length)) { goto protocol_error; }
+        int deadline_status = ncr_ws_check_deadline(finite, deadline, timed_out, failure);
+        if (deadline_status <= 0) {
+            if (deadline_status < 0) { ncr_ws_transport_cleanup(ws); }
+            ncr_ws_drop_accumulator(accumulated);
+            return deadline_status;
+        }
         *message_body = accumulated;
         return 1;
 
@@ -855,7 +880,7 @@ static @RECEIVE_RESULT_TYPE@ @RECEIVE_FN@(@WEBSOCKET_SELF_TYPE@ ncr_self,
     }
     @BUFFER_TYPE@ message_body = NULL;
     bool message_text = false;
-    int status = ncr_ws_receive_inner(ncr_self, @RECEIVE_TIMEOUT_ARG@, finite, deadline,
+    int status = ncr_ws_receive_inner(ncr_self, finite, deadline,
         &message_body, &message_text, &timed_out, &failure, line, column);
     if (status == 1) {
         @MESSAGE_TYPE@ message = ncr_allocate(sizeof(*message), line, column);
@@ -909,7 +934,7 @@ static @CLOSE_RESULT_TYPE@ @CLOSE_FN@(@WEBSOCKET_SELF_TYPE@ ncr_self,
     for (;;) {
         @BUFFER_TYPE@ message_body = NULL;
         bool message_text = false;
-        int status = ncr_ws_receive_inner(ncr_self, @CLOSE_TIMEOUT_ARG@, finite, deadline,
+        int status = ncr_ws_receive_inner(ncr_self, finite, deadline,
             &message_body, &message_text, &timed_out, &failure, line, column);
         if (status == 1) {
             ncr_drop_@BUFFER_ID@(message_body);
@@ -921,7 +946,7 @@ static @CLOSE_RESULT_TYPE@ @CLOSE_FN@(@WEBSOCKET_SELF_TYPE@ ncr_self,
         if (ncr_self->ssl != NULL) {
             bool shutdown_timed_out = false;
             int shutdown_failure = 0;
-            (void)ncr_ws_tls_shutdown(ncr_self, @CLOSE_TIMEOUT_ARG@, &shutdown_timed_out, &shutdown_failure);
+            (void)ncr_ws_tls_shutdown(ncr_self, finite, deadline, &shutdown_timed_out, &shutdown_failure);
         }
         ncr_ws_transport_cleanup(ncr_self);
         const char *error = status == 0 || timed_out ? "WebSocket close timed out" : "WebSocket close failed";

@@ -1,7 +1,8 @@
 use crate::codegen::ctype;
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
 use super::support::{
-    has_placeholder, native_function_if, replace_placeholders, result_id, variant, variant_id,
+    has_placeholder, native_class_id, native_class_id_if, native_function_if,
+    replace_placeholders, result_id, template_section, variant, variant_id,
 };
 
 fn method_if(program: &t::Program, native: M) -> Option<&t::Function> {
@@ -13,36 +14,44 @@ fn method(program: &t::Program, native: M) -> &t::Function {
 }
 
 fn class_id_if(program: &t::Program, is: impl Fn(C) -> bool) -> Option<usize> {
-    program.classes.iter().find(|class| class.native.is_some_and(&is)).map(|class| class.id)
+    native_class_id_if(program, is)
 }
 
 fn class_id(program: &t::Program, is: impl Fn(C) -> bool) -> usize {
-    program.classes.iter()
-        .find(|class| class.native.is_some_and(&is))
-        .expect("WebSocket signature specializes required native class")
-        .id
+    native_class_id(program, is)
 }
 
-fn has_any(program: &t::Program, methods: &[M]) -> bool {
-    program.functions.iter().any(|function| {
-        function.native.is_some_and(|method| methods.contains(&method))
-    })
-}
-
-fn group(source: &str, name: &str) -> String {
-    let start = format!("/* WEBSOCKET_GROUP {name} */");
-    let end = format!("/* WEBSOCKET_GROUP_END {name} */");
-    source.split_once(&start).expect("WebSocket template group opener").1
-        .split_once(&end).expect("WebSocket template group closer").0.to_owned()
-}
-fn result_id_for(program: &t::Program, ok_field: Type, err_field: Type) -> usize {
-    program.classes.iter().find(|class| {
-        let Some(variants) = &class.variants else { return false; };
-        let ok = variants.iter().find(|variant| variant.name == "Ok");
-        let err = variants.iter().find(|variant| variant.name == "Err");
-        ok.is_some_and(|variant| variant.fields.len() == 1 && variant.fields[0] == ok_field)
-            && err.is_some_and(|variant| variant.fields.len() == 1 && variant.fields[0] == err_field)
-    }).expect("WebSocket DNS helper Result type is specialized").id
+fn group<'a>(source: &'a str, name: &str) -> &'a str {
+    let (start, end) = match name {
+        "standard_includes_1" => ("/* WEBSOCKET_GROUP standard_includes_1 */", "/* WEBSOCKET_GROUP_END standard_includes_1 */"),
+        "standard_includes_2" => ("/* WEBSOCKET_GROUP standard_includes_2 */", "/* WEBSOCKET_GROUP_END standard_includes_2 */"),
+        "ssl_includes" => ("/* WEBSOCKET_GROUP ssl_includes */", "/* WEBSOCKET_GROUP_END ssl_includes */"),
+        "constants" => ("/* WEBSOCKET_GROUP constants */", "/* WEBSOCKET_GROUP_END constants */"),
+        "connect_text" => ("/* WEBSOCKET_GROUP connect_text */", "/* WEBSOCKET_GROUP_END connect_text */"),
+        "connect_uri" => ("/* WEBSOCKET_GROUP connect_uri */", "/* WEBSOCKET_GROUP_END connect_uri */"),
+        "transport_read" => ("/* WEBSOCKET_GROUP transport_read */", "/* WEBSOCKET_GROUP_END transport_read */"),
+        "transport_write" => ("/* WEBSOCKET_GROUP transport_write */", "/* WEBSOCKET_GROUP_END transport_write */"),
+        "transport_frame" => ("/* WEBSOCKET_GROUP transport_frame */", "/* WEBSOCKET_GROUP_END transport_frame */"),
+        "http" => ("/* WEBSOCKET_GROUP http */", "/* WEBSOCKET_GROUP_END http */"),
+        "cleanup" => ("/* WEBSOCKET_GROUP cleanup */", "/* WEBSOCKET_GROUP_END cleanup */"),
+        "utf8" => ("/* WEBSOCKET_GROUP utf8 */", "/* WEBSOCKET_GROUP_END utf8 */"),
+        "tls_shutdown" => ("/* WEBSOCKET_GROUP tls_shutdown */", "/* WEBSOCKET_GROUP_END tls_shutdown */"),
+        "close_core" => ("/* WEBSOCKET_GROUP close_core */", "/* WEBSOCKET_GROUP_END close_core */"),
+        "receive_core" => ("/* WEBSOCKET_GROUP receive_core */", "/* WEBSOCKET_GROUP_END receive_core */"),
+        "connect_core" => ("/* WEBSOCKET_GROUP connect_core */", "/* WEBSOCKET_GROUP_END connect_core */"),
+        "connect_method" => ("/* WEBSOCKET_GROUP connect_method */", "/* WEBSOCKET_GROUP_END connect_method */"),
+        "connect_tls_method" => ("/* WEBSOCKET_GROUP connect_tls_method */", "/* WEBSOCKET_GROUP_END connect_tls_method */"),
+        "send_text_method" => ("/* WEBSOCKET_GROUP send_text_method */", "/* WEBSOCKET_GROUP_END send_text_method */"),
+        "send_binary_method" => ("/* WEBSOCKET_GROUP send_binary_method */", "/* WEBSOCKET_GROUP_END send_binary_method */"),
+        "ping_method" => ("/* WEBSOCKET_GROUP ping_method */", "/* WEBSOCKET_GROUP_END ping_method */"),
+        "receive_method" => ("/* WEBSOCKET_GROUP receive_method */", "/* WEBSOCKET_GROUP_END receive_method */"),
+        "close_method" => ("/* WEBSOCKET_GROUP close_method */", "/* WEBSOCKET_GROUP_END close_method */"),
+        "message_is_text_method" => ("/* WEBSOCKET_GROUP message_is_text_method */", "/* WEBSOCKET_GROUP_END message_is_text_method */"),
+        "message_body_method" => ("/* WEBSOCKET_GROUP message_body_method */", "/* WEBSOCKET_GROUP_END message_body_method */"),
+        "message_as_text_method" => ("/* WEBSOCKET_GROUP message_as_text_method */", "/* WEBSOCKET_GROUP_END message_as_text_method */"),
+        _ => unreachable!("unknown WebSocket template group"),
+    };
+    template_section(source, start, end)
 }
 
 fn add(replacements: &mut Vec<(&'static str, String)>, key: &'static str, value: impl ToString) {
@@ -152,14 +161,6 @@ pub(super) fn drop_fields(program: &t::Program, class: C) -> String {
 }
 
 pub(super) fn implementation(program: &t::Program) -> String {
-    const IO_METHODS: &[M] = &[
-        M::WebSocketConnect, M::WebSocketConnectTls, M::WebSocketSendText,
-        M::WebSocketSendBinary, M::WebSocketPing, M::WebSocketReceive, M::WebSocketClose,
-    ];
-    const MESSAGE_METHODS: &[M] = &[
-        M::WebSocketMessageIsText, M::WebSocketMessageBody, M::WebSocketMessageAsText,
-    ];
-
     let connect = method_if(program, M::WebSocketConnect);
     let connect_tls = method_if(program, M::WebSocketConnectTls);
     let send_text = method_if(program, M::WebSocketSendText);
@@ -174,8 +175,9 @@ pub(super) fn implementation(program: &t::Program) -> String {
     let message = class_id_if(program, |native| matches!(native, C::WebSocketMessage));
 
     if websocket.is_none() && message.is_none() { return String::new(); }
-    let has_ws_io = has_any(program, IO_METHODS);
-    let has_message_methods = has_any(program, MESSAGE_METHODS);
+    let has_ws_io = connect.is_some() || connect_tls.is_some() || send_text.is_some()
+        || send_binary.is_some() || ping.is_some() || receive.is_some() || close.is_some();
+    let has_message_methods = is_text.is_some() || body.is_some() || as_text.is_some();
     let has_connect = connect.is_some() || connect_tls.is_some();
     let has_receive_core = receive.is_some() || close.is_some();
     let has_ws_instance_methods = send_text.is_some() || send_binary.is_some()
@@ -268,7 +270,7 @@ pub(super) fn implementation(program: &t::Program) -> String {
             offset += (size_t)amount;
             continue;"#);
         add(&mut replacements, "@TLS_SHUTDOWN_BRANCH@", r#"    bool tls_timed_out = false;
-    int status = ncr_tls_shutdown(ws->ssl, ws->fd, timeout_ms, &tls_timed_out, failure);
+    int status = ncr_tls_shutdown(ws->ssl, ws->fd, finite, deadline, &tls_timed_out, failure);
     if (tls_timed_out) { *timed_out = true; }
     return status == 1;"#);
         add(&mut replacements, "@TLS_UPGRADE@", r#"    if (secure) {
@@ -323,8 +325,8 @@ pub(super) fn implementation(program: &t::Program) -> String {
         let Type::Object(option_port) = port_ok.fields[0] else {
             unreachable!("Uri.port Ok payload is Option<int>")
         };
-        let resolver_result = result_id_for(program, Type::Object(list), Type::Object(text));
-        let (resolver_ok_tag, _) = variant(program, resolver_result, "Ok");
+        let resolver_result = result_id(method(program, M::SocketAddressResolve));
+        let resolver_ok_tag = variant_id(program, resolver_result, "Ok");
 
         add(&mut replacements, "@URI_TYPE@", ctype(program, Type::Object(uri)));
         add(&mut replacements, "@TEXT_ID@", text);

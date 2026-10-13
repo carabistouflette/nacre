@@ -1776,11 +1776,13 @@ until all such handles have been dropped.
 
 TLS connect, accept, handshake, read, and write timeouts use the same monotonic
 deadline convention as TCP: zero is unbounded, positive values are milliseconds,
-and negative values return `Err`. Reads append to the destination. `writeSome`
-can report partial progress; `writeAll` uses one end-to-end deadline, and an error
-may follow bytes already sent. `cipher`, `protocol`, and `peerCertificate` return
-owned results; the peer certificate is `None` when the remote side supplied no
-certificate.
+and negative values return `Err`. A positive timeout is checked before each TLS
+operation, including operations that otherwise succeed immediately. Reads append to
+the destination. `writeSome` can report partial progress; `writeAll` uses one
+end-to-end deadline, and an error may follow bytes already sent. `TlsStream.close`
+uses a separate 250 ms deadline for TLS shutdown before releasing the transport.
+`cipher`, `protocol`, and `peerCertificate` return owned results; the peer certificate
+is `None` when the remote side supplied no certificate.
 
 ## WebSocket
 
@@ -1805,7 +1807,8 @@ peer response before returning an affine connection. `maxMessageBytes` limits an
 incoming message. `receive` returns `Ok(None)` after an orderly close; protocol,
 UTF-8, I/O, and timeout failures are owned `Err(Text)` values. `close` sends a
 close frame and completes the peer close handshake, then releases the transport.
-All WebSocket timeouts are monotonic milliseconds; zero means unbounded waiting.
+Each positive WebSocket timeout is one monotonic deadline through frame and control
+processing, including WSS TLS shutdown; zero means unbounded waiting.
 
 ## Platform, allocation, and timing limits
 

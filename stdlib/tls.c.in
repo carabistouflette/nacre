@@ -7,11 +7,13 @@
 #include <errno.h>
 #include <limits.h>
 #include <poll.h>
+#include <signal.h>
 #include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <time.h>
 #include <unistd.h>
 
 /* TLS_GROUP common */
@@ -327,6 +329,60 @@ static bool ncr_tls_set_client_host(SSL *ssl, ncr_obj_@TEXT_ID@ *host,
 
 /* TLS_GROUP stream_helpers */
 
+struct ncr_tls_sigpipe_guard {
+    sigset_t pipe_set;
+    sigset_t old_mask;
+    int was_pending;
+};
+
+static bool ncr_tls_sigpipe_begin(struct ncr_tls_sigpipe_guard *guard, int *failure) {
+    if (sigemptyset(&guard->pipe_set) != 0 || sigaddset(&guard->pipe_set, SIGPIPE) != 0) {
+        *failure = errno;
+        return false;
+    }
+    int mask_error = pthread_sigmask(SIG_BLOCK, &guard->pipe_set, &guard->old_mask);
+    if (mask_error != 0) { *failure = mask_error; return false; }
+    sigset_t pending;
+    if (sigpending(&pending) != 0) {
+        int error = errno;
+        (void)pthread_sigmask(SIG_SETMASK, &guard->old_mask, NULL);
+        *failure = error;
+        return false;
+    }
+    guard->was_pending = sigismember(&pending, SIGPIPE);
+    if (guard->was_pending < 0) {
+        int error = errno;
+        (void)pthread_sigmask(SIG_SETMASK, &guard->old_mask, NULL);
+        *failure = error;
+        return false;
+    }
+    return true;
+}
+
+static bool ncr_tls_sigpipe_finish(struct ncr_tls_sigpipe_guard *guard,
+    bool operation_failed, int operation_errno, int *failure) {
+    int signal_error = 0;
+    if (operation_failed && operation_errno == EPIPE && guard->was_pending == 0) {
+        const struct timespec immediate = { .tv_sec = 0, .tv_nsec = 0 };
+        int received;
+        do { received = sigtimedwait(&guard->pipe_set, NULL, &immediate); }
+        while (received < 0 && errno == EINTR);
+        if (received < 0 && errno != EAGAIN) { signal_error = errno; }
+    }
+    int restore_error = pthread_sigmask(SIG_SETMASK, &guard->old_mask, NULL);
+    if (signal_error == 0 && restore_error != 0) { signal_error = restore_error; }
+    if (signal_error != 0) { *failure = signal_error; return false; }
+    return true;
+}
+
+static int ncr_tls_check_deadline(bool finite, int64_t deadline, bool *timed_out, int *failure) {
+    if (!finite) { return 1; }
+    int64_t now = 0;
+    if (!ncr_time_monotonic_value(&now, failure)) { return -1; }
+    if (now >= deadline) { *timed_out = true; return 0; }
+    return 1;
+}
+
 static SSL *ncr_tls_ssl_for_config(
     ncr_obj_@CONFIG_MUTEX_ID@ *config_handle, int fd, bool client, int *failure
 ) {
@@ -365,14 +421,20 @@ static int ncr_tls_wait_ssl_error(int ssl_error, int fd, bool finite, int64_t de
     return ready < 0 ? -1 : 1;
 }
 
-
 static int ncr_tls_handshake(SSL *ssl, int fd, bool client, bool finite, int64_t deadline,
     bool *timed_out, int *failure) {
     *timed_out = false;
     for (;;) {
+        int deadline_status = ncr_tls_check_deadline(finite, deadline, timed_out, failure);
+        if (deadline_status <= 0) { return deadline_status; }
+        struct ncr_tls_sigpipe_guard guard;
+        if (!ncr_tls_sigpipe_begin(&guard, failure)) { return -1; }
+        ERR_clear_error();
         int status = client ? SSL_connect(ssl) : SSL_accept(ssl);
+        int operation_errno = errno;
+        int ssl_error = status == 1 ? SSL_ERROR_NONE : SSL_get_error(ssl, status);
+        if (!ncr_tls_sigpipe_finish(&guard, status != 1, operation_errno, failure)) { return -1; }
         if (status == 1) { return 1; }
-        int ssl_error = SSL_get_error(ssl, status);
         int ready = ncr_tls_wait_ssl_error(ssl_error, fd, finite, deadline, timed_out, failure);
         if (ready <= 0) { return ready; }
     }
@@ -382,10 +444,17 @@ static ssize_t ncr_tls_read(SSL *ssl, int fd, unsigned char *destination, size_t
     bool finite, int64_t deadline, bool *timed_out, int *failure) {
     *timed_out = false;
     for (;;) {
+        int deadline_status = ncr_tls_check_deadline(finite, deadline, timed_out, failure);
+        if (deadline_status <= 0) { return -1; }
+        struct ncr_tls_sigpipe_guard guard;
+        if (!ncr_tls_sigpipe_begin(&guard, failure)) { return -1; }
         size_t received = 0;
+        ERR_clear_error();
         int status = SSL_read_ex(ssl, destination, maximum, &received);
+        int operation_errno = errno;
+        int ssl_error = status == 1 ? SSL_ERROR_NONE : SSL_get_error(ssl, status);
+        if (!ncr_tls_sigpipe_finish(&guard, status != 1, operation_errno, failure)) { return -1; }
         if (status == 1) { return received > (size_t)SSIZE_MAX ? SSIZE_MAX : (ssize_t)received; }
-        int ssl_error = SSL_get_error(ssl, status);
         if (ssl_error == SSL_ERROR_ZERO_RETURN) { return 0; }
         int ready = ncr_tls_wait_ssl_error(ssl_error, fd, finite, deadline, timed_out, failure);
         if (ready <= 0) { return -1; }
@@ -396,29 +465,41 @@ static ssize_t ncr_tls_write(SSL *ssl, int fd, const unsigned char *source, size
     bool finite, int64_t deadline, bool *timed_out, int *failure) {
     *timed_out = false;
     for (;;) {
+        int deadline_status = ncr_tls_check_deadline(finite, deadline, timed_out, failure);
+        if (deadline_status <= 0) { return -1; }
+        struct ncr_tls_sigpipe_guard guard;
+        if (!ncr_tls_sigpipe_begin(&guard, failure)) { return -1; }
         size_t written = 0;
+        ERR_clear_error();
         int status = SSL_write_ex(ssl, source, length, &written);
+        int operation_errno = errno;
+        int ssl_error = status == 1 ? SSL_ERROR_NONE : SSL_get_error(ssl, status);
+        if (!ncr_tls_sigpipe_finish(&guard, status != 1, operation_errno, failure)) { return -1; }
         if (status == 1) {
             if (written == 0) { *failure = EPIPE; return -1; }
             return written > (size_t)SSIZE_MAX ? SSIZE_MAX : (ssize_t)written;
         }
-        int ssl_error = SSL_get_error(ssl, status);
         int ready = ncr_tls_wait_ssl_error(ssl_error, fd, finite, deadline, timed_out, failure);
         if (ready <= 0) { return -1; }
     }
 }
 
-static int ncr_tls_shutdown(SSL *ssl, int fd, int64_t timeout_ms, bool *timed_out, int *failure) {
-    bool finite = false;
-    int64_t deadline = 0;
+static int ncr_tls_shutdown(SSL *ssl, int fd, bool finite, int64_t deadline,
+    bool *timed_out, int *failure) {
     *timed_out = false;
-    if (!ncr_network_deadline(timeout_ms, &finite, &deadline, failure)) { return -1; }
     for (;;) {
+        int deadline_status = ncr_tls_check_deadline(finite, deadline, timed_out, failure);
+        if (deadline_status <= 0) { return deadline_status; }
+        struct ncr_tls_sigpipe_guard guard;
+        if (!ncr_tls_sigpipe_begin(&guard, failure)) { return -1; }
+        ERR_clear_error();
         int status = SSL_shutdown(ssl);
+        int operation_errno = errno;
+        int ssl_error = status < 0 ? SSL_get_error(ssl, status) : SSL_ERROR_NONE;
+        if (!ncr_tls_sigpipe_finish(&guard, status < 0, operation_errno, failure)) { return -1; }
         if (status == 1) { return 1; }
         short events = POLLIN;
         if (status < 0) {
-            int ssl_error = SSL_get_error(ssl, status);
             if (ssl_error == SSL_ERROR_WANT_READ) { events = POLLIN; }
             else if (ssl_error == SSL_ERROR_WANT_WRITE) { events = POLLOUT; }
             else { *failure = EPROTO; return -1; }
@@ -737,9 +818,16 @@ static ncr_obj_@CLOSE_RESULT_TYPE@ @TLS_STREAM_CLOSE_FN@(ncr_obj_@TLS_STREAM_ID@
     if (stream == NULL || stream->fd < 0 || stream->ssl == NULL) {
         NCR_TLS_RETURN_ERROR(@CLOSE_RESULT_ID@, "TlsStream.close", EBADF, ncr_line, ncr_column);
     }
-    bool timed_out = false;
+    bool finite = false;
+    int64_t deadline = 0;
     int failure = 0;
-    int status = ncr_tls_shutdown((SSL *)stream->ssl, stream->fd, 250, &timed_out, &failure);
+    if (!ncr_network_deadline(250, &finite, &deadline, &failure)) {
+        int close_failure = ncr_tls_stream_release(stream);
+        if (close_failure != 0 && failure == 0) { failure = close_failure; }
+        NCR_TLS_RETURN_ERROR(@CLOSE_RESULT_ID@, "TlsStream.close timeout", failure, ncr_line, ncr_column);
+    }
+    bool timed_out = false;
+    int status = ncr_tls_shutdown((SSL *)stream->ssl, stream->fd, finite, deadline, &timed_out, &failure);
     int close_failure = ncr_tls_stream_release(stream);
     if (status == 1) {
         if (close_failure != 0) { NCR_TLS_RETURN_ERROR(@CLOSE_RESULT_ID@, "TlsStream.close fd", close_failure, ncr_line, ncr_column); }

@@ -179,6 +179,10 @@ void main() {{
                                                                                 && received.get(3L) == (byte)108 && received.get(4L) == (byte)111);
                                                                         }}
                                                                     }}
+                                                                    match (Time.sleepMillis(200L)) {{
+                                                                        Err(error) {{ println("server-delay-error"); }}
+                                                                        Ok(unit) {{ println("server-delay-ok"); }}
+                                                                    }}
                                                                     ByteBuffer response = Encoding.utf8Encode(new Text("world"));
                                                                     match (stream.writeAll(response, 5000L)) {{
                                                                         Err(error) {{ println("server-write-error"); }}
@@ -250,6 +254,15 @@ void main() {{
                                                         Err(error) {{ println("client-write-error"); }}
                                                         Ok(unit) {{ println("client-write-ok"); }}
                                                     }}
+                                                    match (Path.fromText(new Text("/nacre-test-ca-that-does-not-exist.pem"))) {{
+                                                        Err(error) {{ println(false); }}
+                                                        Ok(missing_ca) {{
+                                                            match (TlsConfig.clientWithCa(missing_ca)) {{
+                                                                Err(error) {{ println(!error.isEmpty()); }}
+                                                                Ok(unexpected) {{ println(false); }}
+                                                            }}
+                                                        }}
+                                                    }}
                                                     match (ByteBuffer.withCapacity(0L)) {{
                                                         Err(error) {{ println("buffer-error"); }}
                                                         Ok(received) {{
@@ -269,15 +282,6 @@ void main() {{
                                                     match (stream.close()) {{
                                                         Err(error) {{ println("client-close-error"); }}
                                                         Ok(unit) {{ println("client-close-ok"); }}
-                                                    }}
-                                                }}
-                                            }}
-                                            match (Path.fromText(new Text("/nacre-test-ca-that-does-not-exist.pem"))) {{
-                                                Err(error) {{ println(false); }}
-                                                Ok(missing_ca) {{
-                                                    match (TlsConfig.clientWithCa(missing_ca)) {{
-                                                        Err(error) {{ println(!error.isEmpty()); }}
-                                                        Ok(unexpected) {{ println(false); }}
                                                     }}
                                                 }}
                                             }}
@@ -303,11 +307,11 @@ void main() {{
     assert!(endpoint.starts_with("127.0.0.1:"), "{endpoint}");
     let port = endpoint.rsplit(':').next().unwrap();
     let client_output = run(&client, &[port]);
-    assert!(client_output.contains("true\ntrue\ntrue\nclient-write-ok\ntrue\nclient-close-ok\ntrue\n"), "{client_output}");
+    assert!(client_output.contains("true\ntrue\ntrue\nclient-write-ok\ntrue\ntrue\nclient-close-ok\n"), "{client_output}");
     let (status, stdout, stderr) = server_process.finish_for(Duration::from_secs(15));
     assert!(status.success(), "TLS server failed:\n{stderr}");
     assert_live_zero(&stderr);
-    assert!(stdout.contains("server-accepted\ntrue\ntrue\ntrue\nserver-write-ok\nserver-close-ok\n"), "{stdout}");
+    assert!(stdout.contains("server-accepted\ntrue\ntrue\ntrue\nserver-delay-ok\nserver-write-ok\nserver-close-ok\n"), "{stdout}");
 }
 
 fn sha1(input: &[u8]) -> [u8; 20] {
