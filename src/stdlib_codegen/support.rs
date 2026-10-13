@@ -531,6 +531,7 @@ pub(super) fn replace_placeholders(mut body: String, substitutions: &[(&str, Str
     body
 }
 
+
 pub(super) fn has_placeholder(source: &str) -> bool {
     let bytes = source.as_bytes();
     for (start, byte) in bytes.iter().enumerate() {

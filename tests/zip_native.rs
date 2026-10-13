@@ -76,6 +76,11 @@ Result<Unit, Text> writeEntries(borrow Path path, int level) {
         Err(error) { println("writer rejects NUL entry name"); }
         Ok(unit) { return new Result<Unit, Text>.Err(new Text("writer accepted NUL entry name")); }
     }
+    Text trailingSlash = new Text("payload/");
+    match (writer.add(trailingSlash, payload)) {
+        Err(error) { println("writer rejects trailing slash file name"); }
+        Ok(unit) { return new Result<Unit, Text>.Err(new Text("writer accepted trailing slash file name")); }
+    }
     writer.add(filename, payload)?;
     ByteBuffer unread = ByteBuffer.withCapacity(0L)?;
     unread.append((byte)115);
@@ -330,8 +335,18 @@ Result<boolean, Text> rejectsDamagedArchive(borrow Path path) {
 Result<Unit, Text> damagedExercise() {
     Path truncated = argumentPath(0)?;
     Path corrupt = argumentPath(1)?;
+    Path truncatedDirectory = argumentPath(2)?;
+    Path missingUnicode = argumentPath(3)?;
     require(rejectsDamagedArchive(truncated)?, "truncated archive was accepted")?;
     require(rejectsDamagedArchive(corrupt)?, "corrupt CRC archive was accepted")?;
+    require(rejectsDamagedArchive(truncatedDirectory)?, "archive with truncated central directory was accepted")?;
+    match (ZipReader.open(missingUnicode)) {
+        Err(error) { println("ZIP_ERROR_UTF8_OK"); }
+        Ok(reader) {
+            reader.close()?;
+            return new Result<Unit, Text>.Err(new Text("missing archive path was accepted"));
+        }
+    }
     println("ZIP_DAMAGED_OK");
     return new Result<Unit, Text>.Ok(());
 }
@@ -370,6 +385,7 @@ fn writer_produces_store_deflate_directory_empty_and_sequential_entries() {
     assert!(stdout.contains("ZIP_WRITER_OK"), "{stdout}");
     assert!(stdout.contains("writer rejects empty entry name"), "{stdout}");
     assert!(stdout.contains("writer rejects NUL entry name"), "{stdout}");
+    assert!(stdout.contains("writer rejects trailing slash file name"), "{stdout}");
     assert!(stdout.contains("closed writer rejects add"), "{stdout}");
     assert!(stdout.contains("closed writer rejects close"), "{stdout}");
     assert!(stdout.contains("closed reader rejects next"), "{stdout}");
@@ -388,13 +404,13 @@ with zipfile.ZipFile(sys.argv[1]) as archive:
 with zipfile.ZipFile(sys.argv[3]) as archive:
     assert archive.namelist() == []
 "#;
-    let python = Command::new("python3")
-        .arg("-c").arg(check)
-        .arg(&stored).arg("0")
-        .arg(&deflated).arg("8")
-        .arg(&empty)
-        .output().unwrap();
-    assert!(python.status.success(), "{}", String::from_utf8_lossy(&python.stderr));
+    for (archive_path, expected_method) in [(&stored, "0"), (&deflated, "8")] {
+        let python = Command::new("python3")
+            .arg("-c").arg(check)
+            .arg(archive_path).arg(expected_method).arg(&empty)
+            .output().unwrap();
+        assert!(python.status.success(), "{}", String::from_utf8_lossy(&python.stderr));
+    }
 }
 
 #[test]
@@ -418,11 +434,23 @@ fn reader_rejects_truncated_payload_and_crc_corruption() {
     let truncated = scratch.path("truncated.zip");
     fs::write(&truncated, &fixture[..43]).unwrap();
     let corrupt = scratch.path("corrupt-crc.zip");
-    let mut corrupt_bytes = fixture;
+    let mut corrupt_bytes = fixture.clone();
     corrupt_bytes[40] ^= 1;
     fs::write(&corrupt, corrupt_bytes).unwrap();
+    let directory_signature = fixture.windows(4)
+        .position(|window| window == b"PK\x01\x02")
+        .expect("independent fixture has a central directory");
+    let truncated_directory = scratch.path("truncated-directory.zip");
+    fs::write(&truncated_directory, &fixture[..directory_signature + 4]).unwrap();
+    let mut missing_unicode = scratch.path("missing");
+    // Keep the libarchive diagnostic truncation point inside a lambda scalar.
+    if (511 - 32 - (missing_unicode.as_os_str().len() + 1)) % 3 == 0 {
+        missing_unicode.push("x");
+    }
+    let component = "λ".repeat(80);
+    for _ in 0..3 { missing_unicode.push(&component); }
     let program = compile(DAMAGE_SOURCE);
-    let output = run(&program, &[&truncated, &corrupt]);
+    let output = run(&program, &[&truncated, &corrupt, &truncated_directory, &missing_unicode]);
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("ZIP_DAMAGED_OK"), "{stdout}");
-}
+    assert!(stdout.contains("ZIP_ERROR_UTF8_OK"), "{stdout}");
