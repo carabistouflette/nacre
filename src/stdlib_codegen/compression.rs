@@ -39,7 +39,7 @@ pub(super) fn implementation(program: &t::Program) -> String {
         body.push_str(&checksum_body(program, buffer));
     }
     let body = replace_method_ids(body, program, None);
-    debug_assert!(!body.contains('@'), "unexpanded Compression placeholder");
+    debug_assert!(!super::support::has_placeholder(&body), "unexpanded Compression placeholder");
     body
 }
 

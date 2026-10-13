@@ -91,7 +91,7 @@ pub(super) fn fields(program: &t::Program, class: C) -> String {
                 "    size_t header_count;\n    size_t header_capacity;\n    size_t header_bytes;\n",
                 "    unsigned char *final_url;\n    size_t final_url_length;\n",
                 "    int32_t status;\n",
-            ))
+            ), buffer = buffer)
         }
         _ => unreachable!("HTTP storage requested for a non-HTTP native class"),
     }
@@ -184,6 +184,6 @@ pub(super) fn implementation(program: &t::Program) -> String {
     ];
     let body = replace_placeholders(template.to_owned(), &substitutions);
     let body = replace_method_ids(body, program, None);
-    debug_assert!(!body.contains('@'), "unexpanded HTTP placeholder");
+    debug_assert!(!super::support::has_placeholder(&body), "unexpanded HTTP placeholder");
     body
 }

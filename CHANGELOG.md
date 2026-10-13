@@ -12,6 +12,8 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 - Native emission shares borrowed template sections and places ByteBuffer
   helpers before binary consumers. Compression and checksum emission is
   independent, so either API works without constructing the other class.
+- Native placeholder checks share the actual `@NAME@` grammar rather than
+  rejecting every literal `@` byte, preserving HTTP user-information validation.
 - Native `Encoding` converts affine byte buffers to lowercase hex, canonical
   padded RFC 4648 Base64, canonical unpadded Base64URL, and strict UTF-8 `Text`.
   Decoders reject malformed alphabets, padding, discarded bits, and invalid

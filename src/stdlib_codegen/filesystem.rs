@@ -72,7 +72,7 @@ fn expand_template(
 ) -> String {
     let body = replace_placeholders(template.to_owned(), replacements);
     let body = replace_method_ids(body, program, None);
-    debug_assert!(!body.contains('@'), "unexpanded filesystem placeholder");
+    debug_assert!(!super::support::has_placeholder(&body), "unexpanded filesystem placeholder");
     body
 }
 
@@ -213,7 +213,7 @@ fn files_implementation(
         ("@ERROR_UNIT_ATOMIC@", format!("ncr_result_error_{atomic_result}")),
     ]);
     let atomic = replace_method_ids(atomic, program, None);
-    debug_assert!(!atomic.contains('@'), "unexpanded atomic Files placeholder");
+    debug_assert!(!super::support::has_placeholder(&atomic), "unexpanded atomic Files placeholder");
     body.push_str(&atomic);
     body
 }
@@ -235,7 +235,7 @@ pub(super) fn implementations(program: &t::Program) -> Option<String> {
         let common = replace_placeholders(include_str!("../../stdlib/files_common.c.in").to_owned(), &[
             ("@TEXT_ID@", text.to_string()),
         ]);
-        debug_assert!(!common.contains('@'), "unexpanded common filesystem placeholder");
+        debug_assert!(!super::support::has_placeholder(&common), "unexpanded common filesystem placeholder");
         output.push_str(&common);
         Some(text)
     } else {
@@ -250,7 +250,7 @@ pub(super) fn implementations(program: &t::Program) -> Option<String> {
             ("@BUFFER_ID@", buffer.to_string()),
             ("@BUFFER_RESERVE@", format!("ncr_byte_buffer_reserve_{buffer}")),
         ]);
-        debug_assert!(!streams.contains('@'), "unexpanded filesystem stream placeholder");
+        debug_assert!(!super::support::has_placeholder(&streams), "unexpanded filesystem stream placeholder");
         output.push_str(&streams);
         Some(buffer)
     } else {

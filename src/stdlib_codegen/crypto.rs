@@ -153,6 +153,6 @@ pub(super) fn implementation(program: &t::Program) -> String {
         ("@COMPARE_RIGHT@", parameter(compare, 1)),
     ]);
     let body = replace_method_ids(body, program, None);
-    debug_assert!(!body.contains('@'), "unexpanded Crypto placeholder");
+    debug_assert!(!super::support::has_placeholder(&body), "unexpanded Crypto placeholder");
     body
 }

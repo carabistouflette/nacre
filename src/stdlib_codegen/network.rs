@@ -263,6 +263,6 @@ pub(super) fn implementation(program: &t::Program) -> String {
 
     let mut body = replace_placeholders(body, &substitutions);
     body = replace_method_ids(body, program, None);
-    debug_assert!(!body.contains('@'), "unexpanded network placeholder");
+    debug_assert!(!super::support::has_placeholder(&body), "unexpanded network placeholder");
     body
 }

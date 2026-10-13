@@ -434,7 +434,7 @@ Result<Unit, Text> attempt(borrow Text url, borrow Text caPath, boolean trustCa)
     Text method = new Text("GET");
     HttpRequest request = HttpRequest.create(method, url)?;
     if (trustCa) {
-        Path ca = Path.fromText(caPath)?;
+        Path ca = Path.fromText(caPath.clone())?;
         request.setCaFile(ca)?;
     }
     match (request.send()) {

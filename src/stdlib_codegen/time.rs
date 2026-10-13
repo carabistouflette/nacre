@@ -23,6 +23,6 @@ pub(super) fn implementation(program: &t::Program) -> String {
         ("@TIME_DEADLINE_OK_TAG@", variant_id(program, deadline_result, "Ok").to_string()),
     ]);
     let body = replace_method_ids(body, program, None);
-    debug_assert!(!body.contains('@'), "unexpanded Time placeholder");
+    debug_assert!(!super::support::has_placeholder(&body), "unexpanded Time placeholder");
     body
 }

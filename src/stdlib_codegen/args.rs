@@ -17,6 +17,6 @@ pub(super) fn implementation(program: &t::Program) -> Option<String> {
         ("@ARGS_GET_INDEX@", format!("ncr_v_{}", get.params[0].0)),
     ]);
     let body = replace_method_ids(body, program, None);
-    debug_assert!(!body.contains('@'), "unexpanded Args placeholder");
+    debug_assert!(!super::support::has_placeholder(&body), "unexpanded Args placeholder");
     Some(body)
 }

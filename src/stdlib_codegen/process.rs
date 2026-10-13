@@ -281,6 +281,6 @@ pub(super) fn implementations(program: &t::Program) -> Option<String> {
     if has_process || has_output || has_command { substitutions.extend(status_substitutions(program)); }
     body = replace_placeholders(body, &substitutions);
     body = replace_method_ids(body, program, None);
-    debug_assert!(!body.contains('@'), "unexpanded Process placeholder");
+    debug_assert!(!super::support::has_placeholder(&body), "unexpanded Process placeholder");
     Some(body)
 }

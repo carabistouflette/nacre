@@ -31,7 +31,7 @@ pub(super) fn implementation(program: &t::Program) -> Option<String> {
         ("@OPTION_SOME_TAG@", variant_id(program, option, "Some").to_string()),
     ]);
     let body = replace_method_ids(body, program, None);
-    debug_assert!(!body.contains('@'), "unexpanded Console placeholder");
+    debug_assert!(!super::support::has_placeholder(&body), "unexpanded Console placeholder");
     out.push_str(&body);
     Some(out)
 }

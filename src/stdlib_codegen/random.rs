@@ -28,6 +28,6 @@ pub(super) fn implementation(program: &t::Program) -> String {
         ("@RANDOM_INT_OK_TAG@", variant_id(program, int_result, "Ok").to_string()),
     ]);
     let body = replace_method_ids(body, program, None);
-    debug_assert!(!body.contains('@'), "unexpanded Random placeholder");
+    debug_assert!(!super::support::has_placeholder(&body), "unexpanded Random placeholder");
     body
 }

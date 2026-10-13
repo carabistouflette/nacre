@@ -136,7 +136,7 @@ fn append_body(program: &t::Program, out: &mut String, class: &t::Class, native:
     body = body.replace("@ID@", &class.id.to_string());
     let receiver = match native { C::Arrays | C::ByteBuffer | C::Encoding | C::Crypto => None, _ => Some(class.id) };
     body = support::replace_method_ids(body, program, receiver);
-    debug_assert!(!body.contains('@'), "unexpanded standard-library placeholder");
+    debug_assert!(!support::has_placeholder(&body), "unexpanded standard-library placeholder");
     out.push_str(&body);
     out.push('\n');
 }

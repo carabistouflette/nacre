@@ -278,3 +278,15 @@ pub(super) fn replace_placeholders(mut body: String, substitutions: &[(&str, Str
     }
     body
 }
+
+pub(super) fn has_placeholder(source: &str) -> bool {
+    let bytes = source.as_bytes();
+    for (start, byte) in bytes.iter().enumerate() {
+        if *byte != b'@' { continue; }
+        let name = &bytes[start + 1..];
+        let length = name.iter().take_while(|byte|
+            byte.is_ascii_uppercase() || byte.is_ascii_digit() || **byte == b'_').count();
+        if length > 0 && name.get(length) == Some(&b'@') { return true; }
+    }
+    false
+}

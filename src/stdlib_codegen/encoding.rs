@@ -117,6 +117,6 @@ pub(super) fn implementation(program: &t::Program, class: usize) -> String {
     ]);
     body = body.replace("@ID@", &class.to_string());
     body = replace_method_ids(body, program, None);
-    debug_assert!(!body.contains('@'), "unexpanded Encoding placeholder");
+    debug_assert!(!super::support::has_placeholder(&body), "unexpanded Encoding placeholder");
     body
 }

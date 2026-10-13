@@ -20,6 +20,6 @@ pub(super) fn implementation(program: &t::Program) -> String {
         ("@ABS_LONG_VALUE@", abs_long_value),
     ]);
     let body = replace_method_ids(body, program, None);
-    debug_assert!(!body.contains('@'), "unexpanded Math placeholder");
+    debug_assert!(!super::support::has_placeholder(&body), "unexpanded Math placeholder");
     body
 }
