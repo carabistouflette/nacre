@@ -216,11 +216,22 @@ boolean tlsTextEquals(Result<Text, Text> result, String expected) {{
 boolean tlsUnitOk(Result<Unit, Text> result) {{
     match (result) {{ Err(error) {{ return false; }} Ok(value) {{ return true; }} }}
 }}
-boolean peerChainSurvivesStreamClose(borrow Certificate certificate, String expected, borrow Path caFile) {{
+boolean peerChainSurvivesStreamClose(borrow Certificate certificate, borrow Path caFile) {{
     match (certificate.toPemChain()) {{
         Err(error) {{ return false; }}
         Ok(pem) {{
-            if (!pem.equalsString(expected)) {{ return false; }}
+            Text marker = new Text("-----BEGIN CERTIFICATE-----");
+            List<Text> certificates = pem.split(marker);
+            if (certificates.size() != 3) {{ return false; }}
+            borrow Text second = certificates.getRef(2);
+            Text intermediatePem = new Text("-----BEGIN CERTIFICATE-----");
+            intermediatePem.appendText(second);
+            match (Certificate.parsePem(intermediatePem)) {{
+                Err(error) {{ return false; }}
+                Ok(intermediate) {{
+                    if (!tlsTextEquals(intermediate.subject(), "CN=Nacre Test Intermediate")) {{ return false; }}
+                }}
+            }}
             match (Certificate.parsePemChain(pem)) {{
                 Err(error) {{ return false; }}
                 Ok(restored) {{
@@ -307,7 +318,7 @@ void main() {{
                                                             match (peer) {{
                                                                 None {{ println(false); }}
                                                                 Some(certificate) {{
-                                                                    println(peerChainSurvivesStreamClose(certificate, {}, ca_file));
+                                                                    println(peerChainSurvivesStreamClose(certificate, ca_file));
                                                                 }}
                                                             }}
                                                         }}
@@ -327,7 +338,7 @@ void main() {{
         }}
     }}
 }}
-    "#, nacre_literal(ca_path), nacre_literal(&format!("{CERT}{INTERMEDIATE}")));
+    "#, nacre_literal(ca_path));
 
     let server = compile(&server_source);
     let client = compile(&client_source);

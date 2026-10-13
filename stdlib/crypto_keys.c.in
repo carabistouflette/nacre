@@ -180,6 +180,7 @@ static bool ncr_cryptokeys_signature_context(EVP_PKEY *key, @TEXT_TYPE@ digest,
     int kind = ncr_cryptokeys_key_kind(key);
     if (kind != 1 && kind != 2 && kind != 4) { return false; }
     const struct ncr_crypto_digest_spec *spec = NULL;
+    const EVP_MD *md = NULL;
     if (kind == 2) {
         if (digest == NULL || digest->length != 0 || ncr_cryptokeys_text_has_nul(digest)) { return false; }
     } else {

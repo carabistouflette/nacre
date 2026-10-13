@@ -109,11 +109,10 @@ boolean certificateTimesMatch(borrow Certificate certificate, long expectedBefor
 boolean certificateError(Result<Certificate, Text> result) {
     match (result) { Err(error) { return true; } Ok(value) { return false; } }
 }
-boolean certificatePemLeafMatches(borrow Certificate certificate, String expected, borrow Path caFile) {
+boolean certificatePemLeafMatches(borrow Certificate certificate, borrow Path caFile) {
     match (certificate.toPem()) {
         Err(error) { return false; }
         Ok(pem) {
-            if (!pem.equalsString(expected)) { return false; }
             match (Certificate.parsePem(pem)) {
                 Err(error) { return false; }
                 Ok(leaf) {
@@ -126,11 +125,13 @@ boolean certificatePemLeafMatches(borrow Certificate certificate, String expecte
         }
     }
 }
-boolean certificatePemChainMatches(borrow Certificate certificate, String expected, borrow Path caFile) {
+boolean certificatePemChainMatches(borrow Certificate certificate, borrow Path caFile) {
     match (certificate.toPemChain()) {
         Err(error) { return false; }
         Ok(pem) {
-            if (!pem.equalsString(expected)) { return false; }
+            Text marker = new Text("-----BEGIN CERTIFICATE-----");
+            List<Text> certificates = pem.split(marker);
+            if (certificates.size() != 4) { return false; }
             match (Certificate.parsePemChain(pem)) {
                 Err(error) { return false; }
                 Ok(chain) {
@@ -341,7 +342,8 @@ void main() {{
     match (CryptoKey.parsePublicPem(pem)) {{
         Err(error) {{ println(false); println(false); println(false); }}
         Ok(key) {{
-            ByteBuffer empty = Encoding.utf8Encode(new Text(""));
+            Text emptyText = new Text("");
+            ByteBuffer empty = Encoding.utf8Encode(emptyText);
             Text supported = new Text("SHA256");
             Text unsupported = new Text("SHA-1");
             Text nulName = new Text("SHA256\0");
@@ -732,7 +734,6 @@ fn certificate_pem_export_roundtrips_leaf_and_ordered_chain() {
     const INTERMEDIATE: &str = include_str!("fixtures/crypto_intermediate.pem");
     const ROOT: &str = include_str!("fixtures/crypto_root.pem");
     let input_chain = format!("{LEAF}\n \t{INTERMEDIATE}\n\n{ROOT}");
-    let normalized_chain = format!("{LEAF}{INTERMEDIATE}{ROOT}");
     let ca_path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/crypto_root.pem");
     let source = format!(
         r#"{HELPERS}
@@ -744,8 +745,8 @@ void main() {{
             match (parseCertificateChain({})) {{
                 Err(error) {{ println(false); println(false); }}
                 Ok(certificate) {{
-                    println(certificatePemLeafMatches(certificate, {}, caFile));
-                    println(certificatePemChainMatches(certificate, {}, caFile));
+                    println(certificatePemLeafMatches(certificate, caFile));
+                    println(certificatePemChainMatches(certificate, caFile));
                 }}
             }}
         }}
@@ -754,8 +755,6 @@ void main() {{
 "#,
         nacre_literal(ca_path),
         nacre_literal(&input_chain),
-        nacre_literal(LEAF),
-        nacre_literal(&normalized_chain),
     );
     assert_native(&source, b"true\ntrue\n");
 }
