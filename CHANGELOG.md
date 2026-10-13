@@ -18,6 +18,11 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   zone IDs. DateFields' private constructor now initializes every field.
   Class-presence emission replaces a duplicate expression traversal; advertised
   zone IDs are checked through actual temporal conversion.
+- Ordered-key queries preserve affine borrows and specialize every copied-key
+  query consistently. Native iterator interface adapters include their diagnostic
+  arguments, and mapper extraction uses the element representation, not the
+  input-interface representation. Hidden callback and element state remains
+  subject to recursive sendability checks.
 - Native `Encoding` converts affine byte buffers to lowercase hex, canonical
   padded RFC 4648 Base64, canonical unpadded Base64URL, and strict UTF-8 `Text`.
   Decoders reject malformed alphabets, padding, discarded bits, and invalid
@@ -122,6 +127,10 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 - Set reuses Map table storage without a wrapper allocation; Deque moves affine
   ring elements through wrap and growth. List heapsort and lower-bound searches
   support total primitive ordering or borrowed Comparators, without enum operand copies.
+- Comparator-ordered maps and sets use sorted contiguous storage; PriorityQueue
+  uses a binary min-heap, and BitSet adds packed ranges and logical operations.
+- List drain/collect and lazy map/filter/take/skip adapters form owned iterator
+  pipelines that transfer elements and recursively drop unconsumed owners.
 - Module resolution preserves E4101 classification for type parameters that shadow
   declared or imported types and reserved names.
 - Native Text owners embed up to 16 bytes; growth and owned-buffer transfers

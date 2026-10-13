@@ -15,12 +15,29 @@ fn supports_default_ordering(ty: &Type) -> bool {
     matches!(ty, Type::Byte | Type::Char | Type::Int | Type::Long | Type::Double | Type::Boolean | Type::String)
 }
 
-fn rewrite_borrowed_t_parameter_to_value(methods: &mut [a::Function], method_name: &str, index: usize) {
+fn rewrite_borrowed_parameter_to_value(
+    methods: &mut [a::Function],
+    method_name: &str,
+    index: usize,
+    parameter_name: &str,
+) {
     if let Some(param) = methods.iter_mut().find(|method| method.name == method_name)
         .and_then(|method| method.params.get_mut(index))
     {
-        if matches!(&param.ty, Type::Borrow { name, args, .. } if name == "T" && args.is_empty()) {
-            param.ty = Type::Named("T".to_owned());
+        if matches!(&param.ty, Type::Borrow { name, args, .. } if name == parameter_name && args.is_empty()) {
+            param.ty = Type::Named(parameter_name.to_owned());
+        }
+    }
+}
+
+fn rewrite_borrowed_t_parameter_to_value(methods: &mut [a::Function], method_name: &str, index: usize) {
+    rewrite_borrowed_parameter_to_value(methods, method_name, index, "T");
+}
+
+fn rewrite_borrowed_return_to_value(methods: &mut [a::Function], method_name: &str, parameter_name: &str) {
+    if let Some(method) = methods.iter_mut().find(|method| method.name == method_name) {
+        if matches!(&method.return_type, Type::Borrow { name, args, .. } if name == parameter_name && args.is_empty()) {
+            method.return_type = Type::Named(parameter_name.to_owned());
         }
     }
 }
@@ -209,11 +226,16 @@ impl Expander {
     }
     fn class(&mut self, class: &mut a::Class, env: &Environment) -> Result<(), Diagnostic> {
         let mut erase_comparator_marker = false;
+        let mut erase_predicate_marker = false;
         let mut native = class.native.take();
         match &mut native {
             Some(a::NativeClass::List(element)) => {
                 *element = self.ty(element, env, class.span, 0)?;
                 prune_list_methods(class, element);
+                self.ty(&Type::Applied {
+                    name: "ListIterator".to_owned(),
+                    args: vec![element.clone()],
+                }, env, class.span, 0)?;
             }
             Some(a::NativeClass::Deque(element)) => {
                 *element = self.ty(element, env, class.span, 0)?;
@@ -227,6 +249,82 @@ impl Expander {
                     class.methods.retain(|method| !matches!(method.name.as_str(), "get" | "tryGet"));
                 }
             }
+            Some(a::NativeClass::OrderedMap { key, value }) => {
+                *key = self.ty(key, env, class.span, 0)?;
+                *value = self.ty(value, env, class.span, 0)?;
+                self.ty(&Type::Applied {
+                    name: "Comparator".to_owned(),
+                    args: vec![key.clone()],
+                }, env, class.span, 0)?;
+                if key.is_copy() {
+                    for method_name in [
+                        "contains", "tryRemove", "tryGet", "getRef", "getMut",
+                        "floorIndex", "ceilingIndex", "lowerIndex", "higherIndex",
+                    ] {
+                        rewrite_borrowed_parameter_to_value(&mut class.methods, method_name, 0, "K");
+                    }
+                    rewrite_borrowed_return_to_value(&mut class.methods, "keyAt", "K");
+                }
+                if value.is_copy() {
+                    rewrite_borrowed_return_to_value(&mut class.methods, "valueAt", "V");
+                }
+                prune_map_value_methods(class, value);
+            }
+            Some(a::NativeClass::OrderedSet(key)) => {
+                *key = self.ty(key, env, class.span, 0)?;
+                self.ty(&Type::Applied {
+                    name: "Comparator".to_owned(),
+                    args: vec![key.clone()],
+                }, env, class.span, 0)?;
+                if key.is_copy() {
+                    for method_name in ["contains", "remove"] {
+                        rewrite_borrowed_parameter_to_value(&mut class.methods, method_name, 0, "T");
+                    }
+                }
+                self.ty(&Type::Applied {
+                    name: "OrderedMap".to_owned(),
+                    args: vec![key.clone(), Type::Unit],
+                }, env, class.span, 0)?;
+            }
+            Some(a::NativeClass::PriorityQueue(element)) => {
+                *element = self.ty(element, env, class.span, 0)?;
+                self.ty(&Type::Applied {
+                    name: "Comparator".to_owned(),
+                    args: vec![element.clone()],
+                }, env, class.span, 0)?;
+                if element.is_copy() {
+                    class.methods.retain(|method| method.name != "getRef");
+                } else {
+                    class.methods.retain(|method| !matches!(method.name.as_str(), "peek" | "tryPeek"));
+                }
+            }
+            Some(a::NativeClass::ListIterator(element))
+            | Some(a::NativeClass::FilterIterator(element))
+            | Some(a::NativeClass::TakeIterator(element))
+            | Some(a::NativeClass::SkipIterator(element)) => {
+                *element = self.ty(element, env, class.span, 0)?;
+            }
+            Some(a::NativeClass::Iterators(element)) => {
+                *element = self.ty(element, env, class.span, 0)?;
+                for name in ["TakeIterator", "SkipIterator"] {
+                    self.ty(&Type::Applied {
+                        name: name.to_owned(),
+                        args: vec![element.clone()],
+                    }, env, class.span, 0)?;
+                }
+            }
+            Some(a::NativeClass::MapIterator(input, output)) => {
+                *input = self.ty(input, env, class.span, 0)?;
+                *output = self.ty(output, env, class.span, 0)?;
+            }
+            Some(a::NativeClass::Predicate(element)) => {
+                *element = self.ty(element, env, class.span, 0)?;
+                if element.is_copy() {
+                    rewrite_borrowed_t_parameter_to_value(&mut class.methods, "test", 0);
+                }
+                erase_predicate_marker = true;
+            }
+            Some(a::NativeClass::BitSet) => {}
             Some(a::NativeClass::Map { key, value, key_kind }) => {
                 *key = self.ty(key, env, class.span, 0)?;
                 *value = self.ty(value, env, class.span, 0)?;
@@ -286,7 +384,7 @@ impl Expander {
             }
             _ => {}
         }
-        if !erase_comparator_marker {
+        if !erase_comparator_marker && !erase_predicate_marker {
             class.native = native;
         }
         // Files' native text I/O uses the shared ByteBuffer reserve implementation.

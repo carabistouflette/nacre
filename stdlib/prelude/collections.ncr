@@ -19,6 +19,8 @@ class List<T> {
     public void sortBy(Comparator<T> comparator) {}
     public readonly Option<int> binarySearch(T value) {}
     public readonly Option<int> binarySearchBy(Comparator<T> comparator, borrow T value) {}
+    public Iterator<T> drain() {}
+    public static List<T> collect(Iterator<T> input) {}
 }
 
 class Deque<T> {
@@ -86,4 +88,116 @@ class Map<K, V> {
     public readonly borrow V getRef(K key) {}
     public borrow mut V getMut(K key) {}
     public void clear() {}
+}
+
+class OrderedMap<K, V> {
+    private Comparator<K> comparator;
+    public OrderedMap(Comparator<K> comparator) {}
+    public Option<V> put(K key, V value) {}
+    public Option<V> tryRemove(borrow K key) {}
+    public readonly boolean contains(borrow K key) {}
+    public readonly Option<V> tryGet(borrow K key) {}
+    public readonly borrow V getRef(borrow K key) {}
+    public borrow mut V getMut(borrow K key) {}
+    public readonly borrow K keyAt(int index) {}
+    public readonly borrow V valueAt(int index) {}
+    public readonly int size() {}
+    public readonly boolean isEmpty() {}
+    public void clear() {}
+    public readonly Option<int> floorIndex(borrow K key) {}
+    public readonly Option<int> ceilingIndex(borrow K key) {}
+    public readonly Option<int> lowerIndex(borrow K key) {}
+    public readonly Option<int> higherIndex(borrow K key) {}
+}
+
+class OrderedSet<T> {
+    private Comparator<T> comparator;
+    public OrderedSet(Comparator<T> comparator) {}
+    public void add(T key) {}
+    public readonly boolean contains(borrow T key) {}
+    public boolean remove(borrow T key) {}
+    public readonly int size() {}
+    public readonly boolean isEmpty() {}
+    public void clear() {}
+}
+
+class PriorityQueue<T> {
+    private Comparator<T> comparator;
+    public PriorityQueue(Comparator<T> comparator) {}
+    public void add(T value) {}
+    public T pop() {}
+    public Option<T> tryPop() {}
+    public readonly T peek() {}
+    public readonly borrow T getRef() {}
+    public readonly Option<T> tryPeek() {}
+    public readonly int size() {}
+    public readonly boolean isEmpty() {}
+    public void clear() {}
+}
+
+class BitSet {
+    public BitSet(long initialBits) {}
+    public readonly boolean get(long bit) {}
+    public void set(long bit) {}
+    public void clear(long bit) {}
+    public void flip(long bit) {}
+    public void setRange(long fromInclusive, long toExclusive) {}
+    public void clearRange(long fromInclusive, long toExclusive) {}
+    public void flipRange(long fromInclusive, long toExclusive) {}
+    public readonly Option<long> nextSetBit(long fromIndex) {}
+    public readonly long cardinality() {}
+    public readonly long length() {}
+    public readonly boolean isEmpty() {}
+    public readonly BitSet clone() {}
+    public void and(borrow BitSet other) {}
+    public void or(borrow BitSet other) {}
+    public void xor(borrow BitSet other) {}
+    public void andNot(borrow BitSet other) {}
+}
+
+interface Iterator<T> {
+    Option<T> next();
+}
+
+interface Mapper<T, U> {
+    U apply(T value);
+}
+
+interface Predicate<T> {
+    readonly boolean test(borrow T value);
+}
+
+class ListIterator<T> implements Iterator<T> {
+    public Option<T> next() {}
+}
+
+class MapIterator<T, U> implements Iterator<U> {
+    private Iterator<T> input;
+    private Mapper<T, U> mapper;
+    public MapIterator(Iterator<T> input, Mapper<T, U> mapper) {}
+    public Option<U> next() {}
+}
+
+class FilterIterator<T> implements Iterator<T> {
+    private Iterator<T> input;
+    private Predicate<T> predicate;
+    public FilterIterator(Iterator<T> input, Predicate<T> predicate) {}
+    public Option<T> next() {}
+}
+
+class TakeIterator<T> implements Iterator<T> {
+    private Iterator<T> input;
+    public TakeIterator(Iterator<T> input, long limit) {}
+    public Option<T> next() {}
+}
+
+class SkipIterator<T> implements Iterator<T> {
+    private Iterator<T> input;
+    public SkipIterator(Iterator<T> input, long count) {}
+    public Option<T> next() {}
+}
+
+class Iterators<T> {
+    public static Iterator<T> take(Iterator<T> input, long limit) {}
+    public static Iterator<T> skip(Iterator<T> input, long count) {}
 }

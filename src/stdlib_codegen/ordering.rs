@@ -38,7 +38,7 @@ fn default_compare(class_id: usize, element: Type, element_c: &str) -> String {
     )
 }
 
-fn borrow_storage(program: &t::Program, element: Type, name: &str) -> String {
+pub(super) fn borrow_storage(program: &t::Program, element: Type, name: &str) -> String {
     let Type::Object(class) = element else { return name.to_owned(); };
     if program.classes[class].variants.is_some() {
         format!("&({name})")
@@ -47,7 +47,7 @@ fn borrow_storage(program: &t::Program, element: Type, name: &str) -> String {
     }
 }
 
-fn comparator_info(program: &t::Program, function: &t::Function) -> (usize, usize, Type) {
+pub(super) fn comparator_info(program: &t::Program, function: &t::Function) -> (usize, usize, Type) {
     let Some(Type::Object(interface)) = function.params.first().map(|(_, ty)| *ty) else {
         unreachable!("sortBy and binarySearchBy take an owned Comparator<T> interface")
     };

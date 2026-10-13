@@ -14,6 +14,10 @@ mod random;
 mod ordering;
 mod deque;
 mod set;
+mod bitset;
+mod iterators;
+mod ordered;
+mod priority;
 mod support;
 mod text;
 mod time;
@@ -48,6 +52,12 @@ pub fn fields(program: &t::Program, class: C, class_id: usize) -> String {
         C::Deque(element) => deque::fields(program, element),
         C::Map(_, _) => collections::map_fields(class_id),
         C::Set(key) => set::fields(program, key),
+        C::OrderedMap(_, _) | C::OrderedSet(_) => ordered::fields(program, class, class_id),
+        C::PriorityQueue(_) => priority::fields(program, class, class_id),
+        C::BitSet => bitset::fields(program, class, class_id),
+        C::ListIterator(_) | C::MapIterator(_, _) | C::FilterIterator(_) |
+        C::TakeIterator(_) | C::SkipIterator(_) | C::Iterators(_) =>
+            iterators::fields(program, class, class_id),
         C::Text => text::fields(),
         C::BigInt | C::BigDecimal => big_numbers::fields(class),
         C::Arrays => arrays::utility_fields(),
@@ -76,6 +86,12 @@ pub fn drop_fields(program: &t::Program, class: C, class_id: usize) -> String {
         C::Deque(element) => deque::drop_fields(element),
         C::Map(key, value) => collections::drop_map_fields(program, key, value),
         C::Set(key) => set::drop_fields(program, key),
+        C::OrderedMap(_, _) | C::OrderedSet(_) => ordered::drop_fields(class),
+        C::PriorityQueue(_) => priority::drop_fields(class),
+        C::BitSet => bitset::drop_fields(program, class, class_id),
+        C::ListIterator(_) | C::MapIterator(_, _) | C::FilterIterator(_) |
+        C::TakeIterator(_) | C::SkipIterator(_) | C::Iterators(_) =>
+            iterators::drop_fields(class),
         C::Text => text::drop_fields(),
         C::Arrays => arrays::drop_utility_fields(),
         C::BigInt | C::BigDecimal => big_numbers::drop_fields(program, class),
@@ -110,6 +126,13 @@ pub(crate) fn drop_helper_prototypes(program: &t::Program) -> String {
 pub fn map_entry_definition(program: &t::Program, class_id: usize, key: MapKeyKind, value: Type) -> String {
     collections::map_entry_definition(program, class_id, key, value)
 }
+pub fn ordered_storage_definition(program: &t::Program, class_id: usize) -> String {
+    ordered::storage_definition(program, class_id)
+}
+
+pub fn ordered_entry_definition(program: &t::Program, class_id: usize, key: Type, value: Type) -> String {
+    ordered::entry_definition(program, class_id, key, value)
+}
 
 pub(crate) fn map_capacity_expression(map: &str) -> String {
     collections::map_capacity_expression(map)
@@ -129,12 +152,20 @@ fn append_body(program: &t::Program, out: &mut String, class: &t::Class, native:
         C::List(element) => {
             let mut body = collections::list_implementation(program, class.id, element);
             body.push_str(&ordering::list_implementation(program, class.id, element));
+            body.push_str(&iterators::list_implementation(program, class.id, element));
             body
         }
         C::Array(element) => arrays::array_implementation(program, class.id, element),
         C::Deque(element) => deque::implementation(program, class.id, element),
         C::Map(key, value) => collections::map_implementation(program, class.id, key, value),
         C::Set(key) => set::implementation(program, class.id, key),
+        C::OrderedMap(key, value) => ordered::map_implementation(program, class.id, key, value),
+        C::OrderedSet(key) => ordered::set_implementation(program, class.id, key),
+        C::PriorityQueue(element) => priority::implementation(program, class.id, element),
+        C::BitSet => bitset::implementation(program, class.id),
+        C::ListIterator(_) | C::MapIterator(_, _) | C::FilterIterator(_) |
+        C::TakeIterator(_) | C::SkipIterator(_) | C::Iterators(_) =>
+            iterators::implementation(program, native, class.id),
         C::Text => text::implementation(program, class.id),
         C::Math => math::implementation(program),
         C::Random => random::implementation(program),
@@ -182,9 +213,15 @@ pub fn implementations(program: &t::Program) -> String {
             append_body(program, &mut out, class, native);
         }
     }
+    // OrderedSet reuses the native core of its hidden OrderedMap<K, Unit> specialization.
+    for class in &program.classes {
+        if let Some(native @ C::OrderedMap(_, _)) = class.native {
+            append_body(program, &mut out, class, native);
+        }
+    }
     for class in &program.classes {
         if let Some(native) = class.native {
-            if !matches!(native, C::Map(_, _) | C::ByteBuffer) {
+            if !matches!(native, C::Map(_, _) | C::OrderedMap(_, _) | C::ByteBuffer) {
                 append_body(program, &mut out, class, native);
             }
         }

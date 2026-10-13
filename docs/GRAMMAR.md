@@ -94,8 +94,9 @@ list or set traversal, or two for map traversal. Integer keys use `int`; Text
 keys use readonly `borrow Text`. Map value bindings use a copyable value type or
 `borrow V`/`borrow mut V` for affine value types. The collection expression is
 evaluated once and must be a stable place; traversal holds a lexical loan on the
-complete collection root. Map and set order is unspecified. This is not a C-style
-loop or general iterator API. See [BORROWING.md](BORROWING.md) and
+complete collection root. Map and set order is unspecified; `OrderedMap` and
+`OrderedSet` provide comparator order. `Iterator<T>` is an explicit owned library
+API, not a second loop syntax or a borrowed-iterator feature. See [BORROWING.md](BORROWING.md) and
 [STDLIB.md](STDLIB.md).
 
 `match` is exhaustive for enums and uses one branch per variant. Payload bindings

@@ -1,0 +1,242 @@
+/* Dense bits are packed into 64-bit words; capacity is measured in words. */
+static void ncr_bit_set_reserve_@ID@(ncr_obj_@ID@ *p, int64_t requested,
+                                     size_t line, size_t column) {
+    if (requested < 0) { ncr_fail("BitSet capacity is too large", line, column); }
+    if (requested <= p->capacity) { return; }
+    int64_t capacity = p->capacity == 0 ? 1 : p->capacity;
+    while (capacity < requested) {
+        capacity = capacity > INT64_MAX / 2 ? INT64_MAX : capacity * 2;
+    }
+    if ((uint64_t)capacity > SIZE_MAX / sizeof(uint64_t)) {
+        ncr_fail("BitSet capacity is too large", line, column);
+    }
+    uint64_t *words = ncr_allocate((size_t)capacity * sizeof(uint64_t), line, column);
+    if (p->word_count > 0) {
+        memcpy(words, p->words, (size_t)p->word_count * sizeof(uint64_t));
+    }
+    ncr_deallocate(p->words);
+    p->words = words;
+    p->capacity = capacity;
+}
+
+static void ncr_bit_set_ensure_@ID@(ncr_obj_@ID@ *p, int64_t requested,
+                                    size_t line, size_t column) {
+    ncr_bit_set_reserve_@ID@(p, requested, line, column);
+    if (requested > p->word_count) {
+        memset(p->words + p->word_count, 0,
+               (size_t)(requested - p->word_count) * sizeof(uint64_t));
+        p->word_count = requested;
+    }
+}
+
+static void ncr_bit_set_trim_@ID@(ncr_obj_@ID@ *p) {
+    while (p->word_count > 0 && p->words[p->word_count - 1] == 0) {
+        --p->word_count;
+    }
+}
+
+static void ncr_bit_set_validate_range_@ID@(int64_t from, int64_t to,
+                                            size_t line, size_t column) {
+    if (from < 0 || to < from) { ncr_fail("invalid BitSet range", line, column); }
+}
+
+static uint64_t ncr_bit_set_range_mask_@ID@(int64_t word, int64_t from, int64_t to) {
+    int64_t low = word == from / 64 ? from % 64 : 0;
+    int64_t high = word == (to - 1) / 64 ? to % 64 : 0;
+    uint64_t low_mask = UINT64_MAX << (unsigned)low;
+    uint64_t high_mask = high == 0 ? UINT64_MAX : ((UINT64_C(1) << (unsigned)high) - UINT64_C(1));
+    return low_mask & high_mask;
+}
+
+static void @BIT_SET_NEW@(ncr_obj_@ID@ *p, int64_t initialBits,
+                          size_t line, size_t column) {
+    if (initialBits < 0) { ncr_fail("negative BitSet size", line, column); }
+    int64_t words = initialBits / 64 + (initialBits % 64 != 0);
+    if ((uint64_t)words > SIZE_MAX / sizeof(uint64_t)) {
+        ncr_fail("BitSet capacity is too large", line, column);
+    }
+    p->words = NULL;
+    p->word_count = 0;
+    p->capacity = words;
+    if (words > 0) {
+        p->words = ncr_allocate((size_t)words * sizeof(uint64_t), line, column);
+        memset(p->words, 0, (size_t)words * sizeof(uint64_t));
+    }
+}
+
+static bool @BIT_SET_GET@(ncr_obj_@ID@ *p, int64_t bit,
+                          size_t line, size_t column) {
+    if (bit < 0) { ncr_fail("negative BitSet index", line, column); }
+    int64_t word = bit / 64;
+    return word < p->word_count && (p->words[word] & (UINT64_C(1) << (unsigned)(bit % 64))) != 0;
+}
+
+static void @BIT_SET_SET@(ncr_obj_@ID@ *p, int64_t bit,
+                          size_t line, size_t column) {
+    if (bit < 0 || bit == INT64_MAX) { ncr_fail("BitSet index is out of range", line, column); }
+    int64_t word = bit / 64;
+    ncr_bit_set_ensure_@ID@(p, word + 1, line, column);
+    p->words[word] |= UINT64_C(1) << (unsigned)(bit % 64);
+}
+
+static void @BIT_SET_CLEAR@(ncr_obj_@ID@ *p, int64_t bit,
+                            size_t line, size_t column) {
+    if (bit < 0) { ncr_fail("negative BitSet index", line, column); }
+    int64_t word = bit / 64;
+    if (word >= p->word_count) { return; }
+    p->words[word] &= ~(UINT64_C(1) << (unsigned)(bit % 64));
+    ncr_bit_set_trim_@ID@(p);
+}
+
+static void @BIT_SET_FLIP@(ncr_obj_@ID@ *p, int64_t bit,
+                           size_t line, size_t column) {
+    if (bit < 0 || bit == INT64_MAX) { ncr_fail("BitSet index is out of range", line, column); }
+    int64_t word = bit / 64;
+    ncr_bit_set_ensure_@ID@(p, word + 1, line, column);
+    p->words[word] ^= UINT64_C(1) << (unsigned)(bit % 64);
+    ncr_bit_set_trim_@ID@(p);
+}
+
+static void @BIT_SET_SET_RANGE@(ncr_obj_@ID@ *p, int64_t from, int64_t to,
+                                size_t line, size_t column) {
+    ncr_bit_set_validate_range_@ID@(from, to, line, column);
+    if (from == to) { return; }
+    int64_t required = to / 64 + (to % 64 != 0);
+    ncr_bit_set_ensure_@ID@(p, required, line, column);
+    for (int64_t word = from / 64; word < required; ++word) {
+        p->words[word] |= ncr_bit_set_range_mask_@ID@(word, from, to);
+    }
+}
+
+static void @BIT_SET_CLEAR_RANGE@(ncr_obj_@ID@ *p, int64_t from, int64_t to,
+                                  size_t line, size_t column) {
+    ncr_bit_set_validate_range_@ID@(from, to, line, column);
+    if (from == to || p->word_count == 0) { return; }
+    int64_t required = to / 64 + (to % 64 != 0);
+    if (required > p->word_count) { required = p->word_count; }
+    for (int64_t word = from / 64; word < required; ++word) {
+        p->words[word] &= ~ncr_bit_set_range_mask_@ID@(word, from, to);
+    }
+    ncr_bit_set_trim_@ID@(p);
+}
+
+static void @BIT_SET_FLIP_RANGE@(ncr_obj_@ID@ *p, int64_t from, int64_t to,
+                                 size_t line, size_t column) {
+    ncr_bit_set_validate_range_@ID@(from, to, line, column);
+    if (from == to) { return; }
+    int64_t required = to / 64 + (to % 64 != 0);
+    ncr_bit_set_ensure_@ID@(p, required, line, column);
+    for (int64_t word = from / 64; word < required; ++word) {
+        p->words[word] ^= ncr_bit_set_range_mask_@ID@(word, from, to);
+    }
+    ncr_bit_set_trim_@ID@(p);
+}
+
+static @OPTION_LONG_TYPE@ @BIT_SET_NEXT_SET_BIT@(ncr_obj_@ID@ *p, int64_t from,
+                                                  size_t line, size_t column) {
+    if (from < 0) { ncr_fail("negative BitSet index", line, column); }
+    int64_t word_index = from / 64;
+    if (word_index >= p->word_count) { return (@OPTION_LONG_TYPE@){ .tag = @NONE_TAG@ }; }
+    uint64_t word = p->words[word_index] & (UINT64_MAX << (unsigned)(from % 64));
+    while (true) {
+        if (word != 0) {
+            int64_t offset = 0;
+            while ((word & UINT64_C(1)) == 0) { word >>= 1; ++offset; }
+            int64_t result = word_index * 64 + offset;
+            return (@OPTION_LONG_TYPE@){ .tag = @SOME_TAG@, .data.v@SOME_TAG@.f0 = result };
+        }
+        if (++word_index >= p->word_count) { break; }
+        word = p->words[word_index];
+    }
+    return (@OPTION_LONG_TYPE@){ .tag = @NONE_TAG@ };
+}
+
+static int64_t @BIT_SET_CARDINALITY@(ncr_obj_@ID@ *p, size_t line, size_t column) {
+    (void)line; (void)column;
+    int64_t count = 0;
+    for (int64_t index = 0; index < p->word_count; ++index) {
+        uint64_t word = p->words[index];
+        while (word != 0) { word &= word - UINT64_C(1); ++count; }
+    }
+    return count;
+}
+
+static int64_t @BIT_SET_LENGTH@(ncr_obj_@ID@ *p, size_t line, size_t column) {
+    (void)line; (void)column;
+    int64_t index = p->word_count;
+    while (index > 0) {
+        uint64_t word = p->words[--index];
+        if (word != 0) {
+            int64_t high = 0;
+            while ((word >>= 1) != 0) { ++high; }
+            return index * 64 + high + 1;
+        }
+    }
+    return 0;
+}
+
+static bool @BIT_SET_IS_EMPTY@(ncr_obj_@ID@ *p, size_t line, size_t column) {
+    (void)line; (void)column;
+    return p->word_count == 0;
+}
+
+static ncr_obj_@ID@ * @BIT_SET_CLONE@(ncr_obj_@ID@ *p, size_t line, size_t column) {
+    ncr_obj_@ID@ *copy = ncr_allocate(sizeof(ncr_obj_@ID@), line, column);
+    copy->word_count = p->word_count;
+    copy->capacity = p->capacity;
+    copy->words = NULL;
+    if (copy->capacity > 0) {
+        copy->words = ncr_allocate((size_t)copy->capacity * sizeof(uint64_t), line, column);
+        memset(copy->words, 0, (size_t)copy->capacity * sizeof(uint64_t));
+        if (copy->word_count > 0) {
+            memcpy(copy->words, p->words, (size_t)copy->word_count * sizeof(uint64_t));
+        }
+    }
+    return copy;
+}
+
+static void @BIT_SET_AND@(ncr_obj_@ID@ *p, ncr_obj_@ID@ *other,
+                          size_t line, size_t column) {
+    (void)line; (void)column;
+    if (p == other) { return; }
+    int64_t shared = p->word_count < other->word_count ? p->word_count : other->word_count;
+    for (int64_t index = 0; index < shared; ++index) { p->words[index] &= other->words[index]; }
+    p->word_count = shared;
+    ncr_bit_set_trim_@ID@(p);
+}
+
+static void @BIT_SET_OR@(ncr_obj_@ID@ *p, ncr_obj_@ID@ *other,
+                         size_t line, size_t column) {
+    (void)line; (void)column;
+    if (p == other) { return; }
+    int64_t target = p->word_count > other->word_count ? p->word_count : other->word_count;
+    ncr_bit_set_ensure_@ID@(p, target, line, column);
+    for (int64_t index = 0; index < other->word_count; ++index) { p->words[index] |= other->words[index]; }
+}
+
+static void @BIT_SET_XOR@(ncr_obj_@ID@ *p, ncr_obj_@ID@ *other,
+                          size_t line, size_t column) {
+    (void)line; (void)column;
+    if (p == other) {
+        for (int64_t index = 0; index < p->word_count; ++index) { p->words[index] = 0; }
+        p->word_count = 0;
+        return;
+    }
+    int64_t target = p->word_count > other->word_count ? p->word_count : other->word_count;
+    ncr_bit_set_ensure_@ID@(p, target, line, column);
+    for (int64_t index = 0; index < other->word_count; ++index) { p->words[index] ^= other->words[index]; }
+    ncr_bit_set_trim_@ID@(p);
+}
+
+static void @BIT_SET_AND_NOT@(ncr_obj_@ID@ *p, ncr_obj_@ID@ *other,
+                              size_t line, size_t column) {
+    (void)line; (void)column;
+    if (p == other) {
+        for (int64_t index = 0; index < p->word_count; ++index) { p->words[index] = 0; }
+        p->word_count = 0;
+        return;
+    }
+    int64_t shared = p->word_count < other->word_count ? p->word_count : other->word_count;
+    for (int64_t index = 0; index < shared; ++index) { p->words[index] &= ~other->words[index]; }
+    ncr_bit_set_trim_@ID@(p);
+}

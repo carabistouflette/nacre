@@ -155,11 +155,21 @@ fn class_support(program: &t::Program) -> String {
             out.push_str(&format!("struct ncr_map_entry_{};\n", class.id));
         }
     }
+    for class in &program.classes {
+        if matches!(class.native, Some(t::NativeClass::OrderedMap(_, _))) {
+            out.push_str(&format!("struct ncr_ordered_entry_{};\n", class.id));
+        }
+    }
     // Set embeds the table control record from its hidden Map<K, Unit>
     // specialization, so all records precede source object layouts.
     for class in &program.classes {
         if matches!(class.native, Some(t::NativeClass::Map(_, _))) {
             out.push_str(&crate::stdlib_codegen::hash_table_definition(class.id));
+        }
+    }
+    for class in &program.classes {
+        if matches!(class.native, Some(t::NativeClass::OrderedMap(_, _))) {
+            out.push_str(&crate::stdlib_codegen::ordered_storage_definition(program, class.id));
         }
     }
     for class in &program.classes {
@@ -201,11 +211,26 @@ fn class_support(program: &t::Program) -> String {
         }
         out.push_str("};\n");
     }
+    // Native iterator factories construct interfaces before their typed
+    // vtable definitions are emitted.
+    for class in &program.classes {
+        for (interface, _) in &class.implementations {
+            out.push_str(&format!(
+                "static const struct ncr_vtable_{interface} ncr_vtable_{}_{};\n",
+                class.id, interface,
+            ));
+        }
+    }
     // Hash entries embed V by value, so define them after all object, enum,
     // interface, and vtable layouts, but before native drop bodies.
     for class in &program.classes {
         if let Some(t::NativeClass::Map(key, value)) = class.native {
             out.push_str(&crate::stdlib_codegen::map_entry_definition(program, class.id, key, value));
+        }
+    }
+    for class in &program.classes {
+        if let Some(t::NativeClass::OrderedMap(key, value)) = class.native {
+            out.push_str(&crate::stdlib_codegen::ordered_entry_definition(program, class.id, key, value));
         }
     }
     for class in &program.classes {
@@ -253,6 +278,10 @@ fn interface_implementations(program: &t::Program) -> String {
                 for (index, (_, ty)) in method.params.iter().enumerate() {
                     params.push(format!("{} a{index}", ctype(program, *ty)));
                     args.push(format!("a{index}"));
+                }
+                if method.native.is_some() {
+                    // The interface ABI has no source coordinates; zero marks an unknown call site.
+                    args.extend(["0".to_owned(), "0".to_owned()]);
                 }
                 out.push_str(&format!("static {} ncr_thunk_{cid}_{interface}_{slot}({}) {{\n    {}ncr_fn_{implementation}({});\n}}\n",
                     ctype(program, method.return_type), params.join(", "),

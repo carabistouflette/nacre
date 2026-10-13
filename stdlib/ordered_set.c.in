@@ -1,0 +1,51 @@
+/* OrderedSet embeds its OrderedMap<K, Unit> vector, without a Map wrapper object. */
+static void @ORDERED_SET_NEW@(ncr_obj_@ID@ *p, @COMPARATOR_TYPE@ comparator,
+                               size_t line, size_t column) {
+    (void)line; (void)column;
+    p->table.items = NULL;
+    p->table.length = 0;
+    p->table.capacity = 0;
+    p->@COMPARATOR_FIELD@ = comparator;
+    p->table.comparator = &p->@COMPARATOR_FIELD@;
+}
+
+static void @ORDERED_SET_ADD@(ncr_obj_@ID@ *p, @KEY_TYPE@ key,
+                              size_t line, size_t column) {
+    bool found = false;
+    int32_t index = ncr_ordered_lower_bound_@MAP_ID@(&p->table, @KEY_QUERY_EXPR@, &found);
+    if (found) {
+        @DROP_DUPLICATE_KEY@
+        return;
+    }
+    ncr_ordered_insert_at_@MAP_ID@(&p->table, index, key, UINT8_C(0), line, column);
+}
+
+static bool @ORDERED_SET_CONTAINS@(ncr_obj_@ID@ *p, @QUERY_TYPE@ key,
+                                   size_t line, size_t column) {
+    (void)line; (void)column;
+    return ncr_ordered_lookup_@MAP_ID@(&p->table, key) >= 0;
+}
+
+static bool @ORDERED_SET_REMOVE@(ncr_obj_@ID@ *p, @QUERY_TYPE@ key,
+                                 size_t line, size_t column) {
+    (void)line; (void)column;
+    int32_t index = ncr_ordered_lookup_@MAP_ID@(&p->table, key);
+    if (index < 0) { return false; }
+    ncr_ordered_remove_at_@MAP_ID@(&p->table, index);
+    return true;
+}
+
+static int32_t @ORDERED_SET_SIZE@(ncr_obj_@ID@ *p, size_t line, size_t column) {
+    (void)line; (void)column;
+    return p->table.length;
+}
+
+static bool @ORDERED_SET_IS_EMPTY@(ncr_obj_@ID@ *p, size_t line, size_t column) {
+    (void)line; (void)column;
+    return p->table.length == 0;
+}
+
+static void @ORDERED_SET_CLEAR@(ncr_obj_@ID@ *p, size_t line, size_t column) {
+    (void)line; (void)column;
+    ncr_ordered_clear_@MAP_ID@(&p->table);
+}

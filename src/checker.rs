@@ -57,7 +57,8 @@ impl Tables {
         matches!(self.classes[id].native,
             Some(t::NativeClass::Arrays | t::NativeClass::Encoding | t::NativeClass::Console | t::NativeClass::Files |
                 t::NativeClass::Args | t::NativeClass::Math | t::NativeClass::Time | t::NativeClass::DateTime |
-                t::NativeClass::Env | t::NativeClass::Crypto | t::NativeClass::Compression | t::NativeClass::Checksums))
+                t::NativeClass::Env | t::NativeClass::Crypto | t::NativeClass::Compression |
+                t::NativeClass::Checksums | t::NativeClass::Iterators(_)))
     }
     fn type_name(&self, ty: Type) -> String {
         match ty {
@@ -111,7 +112,12 @@ impl Tables {
                         states[id] = 3;
                         return false;
                     }
-                    Some(t::NativeClass::Set(_) | t::NativeClass::Text |
+                    Some(t::NativeClass::Set(_) | t::NativeClass::OrderedMap(_, _) |
+                        t::NativeClass::OrderedSet(_) | t::NativeClass::PriorityQueue(_) |
+                        t::NativeClass::BitSet | t::NativeClass::ListIterator(_) |
+                        t::NativeClass::MapIterator(_, _) | t::NativeClass::FilterIterator(_) |
+                        t::NativeClass::TakeIterator(_) | t::NativeClass::SkipIterator(_) |
+                        t::NativeClass::Iterators(_) | t::NativeClass::Text |
                         t::NativeClass::BigInt | t::NativeClass::BigDecimal |
                         t::NativeClass::Regex | t::NativeClass::RegexMatch |
                         t::NativeClass::Arrays | t::NativeClass::ByteBuffer | t::NativeClass::Encoding |
@@ -132,6 +138,20 @@ impl Tables {
                 if let Some(element) = native_type {
                     sendable &= value_sendable(tables, element, states);
                 }
+                sendable &= match class.native {
+                    Some(t::NativeClass::OrderedMap(key, value)) =>
+                        value_sendable(tables, key, states) && value_sendable(tables, value, states),
+                    Some(t::NativeClass::MapIterator(input, output)) =>
+                        value_sendable(tables, input, states) && value_sendable(tables, output, states),
+                    Some(t::NativeClass::OrderedSet(element)
+                        | t::NativeClass::PriorityQueue(element)
+                        | t::NativeClass::ListIterator(element)
+                        | t::NativeClass::FilterIterator(element)
+                        | t::NativeClass::TakeIterator(element)
+                        | t::NativeClass::SkipIterator(element)) =>
+                        value_sendable(tables, element, states),
+                    _ => true,
+                };
                 sendable &= class.fields.iter().all(|field|
                     value_sendable(tables, field.ty, states));
                 if let Some(variants) = &class.variants {
@@ -232,6 +252,19 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
             Some(a::NativeClass::Set { .. }) =>
                 return Err(Diagnostic::new(class.span, "[E5004] Set<T> key classification is missing")),
             Some(a::NativeClass::Comparator(_)) => None,
+            Some(a::NativeClass::OrderedMap { .. }) =>
+                Some(t::NativeClass::OrderedMap(Type::Void, Type::Void)),
+            Some(a::NativeClass::OrderedSet(_)) => Some(t::NativeClass::OrderedSet(Type::Void)),
+            Some(a::NativeClass::PriorityQueue(_)) => Some(t::NativeClass::PriorityQueue(Type::Void)),
+            Some(a::NativeClass::BitSet) => Some(t::NativeClass::BitSet),
+            Some(a::NativeClass::ListIterator(_)) => Some(t::NativeClass::ListIterator(Type::Void)),
+            Some(a::NativeClass::MapIterator(_, _)) =>
+                Some(t::NativeClass::MapIterator(Type::Void, Type::Void)),
+            Some(a::NativeClass::FilterIterator(_)) => Some(t::NativeClass::FilterIterator(Type::Void)),
+            Some(a::NativeClass::TakeIterator(_)) => Some(t::NativeClass::TakeIterator(Type::Void)),
+            Some(a::NativeClass::SkipIterator(_)) => Some(t::NativeClass::SkipIterator(Type::Void)),
+            Some(a::NativeClass::Iterators(_)) => Some(t::NativeClass::Iterators(Type::Void)),
+            Some(a::NativeClass::Predicate(_)) => None,
             Some(a::NativeClass::Path) => Some(t::NativeClass::Path),
             Some(a::NativeClass::File) => Some(t::NativeClass::File),
             Some(a::NativeClass::Directory) => Some(t::NativeClass::Directory),
@@ -284,6 +317,45 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
                     key_kind, tables.resolve_type(value, class.span)?,
                 ));
             }
+            Some(a::NativeClass::OrderedMap { key, value }) => {
+                tables.classes[id].native = Some(t::NativeClass::OrderedMap(
+                    tables.resolve_type(key, class.span)?,
+                    tables.resolve_type(value, class.span)?,
+                ));
+            }
+            Some(a::NativeClass::OrderedSet(key)) =>
+                tables.classes[id].native = Some(t::NativeClass::OrderedSet(
+                    tables.resolve_type(key, class.span)?,
+                )),
+            Some(a::NativeClass::PriorityQueue(element)) =>
+                tables.classes[id].native = Some(t::NativeClass::PriorityQueue(
+                    tables.resolve_type(element, class.span)?,
+                )),
+            Some(a::NativeClass::ListIterator(element)) =>
+                tables.classes[id].native = Some(t::NativeClass::ListIterator(
+                    tables.resolve_type(element, class.span)?,
+                )),
+            Some(a::NativeClass::MapIterator(input, output)) =>
+                tables.classes[id].native = Some(t::NativeClass::MapIterator(
+                    tables.resolve_type(input, class.span)?,
+                    tables.resolve_type(output, class.span)?,
+                )),
+            Some(a::NativeClass::FilterIterator(element)) =>
+                tables.classes[id].native = Some(t::NativeClass::FilterIterator(
+                    tables.resolve_type(element, class.span)?,
+                )),
+            Some(a::NativeClass::TakeIterator(element)) =>
+                tables.classes[id].native = Some(t::NativeClass::TakeIterator(
+                    tables.resolve_type(element, class.span)?,
+                )),
+            Some(a::NativeClass::SkipIterator(element)) =>
+                tables.classes[id].native = Some(t::NativeClass::SkipIterator(
+                    tables.resolve_type(element, class.span)?,
+                )),
+            Some(a::NativeClass::Iterators(element)) =>
+                tables.classes[id].native = Some(t::NativeClass::Iterators(
+                    tables.resolve_type(element, class.span)?,
+                )),
             Some(a::NativeClass::Thread(value)) =>
                 tables.classes[id].native = Some(t::NativeClass::Thread(tables.resolve_type(value, class.span)?)),
             Some(a::NativeClass::Mutex(value)) =>
@@ -363,6 +435,31 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
             }
             Some(t::NativeClass::Map(_, value)) if tables.is_view(value) || matches!(value, Type::Void | Type::Borrow { .. }) => {
                 return Err(Diagnostic::new(class.span, "[E5005] Map<K, V> requires an owned value without a borrow or local view"));
+            }
+            Some(t::NativeClass::OrderedMap(key, value))
+                if [key, value].into_iter().any(|ty|
+                    tables.is_view(ty) || matches!(ty, Type::Void | Type::Borrow { .. })) =>
+            {
+                return Err(Diagnostic::new(class.span,
+                    "[E5003] OrderedMap<K, V> requires owned keys and values without borrows or local views"));
+            }
+            Some(t::NativeClass::OrderedSet(element)
+                | t::NativeClass::PriorityQueue(element)
+                | t::NativeClass::ListIterator(element)
+                | t::NativeClass::FilterIterator(element)
+                | t::NativeClass::TakeIterator(element)
+                | t::NativeClass::SkipIterator(element))
+                if tables.is_view(element) || matches!(element, Type::Void | Type::Borrow { .. }) =>
+            {
+                return Err(Diagnostic::new(class.span,
+                    "[E5003] native collection elements must be owned values without borrows or local views"));
+            }
+            Some(t::NativeClass::MapIterator(input, output))
+                if [input, output].into_iter().any(|ty|
+                    tables.is_view(ty) || matches!(ty, Type::Void | Type::Borrow { .. })) =>
+            {
+                return Err(Diagnostic::new(class.span,
+                    "[E5003] MapIterator<T, U> requires owned input and output values without borrows or local views"));
             }
             _ => {}
         }

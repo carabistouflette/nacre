@@ -1,0 +1,217 @@
+use crate::codegen::ctype;
+use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
+use super::{
+    collections, ordering,
+    support::{marker, replace_method_ids, replace_placeholders, result_id, variant},
+};
+
+fn native_method(program: &t::Program, receiver: usize, method: M) -> Option<&t::Function> {
+    program.functions.iter().find(|function| {
+        function.receiver == Some(receiver) && function.native == Some(method)
+    })
+}
+
+fn required_method(program: &t::Program, receiver: usize, method: M) -> &t::Function {
+    native_method(program, receiver, method).expect("compiler-owned ordered collection method is present")
+}
+
+const COMPARATOR_FIELD: usize = 0;
+
+pub(super) fn comparator_field(program: &t::Program, class_id: usize) -> Type {
+    let Type::Object(interface) = *program.classes[class_id].fields.get(COMPARATOR_FIELD)
+        .expect("ordered collection stores its Comparator<K> interface") else {
+            unreachable!("ordered collection comparator field is an owning interface")
+        };
+    assert!(program.classes[interface].is_interface, "Comparator<K> is an interface value");
+    Type::Object(interface)
+}
+
+pub(super) fn comparator_field_name() -> String {
+    format!("ncr_f_{COMPARATOR_FIELD}")
+}
+
+fn comparator_info(program: &t::Program, class_id: usize, method: M) -> (usize, usize, Type) {
+    ordering::comparator_info(program, required_method(program, class_id, method))
+}
+
+fn option_tags(program: &t::Program, function: &t::Function, element: Type) -> (usize, usize) {
+    let option = result_id(function);
+    let (none_tag, none) = variant(program, option, "None");
+    let (some_tag, some) = variant(program, option, "Some");
+    assert!(none.fields.is_empty(), "Option None has no payload");
+    assert!(matches!(some.fields.as_slice(), [field] if *field == element),
+        "Option Some payload matches the ordered collection result");
+    (none_tag, some_tag)
+}
+
+
+fn ordered_map_for_set(program: &t::Program, key: Type) -> &t::Class {
+    program.classes.iter().find(|class| {
+        matches!(class.native, Some(C::OrderedMap(candidate, Type::Unit)) if candidate == key)
+    }).expect("OrderedSet specialization owns its shared OrderedMap<K, Unit> core")
+}
+
+pub(super) fn storage_definition(program: &t::Program, class_id: usize) -> String {
+    let comparator = ctype(program, comparator_field(program, class_id));
+    format!(
+        "struct ncr_ordered_storage_{class_id} {{\n    struct ncr_ordered_entry_{class_id} *items;\n    int32_t length;\n    int32_t capacity;\n    const {comparator} *comparator;\n}};\n"
+    )
+}
+
+pub(super) fn entry_definition(program: &t::Program, class_id: usize, key: Type, value: Type) -> String {
+    format!(
+        "struct ncr_ordered_entry_{class_id} {{\n    {} key;\n    {} value;\n}};\n",
+        ctype(program, key), ctype(program, value),
+    )
+}
+
+pub(super) fn map_fields(class_id: usize) -> String {
+    format!("    struct ncr_ordered_storage_{class_id} table;\n")
+}
+
+pub(super) fn set_fields(program: &t::Program, key: Type) -> String {
+    let map = ordered_map_for_set(program, key);
+    format!("    struct ncr_ordered_storage_{} table;\n", map.id)
+}
+
+pub(super) fn fields(program: &t::Program, class: C, class_id: usize) -> String {
+    match class {
+        C::OrderedMap(_, _) => map_fields(class_id),
+        C::OrderedSet(key) => set_fields(program, key),
+        _ => unreachable!("ordered codegen fields called for another native class"),
+    }
+}
+
+pub(super) fn drop_fields(class: C) -> String {
+    match class {
+        C::OrderedMap(key, value) => ordered_storage_drop(key, value),
+        C::OrderedSet(key) => ordered_storage_drop(key, Type::Unit),
+        _ => unreachable!("ordered codegen drops called for another native class"),
+    }
+}
+
+fn ordered_storage_drop(key: Type, value: Type) -> String {
+    let items = "p->table.items[index]";
+    format!(
+        "    while (p->table.length > 0) {{\n        int32_t index = --p->table.length;\n        {}\n        {}\n    }}\n    ncr_deallocate(p->table.items);\n",
+        collections::drop_element(key, &format!("{items}.key")),
+        collections::drop_element(value, &format!("{items}.value")),
+    )
+}
+
+fn try_get_method(program: &t::Program, class_id: usize, value: Type) -> String {
+    let Some(function) = native_method(program, class_id, M::OrderedMapTryGet) else {
+        return String::new();
+    };
+    assert!(value.is_copy(), "OrderedMap.tryGet is specialized for copied values");
+    let query = function.params.first().expect("OrderedMap.tryGet key query").1;
+    let (none_tag, some_tag) = option_tags(program, function, value);
+    format!(
+        "static {} {}(ncr_obj_{} *p, {} key, size_t line, size_t column) {{\n    (void)line; (void)column;\n    int32_t index = ncr_ordered_lookup_{}(&p->table, key);\n    if (index < 0) {{ return ({}){{ .tag = {} }}; }}\n    return ({}){{ .tag = {}, .data.v{}.f0 = p->table.items[index].value }};\n}}\n",
+        ctype(program, function.return_type), marker(M::OrderedMapTryGet), class_id,
+        ctype(program, query), class_id, ctype(program, function.return_type), none_tag,
+        ctype(program, function.return_type), some_tag, some_tag,
+    )
+}
+
+fn borrowed_getters(program: &t::Program, class_id: usize, value: Type) -> String {
+    let mut output = String::new();
+    for method in [M::OrderedMapGetRef, M::OrderedMapGetMut] {
+        let Some(function) = native_method(program, class_id, method) else { continue; };
+        let Type::Borrow { class: value_class, .. } = function.return_type else {
+            unreachable!("OrderedMap borrowed getters return borrowed values");
+        };
+        assert_eq!(value_class, value.object_class().expect("affine value object class"));
+        let query = function.params.first().expect("OrderedMap getter query").1;
+        let stored = ordering::borrow_storage(program, value, "p->table.items[index].value");
+        let name = marker(method);
+        output.push_str(&format!(
+            "static {} {}(ncr_obj_{} *p, {} key, size_t line, size_t column) {{\n    int32_t index = ncr_ordered_lookup_{}(&p->table, key);\n    if (index < 0) {{ ncr_fail(\"OrderedMap key not found\", line, column); }}\n    return {};\n}}\n",
+            ctype(program, function.return_type), name, class_id, ctype(program, query), class_id, stored,
+        ));
+    }
+    output
+}
+
+pub(super) fn map_implementation(program: &t::Program, class_id: usize, key: Type, value: Type) -> String {
+    let constructor = required_method(program, class_id, M::OrderedMapNew);
+    let (comparator, compare_slot, compare_type) = ordering::comparator_info(program, constructor);
+    assert_eq!(comparator_field(program, class_id), Type::Object(comparator));
+    let contains = required_method(program, class_id, M::OrderedMapContains);
+    let query_type = contains.params.first().expect("OrderedMap key query").1;
+    assert_eq!(query_type, compare_type, "borrowed key query matches Comparator<K> representation");
+    let put = required_method(program, class_id, M::OrderedMapPut);
+    let (none_tag, some_tag) = option_tags(program, put, value);
+    let floor = required_method(program, class_id, M::OrderedMapFloorIndex);
+    let (index_none_tag, index_some_tag) = option_tags(program, floor, Type::Int);
+    let try_get = try_get_method(program, class_id, value);
+    let borrowed = borrowed_getters(program, class_id, value);
+    let entry_middle = ordering::borrow_storage(program, key, "table->items[middle].key");
+    let entry_lower = ordering::borrow_storage(program, key, "table->items[low].key");
+    let key_query = ordering::borrow_storage(program, key, "key");
+    let drop_key_field = collections::drop_element(key, "table->items[index].key");
+    let drop_value_field = collections::drop_element(value, "table->items[index].value");
+    let drop_key_at = collections::drop_element(key, "p->table.items[index].key");
+    let zero_key = collections::zero(program, key);
+    let zero_value = collections::zero(program, value);
+    let key_at = required_method(program, class_id, M::OrderedMapKeyAt);
+    let value_at = required_method(program, class_id, M::OrderedMapValueAt);
+    let key_at_expr = ordering::borrow_storage(program, key, "p->table.items[index].key");
+    let value_at_expr = ordering::borrow_storage(program, value, "p->table.items[index].value");
+    let query_type_c = ctype(program, query_type);
+    let value_type_c = ctype(program, value);
+    let mut body = replace_placeholders(include_str!("../../stdlib/ordered_map.c.in").to_owned(), &[
+        ("@COMPARE_TYPE@", ctype(program, compare_type)),
+        ("@COMPARE_SLOT@", compare_slot.to_string()),
+        ("@COMPARE_STORED_KEY@", entry_middle),
+        ("@COMPARE_LOWER_KEY@", entry_lower),
+        ("@KEY_TYPE@", ctype(program, key)),
+        ("@VALUE_TYPE@", value_type_c),
+        ("@DROP_KEY_FIELD@", drop_key_field),
+        ("@DROP_VALUE_FIELD@", drop_value_field),
+        ("@ZERO_KEY@", zero_key),
+        ("@ZERO_VALUE@", zero_value),
+        ("@KEY_QUERY_EXPR@", key_query),
+        ("@COMPARATOR_TYPE@", ctype(program, Type::Object(comparator))),
+        ("@COMPARATOR_FIELD@", comparator_field_name()),
+        ("@OPTION_TYPE@", ctype(program, put.return_type)),
+        ("@NONE_TAG@", none_tag.to_string()),
+        ("@SOME_TAG@", some_tag.to_string()),
+        ("@DROP_DUPLICATE_KEY@", collections::drop_element(key, "key")),
+        ("@DROP_KEY_AT_INDEX@", drop_key_at),
+        ("@QUERY_TYPE@", query_type_c),
+        ("@TRY_GET_METHOD@", try_get),
+        ("@BORROWED_GETTERS@", borrowed),
+        ("@KEY_AT_TYPE@", ctype(program, key_at.return_type)),
+        ("@KEY_AT_EXPR@", key_at_expr),
+        ("@VALUE_AT_TYPE@", ctype(program, value_at.return_type)),
+        ("@VALUE_AT_EXPR@", value_at_expr),
+        ("@OPTION_INDEX_TYPE@", ctype(program, floor.return_type)),
+        ("@INDEX_NONE_TAG@", index_none_tag.to_string()),
+        ("@INDEX_SOME_TAG@", index_some_tag.to_string()),
+    ]);
+    body = replace_method_ids(body, program, Some(class_id));
+    body
+}
+
+pub(super) fn set_implementation(program: &t::Program, class_id: usize, key: Type) -> String {
+    let map = ordered_map_for_set(program, key);
+    let (_, _, compare_type) = comparator_info(program, class_id, M::OrderedSetNew);
+    let contains = required_method(program, class_id, M::OrderedSetContains);
+    let query = contains.params.first().expect("OrderedSet key query").1;
+    assert_eq!(query, compare_type, "borrowed key query matches Comparator<T> representation");
+    let key_query = ordering::borrow_storage(program, key, "key");
+    let mut body = replace_placeholders(include_str!("../../stdlib/ordered_set.c.in").to_owned(), &[
+        ("@ID@", class_id.to_string()),
+        ("@MAP_ID@", map.id.to_string()),
+        ("@COMPARATOR_TYPE@", ctype(program, comparator_field(program, class_id))),
+        ("@COMPARATOR_FIELD@", comparator_field_name()),
+        ("@KEY_TYPE@", ctype(program, key)),
+        ("@QUERY_TYPE@", ctype(program, query)),
+        ("@KEY_QUERY_EXPR@", key_query),
+        ("@DROP_DUPLICATE_KEY@", collections::drop_element(key, "key")),
+    ]);
+    body = replace_method_ids(body, program, Some(class_id));
+    debug_assert!(!body.contains('@'), "unexpanded OrderedSet template placeholder");
+    body
+}
