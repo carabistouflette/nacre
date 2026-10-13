@@ -224,6 +224,11 @@ impl Expander {
                 Ok(Type::Named(key))
             }
             Type::Borrow { name, args, mutable } => {
+                if args.is_empty() && !mutable {
+                    if let Some(bound) = env.get(name) {
+                        if bound.is_copy() { return Ok(bound.clone()); }
+                    }
+                }
                 let base = if args.is_empty() { Type::Named(name.clone()) }
                     else { Type::Applied { name: name.clone(), args: args.clone() } };
                 let base = self.ty(&base, env, span, depth + 1)?;

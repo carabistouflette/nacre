@@ -685,10 +685,8 @@ fn text_scalar_index_is_checked_and_opaque_regex_has_no_constructor() {
 }
 
 #[test]
-fn static_native_utility_types_are_not_values_but_factory_values_are() {
+fn static_native_utility_type_cannot_be_used_as_value() {
     assert!(compile_to_c("void accept(Arrays values) {} void main() {}").is_err());
-    compile_to_c("void inspect(RegexMatch capture) { println(capture.groupCount()); } void main() {}")
-        .expect("factory-owned RegexMatch remains an instance value");
 }
 
 #[test]

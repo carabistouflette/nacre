@@ -1350,6 +1350,51 @@ counts. `File.flush` calls `fsync`. `TcpStream.read` and `write` use timeout `0`
 delivery. `Streams.copy` and `writeAll` flush their sink according to that sink's
 contract, not a peer-acknowledgement guarantee.
 
+### Domain serialization
+
+`Codec<T>` is an ordinary generic interface: each codec owns the schema for
+its domain value and explicitly writes every dependent field. A codec can
+compose other codecs by calling them in wire order; there is no reflection,
+implicit field discovery, or automatic collection codec. The mutable reader or
+writer is borrowed only for the call. `Serialization<T>` provides the framed
+entry points:
+
+```java
+interface Codec<T> {
+    Result<Unit, Text> encode(borrow T value, borrow mut BinaryWriter writer)
+    Result<T, Text> decode(borrow mut BinaryReader reader)
+}
+static Result<ByteBuffer, Text> Serialization<T>.encode(
+    borrow T value, borrow mut Codec<T> codec)
+static Result<T, Text> Serialization<T>.decode(
+    ByteBuffer input, borrow mut Codec<T> codec)
+```
+
+`encode` borrows the value, builds the header and codec payload directly in a
+single `BinaryWriter`, then transfers its buffer. `decode` consumes the input
+buffer into a reader and returns a fully owned `T`; neither the returned value
+nor any decoded dependents borrow the input, reader, or codec. The format begins
+with the four ASCII bytes `NCRS`, followed by one version byte (`1`), then the
+codec-defined payload. The wrapper validates all five framing bytes before
+calling the codec and rejects any remaining bytes after it returns. Truncated
+headers, bad magic, unsupported versions, codec errors, and trailing input
+return `Err`; partially decoded owners are dropped on error.
+Resource cleanup does not roll back the borrowed codec's abstract state: mutations
+made by a codec remain observable after its own error or trailing-input rejection.
+Stateful codecs must define any transactional behavior themselves.
+
+The built-in `ByteCodec`, `CharCodec`, `IntCodec`, `LongCodec`, `DoubleCodec`,
+`BooleanCodec`, and `UnitCodec` cover the corresponding scalar values. Numeric
+fields use the existing binary reader/writer's big-endian representation;
+booleans accept only the canonical bytes `0` and `1`, and characters encode a
+Unicode scalar as a four-byte signed integer. `TextCodec` and `BytesCodec`
+prefix UTF-8 text and arbitrary bytes, respectively, with a four-byte signed
+big-endian length, then emit the content. Decoders reject negative lengths and
+lengths larger than the reader's remaining input before allocating or reading
+the content; text decoding also requires valid UTF-8. Their lengths are limited
+to the nonnegative signed 32-bit range. Composed application codecs choose and
+document their own field order and schema evolution.
+
 ## ZIP archives
 
 The pinned private dependency build in `scripts/build_libarchive.py` applies the

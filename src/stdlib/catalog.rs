@@ -162,6 +162,22 @@ pub(super) const PRELUDE_UNITS: &[PreludeUnit] = &[
             Builtin { name: "BinaryWriter", native: Some(|| NativeClass::BinaryWriter) },
         ],
     },
+    PreludeUnit {
+        source: include_str!("../../stdlib/prelude/serialization.ncr"),
+        builtins: &[
+            Builtin { name: "Codec", native: None },
+            Builtin { name: "Serialization", native: None },
+            Builtin { name: "ByteCodec", native: None },
+            Builtin { name: "CharCodec", native: None },
+            Builtin { name: "UnitCodec", native: None },
+            Builtin { name: "IntCodec", native: None },
+            Builtin { name: "LongCodec", native: None },
+            Builtin { name: "DoubleCodec", native: None },
+            Builtin { name: "BooleanCodec", native: None },
+            Builtin { name: "TextCodec", native: None },
+            Builtin { name: "BytesCodec", native: None },
+        ],
+    },
 
     PreludeUnit {
         source: include_str!("../../stdlib/prelude/uuid.ncr"),

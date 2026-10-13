@@ -6,7 +6,7 @@
     "tests/arrays_buffers.rs": 7,
     "tests/atomic_files.rs": 6,
     "tests/big_numbers.rs": 5,
-    "tests/binary_streams.rs": 3,
+    "tests/binary_streams.rs": 5,
     "tests/borrowing_diagnostics.rs": 8,
     "tests/borrowing_frontend.rs": 132,
     "tests/borrowing_native.rs": 46,
@@ -54,7 +54,7 @@
     "tests/sudoku_v6.rs": 4,
     "tests/sums_v6.rs": 6,
     "tests/text_map_keys.rs": 10,
-    "tests/text_regex.rs": 11,
+    "tests/text_regex.rs": 12,
     "tests/tls_websocket.rs": 2,
     "tests/unicode_native.rs": 9,
     "tests/uri_dns.rs": 3,
@@ -65,5 +65,5 @@
     "src/ownership.rs": 4,
     "src/project.rs": 2
   },
-  "total": 1230
+  "total": 1233
 }

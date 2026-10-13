@@ -505,3 +505,273 @@ fn streams_copy_file_interfaces_bounds_and_short_write_recovery() {
     assert_eq!(fs::read(short).unwrap(), (0_u8..13).collect::<Vec<_>>());
     assert_eq!(fs::read(write_all).unwrap(), (0_u8..100).collect::<Vec<_>>());
 }
+
+const SERIALIZATION_SOURCE: &str = r#"
+class Child {
+    private Text label;
+    public Child(Text label) { this.label = label; }
+    public readonly borrow Text label() { return this.label; }
+}
+
+class Parent {
+    private Text title;
+    private List<Child> children;
+    public Parent(Text title, List<Child> children) {
+        this.title = title;
+        this.children = children;
+    }
+    public readonly borrow Text title() { return this.title; }
+    public readonly int childCount() { return this.children.size(); }
+    public readonly borrow Child child(int index) { return this.children.getRef(index); }
+}
+
+class ChildCodec implements Codec<Child> {
+    private Codec<Text> textCodec;
+    public ChildCodec(Codec<Text> textCodec) { this.textCodec = textCodec; }
+    public Result<Unit, Text> encode(borrow Child value, borrow mut BinaryWriter writer) {
+        return this.textCodec.encode(value.label(), writer);
+    }
+    public Result<Child, Text> decode(borrow mut BinaryReader reader) {
+        Text label = this.textCodec.decode(reader)?;
+        return new Result<Child, Text>.Ok(new Child(label));
+    }
+}
+
+class ParentCodec implements Codec<Parent> {
+    private Codec<Text> textCodec;
+    private Codec<Child> childCodec;
+    public ParentCodec(Codec<Text> textCodec, Codec<Child> childCodec) {
+        this.textCodec = textCodec;
+        this.childCodec = childCodec;
+    }
+    public Result<Unit, Text> encode(borrow Parent value, borrow mut BinaryWriter writer) {
+        this.textCodec.encode(value.title(), writer)?;
+        int count = value.childCount();
+        writer.writeInt32(count)?;
+        int index = 0;
+        while (index < count) {
+            this.childCodec.encode(value.child(index), writer)?;
+            index = index + 1;
+        }
+        return new Result<Unit, Text>.Ok(());
+    }
+    public Result<Parent, Text> decode(borrow mut BinaryReader reader) {
+        Text title = this.textCodec.decode(reader)?;
+        int count = reader.readInt32()?;
+        if (count < 0 || (long)count > reader.remaining() / 4L) {
+            return new Result<Parent, Text>.Err(new Text("invalid child count"));
+        }
+        List<Child> children = new List<Child>();
+        int index = 0;
+        while (index < count) {
+            Child child = this.childCodec.decode(reader)?;
+            children.add(child);
+            index = index + 1;
+        }
+        return new Result<Parent, Text>.Ok(new Parent(title, children));
+    }
+}
+
+class ProbeCodec implements Codec<int> {
+    private int decodes;
+    public ProbeCodec() { this.decodes = 0; }
+    public Result<Unit, Text> encode(int value, borrow mut BinaryWriter writer) {
+        return writer.writeInt32(value);
+    }
+    public Result<int, Text> decode(borrow mut BinaryReader reader) {
+        this.decodes = this.decodes + 1;
+        return reader.readInt32();
+    }
+    public readonly int decodeCount() { return this.decodes; }
+}
+
+Parent makeParent() {
+    List<Child> children = new List<Child>();
+    children.add(new Child(new Text("north")));
+    children.add(new Child(new Text("south")));
+    return new Parent(new Text("catalogue"), children);
+}
+
+Result<ByteBuffer, Text> encodeParent() {
+    Parent parent = makeParent();
+    ParentCodec codec = new ParentCodec(new TextCodec(), new ChildCodec(new TextCodec()));
+    ByteBuffer bytes = Serialization<Parent>.encode(parent, codec)?;
+    drop(parent);
+    drop(codec);
+    return new Result<ByteBuffer, Text>.Ok(bytes);
+}
+
+
+Result<Parent, Text> decodeParent() {
+    ByteBuffer bytes = encodeParent()?;
+    ParentCodec codec = new ParentCodec(new TextCodec(), new ChildCodec(new TextCodec()));
+    Parent parent = Serialization<Parent>.decode(move(bytes), codec)?;
+    drop(codec);
+    return new Result<Parent, Text>.Ok(parent);
+}
+
+Result<ByteBuffer, Text> encodeInt(int value) {
+    IntCodec codec = new IntCodec();
+    ByteBuffer bytes = Serialization<int>.encode(value, codec)?;
+    drop(codec);
+    return new Result<ByteBuffer, Text>.Ok(bytes);
+}
+
+
+Result<ByteBuffer, Text> invalidLengthFrame(int length) {
+    BinaryWriter writer = new BinaryWriter(0L, false);
+    writer.writeByte((byte)78)?;
+    writer.writeByte((byte)67)?;
+    writer.writeByte((byte)82)?;
+    writer.writeByte((byte)83)?;
+    writer.writeByte((byte)1)?;
+    writer.writeInt32(length)?;
+    return new Result<ByteBuffer, Text>.Ok(BinaryWriter.finish(move(writer)));
+}
+
+
+boolean rejectedBeforeDecode(ByteBuffer bytes, borrow mut ProbeCodec codec) {
+    boolean rejected = false;
+    match (Serialization<int>.decode(move(bytes), codec)) {
+        Err(error) { rejected = true; drop(error); }
+        Ok(value) { }
+    }
+    return rejected && codec.decodeCount() == 0;
+}
+
+boolean rejectParent(ByteBuffer bytes) {
+    ParentCodec codec = new ParentCodec(new TextCodec(), new ChildCodec(new TextCodec()));
+    boolean rejected = false;
+    match (Serialization<Parent>.decode(move(bytes), codec)) {
+        Err(error) { rejected = true; drop(error); }
+        Ok(value) { drop(value); }
+    }
+    drop(codec);
+    return rejected;
+}
+
+Result<Unit, Text> exercise() {
+    ByteBuffer integerFrame = encodeInt(16909060)?;
+    boolean canonicalIntegerFrame = integerFrame.length() == 9L
+        && integerFrame.get(0L) == (byte)78 && integerFrame.get(1L) == (byte)67
+        && integerFrame.get(2L) == (byte)82 && integerFrame.get(3L) == (byte)83
+        && integerFrame.get(4L) == (byte)1 && integerFrame.get(5L) == (byte)1
+        && integerFrame.get(6L) == (byte)2 && integerFrame.get(7L) == (byte)3
+        && integerFrame.get(8L) == (byte)4;
+    IntCodec intCodec = new IntCodec();
+    int decodedInteger = Serialization<int>.decode(move(integerFrame), intCodec)?;
+    drop(intCodec);
+    println(canonicalIntegerFrame && decodedInteger == 16909060);
+
+    Parent decoded = decodeParent()?;
+    {
+        borrow Text title = decoded.title();
+        println(title.equalsString("catalogue"));
+    }
+    {
+        borrow Child first = decoded.child(0);
+        borrow Text label = first.label();
+        println(label.equalsString("north"));
+    }
+    {
+        borrow Child second = decoded.child(1);
+        borrow Text label = second.label();
+        println(label.equalsString("south"));
+    }
+    println(decoded.childCount() == 2);
+    drop(decoded);
+
+    Text text = new Text("UTF-8 α\0z");
+    TextCodec textEncoder = new TextCodec();
+    ByteBuffer textFrame = Serialization<Text>.encode(text, textEncoder)?;
+    drop(text);
+    drop(textEncoder);
+    TextCodec textDecoder = new TextCodec();
+    Text recoveredText = Serialization<Text>.decode(move(textFrame), textDecoder)?;
+    drop(textDecoder);
+    println(recoveredText.equalsString("UTF-8 α\0z"));
+    drop(recoveredText);
+
+    ByteBuffer raw = ByteBuffer.withCapacity(0L)?;
+    raw.append((byte)0);
+    raw.append((byte)255);
+    raw.append((byte)17);
+    BytesCodec bytesEncoder = new BytesCodec();
+    ByteBuffer bytesFrame = Serialization<ByteBuffer>.encode(raw, bytesEncoder)?;
+    drop(raw);
+    drop(bytesEncoder);
+    BytesCodec bytesDecoder = new BytesCodec();
+    ByteBuffer recoveredBytes = Serialization<ByteBuffer>.decode(move(bytesFrame), bytesDecoder)?;
+    drop(bytesDecoder);
+    println(recoveredBytes.length() == 3L && recoveredBytes.get(0L) == (byte)0
+        && recoveredBytes.get(1L) == (byte)255 && recoveredBytes.get(2L) == (byte)17);
+    drop(recoveredBytes);
+
+    ProbeCodec probe = new ProbeCodec();
+    ByteBuffer badMagic = encodeInt(7)?;
+    badMagic.set(0L, (byte)0);
+    println(rejectedBeforeDecode(move(badMagic), probe));
+    ByteBuffer badVersion = encodeInt(7)?;
+    badVersion.set(4L, (byte)2);
+    println(rejectedBeforeDecode(move(badVersion), probe));
+    ByteBuffer shortHeader = encodeInt(7)?;
+    shortHeader.truncate(4L)?;
+    println(rejectedBeforeDecode(move(shortHeader), probe));
+    drop(probe);
+
+    ByteBuffer trailing = encodeParent()?;
+    trailing.append((byte)99);
+    println(rejectParent(move(trailing)));
+    ByteBuffer truncatedValue = encodeParent()?;
+    truncatedValue.truncate(truncatedValue.length() - 1L)?;
+    println(rejectParent(move(truncatedValue)));
+
+    TextCodec invalidTextCodec = new TextCodec();
+    boolean negativeTextLengthRejected = false;
+    match (Serialization<Text>.decode(invalidLengthFrame(-1)?, invalidTextCodec)) {
+        Err(error) { negativeTextLengthRejected = true; drop(error); }
+        Ok(value) { drop(value); }
+    }
+    drop(invalidTextCodec);
+    println(negativeTextLengthRejected);
+
+    BytesCodec truncatedBytesCodec = new BytesCodec();
+    boolean truncatedBytesLengthRejected = false;
+    match (Serialization<ByteBuffer>.decode(invalidLengthFrame(1)?, truncatedBytesCodec)) {
+        Err(error) { truncatedBytesLengthRejected = true; drop(error); }
+        Ok(value) { drop(value); }
+    }
+    drop(truncatedBytesCodec);
+    println(truncatedBytesLengthRejected);
+    return new Result<Unit, Text>.Ok(());
+}
+
+void main() {
+    match (exercise()) {
+        Ok(unit) {}
+        Err(error) { error.print(); }
+    }
+}
+"#;
+
+#[test]
+fn serialization_codecs_frame_compose_and_return_independent_owned_values() {
+    let program = compile(SERIALIZATION_SOURCE);
+    let output = run(&program, &[]);
+    assert_eq!(
+        output.stdout,
+        b"true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n"
+    );
+}
+
+#[test]
+fn mutable_generic_borrows_still_reject_copy_primitives() {
+    let source = r#"
+interface MutableBorrow<T> {
+    void consume(borrow mut T value);
+}
+void accept(MutableBorrow<int> value) {}
+void main() {}
+"#;
+    assert!(compile_to_c(source).is_err());
+}

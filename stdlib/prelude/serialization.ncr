@@ -1,0 +1,143 @@
+interface Codec<T> {
+    Result<Unit, Text> encode(borrow T value, borrow mut BinaryWriter writer);
+    Result<T, Text> decode(borrow mut BinaryReader reader);
+}
+
+class Serialization<T> {
+    public static Result<ByteBuffer, Text> encode(borrow T value, borrow mut Codec<T> codec) {
+        BinaryWriter writer = new BinaryWriter(0L, false);
+        writer.writeByte((byte)78)?;
+        writer.writeByte((byte)67)?;
+        writer.writeByte((byte)82)?;
+        writer.writeByte((byte)83)?;
+        writer.writeByte((byte)1)?;
+        codec.encode(value, writer)?;
+        return new Result<ByteBuffer, Text>.Ok(BinaryWriter.finish(move(writer)));
+    }
+
+    public static Result<T, Text> decode(ByteBuffer input, borrow mut Codec<T> codec) {
+        BinaryReader reader = new BinaryReader(input, false);
+        byte first = reader.readByte()?;
+        byte second = reader.readByte()?;
+        byte third = reader.readByte()?;
+        byte fourth = reader.readByte()?;
+        byte version = reader.readByte()?;
+        if (first != (byte)78 || second != (byte)67 || third != (byte)82 || fourth != (byte)83) {
+            return new Result<T, Text>.Err(new Text("Serialization.decode: invalid magic"));
+        }
+        if (version != (byte)1) {
+            return new Result<T, Text>.Err(new Text("Serialization.decode: unsupported version"));
+        }
+
+        T value = codec.decode(reader)?;
+        if (reader.remaining() != 0L) {
+            return new Result<T, Text>.Err(new Text("Serialization.decode: trailing input"));
+        }
+        return new Result<T, Text>.Ok(value);
+    }
+}
+
+class ByteCodec implements Codec<byte> {
+    public Result<Unit, Text> encode(byte value, borrow mut BinaryWriter writer) {
+        return writer.writeByte(value);
+    }
+    public Result<byte, Text> decode(borrow mut BinaryReader reader) {
+        return reader.readByte();
+    }
+}
+
+class CharCodec implements Codec<char> {
+    public Result<Unit, Text> encode(char value, borrow mut BinaryWriter writer) {
+        return writer.writeInt32((int)value);
+    }
+    public Result<char, Text> decode(borrow mut BinaryReader reader) {
+        int scalar = reader.readInt32()?;
+        if (scalar < 0 || scalar > 1114111 || (scalar >= 55296 && scalar <= 57343)) {
+            return new Result<char, Text>.Err(new Text("CharCodec.decode: invalid Unicode scalar"));
+        }
+        return new Result<char, Text>.Ok((char)scalar);
+    }
+}
+
+class UnitCodec implements Codec<Unit> {
+    public Result<Unit, Text> encode(Unit value, borrow mut BinaryWriter writer) {
+        return new Result<Unit, Text>.Ok(());
+    }
+    public Result<Unit, Text> decode(borrow mut BinaryReader reader) {
+        return new Result<Unit, Text>.Ok(());
+    }
+}
+
+class IntCodec implements Codec<int> {
+    public Result<Unit, Text> encode(int value, borrow mut BinaryWriter writer) {
+        return writer.writeInt32(value);
+    }
+    public Result<int, Text> decode(borrow mut BinaryReader reader) {
+        return reader.readInt32();
+    }
+}
+
+class LongCodec implements Codec<long> {
+    public Result<Unit, Text> encode(long value, borrow mut BinaryWriter writer) {
+        return writer.writeInt64(value);
+    }
+    public Result<long, Text> decode(borrow mut BinaryReader reader) {
+        return reader.readInt64();
+    }
+}
+
+class DoubleCodec implements Codec<double> {
+    public Result<Unit, Text> encode(double value, borrow mut BinaryWriter writer) {
+        return writer.writeDouble(value);
+    }
+    public Result<double, Text> decode(borrow mut BinaryReader reader) {
+        return reader.readDouble();
+    }
+}
+
+class BooleanCodec implements Codec<boolean> {
+    public Result<Unit, Text> encode(boolean value, borrow mut BinaryWriter writer) {
+        byte encoded = (byte)0;
+        if (value) { encoded = (byte)1; }
+        return writer.writeByte(encoded);
+    }
+    public Result<boolean, Text> decode(borrow mut BinaryReader reader) {
+        byte encoded = reader.readByte()?;
+        if (encoded == (byte)0) { return new Result<boolean, Text>.Ok(false); }
+        if (encoded == (byte)1) { return new Result<boolean, Text>.Ok(true); }
+        return new Result<boolean, Text>.Err(new Text("BooleanCodec.decode: noncanonical boolean"));
+    }
+}
+
+class TextCodec implements Codec<Text> {
+    public Result<Unit, Text> encode(borrow Text value, borrow mut BinaryWriter writer) {
+        int length = value.byteLength();
+        writer.writeInt32(length)?;
+        return writer.writeUtf8(value);
+    }
+    public Result<Text, Text> decode(borrow mut BinaryReader reader) {
+        int length = reader.readInt32()?;
+        if (length < 0 || (long)length > reader.remaining()) {
+            return new Result<Text, Text>.Err(new Text("TextCodec.decode: invalid or truncated length"));
+        }
+        return reader.readUtf8((long)length);
+    }
+}
+
+class BytesCodec implements Codec<ByteBuffer> {
+    public Result<Unit, Text> encode(borrow ByteBuffer value, borrow mut BinaryWriter writer) {
+        long length = value.length();
+        if (length > 2147483647L) {
+            return new Result<Unit, Text>.Err(new Text("BytesCodec.encode: length exceeds signed 32-bit format"));
+        }
+        writer.writeInt32((int)length)?;
+        return writer.writeBytes(value);
+    }
+    public Result<ByteBuffer, Text> decode(borrow mut BinaryReader reader) {
+        int length = reader.readInt32()?;
+        if (length < 0 || (long)length > reader.remaining()) {
+            return new Result<ByteBuffer, Text>.Err(new Text("BytesCodec.decode: invalid or truncated length"));
+        }
+        return reader.readBytes((long)length);
+    }
+}
