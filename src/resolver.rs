@@ -249,7 +249,7 @@ impl Resolver {
                 || self.classes.contains_key(&(module.clone(), parameter.clone()))
                 || self.imports[unit].types.contains_key(parameter)
                 || matches!(parameter.as_str(), "System" | "println" | "move" | "drop") {
-                return Err(Diagnostic::new(span, format!("type parameter `{parameter}` shadows a type or reserved name")));
+                return Err(Diagnostic::new(span, format!("[E4101] type parameter `{parameter}` shadows a type or reserved name")));
             }
         }
         Ok(())

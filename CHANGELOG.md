@@ -25,6 +25,8 @@
 - Set reuses Map table storage without a wrapper allocation; Deque moves affine
   ring elements through wrap and growth. List heapsort and lower-bound searches
   support total primitive ordering or borrowed Comparators, without enum operand copies.
+- Module resolution preserves E4101 classification for type parameters that shadow
+  declared or imported types and reserved names.
 
 - Postfix `?` unwraps trusted built-in `Result` values or returns the exact
   error payload after cleaning live locals and pending owned C temporaries.
