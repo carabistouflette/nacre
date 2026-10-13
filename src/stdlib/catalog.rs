@@ -27,6 +27,7 @@ enum NativeBuiltin {
     Time,
     Compression,
     Checksums,
+    DateTime,
     SocketAddress,
     TcpListener,
     TcpStream,
@@ -81,6 +82,7 @@ impl NativeBuiltin {
             Self::Time => NativeClass::Time,
             Self::Compression => NativeClass::Compression,
             Self::Checksums => NativeClass::Checksums,
+            Self::DateTime => NativeClass::DateTime,
             Self::SocketAddress => NativeClass::SocketAddress,
             Self::TcpListener => NativeClass::TcpListener,
             Self::TcpStream => NativeClass::TcpStream,
@@ -193,6 +195,13 @@ pub(super) const PRELUDE_UNITS: &[PreludeUnit] = &[
         builtins: &[
             Builtin { name: "Compression", native: Some(NativeBuiltin::Compression) },
             Builtin { name: "Checksums", native: Some(NativeBuiltin::Checksums) },
+        ],
+    },
+    PreludeUnit {
+        source: include_str!("../../stdlib/prelude/date_time.ncr"),
+        builtins: &[
+            Builtin { name: "DateFields", native: None },
+            Builtin { name: "DateTime", native: Some(NativeBuiltin::DateTime) },
         ],
     },
     PreludeUnit {

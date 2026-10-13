@@ -1,0 +1,850 @@
+/* nacre-link: icu */
+#include <unicode/ucal.h>
+#include <unicode/udat.h>
+#include <unicode/uloc.h>
+#include <unicode/ustring.h>
+#include <unicode/utypes.h>
+
+#define NCR_DT_MAX_EXACT_MILLIS INT64_C(9007199254740991)
+#define NCR_DT_RESULT_ERROR(result_id, message, line, column) \
+    ncr_result_error_##result_id((message), sizeof(message) - 1, (line), (column))
+
+struct ncr_dt_fields {
+    int32_t year;
+    int32_t month;
+    int32_t day;
+    int32_t hour;
+    int32_t minute;
+    int32_t second;
+    int32_t millisecond;
+};
+
+static bool ncr_dt_epoch_in_range(int64_t value) {
+    return value >= -NCR_DT_MAX_EXACT_MILLIS && value <= NCR_DT_MAX_EXACT_MILLIS;
+}
+
+static bool ncr_dt_udate_to_epoch(UDate value, int64_t *result) {
+    if (!isfinite(value) || value < -(double)NCR_DT_MAX_EXACT_MILLIS
+        || value > (double)NCR_DT_MAX_EXACT_MILLIS || trunc(value) != value) {
+        return false;
+    }
+    *result = (int64_t)value;
+    return true;
+}
+
+static bool ncr_dt_utf8_to_uchar(
+    const ncr_obj_@DATE_TIME_TEXT_ID@ *text,
+    bool reject_nul,
+    UChar **result,
+    int32_t *result_length,
+    size_t line,
+    size_t column
+) {
+    size_t byte_length = (size_t)text->length;
+    if (byte_length > (size_t)INT32_MAX || (reject_nul && byte_length > 0 && memchr(text->bytes, 0, byte_length) != NULL)) {
+        return false;
+    }
+
+    UErrorCode status = U_ZERO_ERROR;
+    int32_t required = 0;
+    (void)u_strFromUTF8(NULL, 0, &required, (const char *)text->bytes,
+        (int32_t)byte_length, &status);
+    if (status != U_BUFFER_OVERFLOW_ERROR && U_FAILURE(status)) {
+        return false;
+    }
+    if (required < 0 || required == INT32_MAX || (size_t)required >= SIZE_MAX / sizeof(UChar)) {
+        return false;
+    }
+
+    UChar *converted = ncr_allocate(((size_t)required + 1) * sizeof(UChar), line, column);
+    status = U_ZERO_ERROR;
+    int32_t written = 0;
+    (void)u_strFromUTF8(converted, required + 1, &written, (const char *)text->bytes,
+        (int32_t)byte_length, &status);
+    if (U_FAILURE(status) || written < 0) {
+        ncr_deallocate(converted);
+        return false;
+    }
+    *result = converted;
+    *result_length = written;
+    return true;
+}
+
+static const char *ncr_dt_zone_id(
+    const ncr_obj_@DATE_TIME_TEXT_ID@ *zone,
+    UChar **result,
+    int32_t *result_length,
+    size_t line,
+    size_t column
+) {
+    UChar *input = NULL;
+    int32_t input_length = 0;
+    if (!ncr_dt_utf8_to_uchar(zone, true, &input, &input_length, line, column)) {
+        return "DateTime: timezone must be valid UTF-8 without NUL";
+    }
+    if (input_length == 0) {
+        ncr_deallocate(input);
+        return "DateTime: timezone must be a known IANA zone ID";
+    }
+
+    UErrorCode status = U_ZERO_ERROR;
+    UBool is_system_id = false;
+    int32_t required = ucal_getCanonicalTimeZoneID(
+        input, input_length, NULL, 0, &is_system_id, &status);
+    if ((status != U_BUFFER_OVERFLOW_ERROR && U_FAILURE(status)) || !is_system_id
+        || required <= 0 || required == INT32_MAX) {
+        ncr_deallocate(input);
+        return "DateTime: timezone must be a known IANA zone ID";
+    }
+
+    UChar *canonical = ncr_allocate(((size_t)required + 1) * sizeof(UChar), line, column);
+    status = U_ZERO_ERROR;
+    int32_t written = ucal_getCanonicalTimeZoneID(
+        input, input_length, canonical, required + 1, &is_system_id, &status);
+    ncr_deallocate(input);
+    if (U_FAILURE(status) || !is_system_id || written != required) {
+        ncr_deallocate(canonical);
+        return "DateTime: timezone must be a known IANA zone ID";
+    }
+    *result = canonical;
+    *result_length = written;
+    return NULL;
+}
+
+static UCalendar *ncr_dt_open_calendar(
+    const UChar *zone,
+    int32_t zone_length,
+    size_t line,
+    size_t column
+) {
+    UErrorCode status = U_ZERO_ERROR;
+    UCalendar *calendar = ucal_open(zone, zone_length, "en_US_POSIX", UCAL_GREGORIAN, &status);
+    if (U_FAILURE(status) || calendar == NULL) {
+        if (calendar != NULL) { ucal_close(calendar); }
+        return NULL;
+    }
+    /* Every supported epoch is after this cutover, so ICU uses Gregorian rules. */
+    ucal_setGregorianChange(calendar, -9007199254740992.0, &status);
+    if (U_FAILURE(status)) {
+        ucal_close(calendar);
+        return NULL;
+    }
+    ucal_setAttribute(calendar, UCAL_LENIENT, false);
+    (void)line;
+    (void)column;
+    return calendar;
+}
+
+static bool ncr_dt_locale_available(const char *locale_id, size_t line, size_t column) {
+    UErrorCode status = U_ZERO_ERROR;
+    int32_t base_length = uloc_getBaseName(locale_id, NULL, 0, &status);
+    if ((status != U_BUFFER_OVERFLOW_ERROR && U_FAILURE(status)) || base_length < 0
+        || base_length == INT32_MAX) {
+        return false;
+    }
+    char *base = ncr_allocate((size_t)base_length + 1, line, column);
+    status = U_ZERO_ERROR;
+    int32_t written = uloc_getBaseName(locale_id, base, base_length + 1, &status);
+    if (U_FAILURE(status) || written != base_length) {
+        ncr_deallocate(base);
+        return false;
+    }
+
+    bool found = false;
+    int32_t available = uloc_countAvailable();
+    for (int32_t index = 0; index < available; ++index) {
+        const char *candidate = uloc_getAvailable(index);
+        if (candidate != NULL && strcmp(candidate, base) == 0) {
+            found = true;
+            break;
+        }
+    }
+    ncr_deallocate(base);
+    return found;
+}
+
+static const char *ncr_dt_locale_id(
+    const ncr_obj_@DATE_TIME_TEXT_ID@ *locale,
+    char **result,
+    size_t line,
+    size_t column
+) {
+    size_t length = (size_t)locale->length;
+    if (length > 0 && memchr(locale->bytes, 0, length) != NULL) {
+        return "DateTime: locale must be an installed BCP47 locale without NUL";
+    }
+    if (length == 0) {
+        char *root = ncr_allocate(32, line, column);
+        root[0] = '\0';
+        UErrorCode status = U_ZERO_ERROR;
+        int32_t written = uloc_setKeywordValue("calendar", "gregorian", root, 32, &status);
+        if (U_FAILURE(status) || written >= 32) {
+            ncr_deallocate(root);
+            return "DateTime: ICU root locale initialization failed";
+        }
+        *result = root;
+        return NULL;
+    }
+    for (size_t index = 0; index < length; ++index) {
+        if (locale->bytes[index] > 0x7f) {
+            return "DateTime: locale must be an installed BCP47 locale";
+        }
+    }
+    if (length > (size_t)INT32_MAX - 64) {
+        return "DateTime: locale tag is too large";
+    }
+
+    char *tag = ncr_allocate(length + 1, line, column);
+    memcpy(tag, locale->bytes, length);
+    tag[length] = '\0';
+    UErrorCode status = U_ZERO_ERROR;
+    int32_t parsed_length = 0;
+    int32_t required = uloc_forLanguageTag(tag, NULL, 0, &parsed_length, &status);
+    if ((status != U_BUFFER_OVERFLOW_ERROR && U_FAILURE(status)) || required < 0
+        || required > INT32_MAX - 65) {
+        ncr_deallocate(tag);
+        return "DateTime: locale must be an installed BCP47 locale";
+    }
+    char *locale_id = ncr_allocate((size_t)required + 65, line, column);
+    status = U_ZERO_ERROR;
+    int32_t written = uloc_forLanguageTag(
+        tag, locale_id, required + 65, &parsed_length, &status);
+    ncr_deallocate(tag);
+    if (U_FAILURE(status) || written != required || parsed_length != (int32_t)length
+        || required == 0 || !ncr_dt_locale_available(locale_id, line, column)) {
+        ncr_deallocate(locale_id);
+        return "DateTime: locale must be an installed BCP47 locale";
+    }
+
+    status = U_ZERO_ERROR;
+    written = uloc_setKeywordValue("calendar", "gregorian", locale_id, required + 65, &status);
+    if (U_FAILURE(status) || written >= required + 65) {
+        ncr_deallocate(locale_id);
+        return "DateTime: ICU Gregorian locale initialization failed";
+    }
+    *result = locale_id;
+    return NULL;
+}
+
+static bool ncr_dt_calendar_fields(UCalendar *calendar, struct ncr_dt_fields *fields) {
+    UErrorCode status = U_ZERO_ERROR;
+    fields->year = ucal_get(calendar, UCAL_EXTENDED_YEAR, &status);
+    fields->month = ucal_get(calendar, UCAL_MONTH, &status);
+    fields->day = ucal_get(calendar, UCAL_DATE, &status);
+    fields->hour = ucal_get(calendar, UCAL_HOUR_OF_DAY, &status);
+    fields->minute = ucal_get(calendar, UCAL_MINUTE, &status);
+    fields->second = ucal_get(calendar, UCAL_SECOND, &status);
+    fields->millisecond = ucal_get(calendar, UCAL_MILLISECOND, &status);
+    return U_SUCCESS(status);
+}
+
+static void ncr_dt_set_wall_fields(
+    UCalendar *calendar,
+    int32_t year,
+    int32_t month,
+    int32_t day,
+    int32_t hour,
+    int32_t minute,
+    int32_t second,
+    int32_t millisecond,
+    UCalendarWallTimeOption repeated,
+    UCalendarWallTimeOption skipped
+) {
+    ucal_clear(calendar);
+    ucal_setAttribute(calendar, UCAL_LENIENT, false);
+    ucal_setAttribute(calendar, UCAL_REPEATED_WALL_TIME, repeated);
+    ucal_setAttribute(calendar, UCAL_SKIPPED_WALL_TIME, skipped);
+    ucal_set(calendar, UCAL_EXTENDED_YEAR, year);
+    ucal_set(calendar, UCAL_MONTH, month - 1);
+    ucal_set(calendar, UCAL_DATE, day);
+    ucal_set(calendar, UCAL_HOUR_OF_DAY, hour);
+    ucal_set(calendar, UCAL_MINUTE, minute);
+    ucal_set(calendar, UCAL_SECOND, second);
+    ucal_set(calendar, UCAL_MILLISECOND, millisecond);
+}
+
+static bool ncr_dt_wall_matches(
+    UCalendar *calendar,
+    int32_t year,
+    int32_t month,
+    int32_t day,
+    int32_t hour,
+    int32_t minute,
+    int32_t second,
+    int32_t millisecond
+) {
+    struct ncr_dt_fields actual;
+    return ncr_dt_calendar_fields(calendar, &actual)
+        && actual.year == year && actual.month + 1 == month && actual.day == day
+        && actual.hour == hour && actual.minute == minute && actual.second == second
+        && actual.millisecond == millisecond;
+}
+
+static bool ncr_dt_resolve_wall(
+    UCalendar *calendar,
+    int32_t year,
+    int32_t month,
+    int32_t day,
+    int32_t hour,
+    int32_t minute,
+    int32_t second,
+    int32_t millisecond,
+    bool prefer_later,
+    bool reject_overlap,
+    int64_t *result
+) {
+    UCalendarWallTimeOption repeated = prefer_later ? UCAL_WALLTIME_LAST : UCAL_WALLTIME_FIRST;
+    ncr_dt_set_wall_fields(calendar, year, month, day, hour, minute, second, millisecond,
+        repeated, UCAL_WALLTIME_FIRST);
+    UErrorCode status = U_ZERO_ERROR;
+    UDate instant = ucal_getMillis(calendar, &status);
+    int64_t epoch = 0;
+    if (U_FAILURE(status) || !ncr_dt_wall_matches(calendar, year, month, day, hour, minute,
+        second, millisecond) || !ncr_dt_udate_to_epoch(instant, &epoch)) {
+        return false;
+    }
+
+    if (reject_overlap) {
+        UCalendar *later = ucal_clone(calendar, &status);
+        if (U_FAILURE(status) || later == NULL) {
+            if (later != NULL) { ucal_close(later); }
+            return false;
+        }
+        ncr_dt_set_wall_fields(later, year, month, day, hour, minute, second, millisecond,
+            UCAL_WALLTIME_LAST, UCAL_WALLTIME_FIRST);
+        status = U_ZERO_ERROR;
+        UDate later_instant = ucal_getMillis(later, &status);
+        ucal_close(later);
+        if (U_FAILURE(status) || later_instant != instant) {
+            return false;
+        }
+    }
+    *result = epoch;
+    return true;
+}
+
+static bool ncr_dt_days_in_month(int32_t year, int32_t month, int32_t *result) {
+    static const int32_t month_lengths[12] = {
+        31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31
+    };
+    if (month < 1 || month > 12) { return false; }
+    int32_t days = month_lengths[month - 1];
+    if (month == 2 && year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)) {
+        days = 29;
+    }
+    *result = days;
+    return true;
+}
+
+static int64_t ncr_dt_gregorian_days_from_date(int64_t year, int32_t month, int32_t day) {
+    year -= month <= 2;
+    int64_t era = year >= 0 ? year / 400 : (year - 399) / 400;
+    int64_t year_of_era = year - era * 400;
+    int64_t month_adjusted = month + (month > 2 ? -3 : 9);
+    int64_t day_of_year = (153 * month_adjusted + 2) / 5 + day - 1;
+    int64_t day_of_era = year_of_era * 365 + year_of_era / 4
+        - year_of_era / 100 + day_of_year;
+    return era * 146097 + day_of_era - 719468;
+}
+
+static bool ncr_dt_gregorian_date_from_days(int64_t days, struct ncr_dt_fields *result) {
+    int64_t shifted = days + 719468;
+    int64_t era = shifted >= 0 ? shifted / 146097 : (shifted - 146096) / 146097;
+    int64_t day_of_era = shifted - era * 146097;
+    int64_t year_of_era = (day_of_era - day_of_era / 1460 + day_of_era / 36524
+        - day_of_era / 146096) / 365;
+    int64_t year = year_of_era + era * 400;
+    int64_t day_of_year = day_of_era
+        - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    int64_t month_prime = (5 * day_of_year + 2) / 153;
+    int64_t day = day_of_year - (153 * month_prime + 2) / 5 + 1;
+    int64_t month = month_prime + (month_prime < 10 ? 3 : -9);
+    year += month <= 2;
+    if (year < INT32_MIN || year > INT32_MAX) { return false; }
+    result->year = (int32_t)year;
+    result->month = (int32_t)month - 1;
+    result->day = (int32_t)day;
+    return true;
+}
+
+static UDateFormat *ncr_dt_open_formatter(
+    const ncr_obj_@DATE_TIME_TEXT_ID@ *pattern_text,
+    const ncr_obj_@DATE_TIME_TEXT_ID@ *zone_text,
+    const ncr_obj_@DATE_TIME_TEXT_ID@ *locale_text,
+    const char **failure,
+    size_t line,
+    size_t column
+) {
+    UChar *pattern = NULL;
+    int32_t pattern_length = 0;
+    if (!ncr_dt_utf8_to_uchar(pattern_text, true, &pattern, &pattern_length, line, column)
+        || pattern_length == 0) {
+        if (pattern != NULL) { ncr_deallocate(pattern); }
+        *failure = "DateTime: pattern must be nonempty valid ICU pattern text without NUL";
+        return NULL;
+    }
+
+    UChar *zone = NULL;
+    int32_t zone_length = 0;
+    const char *zone_failure = ncr_dt_zone_id(zone_text, &zone, &zone_length, line, column);
+    if (zone_failure != NULL) {
+        ncr_deallocate(pattern);
+        *failure = zone_failure;
+        return NULL;
+    }
+
+    char *locale = NULL;
+    const char *locale_failure = ncr_dt_locale_id(locale_text, &locale, line, column);
+    if (locale_failure != NULL) {
+        ncr_deallocate(pattern);
+        ncr_deallocate(zone);
+        *failure = locale_failure;
+        return NULL;
+    }
+
+    UCalendar *calendar = ncr_dt_open_calendar(zone, zone_length, line, column);
+    if (calendar == NULL) {
+        ncr_deallocate(pattern);
+        ncr_deallocate(zone);
+        ncr_deallocate(locale);
+        *failure = "DateTime: ICU Gregorian calendar initialization failed";
+        return NULL;
+    }
+    UErrorCode status = U_ZERO_ERROR;
+    UDateFormat *formatter = udat_open(UDAT_PATTERN, UDAT_PATTERN, locale,
+        zone, zone_length, pattern, pattern_length, &status);
+    ncr_deallocate(pattern);
+    ncr_deallocate(zone);
+    ncr_deallocate(locale);
+    if (U_FAILURE(status) || formatter == NULL) {
+        if (formatter != NULL) { udat_close(formatter); }
+        ucal_close(calendar);
+        *failure = "DateTime: invalid ICU pattern, locale, or timezone";
+        return NULL;
+    }
+    udat_setCalendar(formatter, calendar);
+    ucal_close(calendar);
+    udat_setLenient(formatter, false);
+    status = U_ZERO_ERROR;
+    udat_setBooleanAttribute(formatter, UDAT_PARSE_ALLOW_WHITESPACE, false, &status);
+    udat_setBooleanAttribute(formatter, UDAT_PARSE_ALLOW_NUMERIC, false, &status);
+    udat_setBooleanAttribute(formatter, UDAT_PARSE_PARTIAL_LITERAL_MATCH, false, &status);
+    udat_setBooleanAttribute(formatter, UDAT_PARSE_MULTIPLE_PATTERNS_FOR_MATCH, false, &status);
+    udat_set2DigitYearStart(formatter, -946771200000.0, &status);
+    if (U_FAILURE(status)) {
+        udat_close(formatter);
+        *failure = "DateTime: ICU strict formatter initialization failed";
+        return NULL;
+    }
+    return formatter;
+}
+
+static ncr_obj_@DATE_TIME_TEXT_ID@ *ncr_dt_text_from_uchar(
+    const UChar *source,
+    int32_t source_length,
+    size_t line,
+    size_t column
+) {
+    UErrorCode status = U_ZERO_ERROR;
+    int32_t required = 0;
+    (void)u_strToUTF8(NULL, 0, &required, source, source_length, &status);
+    if ((status != U_BUFFER_OVERFLOW_ERROR && U_FAILURE(status)) || required < 0
+        || required == INT32_MAX) {
+        return NULL;
+    }
+    unsigned char *bytes = required == 0 ? NULL : ncr_allocate((size_t)required, line, column);
+    if (required > 0) {
+        status = U_ZERO_ERROR;
+        int32_t written = 0;
+        (void)u_strToUTF8((char *)bytes, required, &written, source, source_length, &status);
+        if (U_FAILURE(status) || written != required) {
+            ncr_deallocate(bytes);
+            return NULL;
+        }
+    }
+    return @DATE_TIME_TEXT_TAKE@(bytes, (size_t)required, (size_t)required, line, column);
+}
+
+static bool ncr_dt_parse_candidate(
+    const UDateFormat *formatter,
+    const UChar *input,
+    int32_t input_length,
+    UCalendarWallTimeOption repeated,
+    UCalendarWallTimeOption skipped,
+    int64_t *result
+) {
+    UErrorCode status = U_ZERO_ERROR;
+    UCalendar *calendar = ucal_clone(udat_getCalendar(formatter), &status);
+    if (U_FAILURE(status) || calendar == NULL) {
+        if (calendar != NULL) { ucal_close(calendar); }
+        return false;
+    }
+    ncr_dt_set_wall_fields(calendar, 1970, 1, 1, 0, 0, 0, 0, repeated, skipped);
+    int32_t parse_position = 0;
+    status = U_ZERO_ERROR;
+    udat_parseCalendar(formatter, calendar, input, input_length, &parse_position, &status);
+    if (U_FAILURE(status) || parse_position != input_length) {
+        ucal_close(calendar);
+        return false;
+    }
+    status = U_ZERO_ERROR;
+    UDate instant = ucal_getMillis(calendar, &status);
+    ucal_close(calendar);
+    return U_SUCCESS(status) && ncr_dt_udate_to_epoch(instant, result);
+}
+
+ncr_obj_@DATE_TIME_FROM_PARTS_RESULT@ @DATE_TIME_FROM_PARTS@(
+    int32_t ncr_v_0, int32_t ncr_v_1, int32_t ncr_v_2,
+    int32_t ncr_v_3, int32_t ncr_v_4, int32_t ncr_v_5,
+    int32_t ncr_v_6, ncr_obj_@DATE_TIME_TEXT_ID@ *ncr_v_7, bool ncr_v_8,
+    size_t ncr_line, size_t ncr_column
+) {
+    int32_t maximum_day = 0;
+    if (!ncr_dt_days_in_month(ncr_v_0, ncr_v_1, &maximum_day)
+        || ncr_v_2 < 1 || ncr_v_2 > maximum_day
+        || ncr_v_3 < 0 || ncr_v_3 > 23 || ncr_v_4 < 0 || ncr_v_4 > 59
+        || ncr_v_5 < 0 || ncr_v_5 > 59 || ncr_v_6 < 0 || ncr_v_6 > 999) {
+        return NCR_DT_RESULT_ERROR(@DATE_TIME_FROM_PARTS_RESULT@,
+            "DateTime.fromParts: invalid Gregorian date or time", ncr_line, ncr_column);
+    }
+    UChar *zone = NULL;
+    int32_t zone_length = 0;
+    const char *failure = ncr_dt_zone_id(ncr_v_7, &zone, &zone_length, ncr_line, ncr_column);
+    if (failure != NULL) {
+        return ncr_result_error_@DATE_TIME_FROM_PARTS_RESULT@(failure, strlen(failure), ncr_line, ncr_column);
+    }
+    UCalendar *calendar = ncr_dt_open_calendar(zone, zone_length, ncr_line, ncr_column);
+    ncr_deallocate(zone);
+    if (calendar == NULL) {
+        return NCR_DT_RESULT_ERROR(@DATE_TIME_FROM_PARTS_RESULT@,
+            "DateTime.fromParts: ICU calendar initialization failed", ncr_line, ncr_column);
+    }
+    int64_t epoch = 0;
+    bool valid = ncr_dt_resolve_wall(calendar, ncr_v_0, ncr_v_1, ncr_v_2,
+        ncr_v_3, ncr_v_4, ncr_v_5, ncr_v_6, ncr_v_8, false, &epoch);
+    ucal_close(calendar);
+    if (!valid) {
+        return NCR_DT_RESULT_ERROR(@DATE_TIME_FROM_PARTS_RESULT@,
+            "DateTime.fromParts: invalid date, unrepresentable time, or daylight-saving gap",
+            ncr_line, ncr_column);
+    }
+    return (ncr_obj_@DATE_TIME_FROM_PARTS_RESULT@){
+        .tag = @DATE_TIME_FROM_PARTS_OK_TAG@,
+        .data.v@DATE_TIME_FROM_PARTS_OK_TAG@.f0 = epoch
+    };
+}
+
+ncr_obj_@DATE_TIME_PARTS_RESULT@ @DATE_TIME_PARTS@(
+    int64_t ncr_v_0, ncr_obj_@DATE_TIME_TEXT_ID@ *ncr_v_1,
+    size_t ncr_line, size_t ncr_column
+) {
+    if (!ncr_dt_epoch_in_range(ncr_v_0)) {
+        return NCR_DT_RESULT_ERROR(@DATE_TIME_PARTS_RESULT@,
+            "DateTime.parts: epoch milliseconds exceed exact ICU precision", ncr_line, ncr_column);
+    }
+    UChar *zone = NULL;
+    int32_t zone_length = 0;
+    const char *failure = ncr_dt_zone_id(ncr_v_1, &zone, &zone_length, ncr_line, ncr_column);
+    if (failure != NULL) {
+        return ncr_result_error_@DATE_TIME_PARTS_RESULT@(failure, strlen(failure), ncr_line, ncr_column);
+    }
+    UCalendar *calendar = ncr_dt_open_calendar(zone, zone_length, ncr_line, ncr_column);
+    ncr_deallocate(zone);
+    if (calendar == NULL) {
+        return NCR_DT_RESULT_ERROR(@DATE_TIME_PARTS_RESULT@,
+            "DateTime.parts: ICU calendar initialization failed", ncr_line, ncr_column);
+    }
+    UErrorCode status = U_ZERO_ERROR;
+    ucal_setMillis(calendar, (UDate)ncr_v_0, &status);
+    struct ncr_dt_fields fields;
+    bool valid = U_SUCCESS(status) && ncr_dt_calendar_fields(calendar, &fields);
+    int64_t offset_millis = 0;
+    bool daylight = false;
+    if (valid) {
+        status = U_ZERO_ERROR;
+        offset_millis = (int64_t)ucal_get(calendar, UCAL_ZONE_OFFSET, &status)
+            + (int64_t)ucal_get(calendar, UCAL_DST_OFFSET, &status);
+        daylight = ucal_inDaylightTime(calendar, &status);
+        valid = U_SUCCESS(status);
+    }
+    ucal_close(calendar);
+    if (!valid) {
+        return NCR_DT_RESULT_ERROR(@DATE_TIME_PARTS_RESULT@,
+            "DateTime.parts: ICU could not represent the requested epoch", ncr_line, ncr_column);
+    }
+
+    ncr_obj_@DATE_TIME_FIELDS_ID@ *parts = ncr_allocate(sizeof(*parts), ncr_line, ncr_column);
+    parts->ncr_f_0 = fields.year;
+    parts->ncr_f_1 = fields.month + 1;
+    parts->ncr_f_2 = fields.day;
+    parts->ncr_f_3 = fields.hour;
+    parts->ncr_f_4 = fields.minute;
+    parts->ncr_f_5 = fields.second;
+    parts->ncr_f_6 = fields.millisecond;
+    parts->ncr_f_7 = (int32_t)(offset_millis / INT64_C(1000));
+    parts->ncr_f_8 = daylight;
+    return (ncr_obj_@DATE_TIME_PARTS_RESULT@){
+        .tag = @DATE_TIME_PARTS_OK_TAG@,
+        .data.v@DATE_TIME_PARTS_OK_TAG@.f0 = parts
+    };
+}
+
+ncr_obj_@DATE_TIME_FORMAT_RESULT@ @DATE_TIME_FORMAT@(
+    int64_t ncr_v_0, ncr_obj_@DATE_TIME_TEXT_ID@ *ncr_v_1,
+    ncr_obj_@DATE_TIME_TEXT_ID@ *ncr_v_2, ncr_obj_@DATE_TIME_TEXT_ID@ *ncr_v_3,
+    size_t ncr_line, size_t ncr_column
+) {
+    if (!ncr_dt_epoch_in_range(ncr_v_0)) {
+        return NCR_DT_RESULT_ERROR(@DATE_TIME_FORMAT_RESULT@,
+            "DateTime.format: epoch milliseconds exceed exact ICU precision", ncr_line, ncr_column);
+    }
+    const char *failure = NULL;
+    UDateFormat *formatter = ncr_dt_open_formatter(ncr_v_1, ncr_v_2, ncr_v_3,
+        &failure, ncr_line, ncr_column);
+    if (formatter == NULL) {
+        return ncr_result_error_@DATE_TIME_FORMAT_RESULT@(failure, strlen(failure), ncr_line, ncr_column);
+    }
+
+    UErrorCode status = U_ZERO_ERROR;
+    int32_t required = udat_format(formatter, (UDate)ncr_v_0, NULL, 0, NULL, &status);
+    if ((status != U_BUFFER_OVERFLOW_ERROR && U_FAILURE(status)) || required < 0
+        || required == INT32_MAX) {
+        udat_close(formatter);
+        return NCR_DT_RESULT_ERROR(@DATE_TIME_FORMAT_RESULT@,
+            "DateTime.format: ICU could not format the requested epoch", ncr_line, ncr_column);
+    }
+    UChar *output = ncr_allocate(((size_t)required + 1) * sizeof(UChar), ncr_line, ncr_column);
+    status = U_ZERO_ERROR;
+    int32_t written = udat_format(formatter, (UDate)ncr_v_0, output, required + 1, NULL, &status);
+    udat_close(formatter);
+    if (U_FAILURE(status) || written != required) {
+        ncr_deallocate(output);
+        return NCR_DT_RESULT_ERROR(@DATE_TIME_FORMAT_RESULT@,
+            "DateTime.format: ICU could not format the requested epoch", ncr_line, ncr_column);
+    }
+    ncr_obj_@DATE_TIME_TEXT_ID@ *text = ncr_dt_text_from_uchar(output, written, ncr_line, ncr_column);
+    ncr_deallocate(output);
+    if (text == NULL) {
+        return NCR_DT_RESULT_ERROR(@DATE_TIME_FORMAT_RESULT@,
+            "DateTime.format: formatted result is too large or invalid", ncr_line, ncr_column);
+    }
+    return (ncr_obj_@DATE_TIME_FORMAT_RESULT@){
+        .tag = @DATE_TIME_FORMAT_OK_TAG@,
+        .data.v@DATE_TIME_FORMAT_OK_TAG@.f0 = text
+    };
+}
+
+ncr_obj_@DATE_TIME_PARSE_RESULT@ @DATE_TIME_PARSE@(
+    ncr_obj_@DATE_TIME_TEXT_ID@ *ncr_v_0, ncr_obj_@DATE_TIME_TEXT_ID@ *ncr_v_1,
+    ncr_obj_@DATE_TIME_TEXT_ID@ *ncr_v_2, ncr_obj_@DATE_TIME_TEXT_ID@ *ncr_v_3,
+    size_t ncr_line, size_t ncr_column
+) {
+    const char *failure = NULL;
+    UDateFormat *formatter = ncr_dt_open_formatter(ncr_v_1, ncr_v_2, ncr_v_3,
+        &failure, ncr_line, ncr_column);
+    if (formatter == NULL) {
+        return ncr_result_error_@DATE_TIME_PARSE_RESULT@(failure, strlen(failure), ncr_line, ncr_column);
+    }
+    UChar *input = NULL;
+    int32_t input_length = 0;
+    if (!ncr_dt_utf8_to_uchar(ncr_v_0, false, &input, &input_length, ncr_line, ncr_column)) {
+        udat_close(formatter);
+        return NCR_DT_RESULT_ERROR(@DATE_TIME_PARSE_RESULT@,
+            "DateTime.parse: value is not valid UTF-8", ncr_line, ncr_column);
+    }
+
+    int64_t first = 0;
+    int64_t last = 0;
+    int64_t skipped = 0;
+    bool valid = ncr_dt_parse_candidate(formatter, input, input_length,
+            UCAL_WALLTIME_FIRST, UCAL_WALLTIME_FIRST, &first)
+        && ncr_dt_parse_candidate(formatter, input, input_length,
+            UCAL_WALLTIME_LAST, UCAL_WALLTIME_FIRST, &last)
+        && ncr_dt_parse_candidate(formatter, input, input_length,
+            UCAL_WALLTIME_FIRST, UCAL_WALLTIME_LAST, &skipped)
+        && first == skipped && first == last;
+    ncr_deallocate(input);
+    udat_close(formatter);
+    if (!valid) {
+        return NCR_DT_RESULT_ERROR(@DATE_TIME_PARSE_RESULT@,
+            "DateTime.parse: invalid, ambiguous, or trailing input; DST gaps and overlaps are rejected",
+            ncr_line, ncr_column);
+    }
+    return (ncr_obj_@DATE_TIME_PARSE_RESULT@){
+        .tag = @DATE_TIME_PARSE_OK_TAG@,
+        .data.v@DATE_TIME_PARSE_OK_TAG@.f0 = first
+    };
+}
+
+bool @DATE_TIME_IS_LEAP_YEAR@(int32_t ncr_v_0, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line;
+    (void)ncr_column;
+    return ncr_v_0 % 4 == 0 && (ncr_v_0 % 100 != 0 || ncr_v_0 % 400 == 0);
+}
+
+ncr_obj_@DATE_TIME_DAYS_RESULT@ @DATE_TIME_DAYS_IN_MONTH@(
+    int32_t ncr_v_0, int32_t ncr_v_1, size_t ncr_line, size_t ncr_column
+) {
+    int32_t days = 0;
+    if (!ncr_dt_days_in_month(ncr_v_0, ncr_v_1, &days)) {
+        return NCR_DT_RESULT_ERROR(@DATE_TIME_DAYS_RESULT@,
+            "DateTime.daysInMonth: month must be in 1 through 12", ncr_line, ncr_column);
+    }
+    return (ncr_obj_@DATE_TIME_DAYS_RESULT@){
+        .tag = @DATE_TIME_DAYS_OK_TAG@,
+        .data.v@DATE_TIME_DAYS_OK_TAG@.f0 = days
+    };
+}
+
+ncr_obj_@DATE_TIME_ADD_RESULT@ @DATE_TIME_ADD_CALENDAR@(
+    int64_t ncr_v_0, int32_t ncr_v_1, int32_t ncr_v_2, int32_t ncr_v_3,
+    ncr_obj_@DATE_TIME_TEXT_ID@ *ncr_v_4, size_t ncr_line, size_t ncr_column
+) {
+    if (!ncr_dt_epoch_in_range(ncr_v_0)) {
+        return NCR_DT_RESULT_ERROR(@DATE_TIME_ADD_RESULT@,
+            "DateTime.addCalendar: epoch milliseconds exceed exact ICU precision", ncr_line, ncr_column);
+    }
+    UChar *zone = NULL;
+    int32_t zone_length = 0;
+    const char *failure = ncr_dt_zone_id(ncr_v_4, &zone, &zone_length, ncr_line, ncr_column);
+    if (failure != NULL) {
+        return ncr_result_error_@DATE_TIME_ADD_RESULT@(failure, strlen(failure), ncr_line, ncr_column);
+    }
+    UCalendar *calendar = ncr_dt_open_calendar(zone, zone_length, ncr_line, ncr_column);
+    ncr_deallocate(zone);
+    if (calendar == NULL) {
+        return NCR_DT_RESULT_ERROR(@DATE_TIME_ADD_RESULT@,
+            "DateTime.addCalendar: ICU calendar initialization failed", ncr_line, ncr_column);
+    }
+    UErrorCode status = U_ZERO_ERROR;
+    ucal_setMillis(calendar, (UDate)ncr_v_0, &status);
+    struct ncr_dt_fields fields;
+    bool valid = U_SUCCESS(status) && ncr_dt_calendar_fields(calendar, &fields);
+    if (!valid) {
+        ucal_close(calendar);
+        return NCR_DT_RESULT_ERROR(@DATE_TIME_ADD_RESULT@,
+            "DateTime.addCalendar: ICU could not read the requested epoch", ncr_line, ncr_column);
+    }
+
+    int64_t target_year = (int64_t)fields.year + ncr_v_1;
+    if (target_year < INT32_MIN || target_year > INT32_MAX) {
+        ucal_close(calendar);
+        return NCR_DT_RESULT_ERROR(@DATE_TIME_ADD_RESULT@,
+            "DateTime.addCalendar: target year is outside the Gregorian range", ncr_line, ncr_column);
+    }
+    int32_t target_day = fields.day;
+    int32_t maximum_day = 0;
+    if (!ncr_dt_days_in_month((int32_t)target_year, fields.month + 1, &maximum_day)) {
+        ucal_close(calendar);
+        return NCR_DT_RESULT_ERROR(@DATE_TIME_ADD_RESULT@,
+            "DateTime.addCalendar: invalid Gregorian source date", ncr_line, ncr_column);
+    }
+    if (target_day > maximum_day) { target_day = maximum_day; }
+
+    int64_t month_index = target_year * INT64_C(12) + fields.month + ncr_v_2;
+    int64_t shifted_year = month_index / INT64_C(12);
+    int64_t shifted_month = month_index % INT64_C(12);
+    if (shifted_month < 0) { shifted_month += 12; --shifted_year; }
+    if (shifted_year < INT32_MIN || shifted_year > INT32_MAX) {
+        ucal_close(calendar);
+        return NCR_DT_RESULT_ERROR(@DATE_TIME_ADD_RESULT@,
+            "DateTime.addCalendar: target year is outside the Gregorian range", ncr_line, ncr_column);
+    }
+    if (!ncr_dt_days_in_month((int32_t)shifted_year, (int32_t)shifted_month + 1, &maximum_day)) {
+        ucal_close(calendar);
+        return NCR_DT_RESULT_ERROR(@DATE_TIME_ADD_RESULT@,
+            "DateTime.addCalendar: invalid Gregorian target month", ncr_line, ncr_column);
+    }
+    if (target_day > maximum_day) { target_day = maximum_day; }
+    struct ncr_dt_fields expected_date;
+    int64_t expected_day_number = ncr_dt_gregorian_days_from_date(
+        shifted_year, (int32_t)shifted_month + 1, target_day) + ncr_v_3;
+    if (!ncr_dt_gregorian_date_from_days(expected_day_number, &expected_date)) {
+        ucal_close(calendar);
+        return NCR_DT_RESULT_ERROR(@DATE_TIME_ADD_RESULT@,
+            "DateTime.addCalendar: target date is outside the Gregorian range",
+            ncr_line, ncr_column);
+    }
+
+    int64_t intermediate = 0;
+    if (!ncr_dt_resolve_wall(calendar, (int32_t)shifted_year, (int32_t)shifted_month + 1,
+        target_day, fields.hour, fields.minute, fields.second, fields.millisecond,
+        false, true, &intermediate)) {
+        ucal_close(calendar);
+        return NCR_DT_RESULT_ERROR(@DATE_TIME_ADD_RESULT@,
+            "DateTime.addCalendar: target month lands in an invalid date or daylight-saving gap",
+            ncr_line, ncr_column);
+    }
+    status = U_ZERO_ERROR;
+    ucal_setMillis(calendar, (UDate)intermediate, &status);
+    if (U_SUCCESS(status)) { ucal_add(calendar, UCAL_DATE, ncr_v_3, &status); }
+    UDate final_instant = U_FAILURE(status) ? 0.0 : ucal_getMillis(calendar, &status);
+    struct ncr_dt_fields final_fields;
+    valid = U_SUCCESS(status) && ncr_dt_calendar_fields(calendar, &final_fields)
+        && final_fields.year == expected_date.year
+        && final_fields.month == expected_date.month && final_fields.day == expected_date.day
+        && final_fields.hour == fields.hour && final_fields.minute == fields.minute
+        && final_fields.second == fields.second && final_fields.millisecond == fields.millisecond;
+    int64_t result = 0;
+    if (valid) {
+        valid = ncr_dt_resolve_wall(calendar, final_fields.year, final_fields.month + 1,
+            final_fields.day, fields.hour, fields.minute, fields.second, fields.millisecond,
+            false, true, &result);
+    }
+    if (valid) {
+        valid = ncr_dt_udate_to_epoch(final_instant, &intermediate)
+            && intermediate == result && ncr_dt_epoch_in_range(result);
+    }
+    ucal_close(calendar);
+    if (!valid) {
+        return NCR_DT_RESULT_ERROR(@DATE_TIME_ADD_RESULT@,
+            "DateTime.addCalendar: target date is invalid, ambiguous, in a daylight-saving gap, or outside ICU precision",
+            ncr_line, ncr_column);
+    }
+    return (ncr_obj_@DATE_TIME_ADD_RESULT@){
+        .tag = @DATE_TIME_ADD_OK_TAG@,
+        .data.v@DATE_TIME_ADD_OK_TAG@.f0 = result
+    };
+}
+
+ncr_obj_@DATE_TIME_DURATION_RESULT@ @DATE_TIME_DURATION_MILLIS@(
+    int64_t ncr_v_0, int64_t ncr_v_1, size_t ncr_line, size_t ncr_column
+) {
+    if ((ncr_v_0 > 0 && ncr_v_1 < INT64_MIN + ncr_v_0)
+        || (ncr_v_0 < 0 && ncr_v_1 > INT64_MAX + ncr_v_0)) {
+        return NCR_DT_RESULT_ERROR(@DATE_TIME_DURATION_RESULT@,
+            "DateTime.durationMillis: signed duration overflow", ncr_line, ncr_column);
+    }
+    int64_t difference = ncr_v_1 - ncr_v_0;
+    return (ncr_obj_@DATE_TIME_DURATION_RESULT@){
+        .tag = @DATE_TIME_DURATION_OK_TAG@,
+        .data.v@DATE_TIME_DURATION_OK_TAG@.f0 = difference
+    };
+}
+
+ncr_obj_@DATE_TIME_LIST_ID@ * @DATE_TIME_AVAILABLE_ZONES@(
+    size_t ncr_line, size_t ncr_column
+) {
+    ncr_obj_@DATE_TIME_LIST_ID@ *zones = ncr_allocate(sizeof(*zones), ncr_line, ncr_column);
+    @DATE_TIME_LIST_NEW@(zones, ncr_line, ncr_column);
+    static const UChar utc_id[] = { 0x0055, 0x0054, 0x0043 };
+    bool has_utc = false;
+    int32_t count = ucal_countAvailable();
+    for (int32_t index = 0; index < count; ++index) {
+        const UChar *zone = ucal_getAvailable(index);
+        if (zone == NULL) { ncr_fail("DateTime.availableZones: ICU zone data is invalid", ncr_line, ncr_column); }
+        int32_t zone_length = u_strlen(zone);
+        if (zone_length == 3 && zone[0] == utc_id[0] && zone[1] == utc_id[1] && zone[2] == utc_id[2]) {
+            has_utc = true;
+        }
+        ncr_obj_@DATE_TIME_TEXT_ID@ *text = ncr_dt_text_from_uchar(zone, zone_length, ncr_line, ncr_column);
+        if (text == NULL) { ncr_fail("DateTime.availableZones: ICU zone data is invalid", ncr_line, ncr_column); }
+        @DATE_TIME_LIST_ADD@(zones, text, ncr_line, ncr_column);
+    }
+    if (!has_utc) {
+        ncr_obj_@DATE_TIME_TEXT_ID@ *text = ncr_dt_text_from_uchar(utc_id, 3, ncr_line, ncr_column);
+        if (text == NULL) { ncr_fail("DateTime.availableZones: ICU zone data is invalid", ncr_line, ncr_column); }
+        @DATE_TIME_LIST_ADD@(zones, text, ncr_line, ncr_column);
+    }
+    return zones;
+}

@@ -56,7 +56,7 @@ impl Tables {
     fn is_static_native(&self, id: usize) -> bool {
         matches!(self.classes[id].native,
             Some(t::NativeClass::Arrays | t::NativeClass::Encoding | t::NativeClass::Console | t::NativeClass::Files |
-                t::NativeClass::Args | t::NativeClass::Math | t::NativeClass::Time |
+                t::NativeClass::Args | t::NativeClass::Math | t::NativeClass::Time | t::NativeClass::DateTime |
                 t::NativeClass::Env | t::NativeClass::Crypto | t::NativeClass::Compression | t::NativeClass::Checksums))
     }
     fn type_name(&self, ty: Type) -> String {
@@ -119,7 +119,7 @@ impl Tables {
                         t::NativeClass::Directory | t::NativeClass::FileInfo |
                         t::NativeClass::Console | t::NativeClass::Files |
                         t::NativeClass::Args | t::NativeClass::Math |
-                        t::NativeClass::Random | t::NativeClass::Time |
+                        t::NativeClass::Random | t::NativeClass::Time | t::NativeClass::DateTime |
                         t::NativeClass::Compression | t::NativeClass::Checksums |
                         t::NativeClass::SocketAddress | t::NativeClass::TcpListener |
                         t::NativeClass::TcpStream | t::NativeClass::Datagram |
@@ -242,6 +242,7 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
             Some(a::NativeClass::Compression) => Some(t::NativeClass::Compression),
             Some(a::NativeClass::Checksums) => Some(t::NativeClass::Checksums),
             Some(a::NativeClass::Time) => Some(t::NativeClass::Time),
+            Some(a::NativeClass::DateTime) => Some(t::NativeClass::DateTime),
             Some(a::NativeClass::SocketAddress) => Some(t::NativeClass::SocketAddress),
             Some(a::NativeClass::TcpListener) => Some(t::NativeClass::TcpListener),
             Some(a::NativeClass::TcpStream) => Some(t::NativeClass::TcpStream),

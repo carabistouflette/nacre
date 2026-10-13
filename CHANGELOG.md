@@ -94,6 +94,9 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   exponent/ULP queries, sign handling and IEEE remainder. Checked int/long
   arithmetic and floor division/modulus return `Result` errors on overflow or
   zero divisors; consumer regressions cover both integer widths and IEEE edges.
+- ICU4C-backed `DateTime` adds proleptic Gregorian conversion, strict parsing and
+  locale formatting, explicit DST overlap choices, calendar arithmetic and zone
+  listings. It is linked only when used; the existing `Time` API stays dependency-free.
 - Fixed Arrays transfer List storage and preserve affine element ownership;
   ByteBuffer supports checked long-sized binary storage and shared native I/O reservation.
 - Text supports scalar operations, slicing, search, replacement and splitting.

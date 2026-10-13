@@ -1,0 +1,34 @@
+class DateFields {
+    private int yearValue;
+    private int monthValue;
+    private int dayValue;
+    private int hourValue;
+    private int minuteValue;
+    private int secondValue;
+    private int millisecondValue;
+    private int offsetSecondsValue;
+    private boolean isDstValue;
+    private DateFields() {}
+
+    public readonly int year() { return this.yearValue; }
+    public readonly int month() { return this.monthValue; }
+    public readonly int day() { return this.dayValue; }
+    public readonly int hour() { return this.hourValue; }
+    public readonly int minute() { return this.minuteValue; }
+    public readonly int second() { return this.secondValue; }
+    public readonly int millisecond() { return this.millisecondValue; }
+    public readonly int offsetSeconds() { return this.offsetSecondsValue; }
+    public readonly boolean isDst() { return this.isDstValue; }
+}
+
+class DateTime {
+    public static Result<long, Text> fromParts(int year, int month, int day, int hour, int minute, int second, int millis, borrow Text zone, boolean preferLaterOffset) {}
+    public static Result<DateFields, Text> parts(long epochMillis, borrow Text zone) {}
+    public static Result<Text, Text> format(long epochMillis, borrow Text pattern, borrow Text zone, borrow Text locale) {}
+    public static Result<long, Text> parse(borrow Text value, borrow Text pattern, borrow Text zone, borrow Text locale) {}
+    public static boolean isLeapYear(int year) {}
+    public static Result<int, Text> daysInMonth(int year, int month) {}
+    public static Result<long, Text> addCalendar(long epochMillis, int years, int months, int days, borrow Text zone) {}
+    public static Result<long, Text> durationMillis(long start, long end) {}
+    public static List<Text> availableZones() {}
+}

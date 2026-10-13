@@ -660,6 +660,63 @@ interval and resumes after interruption where possible; a negative duration is
 nanosecond domain and returns `Err` for a negative timeout, clock failure, or
 unrepresentable deadline. The API does not promise exact scheduling precision.
 
+### `DateTime`
+
+```java
+static Result<long, Text> fromParts(int year, int month, int day, int hour, int minute, int second, int millis, borrow Text zone, boolean preferLaterOffset)
+static Result<DateFields, Text> parts(long epochMillis, borrow Text zone)
+static Result<Text, Text> format(long epochMillis, borrow Text pattern, borrow Text zone, borrow Text locale)
+static Result<long, Text> parse(borrow Text value, borrow Text pattern, borrow Text zone, borrow Text locale)
+static boolean isLeapYear(int year)
+static Result<int, Text> daysInMonth(int year, int month)
+static Result<long, Text> addCalendar(long epochMillis, int years, int months, int days, borrow Text zone)
+static Result<long, Text> durationMillis(long start, long end)
+static List<Text> availableZones()
+
+readonly int DateFields.year()
+readonly int DateFields.month()
+readonly int DateFields.day()
+readonly int DateFields.hour()
+readonly int DateFields.minute()
+readonly int DateFields.second()
+readonly int DateFields.millisecond()
+readonly int DateFields.offsetSeconds()
+readonly boolean DateFields.isDst()
+```
+
+`DateTime` uses ICU4C's Gregorian calendar with the Julian cutover moved before
+its supported range. Years are proleptic Gregorian, including year zero; months
+are 1 through 12. Invalid parts and daylight-saving gaps return `Err`.
+`preferLaterOffset` selects the later instant in a repeated local time; `false`
+selects the earlier instant. `addCalendar` applies years, then months (clamping
+the day to each target month), then calendar days while retaining local wall
+time. It returns `Err` if the result is invalid, falls in a daylight-saving gap
+or overlap, or exceeds ICU's exact-millisecond range.
+
+ICU represents time as a double millisecond value. Calendar conversions accept
+only epoch milliseconds from -9007199254740991 through 9007199254740991 so every
+millisecond remains exactly representable. `durationMillis` is instead a fixed
+signed `end - start` calculation, independent of calendar days, and returns
+`Err` on signed overflow. `DateFields.offsetSeconds` is the total zone offset
+from UTC; `isDst` reports ICU's daylight-time status. `DateFields` is an owned
+affine result with primitive fields.
+
+`zone` must be a known ICU system time-zone ID (for example `UTC` or
+`America/New_York`); custom offsets, unknown IDs, and embedded NUL are rejected.
+No host default time zone or locale is consulted. `locale` is a BCP 47 tag
+identifying an installed ICU locale; the empty string explicitly selects ICU's
+root locale. Invalid or unavailable locales return `Err` rather than silently
+falling back. `availableZones` lists the ICU time-zone IDs.
+
+`format` and `parse` use ICU date-pattern syntax, not a Java-compatibility
+contract. Embedded NUL and invalid patterns return `Err`. Parsing is strict and
+must consume the complete input; trailing text, daylight-saving gaps, and
+ambiguous local times return `Err`. Pattern fields not supplied by the input
+default to `1970-01-01 00:00:00.000` in the requested zone. ICU's `yy` pattern
+uses a fixed 1940 through 2039 year window. Referencing `DateTime` links ICU;
+the dependency-free `Time` clock and sleep APIs remain unchanged.
+
+
 ## Threads, mutexes, guards, and channels
 
 Native concurrency is synchronous POSIX threading and blocking synchronization,

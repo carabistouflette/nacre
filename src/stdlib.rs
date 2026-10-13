@@ -54,7 +54,7 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
             C::Random => M::RandomNew,
             C::Regex | C::RegexMatch | C::Arrays | C::ByteBuffer | C::Encoding | C::Crypto |
             C::Path | C::File | C::Directory | C::FileInfo |
-            C::Console | C::Files | C::Args | C::Math | C::Time |
+            C::Console | C::Files | C::Args | C::Math | C::Time | C::DateTime |
             C::Compression | C::Checksums |
             C::Thread(_) | C::Mutex(_) | C::Guard(_) | C::Channel(_) |
             C::Sender(_) | C::Receiver(_) | C::Env | C::Command | C::Process | C::ProcessOutput =>
@@ -294,6 +294,15 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
         (C::Time, "unixMillis") => M::TimeUnixMillis,
         (C::Time, "sleepMillis") => M::TimeSleepMillis,
         (C::Time, "deadlineAfterMillis") => M::TimeDeadlineAfterMillis,
+        (C::DateTime, "fromParts") => M::DateTimeFromParts,
+        (C::DateTime, "parts") => M::DateTimeParts,
+        (C::DateTime, "format") => M::DateTimeFormat,
+        (C::DateTime, "parse") => M::DateTimeParse,
+        (C::DateTime, "isLeapYear") => M::DateTimeIsLeapYear,
+        (C::DateTime, "daysInMonth") => M::DateTimeDaysInMonth,
+        (C::DateTime, "addCalendar") => M::DateTimeAddCalendar,
+        (C::DateTime, "durationMillis") => M::DateTimeDurationMillis,
+        (C::DateTime, "availableZones") => M::DateTimeAvailableZones,
         (C::Thread(_), "spawn") => M::ThreadSpawn,
         (C::Thread(_), "join") => M::ThreadJoin,
         (C::Mutex(_), "create") => M::MutexCreate,

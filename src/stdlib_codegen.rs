@@ -17,6 +17,7 @@ mod set;
 mod support;
 mod text;
 mod time;
+mod date_time;
 mod network;
 mod http;
 mod monotonic;
@@ -44,7 +45,7 @@ pub fn fields(program: &t::Program, class: C, class_id: usize) -> String {
         C::Env => io::fields(),
         C::Command | C::Process | C::ProcessOutput => process::fields(program, class),
         C::Random => random::fields(),
-        C::Math | C::Time | C::Console | C::Args => io::fields(),
+        C::Math | C::Time | C::DateTime | C::Console | C::Args => io::fields(),
         C::Crypto => io::fields(),
         C::Regex | C::RegexMatch => regex::fields(program, class),
         C::SocketAddress | C::TcpListener | C::TcpStream | C::Datagram | C::UdpSocket =>
@@ -71,7 +72,7 @@ pub fn drop_fields(program: &t::Program, class: C, class_id: usize) -> String {
         C::Env => io::drop_fields(),
         C::Command | C::Process | C::ProcessOutput => process::drop_fields(program, class),
         C::Random => random::drop_fields(),
-        C::Math | C::Time | C::Console | C::Args => io::drop_fields(),
+        C::Math | C::Time | C::DateTime | C::Console | C::Args => io::drop_fields(),
         C::Crypto => String::new(),
         C::Regex | C::RegexMatch => regex::drop_fields(program, class),
         C::SocketAddress | C::TcpListener | C::TcpStream | C::Datagram | C::UdpSocket =>
@@ -107,6 +108,9 @@ pub(crate) fn map_slot_expression(
 }
 
 fn append_body(program: &t::Program, out: &mut String, class: &t::Class, native: C) {
+    if matches!(native, C::DateTime) && !date_time::is_used(program) {
+        return;
+    }
     let mut body = match native {
         C::List(element) => {
             let mut body = collections::list_implementation(program, class.id, element);
@@ -122,6 +126,7 @@ fn append_body(program: &t::Program, out: &mut String, class: &t::Class, native:
         C::Random => random::implementation(program),
         C::Crypto => crypto::implementation(program),
         C::Time => time::implementation(program),
+        C::DateTime => date_time::implementation(program),
         C::Arrays => arrays::zeroed_implementations(program),
         C::ByteBuffer => buffer::implementation(program, class.id),
         C::Encoding => encoding::implementation(program, class.id),
