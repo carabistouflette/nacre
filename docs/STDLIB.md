@@ -770,7 +770,11 @@ outside it; text-only, multiple-root, and non-XML document results return `Err`.
 stylesheet's `xsl:output` method and encoding. It supports XML result fragments,
 HTML, and text, including empty text output. Bytes are written directly into the
 returned `ByteBuffer`, without an intermediate full-output copy. Unsupported
-encodings and serialization failures return `Err`; use `Charset.decode` with the
+encodings and serialization failures return `Err`. Text-method conversion is strict:
+unrepresentable characters return `Err`, never XML numeric references or replacement
+bytes. UTF-8 aliases are accepted; stateful encodings flush their final shift sequence.
+XML and HTML retain their numeric-reference encoding behavior. Unsupported output
+methods return `Err` even for empty results. Use `Charset.decode` with a supported
 declared encoding when owned text is needed. Both result forms outlive the source
 document and stylesheet.
 

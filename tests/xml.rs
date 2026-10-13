@@ -926,7 +926,7 @@ Result<Unit, Text> exercise() {
     borrow Text resultValue = values.getRef(0);
     println(resultValue.equalsString("café 🦀"));
     println(empty.length() == 0L);
-    Text repeated = new Text("");
+    Text repeated = new Text("a");
     int index = 0;
     while (index < 4500) { repeated.appendChar('🦀'); index = index + 1; }
     Text largeSource = new Text("<root>");
@@ -937,7 +937,7 @@ Result<Unit, Text> exercise() {
     drop(largeDocument);
     drop(largeSource);
     Text largeText = Charset.decode(largeWide, utf16le)?;
-    println(largeWide.length() == 18000L && largeText.equals(repeated));
+    println(largeWide.length() == 18002L && largeText.equals(repeated));
     return new Result<Unit, Text>.Ok(());
 }
 void main() {
@@ -950,5 +950,62 @@ void main() {
     let output = execute(source);
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     assert_eq!(output.stdout, b"true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n");
+    assert_memory_balanced(&output);
+}
+
+#[test]
+fn xslt_text_encoding_is_strict_and_flushes_shift_state() {
+    let source = r#"
+Result<ByteBuffer, Text> render(borrow XmlDocument document, String method, String encoding, String body) {
+    Text source = new Text("<xsl:stylesheet xmlns:xsl='http://www.w3.org/1999/XSL/Transform' xmlns:p='urn:unsupported' version='1.0'><xsl:output indent='no' method='");
+    source.append(method); source.append("' encoding='"); source.append(encoding);
+    source.append("'/><xsl:template match='/'>"); source.append(body);
+    source.append("</xsl:template></xsl:stylesheet>");
+    XsltStylesheet stylesheet = XsltStylesheet.compile(source)?;
+    return stylesheet.transformBytes(document);
+}
+Result<Unit, Text> exercise() {
+    Text input = new Text("<root/>");
+    XmlDocument document = XmlDocument.parse(input)?;
+    ByteBuffer alias = render(document, "text", "unicode-1-1-utf-8", "<xsl:text>é</xsl:text>")?;
+    println(alias.length() == 2L && alias.get(0L) == (byte)195 && alias.get(1L) == (byte)169);
+    boolean unrepresentable = false;
+    match (render(document, "text", "US-ASCII", "<xsl:text>é</xsl:text>")) {
+        Ok(bytes) {} Err(error) { unrepresentable = true; }
+    }
+    println(unrepresentable);
+    boolean unsupportedEmpty = false;
+    match (render(document, "p:text", "UTF-8", "")) {
+        Ok(bytes) {} Err(error) { unsupportedEmpty = true; }
+    }
+    println(unsupportedEmpty);
+    boolean unsupportedNonempty = false;
+    match (render(document, "p:text", "UTF-8", "<xsl:text>value</xsl:text>")) {
+        Ok(bytes) {} Err(error) { unsupportedNonempty = true; }
+    }
+    println(unsupportedNonempty);
+    ByteBuffer shifted = render(document, "text", "ISO-2022-JP", "<xsl:text>あ</xsl:text>")?;
+    println(shifted.length() == 8L && shifted.get(0L) == (byte)27 &&
+        shifted.get(1L) == (byte)36 && shifted.get(2L) == (byte)66 &&
+        shifted.get(3L) == (byte)36 && shifted.get(4L) == (byte)34 &&
+        shifted.get(5L) == (byte)27 && shifted.get(6L) == (byte)40 &&
+        shifted.get(7L) == (byte)66);
+    ByteBuffer escaped = render(document, "xml", "US-ASCII", "<out>é</out>")?;
+    Text ascii = new Text("US-ASCII");
+    Text xml = Charset.decode(escaped, ascii)?;
+    XmlDocument result = XmlDocument.parse(xml)?;
+    Text path = new Text("/out/text()");
+    List<Text> values = result.queryText(path)?;
+    borrow Text value = values.getRef(0);
+    println(value.equalsString("é"));
+    ByteBuffer empty = render(document, "text", "UTF-16LE", "")?;
+    println(empty.length() == 0L);
+    return new Result<Unit, Text>.Ok(());
+}
+void main() { match (exercise()) { Ok(unit) {} Err(error) { error.print(); } } }
+"#;
+    let output = execute(source);
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert_eq!(output.stdout, b"true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n");
     assert_memory_balanced(&output);
 }

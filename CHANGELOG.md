@@ -13,6 +13,10 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 - XSLT adds independent serialized XML, HTML, and text results through
   `transformBytes`, honoring output encodings with direct `ByteBuffer` writes
   and the same per-transform resource restrictions as document results.
+  Text output rejects unrepresentable characters without numeric-reference
+  substitution, preserves UTF-8 aliases, and flushes stateful encodings. Unsupported
+  methods are rejected even for empty results; failed output-buffer construction
+  releases its pending encoder.
 - Collection drains destroy unreturned map entry owners on the calling thread
   before publishing their iterator, including custom-key and ordered-map drains.
   Sendable iterators cannot retain discarded thread-affine guards. Direct ordered
