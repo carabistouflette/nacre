@@ -1600,6 +1600,79 @@ block. Locking multiple mutexes in inconsistent orders can deadlock. Avoid cycle
 and establish a consistent lock/wait order; drop guards before blocking on work
 that may need the same mutex.
 
+## Atomics, semaphores, latches, barriers, and conditions
+
+`AtomicInt`, `AtomicLong`, and `AtomicBoolean` store their values in C11 atomics.
+Their load, store, exchange, compare-exchange, and integer fetch operations use
+sequentially consistent ordering. `compareExchange(expected, desired)` returns
+the value observed before the operation, whether or not it matched `expected`.
+`cloneHandle()` explicitly shares the atomic control block.
+
+`Semaphore.create` accepts a nonnegative permit count. `acquire(timeoutMs)` returns
+`Ok(true)` after consuming a permit and `Ok(false)` when a zero or positive
+monotonic timeout expires; zero is a nonblocking attempt. `release(count)` rejects
+negative counts and reports permit overflow. `CountDownLatch` accepts a
+nonnegative count; `countDown()` saturates at zero, while `wait(timeoutMs)` has the
+same boolean timeout convention as `Semaphore.acquire`.
+
+`Barrier.create` requires at least one party. Each generation returns a distinct
+arrival index. A timeout or zero-timeout arrival breaks that generation and wakes
+its other waiters with `Err`; `reset()` succeeds only after the broken generation's
+waiters have left. A spurious condition wake is not a predicate result.
+
+`Condition<T>` is created from a `Mutex<T>` and accepts only a `Guard<T>` belonging
+to that same mutex.
+`wait(guard, timeoutMs)` atomically releases and reacquires the guard's mutex,
+including for a zero-timeout poll; it returns `Ok(false)` on timeout and `Ok(true)`
+on any notification. Spurious notifications are possible, so always recheck the
+protected predicate while holding the guard. `signal()` and `broadcast()` do not
+acquire the mutex: update the predicate under its guard and notify before releasing
+that guard.
+Synchronization constructors and fallible operations report pthread/range errors
+as `Text`.
+
+## Cancellation, futures, and thread pools
+
+Cancellation is cooperative: `CancellationToken.request()` sets a shared flag and
+`isCancelled()` reads it. A task must check the borrowed token and return promptly
+if it wishes to stop. No API kills a worker or promises bounded shutdown for a
+noncooperative task.
+
+```java
+interface CancelableTask<T> {
+    Result<T, Text> run(borrow CancellationToken token);
+}
+static Result<Future<T>, Text> Future.spawn(CancelableTask<T> task)
+Result<Option<T>, Text> Future.await(long timeoutMs)
+Result<Unit, Text> Future.cancel()
+readonly boolean Future.isDone()
+
+static Result<ThreadPool<T>, Text> ThreadPool.create(int workers, long queueCapacity)
+Result<Future<T>, SubmitError<T>> ThreadPool.submit(CancelableTask<T> task)
+Result<Future<T>, SubmitError<T>> ThreadPool.schedule(CancelableTask<T> task, long delayMs)
+Result<Unit, Text> ThreadPool.shutdown(boolean drain)
+enum SubmitError<T> { Closed(CancelableTask<T>); Full(CancelableTask<T>); System(Text, CancelableTask<T>); }
+```
+
+`Future.await` returns `Ok(None)` on a zero-timeout poll or positive monotonic
+timeout, and `Ok(Some(value))` when the task succeeds. A task's `Err(Text)` is
+returned as the future's `Err(Text)`. The affine result is transferred exactly
+once; later completed awaits return an error. Dropping a standalone future requests
+cancellation and joins its worker, so drop may block until a noncooperative task
+finishes. Dropping a pool future does not join a worker; the pool owns queued and
+running work.
+
+Thread-pool submissions reject immediately when the pool is closed or its bounded
+queue is full. Every `SubmitError` variant contains the original task for recovery.
+Scheduling is one-shot with a nonnegative monotonic delay; recurring scheduling
+is not provided. The first `shutdown` call selects the shutdown mode: `drain=true`
+runs queued jobs (including delayed jobs when due), while `drain=false` cancels
+queued jobs; both modes wait for running tasks and join every worker. Pool drop
+uses the cancel-queued mode and can block for noncooperative running tasks.
+`Future<T>` and `ThreadPool<T>` require recursively sendable task and result
+payloads. Shared synchronizer lifetime uses the existing explicit control handles;
+ordinary objects are never implicitly cloned or garbage-collected.
+
 ## Environment and child processes
 
 ### `Env`, `Command`, and `Process`

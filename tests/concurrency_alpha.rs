@@ -1084,3 +1084,598 @@ fn deque_hidden_guard_payload_is_not_sendable_even_when_empty() {
     let error = validate(source).expect_err("a non-sendable Guard container was accepted");
     assert!(error.message.contains("E7101"), "{}", error.render("deque_guard.ncr", source));
 }
+
+#[test]
+fn native_atomics_semaphores_and_latches_cover_values_bounds_and_transitions() {
+    let source = r#"
+Result<Unit, Text> exercise() {
+    AtomicInt counter = AtomicInt.create(4)?;
+    AtomicInt shared = counter.cloneHandle()?;
+    int added = counter.fetchAdd(3);
+    int failed = shared.compareExchange(6, 10);
+    int exchanged = shared.compareExchange(7, 11);
+    int old = counter.exchange(12);
+    counter.store(13);
+    println(added);
+    println(failed);
+    println(exchanged);
+    println(old);
+    println(counter.load());
+    drop(shared);
+
+    AtomicLong wide = AtomicLong.create(-2L)?;
+    println(wide.fetchSubtract(5L));
+    println(wide.load());
+    AtomicBoolean flag = AtomicBoolean.create(false)?;
+    println(flag.exchange(true));
+    println(flag.compareExchange(false, false));
+    println(flag.load());
+
+    Semaphore permits = Semaphore.create(0L)?;
+    println(permits.acquire(0L)?);
+    println(permits.acquire(1L)?);
+    Semaphore alias = permits.cloneHandle()?;
+    drop(permits);
+    alias.release(2L)?;
+    println(alias.acquire(0L)?);
+    println(alias.acquire(0L)?);
+    println(alias.acquire(0L)?);
+    boolean negativeRelease = false;
+    match (alias.release(-1L)) {
+        Ok(unit) {}
+        Err(error) { negativeRelease = true; drop(error); }
+    }
+    if (negativeRelease) { println("negative release rejected"); }
+    drop(alias);
+    boolean negativePermits = false;
+    match (Semaphore.create(-1L)) {
+        Ok(value) { drop(value); }
+        Err(error) { negativePermits = true; drop(error); }
+    }
+    if (negativePermits) { println("negative permits rejected"); }
+
+    CountDownLatch latch = CountDownLatch.create(2L)?;
+    println(latch.wait(0L)?);
+    latch.countDown()?;
+    println(latch.count());
+    latch.countDown()?;
+    latch.countDown()?;
+    println(latch.count());
+    println(latch.wait(0L)?);
+    boolean negativeCount = false;
+    match (CountDownLatch.create(-1L)) {
+        Ok(value) { drop(value); }
+        Err(error) { negativeCount = true; drop(error); }
+    }
+    if (negativeCount) { println("negative latch rejected"); }
+    return new Result<Unit, Text>.Ok(());
+}
+
+void main() {
+    match (exercise()) {
+        Ok(unit) {}
+        Err(error) { error.print(); }
+    }
+}
+"#;
+    let output = execute(source, &["-DNACRE_MEMORY_STATS"]);
+    assert_clean(
+        &output,
+        "4\n7\n7\n11\n13\n-2\n-7\nfalse\ntrue\ntrue\nfalse\nfalse\ntrue\ntrue\nfalse\nnegative release rejected\nnegative permits rejected\nfalse\n1\n0\ntrue\nnegative latch rejected\n",
+    );
+}
+
+#[test]
+fn barriers_break_reset_and_reuse_generations() {
+    let source = r#"
+class BarrierWaitTask implements Task<Unit> {
+    private Barrier barrier;
+    private AtomicInt arrivals;
+    public BarrierWaitTask(Barrier barrier, AtomicInt arrivals) {
+        this.barrier = barrier;
+        this.arrivals = arrivals;
+    }
+    public Unit run() {
+        match (this.barrier.wait(1000L)) {
+            Ok(index) { int previous = this.arrivals.fetchAdd(1); }
+            Err(error) { error.print(); }
+        }
+        return ();
+    }
+}
+
+Result<Unit, Text> exercise() {
+    boolean invalidParties = false;
+    match (Barrier.create(0)) {
+        Ok(value) { drop(value); }
+        Err(error) { invalidParties = true; drop(error); }
+    }
+    if (invalidParties) { println("zero parties rejected"); }
+
+    Barrier barrier = Barrier.create(2)?;
+    boolean prematureReset = false;
+    match (barrier.reset()) {
+        Ok(unit) { println("unexpected barrier reset"); }
+        Err(error) { prematureReset = true; drop(error); }
+    }
+    if (prematureReset) { println("unbroken barrier reset rejected"); }
+    match (barrier.wait(0L)) {
+        Ok(index) { println("unexpected barrier pass"); }
+        Err(error) { println("barrier generation timed out"); drop(error); }
+    }
+    match (barrier.wait(0L)) {
+        Ok(index) { println("unexpected broken barrier pass"); }
+        Err(error) { println("barrier generation broken"); drop(error); }
+    }
+    barrier.reset()?;
+
+    AtomicInt arrivals = AtomicInt.create(0)?;
+    Barrier workerBarrier = barrier.cloneHandle()?;
+    AtomicInt workerArrivals = arrivals.cloneHandle()?;
+    Thread<Unit> worker = Thread<Unit>.spawn(new BarrierWaitTask(workerBarrier, workerArrivals))?;
+    match (barrier.wait(1000L)) {
+        Ok(index) { int previous = arrivals.fetchAdd(1); }
+        Err(error) { return new Result<Unit, Text>.Err(error); }
+    }
+    worker.join()?;
+    if (arrivals.load() == 2) { println("barrier passed"); }
+    return new Result<Unit, Text>.Ok(());
+}
+
+void main() {
+    match (exercise()) {
+        Ok(unit) {}
+        Err(error) { error.print(); }
+    }
+}
+"#;
+    let output = execute(source, &["-DNACRE_MEMORY_STATS"]);
+    assert_clean(
+        &output,
+        "zero parties rejected\nunbroken barrier reset rejected\nbarrier generation timed out\nbarrier generation broken\nbarrier passed\n",
+    );
+}
+
+#[test]
+fn condition_wait_releases_and_reacquires_its_associated_guard() {
+    let source = r#"
+class SignalTask implements Task<Unit> {
+    private Mutex<int> mutex;
+    private Condition<int> condition;
+    public SignalTask(Mutex<int> mutex, Condition<int> condition) {
+        this.mutex = mutex;
+        this.condition = condition;
+    }
+    public Unit run() {
+        Guard<int> guard;
+        match (this.mutex.lock()) {
+            Ok(value) { guard = value; }
+            Err(error) { error.print(); return (); }
+        }
+        match (guard.write(1)) {
+            Ok(unit) {}
+            Err(error) { error.print(); }
+        }
+        match (this.condition.signal()) {
+            Ok(unit) {}
+            Err(error) { error.print(); }
+        }
+        drop(guard);
+        return ();
+    }
+}
+
+Result<Unit, Text> exercise() {
+    Mutex<int> mutex = Mutex<int>.create(0)?;
+    Condition<int> condition = Condition<int>.create(mutex)?;
+    Mutex<int> unrelated = Mutex<int>.create(0)?;
+    Guard<int> unrelatedGuard = unrelated.lock()?;
+    boolean rejected = false;
+    match (condition.wait(unrelatedGuard, 0L)) {
+        Ok(value) { println("unexpected unrelated guard"); }
+        Err(error) { rejected = true; drop(error); }
+    }
+    if (rejected) { println("condition rejected unrelated guard"); }
+    drop(unrelatedGuard);
+    Mutex<int> producerMutex = mutex.cloneHandle()?;
+    Condition<int> producerCondition = condition.cloneHandle()?;
+    Thread<Unit> worker = Thread<Unit>.spawn(new SignalTask(producerMutex, producerCondition))?;
+    Guard<int> guard = mutex.lock()?;
+    while (guard.read() == 0) {
+        boolean notified = condition.wait(guard, 1000L)?;
+        if (!notified) { return new Result<Unit, Text>.Err(new Text("condition timed out")); }
+    }
+    drop(guard);
+    worker.join()?;
+    return new Result<Unit, Text>.Ok(());
+}
+
+void main() {
+    match (exercise()) {
+        Ok(unit) {}
+        Err(error) { error.print(); }
+    }
+}
+"#;
+    let output = execute(source, &["-DNACRE_MEMORY_STATS"]);
+    assert_clean(&output, "condition rejected unrelated guard\ncondition predicate observed\n");
+}
+
+#[test]
+fn futures_transfer_results_once_and_cancellation_is_cooperative() {
+    let source = r#"
+class GateTask implements CancelableTask<int> {
+    private CountDownLatch gate;
+    public GateTask(CountDownLatch gate) { this.gate = gate; }
+    public Result<int, Text> run(borrow CancellationToken token) {
+        boolean opened = this.gate.wait(2000L)?;
+        if (!opened) { return new Result<int, Text>.Err(new Text("gate timed out")); }
+        return new Result<int, Text>.Ok(42);
+    }
+}
+
+class CooperativeTask implements CancelableTask<int> {
+    private CountDownLatch gate;
+    public CooperativeTask(CountDownLatch gate) { this.gate = gate; }
+    public Result<int, Text> run(borrow CancellationToken token) {
+        boolean opened = this.gate.wait(2000L)?;
+        if (!opened) { return new Result<int, Text>.Err(new Text("gate timed out")); }
+        boolean cancelled = token.isCancelled()?;
+        if (cancelled) {
+            return new Result<int, Text>.Err(new Text("cooperative cancellation observed"));
+        }
+        return new Result<int, Text>.Ok(7);
+    }
+}
+
+class DropObservedTask implements CancelableTask<int> {
+    private CountDownLatch started;
+    public DropObservedTask(CountDownLatch started) { this.started = started; }
+    public Result<int, Text> run(borrow CancellationToken token) {
+        this.started.countDown()?;
+        boolean cancelled = token.isCancelled()?;
+        while (!cancelled) { cancelled = token.isCancelled()?; }
+        return new Result<int, Text>.Ok(99);
+    }
+}
+
+Result<Unit, Text> exercise() {
+    CancellationToken explicitToken = CancellationToken.create()?;
+    CancellationToken tokenAlias = explicitToken.cloneHandle()?;
+    println(tokenAlias.isCancelled()?);
+    explicitToken.request()?;
+    println(tokenAlias.isCancelled()?);
+    drop(tokenAlias);
+    drop(explicitToken);
+
+    CountDownLatch gate = CountDownLatch.create(1L)?;
+    CountDownLatch workerGate = gate.cloneHandle()?;
+    Future<int> future = Future<int>.spawn(new GateTask(workerGate))?;
+    if (future.isDone()) { return new Result<Unit, Text>.Err(new Text("future completed before gate")); }
+    Option<int> poll = future.await(0L)?;
+    match (poll) {
+        None { println("future poll timed out"); }
+        Some(value) { return new Result<Unit, Text>.Err(new Text("future completed before release")); }
+    }
+    gate.countDown()?;
+    Option<int> result = future.await(1000L)?;
+    match (result) {
+        Some(value) { println(value); }
+        None { return new Result<Unit, Text>.Err(new Text("future did not complete")); }
+    }
+    boolean repeatRejected = false;
+    match (future.await(1000L)) {
+        Ok(value) { println("unexpected repeat await"); }
+        Err(error) { repeatRejected = true; drop(error); }
+    }
+    if (repeatRejected) { println("future result taken once"); }
+    if (future.isDone()) { println("future done"); }
+    drop(future);
+    CountDownLatch dropStarted = CountDownLatch.create(1L)?;
+    CountDownLatch workerDropStarted = dropStarted.cloneHandle()?;
+    Future<int> dropped = Future<int>.spawn(new DropObservedTask(workerDropStarted))?;
+    if (!dropStarted.wait(1000L)?) { return new Result<Unit, Text>.Err(new Text("drop task did not start")); }
+    drop(dropped);
+    println("future drop joined worker");
+
+
+    CountDownLatch cancelGate = CountDownLatch.create(1L)?;
+    CountDownLatch workerCancelGate = cancelGate.cloneHandle()?;
+    Future<int> cancelled = Future<int>.spawn(new CooperativeTask(workerCancelGate))?;
+    cancelled.cancel()?;
+    cancelGate.countDown()?;
+    match (cancelled.await(1000L)) {
+        Ok(value) { return new Result<Unit, Text>.Err(new Text("cooperative task ignored cancellation")); }
+        Err(error) {
+            error.print();
+            drop(error);
+        }
+    }
+    drop(cancelled);
+    return new Result<Unit, Text>.Ok(());
+}
+
+void main() {
+    match (exercise()) {
+        Ok(unit) {}
+        Err(error) { error.print(); }
+    }
+}
+"#;
+    let output = execute(source, &["-DNACRE_MEMORY_STATS"]);
+    assert_clean(
+        &output,
+        "false\ntrue\nfuture poll timed out\n42\nfuture result taken once\nfuture done\ncooperative cancellation observed\nfuture drop joined worker\n",
+    );
+}
+
+#[test]
+fn thread_pools_recover_rejected_tasks_cancel_queued_work_and_drain_delays() {
+    let source = r#"
+class ImmediateCancelableTask implements CancelableTask<int> {
+    private int value;
+    public ImmediateCancelableTask(int value) { this.value = value; }
+    public Result<int, Text> run(borrow CancellationToken token) {
+        return new Result<int, Text>.Ok(this.value);
+    }
+}
+
+class QueueGateTask implements CancelableTask<int> {
+    private CountDownLatch started;
+    private CountDownLatch release;
+    public QueueGateTask(CountDownLatch started, CountDownLatch release) {
+        this.started = started;
+        this.release = release;
+    }
+    public Result<int, Text> run(borrow CancellationToken token) {
+        this.started.countDown()?;
+        boolean opened = this.release.wait(5000L)?;
+        if (!opened) { return new Result<int, Text>.Err(new Text("pool gate timed out")); }
+        return new Result<int, Text>.Ok(1);
+    }
+}
+
+Result<Future<int>, Text> requiredSubmit(borrow mut ThreadPool<int> pool, CancelableTask<int> task) {
+    match (pool.submit(task)) {
+        Ok(future) { return new Result<Future<int>, Text>.Ok(future); }
+        Err(error) {
+            match (error) {
+                Closed(original) { drop(original); return new Result<Future<int>, Text>.Err(new Text("unexpected closed pool")); }
+                Full(original) { drop(original); return new Result<Future<int>, Text>.Err(new Text("unexpected full pool")); }
+                System(message, original) { drop(original); return new Result<Future<int>, Text>.Err(message); }
+            }
+        }
+    }
+}
+
+Result<Unit, Text> exercise() {
+    boolean zeroWorkers = false;
+    match (ThreadPool<int>.create(0, 1L)) {
+        Ok(value) { drop(value); }
+        Err(error) { zeroWorkers = true; drop(error); }
+    }
+    boolean zeroCapacity = false;
+    match (ThreadPool<int>.create(1, 0L)) {
+        Ok(value) { drop(value); }
+        Err(error) { zeroCapacity = true; drop(error); }
+    }
+    if (zeroWorkers && zeroCapacity) { println("invalid pool bounds rejected"); }
+
+    ThreadPool<int> pool = ThreadPool<int>.create(1, 2L)?;
+    CountDownLatch started = CountDownLatch.create(1L)?;
+    CountDownLatch release = CountDownLatch.create(1L)?;
+    CountDownLatch workerStarted = started.cloneHandle()?;
+    CountDownLatch workerRelease = release.cloneHandle()?;
+    Future<int> running = requiredSubmit(pool, new QueueGateTask(workerStarted, workerRelease))?;
+    if (!started.wait(1000L)?) { return new Result<Unit, Text>.Err(new Text("pool worker did not start")); }
+    Future<int> cancelled = requiredSubmit(pool, new ImmediateCancelableTask(2))?;
+    Future<int> queued = requiredSubmit(pool, new ImmediateCancelableTask(3))?;
+
+    match (pool.submit(new ImmediateCancelableTask(4))) {
+        Ok(future) { drop(future); println("unexpected pool capacity"); }
+        Err(error) {
+            match (error) {
+                Full(original) { println("pool full preserved task"); drop(original); }
+                Closed(original) { drop(original); return new Result<Unit, Text>.Err(new Text("pool closed before full")); }
+                System(message, original) { drop(original); return new Result<Unit, Text>.Err(message); }
+            }
+        }
+    }
+    match (pool.schedule(new ImmediateCancelableTask(5), -1L)) {
+        Ok(future) { drop(future); println("unexpected negative schedule"); }
+        Err(error) {
+            match (error) {
+                System(message, original) { println("negative delay preserved task"); drop(message); drop(original); }
+                Closed(original) { drop(original); return new Result<Unit, Text>.Err(new Text("negative schedule reported closed")); }
+                Full(original) { drop(original); return new Result<Unit, Text>.Err(new Text("negative schedule reported full")); }
+            }
+        }
+    }
+
+    cancelled.cancel()?;
+    release.countDown()?;
+    pool.shutdown(true)?;
+    match (running.await(0L)?) {
+        Some(value) { println(value); }
+        None { return new Result<Unit, Text>.Err(new Text("running pool task did not finish")); }
+    }
+    match (cancelled.await(1000L)) {
+        Ok(value) { println("unexpected cancelled task success"); }
+        Err(error) { println("queued task cancelled"); drop(error); }
+    }
+    match (queued.await(1000L)?) {
+        Some(value) { println(value); }
+        None { return new Result<Unit, Text>.Err(new Text("drained task did not finish")); }
+    }
+    match (pool.submit(new ImmediateCancelableTask(6))) {
+        Ok(future) { drop(future); println("unexpected submit after shutdown"); }
+        Err(error) {
+            match (error) {
+                Closed(original) { println("closed pool preserved task"); drop(original); }
+                Full(original) { drop(original); return new Result<Unit, Text>.Err(new Text("shutdown reported full")); }
+                System(message, original) { drop(original); return new Result<Unit, Text>.Err(message); }
+            }
+        }
+    }
+    drop(running);
+    drop(cancelled);
+    drop(queued);
+    drop(pool);
+
+    ThreadPool<int> delayedPool = ThreadPool<int>.create(1, 1L)?;
+    Future<int> delayed;
+    match (delayedPool.schedule(new ImmediateCancelableTask(9), 50L)) {
+        Ok(value) { delayed = value; }
+        Err(error) {
+            match (error) {
+                Closed(original) { drop(original); return new Result<Unit, Text>.Err(new Text("new pool unexpectedly closed")); }
+                Full(original) { drop(original); return new Result<Unit, Text>.Err(new Text("new pool unexpectedly full")); }
+                System(message, original) { drop(original); return new Result<Unit, Text>.Err(message); }
+            }
+        }
+    }
+    match (delayed.await(1000L)?) {
+        Some(value) { println(value); }
+        None { return new Result<Unit, Text>.Err(new Text("delayed pool task did not run")); }
+    }
+    delayedPool.shutdown(true)?;
+    drop(delayed);
+    drop(delayedPool);
+    return new Result<Unit, Text>.Ok(());
+}
+
+void main() {
+    match (exercise()) {
+        Ok(unit) {}
+        Err(error) { error.print(); }
+    }
+}
+"#;
+    let output = execute(source, &["-DNACRE_MEMORY_STATS"]);
+    assert_clean(
+        &output,
+        "invalid pool bounds rejected\npool full preserved task\nnegative delay preserved task\n1\nqueued task cancelled\n3\nclosed pool preserved task\n9\n",
+    );
+}
+
+#[test]
+fn future_and_pool_result_payloads_must_be_sendable() {
+    let pool_source = "void main() { ThreadPool<Guard<int>>.create(1, 1L); }";
+    let pool_error = validate(pool_source).expect_err("ThreadPool accepted a Guard result payload");
+    assert!(
+        pool_error.message.contains("E7101"),
+        "{}",
+        pool_error.render("thread_pool_guard.ncr", pool_source)
+    );
+
+    let future_source = r#"
+class GuardResultTask implements CancelableTask<Guard<int>> {
+    public Result<Guard<int>, Text> run(borrow CancellationToken token) {
+        return new Result<Guard<int>, Text>.Err(new Text("no guard result"));
+    }
+}
+void main() { Future<Guard<int>>.spawn(new GuardResultTask()); }
+"#;
+    let future_error = validate(future_source).expect_err("Future accepted a Guard result payload");
+    assert!(
+        future_error.message.contains("E7101"),
+        "{}",
+        future_error.render("future_guard.ncr", future_source)
+    );
+}
+
+
+#[test]
+fn pool_cancel_shutdown_completes_queued_futures_before_joining_workers() {
+    let source = r#"
+class BlockUntilReleased implements CancelableTask<int> {
+    private CountDownLatch started;
+    private CountDownLatch release;
+    public BlockUntilReleased(CountDownLatch started, CountDownLatch release) {
+        this.started = started;
+        this.release = release;
+    }
+    public Result<int, Text> run(borrow CancellationToken token) {
+        this.started.countDown()?;
+        boolean opened = this.release.wait(5000L)?;
+        if (!opened) { return new Result<int, Text>.Err(new Text("shutdown gate timed out")); }
+        return new Result<int, Text>.Ok(1);
+    }
+}
+
+class NeverStarted implements CancelableTask<int> {
+    public Result<int, Text> run(borrow CancellationToken token) {
+        return new Result<int, Text>.Ok(2);
+    }
+}
+
+class ObserveShutdownFuture implements Task<Unit> {
+    private Future<int> queued;
+    private CountDownLatch release;
+    public ObserveShutdownFuture(Future<int> queued, CountDownLatch release) {
+        this.queued = queued;
+        this.release = release;
+    }
+    public Unit run() {
+        match (this.queued.await(3000L)) {
+            Ok(value) {
+                match (value) {
+                    None { println("shutdown cancellation timed out"); }
+                    Some(result) { println("queued task ran during cancel shutdown"); }
+                }
+            }
+            Err(error) { println("shutdown canceled queued future"); drop(error); }
+        }
+        match (this.release.countDown()) {
+            Ok(unit) {}
+            Err(error) { error.print(); }
+        }
+        return ();
+    }
+}
+
+Result<Future<int>, Text> requiredSubmit(borrow mut ThreadPool<int> pool, CancelableTask<int> task) {
+    match (pool.submit(task)) {
+        Ok(future) { return new Result<Future<int>, Text>.Ok(future); }
+        Err(error) {
+            match (error) {
+                Closed(original) { drop(original); return new Result<Future<int>, Text>.Err(new Text("unexpected closed pool")); }
+                Full(original) { drop(original); return new Result<Future<int>, Text>.Err(new Text("unexpected full pool")); }
+                System(message, original) { drop(original); return new Result<Future<int>, Text>.Err(message); }
+            }
+        }
+    }
+}
+
+Result<Unit, Text> exercise() {
+    ThreadPool<int> pool = ThreadPool<int>.create(1, 1L)?;
+    CountDownLatch started = CountDownLatch.create(1L)?;
+    CountDownLatch release = CountDownLatch.create(1L)?;
+    CountDownLatch workerStarted = started.cloneHandle()?;
+    CountDownLatch workerRelease = release.cloneHandle()?;
+    Future<int> running = requiredSubmit(pool, new BlockUntilReleased(workerStarted, workerRelease))?;
+    if (!started.wait(1000L)?) { return new Result<Unit, Text>.Err(new Text("pool worker did not start")); }
+    Future<int> queued = requiredSubmit(pool, new NeverStarted())?;
+    CountDownLatch observerRelease = release.cloneHandle()?;
+    Thread<Unit> observer = Thread<Unit>.spawn(new ObserveShutdownFuture(queued, observerRelease))?;
+    pool.shutdown(false)?;
+    observer.join()?;
+    match (running.await(0L)?) {
+        Some(value) { println(value); }
+        None { return new Result<Unit, Text>.Err(new Text("running shutdown task did not finish")); }
+    }
+    drop(running);
+    drop(pool);
+    return new Result<Unit, Text>.Ok(());
+}
+
+void main() {
+    match (exercise()) {
+        Ok(unit) {}
+        Err(error) { error.print(); }
+    }
+}
+"#;
+    let output = execute(source, &["-DNACRE_MEMORY_STATS"]);
+    assert_clean(&output, "shutdown canceled queued future\n1\n");
+}

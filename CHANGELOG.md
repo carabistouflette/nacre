@@ -94,6 +94,11 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   and selects template sections in one pass, without a second expression visitor
   or repeated whole-template copies. Numeric regressions use named borrowed
   operands and exercise coefficient boundaries within the source-size limit.
+- Native affine concurrency adds sequentially consistent atomics, timed semaphores,
+  countdown latches, reusable timeout-breaking barriers, mutex-associated conditions,
+  cooperative cancellation, one-shot futures, and bounded/delayed thread pools.
+  Pool rejection preserves the original task; workers are joined on shutdown and
+  drop, while noncooperative task cancellation remains unbounded.
 - Borrowed channel wakeup regressions synchronize closure after entry into the
   real condition wait, proving blocked receiver EOF and owned sender recovery.
 - Existing composition and lending examples use `ReadJob` and `DeskCommand`

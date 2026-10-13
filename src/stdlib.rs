@@ -71,8 +71,10 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
             C::TlsConfig | C::TlsStream | C::WebSocket | C::WebSocketMessage |
             C::ZipReader | C::ZipWriter | C::ZipEntry |
             C::Thread(_) | C::Mutex(_) | C::Guard(_) | C::Channel(_) |
-            C::Sender(_) | C::Receiver(_) | C::Env | C::Command | C::Process | C::ProcessOutput |
-            C::Uri | C::Dns =>
+            C::Sender(_) | C::Receiver(_) | C::Condition(_) | C::Future(_) | C::ThreadPool(_) |
+            C::AtomicInt | C::AtomicLong | C::AtomicBoolean | C::Semaphore |
+            C::CountDownLatch | C::Barrier | C::CancellationToken |
+            C::Env | C::Command | C::Process | C::ProcessOutput | C::Uri | C::Dns =>
                 unreachable!("static or factory-only native class has no constructor"),
             C::Uuid | C::SocketAddress | C::TcpListener | C::TcpStream | C::Datagram | C::UdpSocket |
             C::HttpRequest | C::HttpResponse | C::ListIterator(_) | C::Iterators(_) |
@@ -561,6 +563,44 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
         (C::Sender(_), "close") => M::SenderClose,
         (C::Receiver(_), "receive") => M::ReceiverReceive,
         (C::Receiver(_), "close") => M::ReceiverClose,
+        (C::AtomicInt | C::AtomicLong | C::AtomicBoolean, "create") => M::AtomicCreate,
+        (C::AtomicInt | C::AtomicLong | C::AtomicBoolean, "cloneHandle") => M::AtomicCloneHandle,
+        (C::AtomicInt | C::AtomicLong | C::AtomicBoolean, "load") => M::AtomicLoad,
+        (C::AtomicInt | C::AtomicLong | C::AtomicBoolean, "store") => M::AtomicStore,
+        (C::AtomicInt | C::AtomicLong | C::AtomicBoolean, "exchange") => M::AtomicExchange,
+        (C::AtomicInt | C::AtomicLong | C::AtomicBoolean, "compareExchange") => M::AtomicCompareExchange,
+        (C::AtomicInt | C::AtomicLong, "fetchAdd") => M::AtomicFetchAdd,
+        (C::AtomicInt | C::AtomicLong, "fetchSubtract") => M::AtomicFetchSubtract,
+        (C::Semaphore, "create") => M::SemaphoreCreate,
+        (C::Semaphore, "cloneHandle") => M::SemaphoreCloneHandle,
+        (C::Semaphore, "acquire") => M::SemaphoreAcquire,
+        (C::Semaphore, "release") => M::SemaphoreRelease,
+        (C::CountDownLatch, "create") => M::LatchCreate,
+        (C::CountDownLatch, "cloneHandle") => M::LatchCloneHandle,
+        (C::CountDownLatch, "countDown") => M::LatchCountDown,
+        (C::CountDownLatch, "wait") => M::LatchWait,
+        (C::CountDownLatch, "count") => M::LatchCount,
+        (C::Barrier, "create") => M::BarrierCreate,
+        (C::Barrier, "cloneHandle") => M::BarrierCloneHandle,
+        (C::Barrier, "wait") => M::BarrierWait,
+        (C::Barrier, "reset") => M::BarrierReset,
+        (C::Condition(_), "create") => M::ConditionCreate,
+        (C::Condition(_), "cloneHandle") => M::ConditionCloneHandle,
+        (C::Condition(_), "wait") => M::ConditionWait,
+        (C::Condition(_), "signal") => M::ConditionSignal,
+        (C::Condition(_), "broadcast") => M::ConditionBroadcast,
+        (C::CancellationToken, "create") => M::CancellationTokenCreate,
+        (C::CancellationToken, "cloneHandle") => M::CancellationTokenCloneHandle,
+        (C::CancellationToken, "request") => M::CancellationTokenRequest,
+        (C::CancellationToken, "isCancelled") => M::CancellationTokenIsCancelled,
+        (C::Future(_), "spawn") => M::FutureSpawn,
+        (C::Future(_), "await") => M::FutureAwait,
+        (C::Future(_), "cancel") => M::FutureCancel,
+        (C::Future(_), "isDone") => M::FutureIsDone,
+        (C::ThreadPool(_), "create") => M::ThreadPoolCreate,
+        (C::ThreadPool(_), "submit") => M::ThreadPoolSubmit,
+        (C::ThreadPool(_), "schedule") => M::ThreadPoolSchedule,
+        (C::ThreadPool(_), "shutdown") => M::ThreadPoolShutdown,
         (C::Console, "readLine") => M::ConsoleReadLine,
         (C::Console, "print") => M::ConsolePrint,
         (C::Console, "printText") => M::ConsolePrintText,

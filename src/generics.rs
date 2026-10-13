@@ -114,6 +114,16 @@ pub fn expand(mut program: a::Program) -> Result<(a::Program, Vec<String>), Diag
             concrete.push(class);
         }
     }
+    if expander.requested.iter().any(|name| {
+        matches!(name.as_str(), "AtomicInt" | "AtomicLong" | "AtomicBoolean" |
+            "Semaphore" | "CountDownLatch" | "Barrier" | "CancellationToken")
+            || ["Future<", "ThreadPool<"].iter().any(|prefix| name.starts_with(prefix))
+    }) {
+        expander.ty(&Type::Applied {
+            name: "Mutex".to_owned(),
+            args: vec![Type::Unit],
+        }, &empty, Span::default(), 0)?;
+    }
     while let Some(request) = expander.pending.pop_front() {
         let mut class = expander.definitions[&request.template].clone();
         let env: Environment = class.type_params.iter().cloned().zip(request.args).collect();
@@ -381,7 +391,10 @@ impl Expander {
             }
             Some(a::NativeClass::Thread(element))
             | Some(a::NativeClass::Mutex(element))
-            | Some(a::NativeClass::Channel(element)) => {
+            | Some(a::NativeClass::Channel(element))
+            | Some(a::NativeClass::Condition(element))
+            | Some(a::NativeClass::Future(element))
+            | Some(a::NativeClass::ThreadPool(element)) => {
                 *element = self.ty(element, env, class.span, 0)?;
             }
             Some(a::NativeClass::Sender(element))

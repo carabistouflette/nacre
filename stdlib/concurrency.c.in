@@ -35,3 +35,41 @@ static int ncr_sync_pthread_create(pthread_t *thread, void *(*start)(void *), vo
 #ifdef NCR_TEST_FAIL_PTHREAD_COND_WAIT
 #define pthread_cond_wait(condition, mutex) ((void)(condition), (void)(mutex), EAGAIN)
 #endif
+
+struct ncr_condition_node {
+    pthread_cond_t condition;
+    struct ncr_condition_node *next;
+};
+
+static int ncr_sync_deadline_after_millis(int64_t timeout_ms, struct timespec *deadline) {
+    if (timeout_ms < 0) { return EINVAL; }
+    int64_t now;
+    int failure = 0;
+    int64_t absolute_ns;
+    if (!ncr_time_monotonic_value(&now, &failure)) { return failure; }
+    if (!ncr_time_deadline_after_millis(now, timeout_ms, &absolute_ns)) { return EOVERFLOW; }
+    int64_t seconds = absolute_ns / INT64_C(1000000000);
+    int64_t nanoseconds = absolute_ns % INT64_C(1000000000);
+    time_t converted = (time_t)seconds;
+    if ((int64_t)converted != seconds) { return EOVERFLOW; }
+    deadline->tv_sec = converted;
+    deadline->tv_nsec = (long)nanoseconds;
+    return 0;
+}
+
+static int ncr_sync_monotonic_now(int64_t *value) {
+    int failure = 0;
+    if (!ncr_time_monotonic_value(value, &failure)) { return failure; }
+    return 0;
+}
+
+static int ncr_sync_timespec_from_monotonic_ns(int64_t absolute_ns, struct timespec *deadline) {
+    if (absolute_ns < 0) { return EOVERFLOW; }
+    int64_t seconds = absolute_ns / INT64_C(1000000000);
+    int64_t nanoseconds = absolute_ns % INT64_C(1000000000);
+    time_t converted = (time_t)seconds;
+    if ((int64_t)converted != seconds) { return EOVERFLOW; }
+    deadline->tv_sec = converted;
+    deadline->tv_nsec = (long)nanoseconds;
+    return 0;
+}

@@ -14,7 +14,9 @@ fn channel_class(program: &t::Program, value: Type) -> usize {
     matching_class(program, |native| if let C::Channel(element) = native { Some(element) } else { None }, value)
 }
 fn is_concurrency(class: C) -> bool {
-    matches!(class, C::Thread(_) | C::Mutex(_) | C::Guard(_) | C::Channel(_) | C::Sender(_) | C::Receiver(_))
+    matches!(class, C::Thread(_) | C::Mutex(_) | C::Guard(_) | C::Channel(_) | C::Sender(_) | C::Receiver(_) |
+        C::Condition(_) | C::Future(_) | C::ThreadPool(_) | C::AtomicInt | C::AtomicLong |
+        C::AtomicBoolean | C::Semaphore | C::CountDownLatch | C::Barrier | C::CancellationToken)
 }
 fn native_owner(program: &t::Program, function: &t::Function) -> usize {
     if let Some(receiver) = function.receiver { return receiver; }
@@ -117,6 +119,10 @@ pub(super) fn fields(program: &t::Program, class: C, class_id: usize) -> String 
             let channel = channel_class(program, value);
             format!("    struct ncr_channel_control_{channel} *control;\n    bool closed;\n")
         }
+        C::Condition(_) | C::Future(_) | C::ThreadPool(_) |
+        C::AtomicInt | C::AtomicLong | C::AtomicBoolean | C::Semaphore |
+        C::CountDownLatch | C::Barrier | C::CancellationToken =>
+            super::concurrency_extra::fields(program, class, class_id),
         _ => unreachable!("non-concurrency native fields"),
     }
 }
@@ -143,7 +149,7 @@ fn control_definitions(program: &t::Program) -> String {
                     class.id, ctype(program, result)));
             }
             Some(C::Mutex(value)) => out.push_str(&format!(
-                "struct ncr_mutex_control_{} {{ _Atomic size_t references; pthread_mutex_t mutex; {} value; }};\n",
+                "struct ncr_mutex_control_{} {{ _Atomic size_t references; pthread_mutex_t mutex; {} value; void *aux_payload; void (*aux_drop)(void *); struct ncr_condition_node *conditions; }};\n",
                 class.id, ctype(program, value))),
             Some(C::Channel(value)) => out.push_str(&format!(
                 "struct ncr_channel_control_{} {{ _Atomic size_t references; pthread_mutex_t mutex; pthread_cond_t not_empty; pthread_cond_t not_full; {} *slots; size_t capacity; size_t head; size_t count; size_t sender_count; bool receiver_closed; }};\n",
@@ -151,6 +157,7 @@ fn control_definitions(program: &t::Program) -> String {
             _ => {}
         }
     }
+    out.push_str(&super::concurrency_extra::control_definitions(program));
     out
 }
 
@@ -163,9 +170,18 @@ fn thread_worker(program: &t::Program, thread_id: usize) -> String {
 }
 fn mutex_control_helpers(program: &t::Program, id: usize, value: Type) -> String {
     let drop = drop_value(program, value, "control->value");
-    format!(
-        "static void ncr_mutex_release_{id}(struct ncr_mutex_control_{id} *control) {{\n    if (!ncr_sync_ref_release(&control->references)) {{ return; }}\n    int error = pthread_mutex_destroy(&control->mutex);\n    if (error != 0) {{ ncr_sync_fatal(\"pthread_mutex_destroy\", error); }}\n{drop}    ncr_deallocate(control);\n}}\n"
-    )
+    let mut out = format!(
+        "static void ncr_mutex_release_{id}(struct ncr_mutex_control_{id} *control) {{\n    if (!ncr_sync_ref_release(&control->references)) {{ return; }}\n    struct ncr_condition_node *condition = control->conditions;\n    while (condition != NULL) {{\n        struct ncr_condition_node *next = condition->next;\n        int condition_error = pthread_cond_destroy(&condition->condition);\n        if (condition_error != 0) {{ ncr_sync_fatal(\"pthread_cond_destroy(control release)\", condition_error); }}\n        ncr_deallocate(condition);\n        condition = next;\n    }}\n    int error = pthread_mutex_destroy(&control->mutex);\n    if (error != 0) {{ ncr_sync_fatal(\"pthread_mutex_destroy\", error); }}\n{drop}    if (control->aux_drop != NULL) {{ control->aux_drop(control->aux_payload); }}\n    ncr_deallocate(control);\n}}\n"
+    );
+    out.push_str(&format!(
+        "static struct ncr_condition_node *ncr_mutex_condition_new_{id}(struct ncr_mutex_control_{id} *control, int *failure) {{\n    struct ncr_condition_node *node = ncr_allocate(sizeof(*node), 0, 0);\n    node->next = NULL;\n    pthread_condattr_t attributes;\n    int error = pthread_condattr_init(&attributes);\n    if (error != 0) {{ ncr_deallocate(node); *failure = error; return NULL; }}\n    error = pthread_condattr_setclock(&attributes, CLOCK_MONOTONIC);\n    if (error != 0) {{\n        int cleanup_error = pthread_condattr_destroy(&attributes);\n        if (cleanup_error != 0) {{ ncr_sync_fatal(\"pthread_condattr_destroy(cleanup)\", cleanup_error); }}\n        ncr_deallocate(node); *failure = error; return NULL;\n    }}\n    error = pthread_cond_init(&node->condition, &attributes);\n    int attr_error = pthread_condattr_destroy(&attributes);\n    if (error != 0) {{\n        if (attr_error != 0) {{ ncr_sync_fatal(\"pthread_condattr_destroy(cleanup)\", attr_error); }}\n        ncr_deallocate(node); *failure = error; return NULL;\n    }}\n    if (attr_error != 0) {{\n        int cleanup_error = pthread_cond_destroy(&node->condition);\n        if (cleanup_error != 0) {{ ncr_sync_fatal(\"pthread_cond_destroy(cleanup)\", cleanup_error); }}\n        ncr_deallocate(node); *failure = attr_error; return NULL;\n    }}\n    error = pthread_mutex_lock(&control->mutex);\n    if (error != 0) {{\n        int cleanup_error = pthread_cond_destroy(&node->condition);\n        if (cleanup_error != 0) {{ ncr_sync_fatal(\"pthread_cond_destroy(cleanup)\", cleanup_error); }}\n        ncr_deallocate(node); *failure = error; return NULL;\n    }}\n    node->next = control->conditions;\n    control->conditions = node;\n    error = pthread_mutex_unlock(&control->mutex);\n    if (error != 0) {{ ncr_sync_fatal(\"pthread_mutex_unlock(condition create)\", error); }}\n    *failure = 0;\n    return node;\n}}\n"
+    ));
+    if value == Type::Unit {
+        out.push_str(&format!(
+            "static struct ncr_mutex_control_{id} *ncr_sync_mutex_control_new_{id}(int *failure) {{\n    struct ncr_mutex_control_{id} *control = ncr_allocate(sizeof(*control), 0, 0);\n    atomic_init(&control->references, 1);\n    control->value = UINT8_C(0);\n    control->aux_payload = NULL; control->aux_drop = NULL; control->conditions = NULL;\n    int error = pthread_mutex_init(&control->mutex, NULL);\n    if (error != 0) {{ ncr_deallocate(control); *failure = error; return NULL; }}\n    *failure = 0;\n    return control;\n}}\n"
+        ));
+    }
+    out
 }
 fn channel_control_helpers(program: &t::Program, id: usize, value: Type) -> String {
     let drop = drop_value(program, value, "control->slots[index]");
@@ -565,6 +581,7 @@ pub(super) fn implementations(program: &t::Program) -> String {
             _ => {}
         }
     }
+    out.push_str(&super::concurrency_extra::helpers(program));
     for class in &program.classes {
         match class.native {
             Some(C::Channel(_)) => out.push_str(&channel_pair_drop(program, class.id)),
@@ -580,6 +597,7 @@ pub(super) fn implementations(program: &t::Program) -> String {
             _ => {}
         }
     }
+    out.push_str(&super::concurrency_extra::drop_helpers(program));
     out.push_str(&drop_helpers(program));
     for function in &program.functions {
         let body = match function.native {
@@ -605,5 +623,6 @@ pub(super) fn implementations(program: &t::Program) -> String {
         };
         if let Some(body) = body { out.push_str(&body); }
     }
+    out.push_str(&super::concurrency_extra::implementations(program));
     out
 }

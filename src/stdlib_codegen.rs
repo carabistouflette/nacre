@@ -33,6 +33,7 @@ mod regex;
 mod concurrency;
 mod cryptokeys;
 mod zip;
+mod concurrency_extra;
 mod process;
 mod crypto;
 mod big_numbers;
@@ -98,7 +99,9 @@ pub fn fields(program: &t::Program, class: C, class_id: usize) -> String {
         C::TlsConfig | C::TlsStream => tls::fields(program, class, class_id),
         C::WebSocket | C::WebSocketMessage => websocket::fields(program, class, class_id),
         C::Thread(_) | C::Mutex(_) | C::Guard(_) | C::Channel(_) |
-        C::Sender(_) | C::Receiver(_) => concurrency::fields(program, class, class_id),
+        C::Sender(_) | C::Receiver(_) | C::Condition(_) | C::Future(_) | C::ThreadPool(_) |
+        C::AtomicInt | C::AtomicLong | C::AtomicBoolean | C::Semaphore | C::CountDownLatch |
+        C::Barrier | C::CancellationToken => concurrency::fields(program, class, class_id),
     }
 }
 
@@ -145,7 +148,9 @@ pub fn drop_fields(program: &t::Program, class: C, class_id: usize) -> String {
         C::TlsConfig | C::TlsStream => tls::drop_fields(program, class),
         C::WebSocket | C::WebSocketMessage => websocket::drop_fields(program, class),
         C::Thread(_) | C::Mutex(_) | C::Guard(_) | C::Channel(_) |
-        C::Sender(_) | C::Receiver(_) => concurrency::drop_fields(class_id),
+        C::Sender(_) | C::Receiver(_) | C::Condition(_) | C::Future(_) | C::ThreadPool(_) |
+        C::AtomicInt | C::AtomicLong | C::AtomicBoolean | C::Semaphore | C::CountDownLatch |
+        C::Barrier | C::CancellationToken => concurrency::drop_fields(class_id),
     }
 }
 
@@ -221,7 +226,9 @@ fn append_body(program: &t::Program, out: &mut String, class: &t::Class, native:
         C::Path | C::File | C::Directory | C::FileInfo | C::Watcher | C::WatchEvent => return,
         C::ZipReader | C::ZipWriter | C::ZipEntry => return,
         C::Thread(_) | C::Mutex(_) | C::Guard(_) | C::Channel(_) |
-        C::Sender(_) | C::Receiver(_) => return,
+        C::Sender(_) | C::Receiver(_) | C::Condition(_) | C::Future(_) | C::ThreadPool(_) |
+        C::AtomicInt | C::AtomicLong | C::AtomicBoolean | C::Semaphore | C::CountDownLatch |
+        C::Barrier | C::CancellationToken => return,
         C::HttpRequest | C::HttpResponse | C::Unicode | C::Character | C::Charset | C::Locale |
         C::CryptoKey | C::CryptoDigest | C::CryptoMac | C::Certificate |
         C::TlsConfig | C::TlsStream | C::WebSocket | C::WebSocketMessage => return,

@@ -108,7 +108,10 @@ impl Tables {
                         | t::NativeClass::Mutex(element)
                         | t::NativeClass::Channel(element)
                         | t::NativeClass::Sender(element)
-                        | t::NativeClass::Receiver(element)) => (Some(element), None, None),
+                        | t::NativeClass::Receiver(element)
+                        | t::NativeClass::Condition(element)
+                        | t::NativeClass::Future(element)
+                        | t::NativeClass::ThreadPool(element)) => (Some(element), None, None),
                     Some(t::NativeClass::Map { key, value, hasher }) =>
                         (Some(key), Some(value), hasher),
                     Some(t::NativeClass::Set { key, hasher }) => (Some(key), hasher, None),
@@ -128,6 +131,10 @@ impl Tables {
                         | t::NativeClass::Iterators(element)) => (Some(element), None, None),
                     Some(t::NativeClass::BitSet | t::NativeClass::Text |
                         t::NativeClass::BigInt | t::NativeClass::BigDecimal |
+                        t::NativeClass::AtomicInt | t::NativeClass::AtomicLong |
+                        t::NativeClass::AtomicBoolean | t::NativeClass::Semaphore |
+                        t::NativeClass::CountDownLatch | t::NativeClass::Barrier |
+                        t::NativeClass::CancellationToken |
                         t::NativeClass::Regex | t::NativeClass::RegexMatch |
                         t::NativeClass::Arrays | t::NativeClass::ByteBuffer | t::NativeClass::Encoding |
                         t::NativeClass::Crypto | t::NativeClass::Uuid |
@@ -330,6 +337,16 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
             Some(a::NativeClass::Channel(_)) => Some(t::NativeClass::Channel(Type::Void)),
             Some(a::NativeClass::Sender(_)) => Some(t::NativeClass::Sender(Type::Void)),
             Some(a::NativeClass::Receiver(_)) => Some(t::NativeClass::Receiver(Type::Void)),
+            Some(a::NativeClass::Condition(_)) => Some(t::NativeClass::Condition(Type::Void)),
+            Some(a::NativeClass::Future(_)) => Some(t::NativeClass::Future(Type::Void)),
+            Some(a::NativeClass::ThreadPool(_)) => Some(t::NativeClass::ThreadPool(Type::Void)),
+            Some(a::NativeClass::AtomicInt) => Some(t::NativeClass::AtomicInt),
+            Some(a::NativeClass::AtomicLong) => Some(t::NativeClass::AtomicLong),
+            Some(a::NativeClass::AtomicBoolean) => Some(t::NativeClass::AtomicBoolean),
+            Some(a::NativeClass::Semaphore) => Some(t::NativeClass::Semaphore),
+            Some(a::NativeClass::CountDownLatch) => Some(t::NativeClass::CountDownLatch),
+            Some(a::NativeClass::Barrier) => Some(t::NativeClass::Barrier),
+            Some(a::NativeClass::CancellationToken) => Some(t::NativeClass::CancellationToken),
             Some(a::NativeClass::Env) => Some(t::NativeClass::Env),
             Some(a::NativeClass::Command) => Some(t::NativeClass::Command),
             Some(a::NativeClass::Process) => Some(t::NativeClass::Process),
@@ -417,6 +434,12 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
                 tables.classes[id].native = Some(t::NativeClass::Sender(tables.resolve_type(value, class.span)?)),
             Some(a::NativeClass::Receiver(value)) =>
                 tables.classes[id].native = Some(t::NativeClass::Receiver(tables.resolve_type(value, class.span)?)),
+            Some(a::NativeClass::Condition(value)) =>
+                tables.classes[id].native = Some(t::NativeClass::Condition(tables.resolve_type(value, class.span)?)),
+            Some(a::NativeClass::Future(value)) =>
+                tables.classes[id].native = Some(t::NativeClass::Future(tables.resolve_type(value, class.span)?)),
+            Some(a::NativeClass::ThreadPool(value)) =>
+                tables.classes[id].native = Some(t::NativeClass::ThreadPool(tables.resolve_type(value, class.span)?)),
             _ => {}
         }
         let variants = class.variants.as_ref().map(|variants| {
@@ -1454,6 +1477,8 @@ impl Checker<'_> {
             let send_type = match (self.tables.classes[owner].native, sig.name.as_str()) {
                 (Some(t::NativeClass::Mutex(value)), "create") => Some(value),
                 (Some(t::NativeClass::Channel(value)), "bounded") => Some(value),
+                (Some(t::NativeClass::Condition(value)), "create") => Some(value),
+                (Some(t::NativeClass::ThreadPool(value)), "create") => Some(value),
                 _ => None,
             };
             if let Some(value) = send_type {
@@ -1463,18 +1488,22 @@ impl Checker<'_> {
                         sig.name, self.tables.type_name(value))));
                 }
             }
-            if let Some(t::NativeClass::Thread(result)) = self.tables.classes[owner].native {
-                if sig.name == "spawn" {
-                    let task = sig.params.first().copied().expect("Task spawn parameter");
-                    if !self.tables.is_sendable(task) {
-                        return Err(Diagnostic::new(span,
-                            "[E7101] Thread.spawn requires every concrete Task implementation to be recursively sendable"));
-                    }
-                    if !self.tables.is_sendable(result) {
-                        return Err(Diagnostic::new(span, format!(
-                            "[E7101] Thread.spawn result `{}` is not recursively sendable",
-                            self.tables.type_name(result))));
-                    }
+            let task_result = match (self.tables.classes[owner].native, sig.name.as_str()) {
+                (Some(t::NativeClass::Thread(result)), "spawn")
+                | (Some(t::NativeClass::Future(result)), "spawn")
+                | (Some(t::NativeClass::ThreadPool(result)), "submit" | "schedule") => Some(result),
+                _ => None,
+            };
+            if let Some(result) = task_result {
+                let task = sig.params.first().copied().expect("concurrent task parameter");
+                if !self.tables.is_sendable(task) {
+                    return Err(Diagnostic::new(span,
+                        "[E7101] concurrent task submission requires every concrete task implementation to be recursively sendable"));
+                }
+                if !self.tables.is_sendable(result) {
+                    return Err(Diagnostic::new(span, format!(
+                        "[E7101] concurrent task result `{}` is not recursively sendable",
+                        self.tables.type_name(result))));
                 }
             }
         }

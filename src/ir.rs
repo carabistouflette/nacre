@@ -142,6 +142,8 @@ pub enum NativeClass {
     TlsConfig, TlsStream, WebSocket, WebSocketMessage,
     Datagram, UdpSocket, HttpRequest, HttpResponse, Thread(Type), Mutex(Type), Guard(Type), Channel(Type),
     Sender(Type), Receiver(Type), Env, Command, Process, ProcessOutput, Database,
+    Condition(Type), Future(Type), ThreadPool(Type),
+    AtomicInt, AtomicLong, AtomicBoolean, Semaphore, CountDownLatch, Barrier, CancellationToken,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NativeMethod {
@@ -288,4 +290,13 @@ pub enum NativeMethod {
     WebSocketConnect, WebSocketConnectTls, WebSocketSendText, WebSocketSendBinary,
     WebSocketPing, WebSocketReceive, WebSocketClose,
     WebSocketMessageIsText, WebSocketMessageBody, WebSocketMessageAsText,
+    AtomicCreate, AtomicCloneHandle, AtomicLoad, AtomicStore, AtomicExchange, AtomicCompareExchange,
+    AtomicFetchAdd, AtomicFetchSubtract,
+    SemaphoreCreate, SemaphoreCloneHandle, SemaphoreAcquire, SemaphoreRelease,
+    LatchCreate, LatchCloneHandle, LatchCountDown, LatchWait, LatchCount,
+    BarrierCreate, BarrierCloneHandle, BarrierWait, BarrierReset,
+    ConditionCreate, ConditionCloneHandle, ConditionWait, ConditionSignal, ConditionBroadcast,
+    CancellationTokenCreate, CancellationTokenCloneHandle, CancellationTokenRequest, CancellationTokenIsCancelled,
+    FutureSpawn, FutureAwait, FutureCancel, FutureIsDone,
+    ThreadPoolCreate, ThreadPoolSubmit, ThreadPoolSchedule, ThreadPoolShutdown,
 }

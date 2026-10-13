@@ -35,6 +35,8 @@ pub enum NativeClass {
     TlsConfig, TlsStream, WebSocket, WebSocketMessage,
     ZipReader, ZipWriter, ZipEntry,
     Thread(Type), Mutex(Type), Guard(Type), Channel(Type), Sender(Type), Receiver(Type),
+    Condition(Type), Future(Type), ThreadPool(Type),
+    AtomicInt, AtomicLong, AtomicBoolean, Semaphore, CountDownLatch, Barrier, CancellationToken,
     Env, Command, Process, ProcessOutput, Database,
 }
 #[derive(Debug, Clone)]

@@ -38,6 +38,98 @@ class Receiver<T> {
     public Result<Unit, Text> close() {}
 }
 
+class AtomicInt {
+    public static Result<AtomicInt, Text> create(int initial) {}
+    public Result<AtomicInt, Text> cloneHandle() {}
+    public readonly int load() {}
+    public Unit store(int value) {}
+    public int exchange(int value) {}
+    public int compareExchange(int expected, int desired) {}
+    public int fetchAdd(int delta) {}
+    public int fetchSubtract(int delta) {}
+}
+
+class AtomicLong {
+    public static Result<AtomicLong, Text> create(long initial) {}
+    public Result<AtomicLong, Text> cloneHandle() {}
+    public readonly long load() {}
+    public Unit store(long value) {}
+    public long exchange(long value) {}
+    public long compareExchange(long expected, long desired) {}
+    public long fetchAdd(long delta) {}
+    public long fetchSubtract(long delta) {}
+}
+
+class AtomicBoolean {
+    public static Result<AtomicBoolean, Text> create(boolean initial) {}
+    public Result<AtomicBoolean, Text> cloneHandle() {}
+    public readonly boolean load() {}
+    public Unit store(boolean value) {}
+    public boolean exchange(boolean value) {}
+    public boolean compareExchange(boolean expected, boolean desired) {}
+}
+
+class Semaphore {
+    public static Result<Semaphore, Text> create(long permits) {}
+    public Result<Semaphore, Text> cloneHandle() {}
+    public Result<boolean, Text> acquire(long timeoutMs) {}
+    public Result<Unit, Text> release(long count) {}
+}
+
+class CountDownLatch {
+    public static Result<CountDownLatch, Text> create(long count) {}
+    public Result<CountDownLatch, Text> cloneHandle() {}
+    public Result<Unit, Text> countDown() {}
+    public Result<boolean, Text> wait(long timeoutMs) {}
+    public readonly long count() {}
+}
+
+class Barrier {
+    public static Result<Barrier, Text> create(int parties) {}
+    public Result<Barrier, Text> cloneHandle() {}
+    public Result<int, Text> wait(long timeoutMs) {}
+    public Result<Unit, Text> reset() {}
+}
+
+class Condition<T> {
+    public static Result<Condition<T>, Text> create(borrow mut Mutex<T> associated) {}
+    public Result<Condition<T>, Text> cloneHandle() {}
+    public Result<boolean, Text> wait(borrow mut Guard<T> guard, long timeoutMs) {}
+    public Result<Unit, Text> signal() {}
+    public Result<Unit, Text> broadcast() {}
+}
+
+class CancellationToken {
+    public static Result<CancellationToken, Text> create() {}
+    public Result<CancellationToken, Text> cloneHandle() {}
+    public Result<Unit, Text> request() {}
+    public readonly Result<boolean, Text> isCancelled() {}
+}
+
+interface CancelableTask<T> {
+    Result<T, Text> run(borrow CancellationToken token);
+}
+
+class Future<T> {
+    public static Result<Future<T>, Text> spawn(CancelableTask<T> task) {}
+    public Result<Option<T>, Text> await(long timeoutMs) {}
+    public Result<Unit, Text> cancel() {}
+    public readonly boolean isDone() {}
+}
+
+class ThreadPool<T> {
+    public static Result<ThreadPool<T>, Text> create(int workers, long queueCapacity) {}
+    public Result<Future<T>, SubmitError<T>> submit(CancelableTask<T> task) {}
+    public Result<Future<T>, SubmitError<T>> schedule(CancelableTask<T> task, long delayMs) {}
+    public Result<Unit, Text> shutdown(boolean drain) {}
+}
+
+enum SubmitError<T> {
+    Closed(CancelableTask<T>);
+    Full(CancelableTask<T>);
+    System(Text, CancelableTask<T>);
+}
+
 enum SendError<T> {
     Closed(T);
     System(Text, T);
