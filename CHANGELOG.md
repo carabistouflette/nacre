@@ -83,6 +83,11 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 - Byte, Unicode-scalar Char, Long, Double and Unit values work through native
   expressions and collections. Int/Long arithmetic wraps explicitly; casts and
   shift counts are checked. Text supports numeric append and parse operations.
+- GMP-backed affine `BigInt` and `BigDecimal` provide exact radix parsing,
+  integer arithmetic, signed division/modular operations, scaled decimal arithmetic,
+  all eight decimal rounding modes, and checked long conversions. Numeric outputs
+  that use these APIs link GMP; documented coefficient, text, and scale bounds
+  reject oversized fallible operations without floating-point approximation.
 - Generic static calls such as `Factory<List<int>>.identity(value)` specialize
   the owner before checking, without confusing generic closers and shift operators.
 - Native library lowering and trusted prelude declarations use focused units and

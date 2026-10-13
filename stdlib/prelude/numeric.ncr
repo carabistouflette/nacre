@@ -1,0 +1,58 @@
+enum RoundingMode {
+    Down;
+    Up;
+    Floor;
+    Ceiling;
+    HalfUp;
+    HalfDown;
+    HalfEven;
+    Unnecessary;
+}
+
+class BigInt {
+    public static BigInt fromLong(long value) {}
+    public static Result<BigInt, Text> parse(borrow Text value, int radix) {}
+    public readonly BigInt clone() {}
+    public readonly Result<Text, Text> toText(int radix) {}
+    public readonly int compareTo(borrow BigInt other) {}
+    public readonly int signum() {}
+    public readonly Result<int, Text> bitLength() {}
+    public readonly BigInt add(borrow BigInt other) {}
+    public readonly BigInt subtract(borrow BigInt other) {}
+    public readonly BigInt multiply(borrow BigInt other) {}
+    public readonly Result<BigInt, Text> divide(borrow BigInt other) {}
+    public readonly Result<BigInt, Text> remainder(borrow BigInt other) {}
+    public readonly BigInt gcd(borrow BigInt other) {}
+    public readonly Result<BigInt, Text> mod(borrow BigInt modulus) {}
+    public readonly Result<BigInt, Text> pow(int exponent) {}
+    public readonly Result<BigInt, Text> modPow(borrow BigInt exponent, borrow BigInt modulus) {}
+    public readonly Result<BigInt, Text> modInverse(borrow BigInt modulus) {}
+    public readonly BigInt negate() {}
+    public readonly BigInt abs() {}
+    public readonly Result<BigInt, Text> shiftLeft(int bits) {}
+    public readonly Result<BigInt, Text> shiftRight(int bits) {}
+    public readonly BigInt bitAnd(borrow BigInt other) {}
+    public readonly BigInt bitOr(borrow BigInt other) {}
+    public readonly BigInt bitXor(borrow BigInt other) {}
+    public readonly BigInt bitNot() {}
+    public readonly Result<boolean, Text> testBit(int bit) {}
+    public readonly Result<long, Text> toLong() {}
+}
+
+class BigDecimal {
+    public static Result<BigDecimal, Text> parse(borrow Text value) {}
+    public static BigDecimal fromLong(long value) {}
+    public readonly BigDecimal clone() {}
+    public readonly Result<Text, Text> toText() {}
+    public readonly int scale() {}
+    public readonly int compareTo(borrow BigDecimal other) {}
+    public readonly int signum() {}
+    public readonly Result<BigDecimal, Text> add(borrow BigDecimal other) {}
+    public readonly Result<BigDecimal, Text> subtract(borrow BigDecimal other) {}
+    public readonly Result<BigDecimal, Text> multiply(borrow BigDecimal other) {}
+    public readonly Result<BigDecimal, Text> divide(borrow BigDecimal other, int resultScale, RoundingMode rounding) {}
+    public readonly Result<BigDecimal, Text> rescale(int scale, RoundingMode rounding) {}
+    public readonly BigDecimal negate() {}
+    public readonly BigDecimal abs() {}
+    public readonly Result<long, Text> toLong() {}
+}

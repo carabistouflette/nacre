@@ -58,6 +58,95 @@ with a runtime diagnostic rather than returning `Result`.
 
 `Text.appendByte` formats the unsigned byte as decimal text; it does not append a raw byte. Use `ByteBuffer` for binary bytes.
 
+## Exact big numbers
+
+`BigInt` and `BigDecimal` are affine native objects backed by GMP integers.
+Operations never convert through `double`; operands passed as `borrow` remain
+usable, and every returned object is a separately owned value. Use `clone()` only
+when an explicit independent copy is needed.
+
+```java
+static BigInt BigInt.fromLong(long value)
+static Result<BigInt, Text> BigInt.parse(borrow Text value, int radix)
+readonly BigInt clone()
+readonly Result<Text, Text> toText(int radix)
+readonly int compareTo(borrow BigInt other)
+readonly int signum()
+readonly Result<int, Text> bitLength()
+readonly BigInt add(borrow BigInt other)
+readonly BigInt subtract(borrow BigInt other)
+readonly BigInt multiply(borrow BigInt other)
+readonly Result<BigInt, Text> divide(borrow BigInt other)
+readonly Result<BigInt, Text> remainder(borrow BigInt other)
+readonly BigInt gcd(borrow BigInt other)
+readonly Result<BigInt, Text> mod(borrow BigInt positiveModulus)
+readonly Result<BigInt, Text> pow(int nonnegativeExponent)
+readonly Result<BigInt, Text> modPow(borrow BigInt nonnegativeExponent,
+    borrow BigInt positiveModulus)
+readonly Result<BigInt, Text> modInverse(borrow BigInt positiveModulus)
+readonly BigInt negate()
+readonly BigInt abs()
+readonly Result<BigInt, Text> shiftLeft(int nonnegativeBits)
+readonly Result<BigInt, Text> shiftRight(int nonnegativeBits)
+readonly BigInt bitAnd(borrow BigInt other)
+readonly BigInt bitOr(borrow BigInt other)
+readonly BigInt bitXor(borrow BigInt other)
+readonly BigInt bitNot()
+readonly Result<boolean, Text> testBit(int nonnegativeBit)
+readonly Result<long, Text> toLong()
+```
+
+`BigInt.parse` accepts an optional ASCII sign and digits for radix 2 through 36;
+it rejects whitespace, NUL, prefixes, and digits outside the radix. `toText`
+formats the value in the requested radix. Division truncates toward zero and
+remainder has the dividend's sign. `mod` requires a positive modulus and returns
+the canonical nonnegative residue. `pow` and `modPow` reject negative exponents;
+modular operations require a positive modulus. `modInverse` returns `Err` when an
+inverse does not exist. Shifts are arithmetic for negative values; bit operations
+use GMP's infinite two's-complement convention. `bitLength` follows signed
+two's-complement magnitude semantics (`-1` has length zero). `toLong` is exact and
+returns `Err` outside the signed 64-bit range.
+
+```java
+enum RoundingMode { Down; Up; Floor; Ceiling; HalfUp; HalfDown; HalfEven; Unnecessary; }
+static Result<BigDecimal, Text> BigDecimal.parse(borrow Text value)
+static BigDecimal BigDecimal.fromLong(long value)
+readonly BigDecimal clone()
+readonly Result<Text, Text> toText()
+readonly int scale()
+readonly int compareTo(borrow BigDecimal other)
+readonly int signum()
+readonly Result<BigDecimal, Text> add(borrow BigDecimal other)
+readonly Result<BigDecimal, Text> subtract(borrow BigDecimal other)
+readonly Result<BigDecimal, Text> multiply(borrow BigDecimal other)
+readonly Result<BigDecimal, Text> divide(borrow BigDecimal other, int resultScale,
+    RoundingMode rounding)
+readonly Result<BigDecimal, Text> rescale(int scale, RoundingMode rounding)
+readonly BigDecimal negate()
+readonly BigDecimal abs()
+readonly Result<long, Text> toLong()
+```
+
+`BigDecimal` stores an exact signed coefficient and decimal scale: its value is
+`coefficient × 10^-scale`. Parsing accepts a signed decimal significand and optional
+decimal exponent, but no whitespace, NUL, `NaN`, or infinity. `toText` emits a
+plain decimal string while preserving the stored scale where possible; it does
+not use exponent notation. Addition and subtraction align to the greater operand
+scale, and multiplication adds scales. Division and rescaling round the exact
+quotient: Down truncates toward zero, Up away from zero, Floor toward negative
+infinity, Ceiling toward positive infinity, HalfUp ties away from zero, HalfDown
+ties toward zero, HalfEven ties to an even retained digit, and Unnecessary returns
+`Err` for an inexact value. Division by zero, inexact `toLong`, and out-of-range
+long conversion return `Err`.
+
+The native numeric limit is 1,000,000 coefficient bits and 1,000,000 input/output
+bytes; `BigDecimal` scales are limited to ±100,000. Parsing, decimal scale
+arithmetic, and fallible numeric operations return `Err` when these limits would
+be exceeded. Plain-returning `BigInt` growth operations report a fatal runtime
+diagnostic rather than truncating a result that crosses the bit limit. GMP's
+default allocator remains in use; native object headers and temporary byte
+buffers use the runtime allocator and are cleaned up explicitly.
+
 ## `Text` and UTF-8
 
 `Text` owns validated, length-delimited UTF-8. Embedded NUL is valid content. Text methods treat data as UTF-8 text; this is distinct from the arbitrary binary data held by `ByteBuffer`.

@@ -25,9 +25,21 @@ mod regex;
 mod concurrency;
 mod process;
 mod crypto;
+mod big_numbers;
 
 use crate::ast::MapKeyKind;
 use crate::ir::{self as t, NativeClass as C, Type};
+
+pub(crate) fn preamble(program: &t::Program) -> String {
+    if big_numbers::is_used(program) {
+        "/* nacre-link: gmp */\n#include <gmp.h>\n".to_owned()
+    } else {
+        String::new()
+    }
+}
+pub(crate) fn should_emit_prototype(program: &t::Program, function: &t::Function) -> bool {
+    !function.native.is_some_and(big_numbers::is_numeric_method) || big_numbers::is_used(program)
+}
 
 pub fn fields(program: &t::Program, class: C, class_id: usize) -> String {
     match class {
@@ -37,6 +49,7 @@ pub fn fields(program: &t::Program, class: C, class_id: usize) -> String {
         C::Map(_, _) => collections::map_fields(class_id),
         C::Set(key) => set::fields(program, key),
         C::Text => text::fields(),
+        C::BigInt | C::BigDecimal => big_numbers::fields(class),
         C::Arrays => arrays::utility_fields(),
         C::Encoding => io::fields(),
         C::ByteBuffer => buffer::fields(),
@@ -65,6 +78,7 @@ pub fn drop_fields(program: &t::Program, class: C, class_id: usize) -> String {
         C::Set(key) => set::drop_fields(program, key),
         C::Text => text::drop_fields(),
         C::Arrays => arrays::drop_utility_fields(),
+        C::BigInt | C::BigDecimal => big_numbers::drop_fields(program, class),
         C::ByteBuffer => buffer::drop_fields(),
         C::Encoding => io::drop_fields(),
         C::Compression | C::Checksums => io::drop_fields(),
@@ -137,6 +151,7 @@ fn append_body(program: &t::Program, out: &mut String, class: &t::Class, native:
         C::HttpRequest | C::HttpResponse => return,
         C::Compression | C::Checksums | C::Regex | C::RegexMatch | C::Console | C::Files | C::Args |
         C::Env | C::Command | C::Process | C::ProcessOutput => return,
+        C::BigInt | C::BigDecimal => return,
     };
     body = body.replace("@ID@", &class.id.to_string());
     let receiver = match native { C::Arrays | C::ByteBuffer | C::Encoding | C::Crypto => None, _ => Some(class.id) };
@@ -175,6 +190,7 @@ pub fn implementations(program: &t::Program) -> String {
         }
     }
     out.push_str(&compression::implementation(program));
+    out.push_str(&big_numbers::implementation(program));
     out.push_str(&regex::implementation(program));
     out.push_str(&concurrency::implementations(program));
     if let Some(console) = console::implementation(program) {

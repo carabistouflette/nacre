@@ -112,6 +112,7 @@ impl Tables {
                         return false;
                     }
                     Some(t::NativeClass::Set(_) | t::NativeClass::Text |
+                        t::NativeClass::BigInt | t::NativeClass::BigDecimal |
                         t::NativeClass::Regex | t::NativeClass::RegexMatch |
                         t::NativeClass::Arrays | t::NativeClass::ByteBuffer | t::NativeClass::Encoding |
                         t::NativeClass::Crypto |

@@ -8,6 +8,8 @@ enum NativeBuiltin {
     Map,
     Set,
     Comparator,
+    BigInt,
+    BigDecimal,
     Text,
     Arrays,
     ByteBuffer,
@@ -64,6 +66,8 @@ impl NativeBuiltin {
             },
             Self::Comparator => NativeClass::Comparator(Type::Named("T".to_owned())),
             Self::Text => NativeClass::Text,
+            Self::BigInt => NativeClass::BigInt,
+            Self::BigDecimal => NativeClass::BigDecimal,
             Self::Arrays => NativeClass::Arrays,
             Self::ByteBuffer => NativeClass::ByteBuffer,
             Self::Encoding => NativeClass::Encoding,
@@ -127,6 +131,14 @@ pub(super) const PRELUDE_UNITS: &[PreludeUnit] = &[
         builtins: &[
             Builtin { name: "Option", native: None },
             Builtin { name: "Result", native: None },
+        ],
+    },
+    PreludeUnit {
+        source: include_str!("../../stdlib/prelude/numeric.ncr"),
+        builtins: &[
+            Builtin { name: "BigInt", native: Some(NativeBuiltin::BigInt) },
+            Builtin { name: "BigDecimal", native: Some(NativeBuiltin::BigDecimal) },
+            Builtin { name: "RoundingMode", native: None },
         ],
     },
     PreludeUnit {

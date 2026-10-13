@@ -128,7 +128,7 @@ pub enum CallTarget { Function(usize), Println }
 #[derive(Debug, Clone, Copy)]
 pub enum NativeClass {
     List(Type), Array(Type), Deque(Type), Map(MapKeyKind, Type), Set(MapKeyKind),
-    Text, Regex, RegexMatch, Arrays, ByteBuffer, Encoding, Crypto, Path, File, Directory, FileInfo,
+    Text, BigInt, BigDecimal, Regex, RegexMatch, Arrays, ByteBuffer, Encoding, Crypto, Path, File, Directory, FileInfo,
     Console, Files, Args, Math, Random, Time, DateTime, Compression, Checksums, SocketAddress, TcpListener, TcpStream,
     Datagram, UdpSocket, HttpRequest, HttpResponse, Thread(Type), Mutex(Type), Guard(Type), Channel(Type),
     Sender(Type), Receiver(Type), Env, Command, Process, ProcessOutput
@@ -202,4 +202,12 @@ pub enum NativeMethod {
     ProcessWait, ProcessWaitFor, ProcessTerminate, ProcessKill,
     ProcessOutputStdout, ProcessOutputStderr, ProcessOutputStatus,
     ProcessOutputStdoutTruncated, ProcessOutputStderrTruncated, ProcessOutputTimedOut,
+    BigIntFromLong, BigIntParse, BigIntClone, BigIntToText, BigIntCompareTo, BigIntSignum,
+    BigIntBitLength, BigIntAdd, BigIntSubtract, BigIntMultiply, BigIntDivide, BigIntRemainder,
+    BigIntGcd, BigIntMod, BigIntPow, BigIntModPow, BigIntModInverse, BigIntNegate, BigIntAbs,
+    BigIntShiftLeft, BigIntShiftRight, BigIntBitAnd, BigIntBitOr, BigIntBitXor, BigIntBitNot,
+    BigIntTestBit, BigIntToLong,
+    BigDecimalParse, BigDecimalFromLong, BigDecimalClone, BigDecimalToText, BigDecimalScale,
+    BigDecimalCompareTo, BigDecimalSignum, BigDecimalAdd, BigDecimalSubtract, BigDecimalMultiply,
+    BigDecimalDivide, BigDecimalRescale, BigDecimalNegate, BigDecimalAbs, BigDecimalToLong,
 }
