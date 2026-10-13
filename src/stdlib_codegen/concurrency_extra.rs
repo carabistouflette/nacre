@@ -84,7 +84,7 @@ fn result_ok(program: &t::Program, function: &t::Function, value: &str) -> Strin
     format!("(ncr_obj_{id}){{ .tag = {}, .data.v{}.f0 = {value} }}", layout.ok_variant, layout.ok_variant)
 }
 
-fn result_error_literal(program: &t::Program, function: &t::Function, message: &str) -> String {
+fn result_error_literal(_program: &t::Program, function: &t::Function, message: &str) -> String {
     let id = result_id(function);
     format!("return ncr_result_error_{id}(\"{message}\", sizeof(\"{message}\") - 1, ncr_line, ncr_column);")
 }
@@ -330,7 +330,7 @@ static void *ncr_future_worker_{id}(void *raw) {{
 "#)
 }
 fn pool_helpers(program: &t::Program, id: usize, value: Type, unit: usize) -> String {
-    let (task, run, _) = task_info(program, value);
+    let (task, run, future_result) = task_info(program, value);
     let slot = program.functions[run].virtual_slot.expect("CancelableTask.run vtable slot");
     let future = future_class(program, value);
     let token = token_class(program);
@@ -468,7 +468,7 @@ static int ncr_pool_shutdown_{id}(struct ncr_mutex_control_{unit} *control, bool
     }}
     return 0;
 }}
- "#, future_result = task_info(program, value).2, task, token, unit, future, slot));
+ "#));
     out
 }
 

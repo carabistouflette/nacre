@@ -3,6 +3,11 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Empty thread pools no longer require a concrete task implementation merely to
+  instantiate their error types. Finite-construction analysis distinguishes an
+  opaque abstract interface from a recursive concrete ownership cycle. Concurrency
+  smoke checks cover owned Text result transfer, single consumption and cleanup
+  of an abandoned result, without changing ordinary affine ownership.
 - PCRE2 Regex rejects byte-wise `\C` patterns at compilation to preserve validated
   UTF-8 capture invariants. Each compiled Regex owns an immutable bounded match
   context reused across calls; execution data remains private to each call.

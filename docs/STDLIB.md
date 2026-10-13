@@ -1618,6 +1618,10 @@ same boolean timeout convention as `Semaphore.acquire`.
 `cloneHandle()` on `Semaphore`, `CountDownLatch`, and `Barrier` shares the
 control and its wait-condition node. A cloned `Condition<T>` shares its original
 condition node and retains the associated mutex control.
+Condition nodes live until the associated mutex control is released, not merely
+until an individual condition handle is dropped. Repeatedly creating conditions
+on a long-lived mutex therefore retains those nodes; reuse a condition handle
+when the wait predicate is unchanged.
 
 `Barrier.create` requires at least one party. Each generation returns a distinct
 arrival index. A timeout or zero-timeout arrival breaks only that generation and
@@ -1681,6 +1685,10 @@ uses the cancel-queued mode and can block for noncooperative running tasks.
 `Future<T>` and `ThreadPool<T>` require recursively sendable task and result
 payloads. Shared synchronizer lifetime uses the existing explicit control handles;
 ordinary objects are never implicitly cloned or garbage-collected.
+An empty pool can be created and shut down without a local `CancelableTask<T>`
+implementation. Abstract interfaces with no local implementers are opaque type
+boundaries, not ownership cycles; concrete interface implementations still
+participate in the finite-construction check.
 
 ## Environment and child processes
 

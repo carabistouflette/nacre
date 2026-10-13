@@ -679,8 +679,17 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
             let can_construct = if info.native.is_some() {
                 true
             } else if info.is_interface {
-                tables.classes.iter().enumerate().any(|(candidate, class)|
-                    productive[candidate] && class.implementations.iter().any(|(interface, _)| *interface == id))
+                // An abstract interface with no local implementers is an opaque
+                // boundary, not a recursive ownership cycle. Existing concrete
+                // implementers still participate in the productivity fixed point.
+                let mut implementers = tables.classes.iter().enumerate().filter_map(
+                    |(candidate, class)| class.implementations.iter()
+                        .any(|(interface, _)| *interface == id).then_some(candidate));
+                match implementers.next() {
+                    None => true,
+                    Some(candidate) => productive[candidate]
+                        || implementers.any(|candidate| productive[candidate]),
+                }
             } else {
                 info.variants.as_ref().map_or_else(
                     || info.fields.iter().all(|field| productive_type(field.ty)),
