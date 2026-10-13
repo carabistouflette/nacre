@@ -1037,6 +1037,7 @@ class BinaryReader {
     Result<int, Text> readInt16()
     Result<int, Text> readInt32()
     Result<long, Text> readInt64()
+    Result<double, Text> readFloat32()
     Result<double, Text> readDouble()
     Result<ByteBuffer, Text> readBytes(long length)
     Result<Text, Text> readUtf8(long length)
@@ -1048,6 +1049,7 @@ class BinaryWriter {
     Result<Unit, Text> writeInt16(int value)
     Result<Unit, Text> writeInt32(int value)
     Result<Unit, Text> writeInt64(long value)
+    Result<Unit, Text> writeFloat32(double value)
     Result<Unit, Text> writeDouble(double value)
     Result<Unit, Text> writeBytes(borrow ByteBuffer source)
     Result<Unit, Text> writeUtf8(borrow Text value)
@@ -1055,6 +1057,7 @@ class BinaryWriter {
     static ByteBuffer finish(BinaryWriter writer)
 }
 static Result<long, Text> Streams.copy(borrow mut ByteSource source, borrow mut ByteSink sink, long maxBytes, long bufferSize)
+static Result<ByteBuffer, Text> Streams.readUpTo(borrow mut ByteSource source, long maxBytes, long bufferSize)
 static Result<ByteBuffer, Text> Streams.readAll(borrow mut ByteSource source, long maxBytes, long bufferSize)
 static Result<Unit, Text> Streams.writeAll(borrow mut ByteSink sink, borrow ByteBuffer source)
 ```
@@ -1064,10 +1067,12 @@ static Result<Unit, Text> Streams.writeAll(borrow mut ByteSink sink, borrow Byte
 loops over partial writes, rejects invalid counts and zero-progress writes, and
 uses positive `bufferSize` to bound each transfer chunk. `copy` consumes at most
 `maxBytes`, stops at EOF, and flushes the sink (including when the bound is zero).
-`readAll` consumes at most `maxBytes` and returns the prefix if it reaches that
-limit without probing or consuming an extra byte. `writeAll` loops until the
-complete buffer is sent, then flushes. These utilities do not roll back source
-consumption or already-written output when an error occurs.
+`readUpTo` consumes at most `maxBytes` and returns the prefix at the limit
+without probing for another byte. `readAll` succeeds only when it reaches EOF.
+After reading `maxBytes` bytes it probes one extra byte; if present, that byte is
+consumed and `Err` is returned. This also applies when `maxBytes` is zero.
+`writeAll` loops until the complete buffer is sent, then flushes. Errors do not
+roll back source consumption or already-written output.
 
 `BinaryReader` uniquely owns its input buffer; `BinaryWriter` uniquely owns the
 buffer it builds. Both constructors require an explicit byte order. Reads of
@@ -1075,6 +1080,9 @@ fixed-width values and `readBytes` leave the cursor unchanged if the requested
 data is insufficient; `readUtf8` is strict UTF-8 and likewise preserves the
 cursor on insufficient input or invalid encoding. `readInt16` returns a signed
 `int`. Binary doubles use IEEE-754 binary64 bits copied with `memcpy`.
+`readFloat32` widens an IEEE-754 binary32 value to `double`. `writeFloat32`
+encodes `double` values as binary32 and rejects finite magnitudes above the
+largest finite binary32 value without advancing the writer.
 `writeInt16` accepts only the signed 16-bit range and leaves the writer unchanged
 when out of range. `bytes()` is a borrow tied to the writer; `finish` consumes the
 writer and transfers its exact buffer without copying.

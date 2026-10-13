@@ -90,10 +90,12 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   preserves ordinary call-statement success cleanup and propagates owned errors.
   FIFO write failures preserve the caller's signal mask and pending SIGPIPE state.
 - BinaryReader and BinaryWriter are unique-owned, choose byte order explicitly,
-  preserve reader cursors on incomplete/invalid UTF-8 input, and transfer the
-  writer's exact buffer on finish. ByteSource/ByteSink are allocation-free
-  interfaces implemented by File and TcpStream; bounded Streams loops handle
-  partial transfers, reject zero progress, and flush according to sink semantics.
+  preserve reader cursors on incomplete/invalid UTF-8 input, encode binary32 and
+  binary64 values, and transfer the writer's exact buffer on finish. ByteSource/
+  ByteSink are allocation-free interfaces implemented by File and TcpStream.
+  Streams distinguishes prefix-returning `readUpTo` from EOF-enforcing `readAll`,
+  which probes and consumes one excess byte before returning `Err`; bounded loops
+  handle partial transfers, reject zero progress, and flush according to the sink.
 
 - Linux networking adds immutable IPv4/IPv6 `SocketAddress`, owned TCP listeners/streams,
   UDP sockets and datagrams with poll-based deadlines and direct ByteBuffer appends.
