@@ -7,10 +7,6 @@ import argparse
 import json
 import os
 import re
-try:
-    import resource
-except ImportError:  # Windows has no wait4/resource support for per-child RSS.
-    resource = None
 import shutil
 import signal
 import statistics
@@ -26,10 +22,10 @@ ROOT = Path(__file__).resolve().parent.parent
 BENCHMARK_DIR = ROOT / "benchmarks"
 NACRE_SOURCE = BENCHMARK_DIR / "nacre_collections.ncr"
 RUST_SOURCE = BENCHMARK_DIR / "rust_collections.rs"
+SUPERVISOR_SOURCE = BENCHMARK_DIR / "wait4_supervisor.c"
 MAX_SIZE = 40_000
 MAX_EMPTY_QUERY_BYTES = 65_536
 MAX_EMPTY_QUERY_REPEATS = 4_096
-WAIT_POLL_INTERVAL_SECONDS = 0.0001
 
 
 @dataclass(frozen=True)
@@ -41,91 +37,92 @@ class ChildResult:
     peak_rss_bytes: int
 
 
-def rss_bytes(usage: object) -> int:
-    if resource is None:
-        raise RuntimeError("per-child peak RSS requires Python's resource module")
-    maximum = int(getattr(usage, "ru_maxrss"))
-    if sys.platform.startswith("linux"):
-        return maximum * 1024
-    if sys.platform == "darwin":
-        return maximum
-    raise RuntimeError(
-        "per-child ru_maxrss units are supported on Linux and macOS only"
-    )
-
-
-def _exit_code(status: int) -> int:
-    if os.WIFEXITED(status):
-        return os.WEXITSTATUS(status)
-    if os.WIFSIGNALED(status):
-        return -os.WTERMSIG(status)
-    return 1
-
-
 def _read_file(file: BinaryIO) -> bytes:
     file.seek(0)
     return file.read()
 
 
+def parse_supervisor_report(report: bytes) -> dict[str, int]:
+    try:
+        tokens = report.decode("ascii").split()
+    except UnicodeDecodeError as error:
+        raise RuntimeError("measurement supervisor returned non-ASCII metadata") from error
+    if not tokens or tokens[0] != "BENCH_CHILD":
+        raise RuntimeError("measurement supervisor returned no child metadata")
+    fields: dict[str, int] = {}
+    for token in tokens[1:]:
+        name, separator, value = token.partition("=")
+        if not separator or name in fields:
+            raise RuntimeError("measurement supervisor returned malformed metadata")
+        try:
+            fields[name] = int(value)
+        except ValueError as error:
+            raise RuntimeError("measurement supervisor returned malformed metadata") from error
+    required = {"elapsed_ns", "peak_rss_bytes", "exit_code", "signal"}
+    if not required.issubset(fields) or fields["elapsed_ns"] < 0 or fields["peak_rss_bytes"] < 0:
+        raise RuntimeError("measurement supervisor returned incomplete metadata")
+    return fields
+
+
 def run_child(
+    supervisor: Path,
     executable: Path,
     arguments: Sequence[str],
     timeout_seconds: float,
 ) -> ChildResult:
-    """Run one native child; wait4 supplies its individual peak RSS."""
-    if not hasattr(os, "wait4"):
-        raise RuntimeError("this runner needs POSIX os.wait4 for per-child peak RSS")
-
+    """Run a fresh supervisor that wait4s only the exec'd benchmark process."""
+    read_fd, write_fd = os.pipe()
     with tempfile.TemporaryFile() as stdout_file, tempfile.TemporaryFile() as stderr_file:
         started = time.perf_counter()
-        process = subprocess.Popen(
-            [str(executable), *arguments],
-            cwd=ROOT,
-            stdout=stdout_file,
-            stderr=stderr_file,
-            start_new_session=True,
-        )
-        deadline = started + timeout_seconds
-        timed_out = False
-        while True:
+        try:
+            process = subprocess.Popen(
+                [str(supervisor), str(write_fd), str(executable), *arguments],
+                cwd=ROOT,
+                stdout=stdout_file,
+                stderr=stderr_file,
+                pass_fds=(write_fd,),
+                start_new_session=True,
+            )
+        except BaseException:
+            os.close(read_fd)
+            os.close(write_fd)
+            raise
+        os.close(write_fd)
+        remaining = timeout_seconds - (time.perf_counter() - started)
+        try:
+            process.wait(timeout=max(remaining, 0.0))
+        except subprocess.TimeoutExpired as error:
             try:
-                pid, status, usage = os.wait4(process.pid, os.WNOHANG)
-            except InterruptedError:
-                continue
-            if pid == process.pid:
-                elapsed = time.perf_counter() - started
-                process.returncode = _exit_code(status)
-                break
-            if time.perf_counter() >= deadline:
-                timed_out = True
-                try:
-                    os.killpg(process.pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
-                while True:
-                    try:
-                        pid, status, usage = os.wait4(process.pid, 0)
-                        if pid == process.pid:
-                            break
-                    except InterruptedError:
-                        continue
-                elapsed = time.perf_counter() - started
-                process.returncode = _exit_code(status)
-                break
-            time.sleep(WAIT_POLL_INTERVAL_SECONDS)
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            process.wait()
+            os.close(read_fd)
+            raise RuntimeError(
+                f"child exceeded its {timeout_seconds:g}s deadline: {executable.name}"
+            ) from error
 
-        result = ChildResult(
-            returncode=process.returncode,
+        if process.returncode != 0:
+            stderr = _read_file(stderr_file)
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            os.close(read_fd)
+            raise RuntimeError(
+                "measurement supervisor failed: "
+                f"{stderr.decode('utf-8', errors='replace')}"
+            )
+
+        with os.fdopen(read_fd, "rb") as report_file:
+            report = parse_supervisor_report(report_file.read(1024))
+        return ChildResult(
+            returncode=report["exit_code"],
             stdout=_read_file(stdout_file),
             stderr=_read_file(stderr_file),
-            elapsed_seconds=elapsed,
-            peak_rss_bytes=rss_bytes(usage),
+            elapsed_seconds=report["elapsed_ns"] / 1_000_000_000,
+            peak_rss_bytes=report["peak_rss_bytes"],
         )
-    if timed_out:
-        raise RuntimeError(
-            f"child exceeded its {timeout_seconds:g}s deadline: {executable.name}"
-        )
-    return result
 
 
 def command_output(
@@ -177,7 +174,9 @@ def version_line(executable: str, timeout_seconds: float) -> str:
     )
 
 
-def find_c_compiler(environment: dict[str, str], timeout_seconds: float) -> tuple[str, str]:
+def find_c_compiler(
+    environment: dict[str, str], timeout_seconds: float
+) -> tuple[str, str, str]:
     selected = environment.get("NACRE_CC") or environment.get("CC")
     if selected is None:
         selected = next(
@@ -190,7 +189,24 @@ def find_c_compiler(environment: dict[str, str], timeout_seconds: float) -> tupl
         version = version_line(selected, timeout_seconds)
     except RuntimeError as error:
         raise RuntimeError(f"selected C compiler is not runnable: {Path(selected).name}") from error
-    return Path(selected).name, version
+    return Path(selected).name, version, selected
+
+
+def supervisor_build(compiler: str, output: Path, timeout_seconds: float) -> None:
+    checked_command(
+        [
+            compiler,
+            "-O2",
+            "-std=c11",
+            "-Wall",
+            "-Wextra",
+            "-pedantic",
+            str(SUPERVISOR_SOURCE),
+            "-o",
+            str(output),
+        ],
+        timeout_seconds,
+    )
 
 
 def native_build(
@@ -379,13 +395,13 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    if os.name != "posix" or resource is None or not hasattr(os, "wait4"):
-        raise RuntimeError("per-child peak RSS requires Python resource and POSIX os.wait4")
+    if os.name != "posix":
+        raise RuntimeError("the per-child RSS supervisor requires POSIX process APIs")
     if not (sys.platform.startswith("linux") or sys.platform == "darwin"):
-        raise RuntimeError("ru_maxrss normalization is supported on Linux and macOS only")
+        raise RuntimeError("the wait4 supervisor supports Linux and macOS only")
 
     environment = os.environ.copy()
-    c_compiler_name, c_compiler_version = find_c_compiler(
+    c_compiler_name, c_compiler_version, c_compiler = find_c_compiler(
         environment, args.deadline_seconds
     )
     rustc = shutil.which("rustc")
@@ -425,6 +441,8 @@ def main() -> int:
         temporary_dir = Path(temporary)
         nacre_binary = temporary_dir / ("nacre-bench.exe" if os.name == "nt" else "nacre-bench")
         rust_binary = temporary_dir / ("rust-bench.exe" if os.name == "nt" else "rust-bench")
+        supervisor = temporary_dir / "wait4-supervisor"
+        supervisor_build(c_compiler, supervisor, args.deadline_seconds)
         native_build(nacre, nacre_binary, args.deadline_seconds, memory_stats=False)
         rust_build(rustc, rust_binary, args.deadline_seconds, allocation_stats=False)
 
@@ -469,6 +487,7 @@ def main() -> int:
         for kernel in kernels:
             for implementation in ("nacre", "rust"):
                 result = run_child(
+                    supervisor,
                     binaries[implementation],
                     arguments_by_kernel[kernel],
                     args.deadline_seconds,
@@ -495,6 +514,7 @@ def main() -> int:
                 trial_outputs: dict[str, bytes] = {}
                 for implementation in order:
                     result = run_child(
+                        supervisor,
                         binaries[implementation],
                         arguments_by_kernel[kernel],
                         args.deadline_seconds,
@@ -558,6 +578,7 @@ def main() -> int:
                 outputs: dict[str, bytes] = {}
                 for implementation in ("nacre", "rust"):
                     result = run_child(
+                        supervisor,
                         stats_binaries[implementation],
                         arguments_by_kernel[kernel],
                         args.deadline_seconds,
@@ -594,6 +615,13 @@ def main() -> int:
             "-Wno-unused-variable",
             "-Wno-unused-parameter",
             "-Wno-unused-but-set-variable",
+        ],
+        "measurement_supervisor_c": [
+            "-O2",
+            "-std=c11",
+            "-Wall",
+            "-Wextra",
+            "-pedantic",
         ],
         "nacre_allocation_run_extra": ["-DNACRE_MEMORY_STATS"],
         "rust_reference": [
@@ -655,16 +683,22 @@ def main() -> int:
         },
         "measurement": {
             "elapsed_seconds": (
-                "perf_counter wall time from immediately before Popen through wait4 reap; "
-                "includes process startup, argument parsing, kernel, checksum output, "
-                "and shutdown; excludes compilation."
+                "CLOCK_MONOTONIC in a fresh native supervisor from before target fork/exec "
+                "through wait4 reap; includes target startup, argument parsing, kernel, "
+                "checksum output, and shutdown; excludes Python/supervisor startup and compilation."
             ),
             "peak_rss_bytes": (
-                "Per-child wait4 RUSAGE_CHILDREN ru_maxrss, normalized to bytes "
-                "(Linux KiB x 1024; macOS bytes); includes setup and output."
+                "wait4 RUSAGE_CHILDREN ru_maxrss for the direct child forked from a fresh "
+                "small supervisor, reported through a private pipe; Linux KiB x 1024, "
+                "macOS bytes. The Python runner's address space is not inherited; the "
+                "high-water mark includes target startup, arguments, setup, and output."
             ),
             "timed_printing": "No printing occurs inside collection/query loops; checksums print after each kernel.",
-            "wait4_poll_interval_seconds": WAIT_POLL_INTERVAL_SECONDS,
+            "rss_isolation": (
+                "A fresh native supervisor forks and execs the target, wait4-reaps that "
+                "direct child, and sends elapsed/RSS metadata over a private pipe; the "
+                "Python runner's resident set is not part of the measured child's image."
+            ),
             "checksum_validation": (
                 "Both actual programs' stdout is checked against independently calculated "
                 "expected lines before warmups and timed samples."
@@ -679,12 +713,16 @@ def main() -> int:
                 "can include process-global runtime allocations; it is not a leak verdict."
             ),
             "deadline_seconds_per_child_or_build": args.deadline_seconds,
+            "timeout_policy": (
+                "Builds and runs have finite deadlines; a timed-out child kills the "
+                "supervisor process group, including the benchmark target."
+            ),
         },
         "comparison_limits": [
-            "Elapsed samples are process-level; startup and argument parsing can dominate the smallest kernels.",
+            "Elapsed samples are target process-level; target startup, arguments, setup, and output remain included, so the smallest kernels can still be startup-dominated.",
             "Hash inputs/mixers match, but Nacre Map and Rust HashMap retain distinct bucket, growth, and probing policies.",
-            "Peak RSS includes process startup, arguments, setup, and output; it is not kernel-only memory.",
-            "Allocation scopes differ: Nacre counters cover ncr_allocate/ncr_deallocate, Rust covers Rust GlobalAlloc calls, and both include process setup.",
+            "Peak RSS is direct-child ru_maxrss after fork/exec from the fresh supervisor; the Python runner's address space is excluded, while target startup, arguments, setup, and output remain included.",
+            "Allocation scopes differ: Nacre counters cover ncr_allocate/ncr_deallocate, Rust covers Rust GlobalAlloc calls, and both include target process setup.",
         ],
         "configuration": {
             "size": args.size,
