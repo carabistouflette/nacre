@@ -71,8 +71,8 @@ fn vtable(program: &t::Program, concrete: usize, interface: usize) -> String {
 pub(super) fn fields(program: &t::Program, class: C, _class_id: usize) -> String {
     match class {
         C::ListIterator(element) => format!(
-            "    {} *items;\n    int32_t length;\n    int32_t cursor;\n",
-            ctype(program, element),
+            "    {} *items;\n    void *state;\n    int32_t length;\n    int32_t cursor;\n    int32_t head;\n    int32_t capacity;\n    void (*ncr_next_fn)(void *, int32_t *, int32_t, {} *, bool *);\n    void (*ncr_drop_fn)(void *, int32_t, int32_t);\n",
+            ctype(program, element), ctype(program, element),
         ),
         C::MapIterator(_, _) | C::FilterIterator(_) => String::new(),
         C::TakeIterator(_) | C::SkipIterator(_) => "    int64_t remaining;\n".to_owned(),
@@ -84,8 +84,8 @@ pub(super) fn fields(program: &t::Program, class: C, _class_id: usize) -> String
 pub(super) fn drop_fields(class: C) -> String {
     match class {
         C::ListIterator(element) => format!(
-            "    for (int32_t index = p->cursor; index < p->length; ++index) {{\n        {}\n    }}\n    ncr_deallocate(p->items);\n",
-            collections::drop_element(element, "p->items[index]"),
+            "    if (p->ncr_drop_fn != NULL) {{\n        p->ncr_drop_fn(p->state, p->cursor, p->length);\n    }} else {{\n        for (int32_t index = p->cursor; index < p->length; ++index) {{\n            int32_t physical = index;\n            if (p->capacity > 0) {{\n                int32_t until_end = p->capacity - p->head;\n                physical = index < until_end ? p->head + index : index - until_end;\n            }}\n            {}\n        }}\n        ncr_deallocate(p->items);\n    }}\n",
+            collections::drop_element(element, "p->items[physical]"),
         ),
         C::MapIterator(_, _) | C::FilterIterator(_) | C::TakeIterator(_) |
         C::SkipIterator(_) | C::Iterators(_) => String::new(),
@@ -93,21 +93,62 @@ pub(super) fn drop_fields(class: C) -> String {
     }
 }
 
+pub(super) fn drain_function(
+    program: &t::Program,
+    source_class: usize,
+    method: M,
+    element: Type,
+    setup: &str,
+) -> String {
+    let Some(drain) = class_method(program, source_class, method) else {
+        return String::new();
+    };
+    let Type::Object(interface) = drain.return_type else {
+        unreachable!("container drain returns Iterator<T>");
+    };
+    let iterator = concrete_class(program, C::ListIterator(element));
+    assert_eq!(implemented_iterator(program, iterator, element), interface,
+        "ListIterator<T> implements the drained Iterator<T>");
+    format!(
+        "static {} ncr_fn_{}(ncr_obj_{} *p, size_t line, size_t column) {{\n    ncr_obj_{} *iterator = ncr_allocate(sizeof(ncr_obj_{}), line, column);\n    iterator->items = NULL;\n    iterator->state = NULL;\n    iterator->length = 0;\n    iterator->cursor = 0;\n    iterator->head = 0;\n    iterator->capacity = 0;\n    iterator->ncr_next_fn = NULL;\n    iterator->ncr_drop_fn = NULL;\n{}\n    return ({}){{ .data = iterator, .vtable = {} }};\n}}\n",
+        ctype(program, drain.return_type), drain.id, source_class,
+        iterator, iterator, indent_setup(setup),
+        ctype(program, drain.return_type), vtable(program, iterator, interface),
+    )
+}
+
+fn indent_setup(setup: &str) -> String {
+    setup.lines().map(|line| format!("    {line}\n")).collect()
+}
+pub(super) fn callback_names(method_id: usize) -> (String, String) {
+    (format!("ncr_drain_next_{method_id}"), format!("ncr_drain_drop_{method_id}"))
+}
+pub(super) fn drain_callbacks(
+    program: &t::Program,
+    method_id: usize,
+    element: Type,
+    next_body: &str,
+    drop_body: &str,
+) -> String {
+    let (next, drop) = callback_names(method_id);
+    format!(
+        "static void {next}(void *raw, int32_t *cursor, int32_t length, {} *value, bool *available) {{\n{next_body}\n}}\nstatic void {drop}(void *raw, int32_t cursor, int32_t length) {{\n{drop_body}\n}}\n",
+        ctype(program, element),
+    )
+}
+
 pub(super) fn list_implementation(program: &t::Program, class_id: usize, element: Type) -> String {
     let mut output = String::new();
-    if let Some(drain) = class_method(program, class_id, M::ListDrain) {
-        let Type::Object(interface) = drain.return_type else {
-            unreachable!("List.drain returns the Iterator<T> interface")
-        };
-        let iterator = concrete_class(program, C::ListIterator(element));
-        assert_eq!(implemented_iterator(program, iterator, element), interface,
-            "ListIterator<T> implements List.drain's Iterator<T>");
-        output.push_str(&format!(
-            "static {} ncr_fn_{}(ncr_obj_{} *p, size_t line, size_t column) {{\n    ncr_obj_{} *iterator = ncr_allocate(sizeof(ncr_obj_{}), line, column);\n    iterator->items = p->items;\n    iterator->length = p->length;\n    iterator->cursor = 0;\n    p->items = NULL;\n    p->length = 0;\n    p->capacity = 0;\n    return ({}){{ .data = iterator, .vtable = {} }};\n}}\n",
-            ctype(program, drain.return_type), drain.id, class_id, iterator, iterator,
-            ctype(program, drain.return_type), vtable(program, iterator, interface),
+    if class_method(program, class_id, M::ListDrain).is_some() {
+        output.push_str(&drain_function(
+            program,
+            class_id,
+            M::ListDrain,
+            element,
+            "iterator->items = p->items;\niterator->length = p->length;\np->items = NULL;\np->length = 0;\np->capacity = 0;",
         ));
     }
+
     if let Some(collect) = class_method(program, class_id, M::ListCollect) {
         let input_type = collect.params.first().expect("List.collect input iterator").1;
         let Type::Object(interface) = input_type else {
@@ -136,8 +177,11 @@ fn list_iterator_next(program: &t::Program, class_id: usize, element: Type) -> S
     let function = required_method(program, class_id, M::ListIteratorNext);
     let (none_tag, some_tag) = option_tags(program, function, element);
     format!(
-        "static {} ncr_fn_{}(ncr_obj_{} *p, size_t line, size_t column) {{\n    (void)line; (void)column;\n    if (p->cursor >= p->length) {{ return ({}){{ .tag = {} }}; }}\n    int32_t index = p->cursor++;\n    {} value = p->items[index];\n    p->items[index] = {};\n    return ({}){{ .tag = {}, .data.v{}.f0 = value }};\n}}\n",
+        "static {} ncr_fn_{}(ncr_obj_{} *p, size_t line, size_t column) {{\n    (void)line; (void)column;\n    if (p->ncr_next_fn != NULL) {{\n        {} value = {};\n        bool available = false;\n        p->ncr_next_fn(p->state, &p->cursor, p->length, &value, &available);\n        if (!available) {{ return ({}){{ .tag = {} }}; }}\n        return ({}){{ .tag = {}, .data.v{}.f0 = value }};\n    }}\n    if (p->cursor >= p->length) {{ return ({}){{ .tag = {} }}; }}\n    int32_t index = p->cursor++;\n    int32_t physical = index;\n    if (p->capacity > 0) {{\n        int32_t until_end = p->capacity - p->head;\n        physical = index < until_end ? p->head + index : index - until_end;\n    }}\n    {} value = p->items[physical];\n    p->items[physical] = {};\n    return ({}){{ .tag = {}, .data.v{}.f0 = value }};\n}}\n",
         ctype(program, function.return_type), function.id, class_id,
+        ctype(program, element), collections::zero(program, element),
+        ctype(program, function.return_type), none_tag,
+        ctype(program, function.return_type), some_tag, some_tag,
         ctype(program, function.return_type), none_tag,
         ctype(program, element), collections::zero(program, element),
         ctype(program, function.return_type), some_tag, some_tag,

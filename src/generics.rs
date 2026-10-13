@@ -278,6 +278,7 @@ impl Expander {
                 }
                 if value.is_copy() {
                     rewrite_borrowed_return_to_value(&mut class.methods, "valueAt", "V");
+                    class.methods.retain(|method| method.name != "valueAtMut");
                 }
                 prune_map_value_methods(class, value);
             }
@@ -291,6 +292,7 @@ impl Expander {
                     for method_name in ["contains", "remove"] {
                         rewrite_borrowed_type_parameter_to_value(&mut class.methods, method_name, 0, "T");
                     }
+                    rewrite_borrowed_return_to_value(&mut class.methods, "keyAt", "T");
                 }
                 self.ty(&Type::Applied {
                     name: "OrderedMap".to_owned(),
@@ -304,9 +306,7 @@ impl Expander {
                     args: vec![element.clone()],
                 }, env, class.span, 0)?;
                 if element.is_copy() {
-                    class.methods.retain(|method| method.name != "getRef");
-                } else {
-                    class.methods.retain(|method| !matches!(method.name.as_str(), "peek" | "tryPeek"));
+                    rewrite_borrowed_return_to_value(&mut class.methods, "valueAt", "T");
                 }
             }
             Some(a::NativeClass::ListIterator(element))
@@ -327,6 +327,14 @@ impl Expander {
             Some(a::NativeClass::MapIterator(input, output)) => {
                 *input = self.ty(input, env, class.span, 0)?;
                 *output = self.ty(output, env, class.span, 0)?;
+            }
+            Some(a::NativeClass::Iterator(element)) => {
+                *element = self.ty(element, env, class.span, 0)?;
+                self.ty(&Type::Applied {
+                    name: "ListIterator".to_owned(),
+                    args: vec![element.clone()],
+                }, env, class.span, 0)?;
+                erase_native_interface_marker = true;
             }
             Some(a::NativeClass::Predicate(element)) => {
                 *element = self.ty(element, env, class.span, 0)?;

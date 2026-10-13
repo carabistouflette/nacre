@@ -197,9 +197,9 @@ pub(crate) fn map_capacity_expression(map: &str) -> String {
 }
 
 pub(crate) fn map_slot_expression(
-    program: &t::Program, map: &str, index: &str, kind: t::MapSlotKind, value_type: Type,
+    program: &t::Program, map_class: usize, map: &str, index: &str, kind: t::MapSlotKind, value_type: Type,
 ) -> String {
-    collections::map_slot_expression(program, map, index, kind, value_type)
+    collections::map_slot_expression(program, map_class, map, index, kind, value_type)
 }
 
 fn append_body(program: &t::Program, out: &mut String, class: &t::Class, native: C) {

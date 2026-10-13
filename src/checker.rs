@@ -1039,13 +1039,29 @@ impl Checker<'_> {
         let value = if place.is_none() { Some(self.expression(collection)?) } else { None };
         let source_type = if let Some(place) = &place { place.ty } else { value.as_ref().unwrap().ty };
         let source_class = source_type.object_class()
-            .ok_or_else(|| Diagnostic::new(collection.span, "collection must be a named or borrowed List, Array, Deque, Map, or Set"))?;
-        match self.tables.classes[source_class].native {
+            .ok_or_else(|| Diagnostic::new(collection.span,
+                "collection must be a named or borrowed List, Array, Deque, Map, Set, OrderedMap, OrderedSet, PriorityQueue, or Iterator"))?;
+        if let Some(iterator) = self.iterator_info(source_class) {
+            if key.is_some() {
+                return Err(Diagnostic::new(header_span, "Iterator<T> allows only one owned or borrowed item binding"));
+            }
+            return self.for_each_iterator(stmt, place, value, source_type, source_class, iterator);
+        }
+        let native = self.tables.classes[source_class].native;
+        match native {
             Some(t::NativeClass::Map { .. }) => {
                 if key.is_none() {
                     return Err(Diagnostic::new(header_span, "Map<K, V> requires two typed bindings: key and value"));
                 }
                 return self.for_each_map(stmt, place, value, source_type, source_class);
+            }
+            Some(t::NativeClass::OrderedMap(map_key, map_value)) => {
+                if key.is_none() {
+                    return Err(Diagnostic::new(header_span, "OrderedMap<K, V> requires two typed bindings: key and value"));
+                }
+                return self.for_each_ordered_map(
+                    stmt, place, value, source_type, source_class, map_key, map_value,
+                );
             }
             Some(t::NativeClass::Set { key: set_key, .. }) => {
                 if key.is_some() {
@@ -1053,23 +1069,35 @@ impl Checker<'_> {
                 }
                 return self.for_each_set(stmt, place, value, source_type, source_class, set_key);
             }
-            Some(t::NativeClass::List(_) | t::NativeClass::Array(_) | t::NativeClass::Deque(_)) => {
+            Some(t::NativeClass::List(_) | t::NativeClass::Array(_) | t::NativeClass::Deque(_) |
+                 t::NativeClass::OrderedSet(_) | t::NativeClass::PriorityQueue(_)) => {
                 if key.is_some() {
                     return Err(Diagnostic::new(header_span, "indexed collections allow only one element binding"));
                 }
             }
-            _ => return Err(Diagnostic::new(collection.span, "for-each collection must be a List, Array, Deque, Map, or Set")),
+            _ => return Err(Diagnostic::new(collection.span,
+                "for-each collection must be a List, Array, Deque, Map, Set, OrderedMap, OrderedSet, PriorityQueue, or Iterator")),
         }
-        let collection_class = source_class;
-        let element_type = match self.tables.classes[collection_class].native {
-            Some(t::NativeClass::List(element) | t::NativeClass::Array(element) | t::NativeClass::Deque(element)) => element,
+        let readonly_slot = match native {
+            Some(t::NativeClass::OrderedSet(_)) => Some(t::MapSlotKind::Key),
+            Some(t::NativeClass::PriorityQueue(_)) => Some(t::MapSlotKind::Value),
+            _ => None,
+        };
+        let element_type = match native {
+            Some(t::NativeClass::List(element) | t::NativeClass::Array(element) |
+                 t::NativeClass::Deque(element) | t::NativeClass::OrderedSet(element) |
+                 t::NativeClass::PriorityQueue(element)) => element,
             _ => unreachable!("checked indexed collection traversal type"),
         };
-        let (binding_type, exclusive) = self.traversal_binding(header, element_type, header_span)?;
+        let (binding_type, exclusive) = if readonly_slot.is_some() {
+            (self.readonly_traversal_binding(header, element_type, header_span)?, false)
+        } else {
+            self.traversal_binding(header, element_type, header_span)?
+        };
         let getter = if binding_type.is_borrow() {
             if exclusive { "getMut" } else { "getRef" }
         } else { "get" };
-        let collection_type = Type::Borrow { class: collection_class, mutable: exclusive };
+        let collection_type = Type::Borrow { class: source_class, mutable: exclusive };
         let frozen_value = self.traversal_receiver(place, value, source_type, collection_type, collection.span)?;
 
         self.scopes.push(HashMap::new());
@@ -1094,29 +1122,320 @@ impl Checker<'_> {
             let condition = synthetic_expr(a::ExprKind::Binary {
                 op: B::Lt, left: Box::new(cursor), right: Box::new(size),
             }, span);
-            let element_index = synthetic_expr(a::ExprKind::Var(cursor_name.clone()), span);
-
-            let element_receiver = synthetic_expr(a::ExprKind::Var(collection_name), span);
-            let element_value = synthetic_expr(a::ExprKind::MethodCall {
-                receiver: Box::new(element_receiver), name: getter.to_owned(), args: vec![element_index],
-            }, collection.span);
-            let element = a::Stmt { kind: a::StmtKind::Let {
-                ty: header.clone(), name: name.to_owned(), value: Some(element_value),
-            }, span: header_span };
-            let increment = synthetic_expr(a::ExprKind::Binary {
-                op: B::Add,
-                left: Box::new(synthetic_expr(a::ExprKind::Var(cursor_name.clone()), span)),
-                right: Box::new(synthetic_expr(a::ExprKind::Int(1), span)),
-            }, span);
-            let advance = a::Stmt { kind: a::StmtKind::Assign {
-                target: synthetic_expr(a::ExprKind::Var(cursor_name), span), value: increment,
-            }, span };
             let condition = self.expression(&condition)?;
             self.require(Type::Boolean, condition.ty, condition.span)?;
+            if let Some(slot_kind) = readonly_slot {
+                let item_id = self.declare(name, binding_type, header_span)?;
+                let collection_place = Place { kind: PlaceKind::Var(collection_id), ty: collection_type };
+                let cursor_place = Place { kind: PlaceKind::Var(cursor_id), ty: Type::Int };
+                let read_cursor = || t::Expr {
+                    kind: t::ExprKind::Read(cursor_place.clone()), ty: Type::Int, span,
+                };
+                let element = t::Stmt::Let {
+                    id: item_id,
+                    ty: binding_type,
+                    value: Some(t::Expr {
+                        kind: t::ExprKind::MapSlot {
+                            map: collection_place,
+                            index: Box::new(read_cursor()),
+                            kind: slot_kind,
+                            pair: None,
+                        },
+                        ty: binding_type, span: collection.span,
+                    }),
+                };
+                let advance = t::Stmt::Assign {
+                    target: cursor_place.clone(),
+                    value: t::Expr {
+                        kind: t::ExprKind::Binary {
+                            op: B::Add,
+                            left: Box::new(read_cursor()),
+                            right: Box::new(t::Expr { kind: t::ExprKind::Int(1), ty: Type::Int, span }),
+                        },
+                        ty: Type::Int, span,
+                    },
+                };
+                self.loop_depth += 1;
+                let user_body = self.block(body);
+                self.loop_depth -= 1;
+                let (user_body, _) = user_body?;
+                let mut loop_body = vec![element, advance];
+                loop_body.extend(user_body);
+                lowered.push(t::Stmt::While { condition, body: loop_body });
+            } else {
+                let element_index = synthetic_expr(a::ExprKind::Var(cursor_name.clone()), span);
+                let element_receiver = synthetic_expr(a::ExprKind::Var(collection_name), span);
+                let element_value = synthetic_expr(a::ExprKind::MethodCall {
+                    receiver: Box::new(element_receiver), name: getter.to_owned(), args: vec![element_index],
+                }, collection.span);
+                let element = a::Stmt { kind: a::StmtKind::Let {
+                    ty: header.clone(), name: name.to_owned(), value: Some(element_value),
+                }, span: header_span };
+                let increment = synthetic_expr(a::ExprKind::Binary {
+                    op: B::Add,
+                    left: Box::new(synthetic_expr(a::ExprKind::Var(cursor_name.clone()), span)),
+                    right: Box::new(synthetic_expr(a::ExprKind::Int(1), span)),
+                }, span);
+                let advance = a::Stmt { kind: a::StmtKind::Assign {
+                    target: synthetic_expr(a::ExprKind::Var(cursor_name), span), value: increment,
+                }, span };
+                self.loop_depth += 1;
+                let checked_body = self.block_with_prefix(&[element, advance], body);
+                self.loop_depth -= 1;
+                lowered.push(t::Stmt::While { condition, body: checked_body?.0 });
+            }
+            Ok(t::Stmt::Block(lowered))
+        })();
+        self.block_depth -= 1;
+        self.scopes.pop();
+        result
+    }
+    fn iterator_info(&self, source_class: usize) -> Option<(usize, Type, usize, usize, usize, usize)> {
+        let is_iterator_interface = |class: usize| {
+            self.tables.classes[class].is_interface &&
+                self.tables.classes[class].name.starts_with("Iterator<")
+        };
+        let interface = if is_iterator_interface(source_class) {
+            source_class
+        } else {
+            self.tables.classes[source_class].implementations.iter()
+                .map(|(interface, _)| *interface)
+                .find(|interface| is_iterator_interface(*interface))?
+        };
+        let next = self.tables.classes[interface].interface_methods.iter().copied()
+            .find(|method| self.tables.signatures[*method].name == "next")?;
+        let Type::Object(option) = self.tables.signatures[next].return_type else { return None; };
+        let variants = self.tables.classes[option].variants.as_ref()?;
+        let none = variants.iter().position(|variant| variant.name == "None")?;
+        let some = variants.iter().position(|variant| variant.name == "Some")?;
+        if !variants[none].fields.is_empty() || variants[some].fields.len() != 1 {
+            return None;
+        }
+        Some((interface, variants[some].fields[0], next, option, none, some))
+    }
+
+    fn for_each_ordered_map(
+        &mut self,
+        stmt: &a::Stmt,
+        place: Option<Place>,
+        value: Option<t::Expr>,
+        source_type: Type,
+        map_class: usize,
+        map_key: Type,
+        map_value: Type,
+    ) -> Result<t::Stmt, Diagnostic> {
+        let a::StmtKind::ForEach {
+            ty: value_header, name: value_name, key: Some((key_header, key_name)),
+            collection, body, header_span, ..
+        } = &stmt.kind else { unreachable!("checked two-binding OrderedMap traversal"); };
+        let header_span = *header_span;
+        let span = stmt.span;
+        let key_binding_type = self.tables.map_key_binding_type(map_key);
+        let key_type = self.tables.resolve_type(key_header, header_span)?;
+        if key_type != key_binding_type {
+            return Err(Diagnostic::new(header_span, format!(
+                "incompatible ordered-map key binding type: expected {}",
+                self.tables.type_name(key_binding_type))));
+        }
+        let (value_binding_type, exclusive) =
+            self.traversal_binding(value_header, map_value, header_span)?;
+        let map_type = Type::Borrow { class: map_class, mutable: exclusive };
+        let frozen_value = self.traversal_receiver(place, value, source_type, map_type, collection.span)?;
+
+        self.scopes.push(HashMap::new());
+        self.block_depth += 1;
+        let result = (|| {
+            let unique = self.variables.len();
+            let map_name = format!("$nacre_for_ordered_map_{unique}");
+            let cursor_name = format!("$nacre_for_ordered_index_{unique}");
+            let map_id = self.declare(&map_name, map_type, span)?;
+            let cursor_id = self.declare(&cursor_name, Type::Int, span)?;
+            let key_id = self.declare(key_name, key_binding_type, header_span)?;
+            let value_id = self.declare(value_name, value_binding_type, header_span)?;
+            let mut lowered = vec![
+                t::Stmt::Let { id: map_id, ty: map_type, value: Some(frozen_value) },
+                t::Stmt::Let { id: cursor_id, ty: Type::Int,
+                    value: Some(t::Expr { kind: t::ExprKind::Int(0), ty: Type::Int, span }) },
+            ];
+            let map_place = Place { kind: PlaceKind::Var(map_id), ty: map_type };
+            let cursor_place = Place { kind: PlaceKind::Var(cursor_id), ty: Type::Int };
+            let typed_expr = |kind, ty, expr_span| t::Expr { kind, ty, span: expr_span };
+            let cursor_read = || typed_expr(t::ExprKind::Read(cursor_place.clone()), Type::Int, span);
+            let slot = |kind, ty| typed_expr(t::ExprKind::MapSlot {
+                map: map_place.clone(),
+                index: Box::new(cursor_read()),
+                kind,
+                pair: Some(key_id),
+            }, ty, collection.span);
+            let key_element = t::Stmt::Let {
+                id: key_id, ty: key_binding_type,
+                value: Some(slot(t::MapSlotKind::Key, key_binding_type)),
+            };
+            let value_element = t::Stmt::Let {
+                id: value_id, ty: value_binding_type,
+                value: Some(slot(t::MapSlotKind::Value, value_binding_type)),
+            };
+            let advance = t::Stmt::Assign {
+                target: cursor_place.clone(),
+                value: typed_expr(t::ExprKind::Binary {
+                    op: B::Add,
+                    left: Box::new(cursor_read()),
+                    right: Box::new(typed_expr(t::ExprKind::Int(1), Type::Int, span)),
+                }, Type::Int, span),
+            };
+            let condition_ast = synthetic_expr(a::ExprKind::Binary {
+                op: B::Lt,
+                left: Box::new(synthetic_expr(a::ExprKind::Var(cursor_name.clone()), span)),
+                right: Box::new(synthetic_expr(a::ExprKind::MethodCall {
+                    receiver: Box::new(synthetic_expr(a::ExprKind::Var(map_name), span)),
+                    name: "size".to_owned(), args: Vec::new(),
+                }, collection.span)),
+            }, span);
+            let condition = self.expression(&condition_ast)?;
+            self.require(Type::Boolean, condition.ty, condition.span)?;
             self.loop_depth += 1;
-            let checked_body = self.block_with_prefix(&[element, advance], body);
+            let user_body = self.block(body);
             self.loop_depth -= 1;
-            lowered.push(t::Stmt::While { condition, body: checked_body?.0 });
+            let (user_body, _) = user_body?;
+            let mut loop_body = vec![key_element, value_element, advance];
+            loop_body.extend(user_body);
+            lowered.push(t::Stmt::While { condition, body: loop_body });
+            Ok(t::Stmt::Block(lowered))
+        })();
+        self.block_depth -= 1;
+        self.scopes.pop();
+        result
+    }
+
+    fn for_each_iterator(
+        &mut self,
+        stmt: &a::Stmt,
+        place: Option<Place>,
+        value: Option<t::Expr>,
+        source_type: Type,
+        source_class: usize,
+        iterator: (usize, Type, usize, usize, usize, usize),
+    ) -> Result<t::Stmt, Diagnostic> {
+        let a::StmtKind::ForEach { ty: header, name, key: None, collection, body, header_span } = &stmt.kind
+            else { unreachable!("checked one-binding Iterator traversal"); };
+        let (interface, element_type, next_method, option_class, none_variant, some_variant) = iterator;
+        let header_type = self.tables.resolve_type(header, *header_span)?;
+        let borrowed_item = match element_type {
+            ty if ty.is_copy() => {
+                if header_type != ty {
+                    return Err(Diagnostic::new(*header_span, format!(
+                        "iterator item type mismatch: expected {}, found {}",
+                        self.tables.type_name(element_type), self.tables.type_name(header_type))));
+                }
+                false
+            }
+            Type::Object(class) => {
+                let matching = match header_type {
+                    Type::Object(header_class) | Type::Borrow { class: header_class, .. } =>
+                        header_class == class,
+                    _ => false,
+                };
+                if !matching {
+                    return Err(Diagnostic::new(*header_span,
+                        "[E5004] an affine iterator item must be bound as `T`, `borrow T`, or `borrow mut T`"));
+                }
+                header_type.is_borrow()
+            }
+            _ => return Err(Diagnostic::new(*header_span, "unsupported iterator item type")),
+        };
+        let span = stmt.span;
+        let collection_span = collection.span;
+        let concrete_borrow = Type::Borrow { class: source_class, mutable: true };
+        let interface_borrow = Type::Borrow { class: interface, mutable: true };
+        self.scopes.push(HashMap::new());
+        self.block_depth += 1;
+        let result = (|| {
+            let unique = self.variables.len();
+            let mut lowered = Vec::new();
+            let frozen_concrete = if place.is_none() && source_type.is_object() {
+                let owner_name = format!("$nacre_for_iterator_owner_{unique}");
+                let owner_id = self.declare(&owner_name, source_type, collection_span)?;
+                lowered.push(t::Stmt::Let {
+                    id: owner_id, ty: source_type, value,
+                });
+                let owner_place = Place { kind: PlaceKind::Var(owner_id), ty: source_type };
+                t::Expr {
+                    kind: t::ExprKind::Borrow { place: owner_place, mutable: true },
+                    ty: concrete_borrow, span: collection_span,
+                }
+            } else {
+                self.traversal_receiver(
+                    place, value, source_type, concrete_borrow, collection_span,
+                )?
+            };
+            let frozen_iterator = if source_class == interface {
+                frozen_concrete
+            } else {
+                t::Expr {
+                    kind: t::ExprKind::Upcast {
+                        value: Box::new(frozen_concrete), interface, concrete: source_class,
+                    },
+                    ty: interface_borrow, span: collection_span,
+                }
+            };
+            let iterator_name = format!("$nacre_for_iterator_{unique}");
+            let iterator_id = self.declare(&iterator_name, interface_borrow, span)?;
+            lowered.push(t::Stmt::Let {
+                id: iterator_id, ty: interface_borrow, value: Some(frozen_iterator),
+            });
+
+            let item_owner_id = if borrowed_item {
+                let owner_name = format!("$nacre_for_iterator_item_{unique}");
+                self.declare(&owner_name, element_type, *header_span)?
+            } else {
+                self.declare(name, element_type, *header_span)?
+            };
+            let borrowed_id = if borrowed_item {
+                Some(self.declare(name, header_type, *header_span)?)
+            } else {
+                None
+            };
+            self.loop_depth += 1;
+            let user_body = self.block(body);
+            self.loop_depth -= 1;
+            let user_body = user_body?.0;
+            let mut some_body = Vec::new();
+            if let Some(binding_id) = borrowed_id {
+                let Type::Borrow { mutable, .. } = header_type else { unreachable!("borrowed iterator binding"); };
+                some_body.push(t::Stmt::Let {
+                    id: binding_id,
+                    ty: header_type,
+                    value: Some(t::Expr {
+                        kind: t::ExprKind::Borrow {
+                            place: Place { kind: PlaceKind::Var(item_owner_id), ty: element_type },
+                            mutable,
+                        },
+                        ty: header_type, span: *header_span,
+                    }),
+                });
+            }
+            some_body.extend(user_body);
+            let iterator_place = Place { kind: PlaceKind::Var(iterator_id), ty: interface_borrow };
+            let next = t::Expr {
+                kind: t::ExprKind::Call {
+                    target: CallTarget::Function(next_method),
+                    receiver: Some(iterator_place),
+                    args: Vec::new(),
+                },
+                ty: Type::Object(option_class),
+                span: collection_span,
+            };
+            let loop_body = vec![t::Stmt::Match {
+                value: next,
+                arms: vec![
+                    t::MatchArm { variant: none_variant, bindings: Vec::new(), body: vec![t::Stmt::Break] },
+                    t::MatchArm { variant: some_variant, bindings: vec![item_owner_id], body: some_body },
+                ],
+            }];
+            lowered.push(t::Stmt::While {
+                condition: t::Expr { kind: t::ExprKind::Boolean(true), ty: Type::Boolean, span },
+                body: loop_body,
+            });
             Ok(t::Stmt::Block(lowered))
         })();
         self.block_depth -= 1;
@@ -1147,6 +1466,45 @@ impl Checker<'_> {
                 }
                 Ok((header_type, mutable))
             }
+            _ => Err(Diagnostic::new(span, "unsupported element type for traversal")),
+        }
+    }
+
+    fn readonly_traversal_binding(
+        &self,
+        header: &a::Type,
+        value_type: Type,
+        span: Span,
+    ) -> Result<Type, Diagnostic> {
+        let header_type = self.tables.resolve_type(header, span)?;
+        match value_type {
+            ty if ty.is_copy() => {
+                if header_type == ty {
+                    Ok(ty)
+                } else {
+                    Err(Diagnostic::new(span, format!(
+                        "element type mismatch: expected {}, found {}",
+                        self.tables.type_name(value_type), self.tables.type_name(header_type))))
+                }
+            }
+            Type::Object(class) => match header_type {
+                Type::Borrow { class: header_class, mutable: false } if header_class == class =>
+                    Ok(header_type),
+                Type::Borrow { class: header_class, .. } if header_class != class =>
+                    Err(Diagnostic::new(span, format!(
+                        "incompatible borrow type: expected {}, found {}",
+                        self.tables.type_name(Type::Borrow { class, mutable: false }),
+                        self.tables.type_name(header_type)))),
+                Type::Borrow { mutable: true, .. } =>
+                    Err(Diagnostic::new(span,
+                        "[E3003] readonly collection traversal cannot yield a mutable element borrow")),
+                Type::Object(header_class) if header_class == class =>
+                    Err(Diagnostic::new(span,
+                        "[E5004] an affine readonly element must be bound as `borrow T`")),
+                _ => Err(Diagnostic::new(span, format!(
+                    "element type mismatch: expected a shared borrow of {}, found {}",
+                    self.tables.type_name(value_type), self.tables.type_name(header_type)))),
+            },
             _ => Err(Diagnostic::new(span, "unsupported element type for traversal")),
         }
     }

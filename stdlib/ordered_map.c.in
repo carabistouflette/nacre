@@ -149,6 +149,7 @@ static @VALUE_AT_TYPE@ @ORDERED_MAP_VALUE_AT@(ncr_obj_@ID@ *p, int32_t index,
     if (index < 0 || index >= p->table.length) { ncr_fail("OrderedMap index out of bounds", line, column); }
     return @VALUE_AT_EXPR@;
 }
+@VALUE_AT_MUT_METHOD@
 
 static int32_t @ORDERED_MAP_SIZE@(ncr_obj_@ID@ *p, size_t line, size_t column) {
     (void)line; (void)column;

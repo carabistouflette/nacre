@@ -240,6 +240,181 @@ void main() {
 }
 
 #[test]
+fn container_drains_compose_and_keep_their_documented_iteration_order() {
+    assert_native(r#"
+class DoubleInt implements Mapper<int, int> {
+    public int apply(int value) { return value * 2; }
+}
+class DivisibleByFour implements Predicate<int> {
+    public readonly boolean test(int value) { return value % 4 == 0; }
+}
+class IntOrder implements Comparator<int> {
+    public readonly int compare(int left, int right) {
+        if (left < right) { return -1; }
+        if (left > right) { return 1; }
+        return 0;
+    }
+}
+void main() {
+    Deque<int> deque = new Deque<int>();
+    deque.pushBack(1); deque.pushBack(2); deque.pushBack(3);
+    deque.pushBack(4); deque.pushBack(5); deque.pushBack(6);
+    MapIterator<int, int> mapped = new MapIterator<int, int>(deque.drain(), new DoubleInt());
+    FilterIterator<int> filtered = new FilterIterator<int>(mapped, new DivisibleByFour());
+    Iterator<int> skipped = Iterators<int>.skip(filtered, 1L);
+    List<int> pipeline = List<int>.collect(Iterators<int>.take(skipped, 1L));
+    println(pipeline.get(0));
+    println(deque.size());
+    Deque<int> directSource = new Deque<int>();
+    directSource.pushBack(2); directSource.pushBack(3);
+    MapIterator<int, int> concreteIterator =
+        new MapIterator<int, int>(directSource.drain(), new DoubleInt());
+    int directSum = 0;
+    for (int value : concreteIterator) { directSum = directSum + value; }
+    println(directSum);
+
+    List<int> arrayInput = new List<int>();
+    arrayInput.add(7); arrayInput.add(8);
+    Array<int> array = new Array<int>(arrayInput);
+    List<int> arrayItems = List<int>.collect(array.drain());
+    println(arrayItems.get(0)); println(arrayItems.get(1));
+
+    Set<int> set = new Set<int>();
+    set.add(3); set.add(1); set.add(2);
+    int setSum = 0; int setCount = 0;
+    for (int value : set.drain()) { setSum = setSum + value; setCount = setCount + 1; }
+    println(setSum); println(setCount);
+
+    OrderedSet<int> orderedSet = new OrderedSet<int>(new IntOrder());
+    orderedSet.add(3); orderedSet.add(1); orderedSet.add(2);
+    List<int> orderedSetItems = List<int>.collect(orderedSet.drain());
+    println(orderedSetItems.get(0)); println(orderedSetItems.get(1)); println(orderedSetItems.get(2));
+
+    PriorityQueue<int> queue = new PriorityQueue<int>(new IntOrder());
+    queue.add(5); queue.add(1); queue.add(4); queue.add(2); queue.add(3);
+    List<int> queueItems = List<int>.collect(queue.drain());
+    println(queueItems.get(0)); println(queueItems.get(1)); println(queueItems.get(2));
+    println(queueItems.get(3)); println(queueItems.get(4));
+
+    Map<int, int> keyMap = new Map<int, int>();
+    keyMap.put(3, 30); keyMap.put(1, 10); keyMap.put(2, 20);
+    int keySum = 0; int keyCount = 0;
+    for (int key : keyMap.drainKeys()) { keySum = keySum + key; keyCount = keyCount + 1; }
+    println(keySum); println(keyCount); println(keyMap.isEmpty());
+
+    Map<int, int> valueMap = new Map<int, int>();
+    valueMap.put(3, 30); valueMap.put(1, 10); valueMap.put(2, 20);
+    int valueSum = 0; int valueCount = 0;
+    for (int value : valueMap.drainValues()) { valueSum = valueSum + value; valueCount = valueCount + 1; }
+    println(valueSum); println(valueCount); println(valueMap.isEmpty());
+
+    OrderedMap<int, int> orderedKeys = new OrderedMap<int, int>(new IntOrder());
+    orderedKeys.put(3, 30); orderedKeys.put(1, 10); orderedKeys.put(2, 20);
+    List<int> orderedKeyItems = List<int>.collect(orderedKeys.drainKeys());
+    println(orderedKeyItems.get(0)); println(orderedKeyItems.get(1)); println(orderedKeyItems.get(2));
+
+    OrderedMap<int, int> orderedValues = new OrderedMap<int, int>(new IntOrder());
+    orderedValues.put(3, 30); orderedValues.put(1, 10); orderedValues.put(2, 20);
+    List<int> orderedValueItems = List<int>.collect(orderedValues.drainValues());
+    println(orderedValueItems.get(0)); println(orderedValueItems.get(1)); println(orderedValueItems.get(2));
+}
+    "#, b"8\n0\n10\n7\n8\n6\n3\n1\n2\n3\n1\n2\n4\n5\n3\n6\n3\ntrue\n60\n3\ntrue\n1\n2\n3\n10\n20\n30\n");
+}
+
+#[test]
+fn affine_drains_drop_unreturned_map_halves_and_iterator_remainders() {
+    assert_native(r#"
+class Item {
+    private int id;
+    private Text payload;
+    Item(int id) { this.id = id; this.payload = new Text("owned item"); }
+    public readonly int idValue() { return this.id; }
+}
+class ItemOrder implements Comparator<Item> {
+    public readonly int compare(borrow Item left, borrow Item right) {
+        if (left.idValue() < right.idValue()) { return -1; }
+        if (left.idValue() > right.idValue()) { return 1; }
+        return 0;
+    }
+}
+void returnAfterFirst(Iterator<Item> items) {
+    for (Item item : items) { println(item.idValue()); return; }
+}
+void main() {
+    Map<int, Item> keyDrainSource = new Map<int, Item>();
+    keyDrainSource.put(1, new Item(10)); keyDrainSource.put(2, new Item(20));
+    int keySum = 0;
+    for (int key : keyDrainSource.drainKeys()) { keySum = keySum + key; }
+    println(keySum); println(keyDrainSource.isEmpty());
+
+    Map<Text, Item> valueDrainSource = new Map<Text, Item>();
+    valueDrainSource.put(new Text("first"), new Item(1));
+    valueDrainSource.put(new Text("second"), new Item(2));
+    int mapValueSum = 0;
+    for (Item item : valueDrainSource.drainValues()) { mapValueSum = mapValueSum + item.idValue(); }
+    println(mapValueSum); println(valueDrainSource.isEmpty());
+
+    OrderedMap<Item, Item> orderedKeySource = new OrderedMap<Item, Item>(new ItemOrder());
+    orderedKeySource.put(new Item(2), new Item(20)); orderedKeySource.put(new Item(1), new Item(10));
+    int orderedKeySequence = 0;
+    for (Item item : orderedKeySource.drainKeys()) { orderedKeySequence = orderedKeySequence * 10 + item.idValue(); }
+    println(orderedKeySequence);
+
+    OrderedMap<Item, Item> orderedValueSource = new OrderedMap<Item, Item>(new ItemOrder());
+    orderedValueSource.put(new Item(2), new Item(20)); orderedValueSource.put(new Item(1), new Item(10));
+    int orderedValueSequence = 0;
+    for (Item item : orderedValueSource.drainValues()) { orderedValueSequence = orderedValueSequence * 100 + item.idValue(); }
+    println(orderedValueSequence);
+
+    Set<Text> textSet = new Set<Text>();
+    textSet.add(new Text("a")); textSet.add(new Text("bb"));
+    int textBytes = 0;
+    for (Text item : textSet.drain()) { textBytes = textBytes + item.byteLength(); }
+    println(textBytes);
+
+    Deque<Item> deque = new Deque<Item>();
+    deque.pushBack(new Item(4)); deque.pushBack(new Item(5));
+    int dequeSum = 0;
+    for (Item item : deque.drain()) { dequeSum = dequeSum + item.idValue(); }
+    println(dequeSum);
+
+    List<Item> arrayInput = new List<Item>();
+    arrayInput.add(new Item(6)); arrayInput.add(new Item(7));
+    Array<Item> array = new Array<Item>(arrayInput);
+    int arraySum = 0;
+    for (Item item : array.drain()) { arraySum = arraySum + item.idValue(); }
+    println(arraySum);
+
+    OrderedSet<Item> orderedSet = new OrderedSet<Item>(new ItemOrder());
+    orderedSet.add(new Item(3)); orderedSet.add(new Item(1)); orderedSet.add(new Item(2));
+    int orderedSetSequence = 0;
+    for (Item item : orderedSet.drain()) { orderedSetSequence = orderedSetSequence * 10 + item.idValue(); }
+    println(orderedSetSequence);
+
+    PriorityQueue<Item> queue = new PriorityQueue<Item>(new ItemOrder());
+    queue.add(new Item(3)); queue.add(new Item(1)); queue.add(new Item(2));
+    int queueSum = 0;
+    for (Item item : queue.drain()) { queueSum = queueSum + item.idValue(); }
+    println(queueSum);
+
+    List<Item> items = new List<Item>();
+    items.add(new Item(8)); items.add(new Item(9)); items.add(new Item(10));
+    Iterator<Item> input = items.drain();
+    for (Item item : input) { println(item.idValue()); break; }
+    match (input.next()) {
+        None { println("none"); }
+        Some(item) { println(item.idValue()); drop(item); }
+    }
+    drop(input);
+
+    List<Item> returned = new List<Item>();
+    returned.add(new Item(11)); returned.add(new Item(12));
+    returnAfterFirst(returned.drain());
+}
+"#, b"3\ntrue\n3\ntrue\n12\n1020\n3\n9\n13\n123\n6\n8\n9\n11\n");
+}
+
+#[test]
 fn bitset_and_iterator_count_preconditions_fail_at_runtime() {
     assert_native_failure("void main() { BitSet bits = new BitSet(-1L); }");
     assert_native_failure("void main() { BitSet bits = new BitSet(0L); bits.setRange(3L, 2L); }");

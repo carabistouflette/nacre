@@ -100,7 +100,7 @@ pub(super) const PRELUDE_UNITS: &[PreludeUnit] = &[
             Builtin { name: "OrderedSet", native: Some(|| NativeClass::OrderedSet(Type::Named("T".to_owned()))) },
             Builtin { name: "PriorityQueue", native: Some(|| NativeClass::PriorityQueue(Type::Named("T".to_owned()))) },
             Builtin { name: "BitSet", native: Some(|| NativeClass::BitSet) },
-            Builtin { name: "Iterator", native: None },
+            Builtin { name: "Iterator", native: Some(|| NativeClass::Iterator(Type::Named("T".to_owned()))) },
             Builtin { name: "Mapper", native: None },
             Builtin { name: "Predicate", native: Some(|| NativeClass::Predicate(Type::Named("T".to_owned()))) },
             Builtin { name: "ListIterator", native: Some(|| NativeClass::ListIterator(Type::Named("T".to_owned()))) },

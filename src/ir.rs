@@ -106,7 +106,7 @@ pub enum ExprKind {
     Borrow { place: Place, mutable: bool },
     /// Compiler-only capacity read for a structurally frozen map.
     MapCapacity(Place),
-    /// Compiler-only direct Map slot access; `pair` links key/value slots to one loop loan.
+    /// Compiler-only map-like slot access; `pair` links key/value entry borrows.
     MapSlot { map: Place, index: Box<Expr>, kind: MapSlotKind, pair: Option<usize> },
     Drop(Box<Expr>),
     /// Allocation-free interface upcast, preserving owned or borrowed status.
@@ -185,16 +185,17 @@ pub enum NativeMethod {
     TcpStreamRead, TcpStreamWrite, TcpStreamFlush,
     MapGetRef, MapGetMut, MapClear,
     SetNew, SetWithHasher, SetAdd, SetContains, SetSize, SetIsEmpty, SetRemove, SetClear,
-    ListDrain, ListCollect,
+    ListDrain, ListCollect, CollectionDrain, MapDrainKeys, MapDrainValues,
     OrderedMapNew, OrderedMapPut, OrderedMapTryRemove, OrderedMapContains, OrderedMapTryGet,
-    OrderedMapGetRef, OrderedMapGetMut, OrderedMapKeyAt, OrderedMapValueAt,
+    OrderedMapGetRef, OrderedMapGetMut, OrderedMapKeyAt, OrderedMapValueAt, OrderedMapValueAtMut,
+    OrderedMapDrainKeys, OrderedMapDrainValues,
     OrderedMapSize, OrderedMapIsEmpty, OrderedMapClear,
     OrderedMapFloorIndex, OrderedMapCeilingIndex, OrderedMapLowerIndex, OrderedMapHigherIndex,
     OrderedSetNew, OrderedSetAdd, OrderedSetContains, OrderedSetRemove,
-    OrderedSetSize, OrderedSetIsEmpty, OrderedSetClear,
+    OrderedSetKeyAt, OrderedSetDrain,
     PriorityQueueNew, PriorityQueueAdd, PriorityQueuePop, PriorityQueueTryPop,
-    PriorityQueuePeek, PriorityQueueGetRef, PriorityQueueTryPeek,
-    PriorityQueueSize, PriorityQueueIsEmpty, PriorityQueueClear,
+    PriorityQueuePeek, PriorityQueueGetRef, PriorityQueueTryPeek, PriorityQueueValueAt,
+    PriorityQueueDrain, PriorityQueueSize, PriorityQueueIsEmpty, PriorityQueueClear,
     BitSetNew, BitSetGet, BitSetSet, BitSetClear, BitSetFlip,
     BitSetSetRange, BitSetClearRange, BitSetFlipRange, BitSetNextSetBit,
     BitSetCardinality, BitSetLength, BitSetIsEmpty, BitSetClone,

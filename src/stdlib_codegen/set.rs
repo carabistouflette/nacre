@@ -1,6 +1,6 @@
 use crate::codegen::ctype;
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
-use super::{collections, support::{result_id, variant_id}};
+use super::{collections, iterators, support::{result_id, variant_id}};
 
 fn map_for_set(program: &t::Program, key: Type, hasher: Option<Type>) -> &t::Class {
     program.classes.iter().find(|class| {
@@ -73,11 +73,34 @@ pub(super) fn implementation(
     let option_class = result_id(map_remove);
     let some_tag = variant_id(program, option_class, "Some");
     let initializer_methods = initializer_methods(program, class_id, map_class.id, hasher);
-    include_str!("../../stdlib/set.c.in")
+    let mut body = include_str!("../../stdlib/set.c.in")
         .replace("@TABLE_ID@", &map_class.id.to_string())
         .replace("@KEY_TYPE@", &ctype(program, add.params[0].1))
         .replace("@QUERY_TYPE@", &ctype(program, contains.params[0].1))
         .replace("@OPTION_TYPE@", &ctype(program, option_type))
         .replace("@SOME_TAG@", &some_tag.to_string())
-        .replace("@SET_INITIALIZER_METHODS@", &initializer_methods)
+        .replace("@SET_INITIALIZER_METHODS@", &initializer_methods);
+    if let Some(drain) = native_method(program, class_id, |method| matches!(method, M::CollectionDrain)) {
+        let (next_name, drop_name) = iterators::callback_names(drain.id);
+        let entry = format!("struct ncr_map_entry_{}", map_class.id);
+        let next_body = format!(
+            "    {entry} *entries = raw;\n    while (*cursor < length) {{\n        int32_t index = (*cursor)++;\n        if (!entries[index].occupied) {{ continue; }}\n        *value = entries[index].key;\n        entries[index].key = {};\n        entries[index].value = UINT8_C(0);\n        entries[index].occupied = false;\n        *available = true;\n        return;\n    }}\n    *available = false;",
+            collections::zero(program, key),
+        );
+        let drop_body = format!(
+            "    {entry} *entries = raw;\n    for (int32_t index = cursor; index < length; ++index) {{\n        if (entries[index].occupied) {{\n            {}\n        }}\n    }}\n    ncr_deallocate(entries);",
+            collections::drop_element(key, "entries[index].key"),
+        );
+        body.push_str(&iterators::drain_callbacks(program, drain.id, key, &next_body, &drop_body));
+        body.push_str(&iterators::drain_function(
+            program,
+            class_id,
+            M::CollectionDrain,
+            key,
+            &format!(
+                "iterator->state = p->table.entries;\niterator->length = p->table.capacity;\niterator->ncr_next_fn = {next_name};\niterator->ncr_drop_fn = {drop_name};\np->table.entries = NULL;\np->table.length = 0;\np->table.capacity = 0;"
+            ),
+        ));
+    }
+    body
 }

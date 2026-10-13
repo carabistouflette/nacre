@@ -1,7 +1,7 @@
 use crate::codegen::ctype;
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
 use super::{
-    collections, ordering, ordered,
+    collections, iterators, ordering, ordered,
     support::{marker, replace_method_ids, replace_placeholders, result_id, variant},
 };
 
@@ -84,6 +84,19 @@ fn try_peek_method(program: &t::Program, class_id: usize, element: Type) -> Stri
         marker(M::PriorityQueueTryPeek),
     )
 }
+fn value_at_method(program: &t::Program, class_id: usize, element: Type) -> String {
+    let Some(function) = native_method(program, class_id, M::PriorityQueueValueAt) else {
+        return String::new();
+    };
+    let index = function.params.first().expect("PriorityQueue.valueAt index parameter").1;
+    assert_eq!(index, Type::Int, "PriorityQueue.valueAt index is int32");
+    let value = ordering::borrow_storage(program, element, "p->items[index]");
+    format!(
+        "static {} {}(ncr_obj_{class_id} *p, int32_t index, size_t line, size_t column) {{\n    if (index < 0 || index >= p->length) {{ ncr_fail(\"PriorityQueue index out of bounds\", line, column); }}\n    return {};\n}}\n",
+        ctype(program, function.return_type), marker(M::PriorityQueueValueAt), value,
+    )
+}
+
 
 pub(super) fn implementation(program: &t::Program, class_id: usize, element: Type) -> String {
     let constructor = required_method(program, class_id, M::PriorityQueueNew);
@@ -125,12 +138,20 @@ pub(super) fn implementation(program: &t::Program, class_id: usize, element: Typ
         ("@OPTION_TYPE@", ctype(program, try_pop.return_type)),
         ("@NONE_TAG@", none_tag.to_string()),
         ("@SOME_TAG@", some_tag.to_string()),
-        ("@PEEK_METHOD@", peek_method(program, class_id, element)),
-        ("@GET_REF_METHOD@", borrowed_getter(program, class_id, element)),
-        ("@TRY_PEEK_METHOD@", try_peek_method(program, class_id, element)),
+        ("@PEEK_METHOD@", &peek_method(program, class_id, element)),
+        ("@GET_REF_METHOD@", &borrowed_getter(program, class_id, element)),
+        ("@TRY_PEEK_METHOD@", &try_peek_method(program, class_id, element)),
+        ("@VALUE_AT_METHOD@", &value_at_method(program, class_id, element)),
         ("@DROP_AT_INDEX@", collections::drop_element(element, "p->items[index]")),
     ];
     body = replace_placeholders(body, &substitutions);
     body = replace_method_ids(body, program, Some(class_id));
+    body.push_str(&iterators::drain_function(
+        program,
+        class_id,
+        M::PriorityQueueDrain,
+        element,
+        "iterator->items = p->items;\niterator->length = p->length;\np->items = NULL;\np->length = 0;\np->capacity = 0;",
+    ));
     body
 }

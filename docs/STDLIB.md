@@ -855,12 +855,13 @@ same ordering. `sortBy` and `binarySearchBy` use a user-supplied
 `Comparator<T>`; the binary search also expects a matching pre-sorted list. A
 comparator returns a negative, zero, or positive `int` for its pair of values.
 
-List traversal uses `for (int value : values)` for copied values and
+Indexed traversal accepts `for (T value : values)` for copied values and
 `for (borrow T value : values)` / `for (borrow mut T value : values)` for affine
-values. The list is evaluated once and stays loaned for the full loop; each
-binding ends at the iteration boundary. `drain()` is a separate explicit ownership
-transfer: it empties the list and returns an owned iterator over its former storage.
-`collect()` consumes an iterator and transfers each yielded value into a new list.
+values. Lists, deques, and arrays traverse in index order; each container is
+evaluated once and stays loaned for the full loop, and each binding ends at the
+iteration boundary. `drain()` instead explicitly transfers owned elements to an
+iterator; `collect()` consumes an iterator and transfers each yielded value into a
+new list.
 
 ### `Deque<T>`
 
@@ -882,12 +883,14 @@ borrow mut T getMut(int index)                     // affine specializations onl
 void set(int index, T value)
 void clear()
 void reserve(int capacity)
+Iterator<T> drain()
 ```
 
 The deque is an owning double-ended collection. Pushes transfer affine elements;
 strict pops from an empty deque and invalid indexed operations are fatal. Recoverable
 pops return `None` when empty. Copied versus borrowed indexed access follows the
-same specialization rules as `List<T>`. Negative reserve is fatal.
+same specialization rules as `List<T>`. Negative reserve is fatal. `drain()` empties
+the deque and transfers its elements to an iterator from front to back.
 
 ### `Array<T>` and `Arrays`
 
@@ -900,6 +903,7 @@ readonly borrow T getRef(int index)                // affine specializations onl
 borrow mut T getMut(int index)                     // affine specializations only
 void set(int index, T value)
 
+Iterator<T> drain()
 static Array<byte> zeroedBytes(int length)
 static Array<char> zeroedChars(int length)
 static Array<int> zeroedInts(int length)
@@ -942,6 +946,7 @@ boolean remove(borrow T key)
 readonly int size()
 readonly boolean isEmpty()
 void clear()
+Iterator<T> drain()
 
 Map<K, V>()
 static Map<K, V> withHasher(Hasher<K> hasher)
@@ -954,6 +959,8 @@ readonly Option<V> tryGet(borrow K key)              // copied value specializat
 readonly borrow V getRef(borrow K key)               // affine value specializations only
 borrow mut V getMut(borrow K key)                     // affine value specializations only
 void clear()
+Iterator<K> drainKeys()
+Iterator<V> drainValues()
 ```
 
 `hash` and `equals` are readonly borrowed queries. Equal keys must return the same
@@ -974,16 +981,26 @@ key and transfers a removed value in `Some`, or returns `None` when absent.
 Insertion or growth can allocate; allocation failure is fatal. Map and set
 iteration order is unspecified.
 
+`Set.drain()` transfers its keys in unspecified hash-table order. `Map.drainKeys()`
+transfers keys and destroys every value; `drainValues()` transfers values and
+destroys every key. Both empty the map and yield entries in unspecified hash-table
+order.
+
 Generic query declarations borrow keys; scalar and static `String` specializations
 copy the value without an implicit clone, while object, interface, enum, and
 `Text` queries use readonly borrows. `tryGet` copies only copied value types;
-affine values require `getRef`/`getMut`. Absent borrowed lookup is a fatal
-boundary error. `Map`
-traversal uses two bindings, for example
+affine values require `getRef`/`getMut`. Absent borrowed lookup is a fatal boundary
+error.
+
+Map traversal uses two bindings, for example
 `for (int key, borrow Value value : map)` or
 `for (borrow Text key, int value : map)`. Set traversal accepts one readonly key
-binding. These loops hold a whole-root loan for their complete lexical extent;
-different entries do not grant disjoint mutable access. See
+binding. OrderedMap uses the same two-binding form in comparator order; ordered
+keys are readonly, while affine values may be bound shared or exclusively. OrderedSet
+uses one readonly key binding in comparator order. PriorityQueue traversal accepts
+one readonly element binding in heap-array order, not priority-pop order. These
+loops hold a whole-root loan for their complete lexical extent; different entries
+do not grant disjoint mutable access. See
 [MAP_TRAVERSAL.md](MAP_TRAVERSAL.md) for the base map traversal contract.
 
 
@@ -999,8 +1016,8 @@ readonly boolean contains(borrow K key)
 readonly Option<V> tryGet(borrow K key)              // copied value specializations only
 readonly borrow V getRef(borrow K key)               // affine value specializations only
 borrow mut V getMut(borrow K key)                    // affine value specializations only
-readonly borrow K keyAt(int index)
-readonly borrow V valueAt(int index)
+readonly borrow K keyAt(int index)                  // affine keys only
+readonly borrow V valueAt(int index)                // affine values only
 readonly int size()
 readonly boolean isEmpty()
 void clear()
@@ -1008,6 +1025,9 @@ readonly Option<int> floorIndex(borrow K key)
 readonly Option<int> ceilingIndex(borrow K key)
 readonly Option<int> lowerIndex(borrow K key)
 readonly Option<int> higherIndex(borrow K key)
+borrow mut V valueAtMut(int index)                    // affine values only
+Iterator<K> drainKeys()
+Iterator<V> drainValues()
 
 OrderedSet<T>(Comparator<T> comparator)
 void add(T key)
@@ -1016,6 +1036,8 @@ boolean remove(borrow T key)
 readonly int size()
 readonly boolean isEmpty()
 void clear()
+readonly borrow T keyAt(int index)                    // affine elements only
+Iterator<T> drain()
 ```
 
 Ordered maps and sets keep keys in comparator order in contiguous storage. Every
@@ -1027,13 +1049,13 @@ key (`lowerIndex`), or least strictly higher key (`higherIndex`); a missing resu
 is `None`. A comparator returns a negative, zero, or positive `int`. Comparator
 equality identifies duplicate keys; `put` returns `None` for a new key, while
 replacing an equal map key retains the original stored key and transfers the
-replaced value in `Some`. Adding an equal set key drops the new key and retains
-the existing one. `keyAt` and `valueAt` copy copied specializations and borrow
-affine ones. The comparator is owned by the collection. As with other collections,
-key and value types must be copied values or owned nominal values, never borrows or
-local views.
-Queries copy scalar keys and borrow affine keys; looking up or removing a key
-does not consume an affine query object.
+replaced value in `Some`. Adding an equal set key drops the new key and retains the
+existing one. `keyAt` and `valueAt` return shared borrows of affine entries;
+`valueAtMut` returns an exclusive value borrow for explicitly mutable traversal.
+`keyAt` is always readonly so comparator order cannot be invalidated through a key
+reference. Key and value types must be copied values or owned nominal values, never
+borrows or local views. Queries copy scalar keys and borrow affine keys; looking up
+or removing a key does not consume an affine query object.
 
 ### `PriorityQueue<T>`
 
@@ -1048,13 +1070,16 @@ readonly Option<T> tryPeek()                         // copied specializations o
 readonly int size()
 readonly boolean isEmpty()
 void clear()
+readonly borrow T valueAt(int index)                  // affine elements only
+Iterator<T> drain()
 ```
 
 The queue is a binary min-heap: a value whose comparator result is negative
 relative to another value has higher priority. Add and extraction preserve owned
 values by transfer; `pop` and `peek` fail on an empty queue, while `tryPop` and
 `tryPeek` return `None`. `clear` destroys every queued value but retains storage.
-The queue owns its comparator.
+The queue owns its comparator. Readonly traversal and `drain()` visit heap-array
+order, not sorted priority order; `drain()` transfers every value and leaves it empty.
 
 ### `BitSet`
 
@@ -1087,9 +1112,19 @@ explicit independent copy.
 ### Owned iterators
 
 `Iterator<T>.next()` returns `Option<T>` and transfers each yielded value to its
-caller. `List.drain()` transfers the list's backing storage and leaves the list
-empty. Dropping an iterator early destroys all remaining owned values. `List.collect`
-consumes its input iterator and builds a new list.
+caller. `for (T value : iterator)` advances the original iterator mutably while
+holding an exclusive root loan for the loop; affine values may be owned or
+explicitly borrowed for one iteration. The iterator remains usable after the loop.
+Break and return destroy the current owned item and release the loop loan; owned
+temporary iterators are dropped on every exit.
+
+`drain()` transfers collection elements without cloning. Lists and arrays yield in
+index order, deques front to back, ordered maps and sets in comparator order, and
+priority queues in heap-array order. Hash maps and sets yield in unspecified order.
+`Map.drainKeys()` destroys unused values and `drainValues()` destroys unused keys;
+the ordered-map forms do the same in comparator order. Each drain leaves its
+collection empty. Dropping an iterator early destroys all remaining owned values.
+`List.collect` consumes its input iterator and builds a new list.
 
 `MapIterator<T, U>` owns an input iterator and a `Mapper<T, U>` callback;
 `FilterIterator<T>` owns an input iterator and a `Predicate<T>` callback. They are
@@ -1098,8 +1133,8 @@ until a value passes or the input ends. Rejected filter values are destroyed.
 `Iterators<T>.take` and `skip` lazily bound and discard a nonnegative number of
 values; a negative count is fatal. All adapters own their inputs and callbacks,
 and dropping an adapter recursively drops those owners. These are explicit owned
-pipelines, separate from `for` traversal's whole-root lexical loans; there are no
-borrowed iterators or early-release loans.
+pipelines, separate from collection traversal's whole-root lexical loans; there are
+no borrowed iterators or early-release loans.
 
 Collection and iterator sendability includes hidden key/value/element storage
 and owned comparator, mapper, predicate, and input objects. An empty container

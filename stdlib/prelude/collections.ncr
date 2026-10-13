@@ -41,6 +41,7 @@ class Deque<T> {
     public void set(int index, T value) {}
     public void clear() {}
     public void reserve(int capacity) {}
+    public Iterator<T> drain() {}
 }
 
 class Set<T> {
@@ -52,6 +53,7 @@ class Set<T> {
     public readonly int size() {}
     public readonly boolean isEmpty() {}
     public void clear() {}
+    public Iterator<T> drain() {}
 }
 
 interface Comparator<T> {
@@ -71,6 +73,7 @@ class Array<T> {
     public readonly borrow T getRef(int index) {}
     public borrow mut T getMut(int index) {}
     public void set(int index, T value) {}
+    public Iterator<T> drain() {}
 }
 
 class Arrays {
@@ -95,6 +98,8 @@ class Map<K, V> {
     public readonly borrow V getRef(borrow K key) {}
     public borrow mut V getMut(borrow K key) {}
     public void clear() {}
+    public Iterator<K> drainKeys() {}
+    public Iterator<V> drainValues() {}
 }
 
 class OrderedMap<K, V> {
@@ -115,6 +120,9 @@ class OrderedMap<K, V> {
     public readonly Option<int> ceilingIndex(borrow K key) {}
     public readonly Option<int> lowerIndex(borrow K key) {}
     public readonly Option<int> higherIndex(borrow K key) {}
+    public borrow mut V valueAtMut(int index) {}
+    public Iterator<K> drainKeys() {}
+    public Iterator<V> drainValues() {}
 }
 
 class OrderedSet<T> {
@@ -126,6 +134,8 @@ class OrderedSet<T> {
     public readonly int size() {}
     public readonly boolean isEmpty() {}
     public void clear() {}
+    public readonly borrow T keyAt(int index) {}
+    public Iterator<T> drain() {}
 }
 
 class PriorityQueue<T> {
@@ -140,6 +150,8 @@ class PriorityQueue<T> {
     public readonly int size() {}
     public readonly boolean isEmpty() {}
     public void clear() {}
+    public readonly borrow T valueAt(int index) {}
+    public Iterator<T> drain() {}
 }
 
 class BitSet {

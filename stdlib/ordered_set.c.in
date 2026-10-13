@@ -35,6 +35,7 @@ static bool @ORDERED_SET_REMOVE@(ncr_obj_@ID@ *p, @QUERY_TYPE@ key,
     return true;
 }
 
+@ORDERED_SET_KEY_AT@
 static int32_t @ORDERED_SET_SIZE@(ncr_obj_@ID@ *p, size_t line, size_t column) {
     (void)line; (void)column;
     return p->table.length;

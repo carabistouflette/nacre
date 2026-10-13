@@ -1,6 +1,6 @@
 use crate::codegen::ctype;
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
-use super::support::{marker, result_id, variant};
+use super::{iterators, support::{marker, result_id, variant}};
 pub(super) fn list_fields(program: &t::Program, element: Type) -> String {
     format!("    {} *items;\n    int32_t length;\n    int32_t capacity;\n", ctype(program, element))
 }
@@ -46,17 +46,30 @@ pub(super) fn map_capacity_expression(map: &str) -> String {
     format!("{map}->table.capacity")
 }
 pub(super) fn map_slot_expression(
-    program: &t::Program, map: &str, index: &str, kind: t::MapSlotKind, value_type: Type,
+    program: &t::Program, map_class: usize, map: &str, index: &str,
+    kind: t::MapSlotKind, value_type: Type,
 ) -> String {
-    let entry = format!("{map}->table.entries[{index}]");
-    match kind {
-        t::MapSlotKind::Occupied => format!("{entry}.occupied"),
-        t::MapSlotKind::Key if value_type.is_borrow() =>
-            map_borrowed_value(program, value_type, &format!("{entry}.key")),
-        t::MapSlotKind::Key => format!("{entry}.key"),
-        t::MapSlotKind::Value if value_type.is_borrow() =>
-            map_borrowed_value(program, value_type, &format!("{entry}.value")),
-        t::MapSlotKind::Value => format!("{entry}.value"),
+    let stored = match (program.classes[map_class].native, kind) {
+        (Some(t::NativeClass::Map { .. }), t::MapSlotKind::Occupied) =>
+            format!("{map}->table.entries[{index}].occupied"),
+        (Some(t::NativeClass::Map { .. }), t::MapSlotKind::Key) =>
+            format!("{map}->table.entries[{index}].key"),
+        (Some(t::NativeClass::Map { .. }), t::MapSlotKind::Value) =>
+            format!("{map}->table.entries[{index}].value"),
+        (Some(t::NativeClass::OrderedMap(..)), t::MapSlotKind::Key) =>
+            format!("{map}->table.items[{index}].key"),
+        (Some(t::NativeClass::OrderedMap(..)), t::MapSlotKind::Value) =>
+            format!("{map}->table.items[{index}].value"),
+        (Some(t::NativeClass::OrderedSet(_)), t::MapSlotKind::Key) =>
+            format!("{map}->table.items[{index}].key"),
+        (Some(t::NativeClass::PriorityQueue(_)), t::MapSlotKind::Value) =>
+            format!("{map}->items[{index}]"),
+        _ => unreachable!("slot kind matches its native collection storage"),
+    };
+    if value_type.is_borrow() {
+        map_borrowed_value(program, value_type, &stored)
+    } else {
+        stored
     }
 }
 pub(super) fn drop_element(ty: Type, expression: &str) -> String {
@@ -343,6 +356,43 @@ fn try_get_map_method(program: &t::Program, map_class: usize, value: Type) -> St
         .replace("@ELEMENT@", &ctype(program, value))
 }
 
+fn map_drain_implementation(
+    program: &t::Program,
+    map_class: usize,
+    key: Type,
+    value: Type,
+    method: M,
+    drain_keys: bool,
+) -> String {
+    let Some(drain) = map_native_function(program, map_class, |candidate|
+        if drain_keys { matches!(candidate, M::MapDrainKeys) } else { matches!(candidate, M::MapDrainValues) })
+    else { return String::new(); };
+    assert_eq!(drain.native, Some(method), "map drain method dispatch matches its source signature");
+    let element = if drain_keys { key } else { value };
+    let (next_name, drop_name) = iterators::callback_names(drain.id);
+    let entry = format!("struct ncr_map_entry_{map_class}");
+    let next_body = if drain_keys {
+        format!(
+            "    {entry} *entries = raw;\n    while (*cursor < length) {{\n        int32_t index = (*cursor)++;\n        if (!entries[index].occupied) {{ continue; }}\n        *value = entries[index].key;\n        entries[index].key = {};\n        {}\n        entries[index].value = {};\n        entries[index].occupied = false;\n        *available = true;\n        return;\n    }}\n    *available = false;",
+            zero(program, key), drop_element(value, "entries[index].value"), zero(program, value),
+        )
+    } else {
+        format!(
+            "    {entry} *entries = raw;\n    while (*cursor < length) {{\n        int32_t index = (*cursor)++;\n        if (!entries[index].occupied) {{ continue; }}\n        *value = entries[index].value;\n        entries[index].value = {};\n        {}\n        entries[index].key = {};\n        entries[index].occupied = false;\n        *available = true;\n        return;\n    }}\n    *available = false;",
+            zero(program, value), drop_map_key(key, "entries[index].key"), zero(program, key),
+        )
+    };
+    let drop_body = format!(
+        "    {entry} *entries = raw;\n    for (int32_t index = cursor; index < length; ++index) {{\n        if (entries[index].occupied) {{\n            {}\n            {}\n        }}\n    }}\n    ncr_deallocate(entries);",
+        drop_map_key(key, "entries[index].key"), drop_element(value, "entries[index].value"),
+    );
+    let callbacks = iterators::drain_callbacks(program, drain.id, element, &next_body, &drop_body);
+    let setup = format!(
+        "iterator->state = p->table.entries;\niterator->length = p->table.capacity;\niterator->ncr_next_fn = {next_name};\niterator->ncr_drop_fn = {drop_name};\np->table.entries = NULL;\np->table.length = 0;\np->table.capacity = 0;"
+    );
+    format!("{callbacks}{}", iterators::drain_function(program, map_class, method, element, &setup))
+}
+
 pub(super) fn map_implementation(
     program: &t::Program, map_class: usize, key: Type, value: Type, hasher: Option<Type>,
 ) -> String {
@@ -368,7 +418,7 @@ pub(super) fn map_implementation(
     let hash_body = map_hash_body(program, map_class, key, hasher);
     let key_equal = map_key_equal(program, key, hasher, query_type);
     let key_query = map_query_view(program, key, query_type, "key");
-    include_str!("../../stdlib/map.c.in")
+    let mut body = include_str!("../../stdlib/map.c.in")
         .replace("@ENTRY_TYPE@", &format!("struct ncr_map_entry_{map_class}"))
         .replace("@KEY_TYPE@", &ctype(program, key))
         .replace("@QUERY_TYPE@", &ctype(program, query_type))
@@ -387,7 +437,10 @@ pub(super) fn map_implementation(
         .replace("@NONE_TAG@", &none_tag.to_string())
         .replace("@SOME_TAG@", &some_tag.to_string())
         .replace("@TRY_GET_METHOD@", &try_get)
-        .replace("@BORROWED_GETTERS@", &borrowed)
+        .replace("@BORROWED_GETTERS@", &borrowed);
+    body.push_str(&map_drain_implementation(program, map_class, key, value, M::MapDrainKeys, true));
+    body.push_str(&map_drain_implementation(program, map_class, key, value, M::MapDrainValues, false));
+    body
 }
 
 pub(super) fn list_implementation(program: &t::Program, class_id: usize, element: Type) -> String {

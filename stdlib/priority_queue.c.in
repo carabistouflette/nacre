@@ -96,6 +96,7 @@ static @OPTION_TYPE@ @PRIORITY_QUEUE_TRY_POP@(ncr_obj_@ID@ *p,
 @PEEK_METHOD@
 @GET_REF_METHOD@
 @TRY_PEEK_METHOD@
+@VALUE_AT_METHOD@
 
 static int32_t @PRIORITY_QUEUE_SIZE@(ncr_obj_@ID@ *p, size_t line, size_t column) {
     (void)line; (void)column;

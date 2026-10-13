@@ -577,9 +577,10 @@ impl Emitter<'_> {
             }
             E::MapSlot { map, index, kind, .. } => {
                 let index = self.expression(index);
-                let map = place_text(map);
+                let map_text = place_text(map);
+                let map_class = map.ty.object_class().expect("map-slot receiver is an object");
                 let slot = crate::stdlib_codegen::map_slot_expression(
-                    self.program, &map, &index, *kind, expr.ty);
+                    self.program, map_class, &map_text, &index, *kind, expr.ty);
                 self.bind(expr.ty, &slot)
             }
             E::Upcast { value, interface, concrete } => {

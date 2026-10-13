@@ -1,6 +1,6 @@
 use crate::codegen::ctype;
 use crate::ir::{self as t, NativeMethod as M, Type};
-use super::{collections, support::{marker, result_id, variant_id}};
+use super::{collections, iterators, support::{marker, result_id, variant_id}};
 
 fn native_method(program: &t::Program, receiver: usize, is: impl Fn(M) -> bool) -> Option<&t::Function> {
     program.functions.iter().find(|function| {
@@ -120,12 +120,20 @@ pub(super) fn implementation(program: &t::Program, class_id: usize, element: Typ
     let get = get_method(program, class_id, element);
     let try_get = try_get_method(program, class_id, element);
     let try_pops = try_pop_methods(program, class_id, element);
-    include_str!("../../stdlib/deque.c.in")
+    let mut body = include_str!("../../stdlib/deque.c.in")
         .replace("@ELEMENT@", &ctype(program, element))
         .replace("@ZERO@", &collections::zero(program, element))
         .replace("@DROP_AT_INDEX@", &collections::drop_element(element, "p->items[physical]"))
         .replace("@GET_METHOD@", &get)
         .replace("@BORROWED_GETTERS@", &borrowed)
         .replace("@TRY_GET_METHOD@", &try_get)
-        .replace("@TRY_POP_METHODS@", &try_pops)
+        .replace("@TRY_POP_METHODS@", &try_pops);
+    body.push_str(&iterators::drain_function(
+        program,
+        class_id,
+        M::CollectionDrain,
+        element,
+        "iterator->items = p->items;\niterator->head = p->head;\niterator->capacity = p->capacity;\niterator->length = p->length;\np->items = NULL;\np->head = 0;\np->length = 0;\np->capacity = 0;",
+    ));
+    body
 }

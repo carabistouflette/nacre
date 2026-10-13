@@ -24,6 +24,7 @@ pub enum NativeClass {
     Set { key: Type, hasher: Option<Type> }, Comparator(Type), Hasher(Type),
     OrderedMap { key: Type, value: Type }, OrderedSet(Type), PriorityQueue(Type), BitSet,
     Predicate(Type),
+    Iterator(Type),
     ListIterator(Type), MapIterator(Type, Type), FilterIterator(Type),
     TakeIterator(Type), SkipIterator(Type), Iterators(Type),
     Text, BigInt, BigDecimal, Regex, RegexMatch, Arrays, ByteBuffer, Encoding, Crypto, Uuid, Path, File, Directory, FileInfo,

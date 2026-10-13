@@ -396,6 +396,167 @@ void main() {
 }
 
 #[test]
+fn ordered_maps_sets_and_priority_queues_traverse_safely() {
+    assert_native(
+        r#"
+class Key {
+    private int rank;
+    private Text payload;
+    Key(int rank) { this.rank = rank; this.payload = new Text("ordered key"); }
+    public readonly int rankValue() { return this.rank; }
+}
+class Value {
+    private int amount;
+    private Text payload;
+    Value(int amount) { this.amount = amount; this.payload = new Text("ordered value"); }
+    public readonly int amountValue() { return this.amount; }
+    public void increment() { this.amount = this.amount + 1; }
+}
+class KeyOrder implements Comparator<Key> {
+    public readonly int compare(borrow Key left, borrow Key right) {
+        if (left.rankValue() < right.rankValue()) { return -1; }
+        if (left.rankValue() > right.rankValue()) { return 1; }
+        return 0;
+    }
+}
+class ValueOrder implements Comparator<Value> {
+    public readonly int compare(borrow Value left, borrow Value right) {
+        if (left.amountValue() < right.amountValue()) { return -1; }
+        if (left.amountValue() > right.amountValue()) { return 1; }
+        return 0;
+    }
+}
+class IntOrder implements Comparator<int> {
+    public readonly int compare(int left, int right) {
+        if (left < right) { return -1; }
+        if (left > right) { return 1; }
+        return 0;
+    }
+}
+void main() {
+    OrderedMap<Key, Value> entries = new OrderedMap<Key, Value>(new KeyOrder());
+    entries.put(new Key(3), new Value(30));
+    entries.put(new Key(1), new Value(10));
+    entries.put(new Key(2), new Value(20));
+    { borrow mut Value first = entries.valueAtMut(0); first.increment(); }
+    for (borrow Key key, borrow mut Value value : entries) {
+        println(key.rankValue());
+        value.increment();
+    }
+    for (borrow Key key, borrow Value value : entries) { println(value.amountValue()); }
+    OrderedMap<int, int> copiedEntries = new OrderedMap<int, int>(new IntOrder());
+    copiedEntries.put(3, 30); copiedEntries.put(1, 10); copiedEntries.put(2, 20);
+    int copiedTotal = 0;
+    for (int key, int value : copiedEntries) { copiedTotal = copiedTotal + key + value; }
+    println(copiedTotal);
+
+    OrderedSet<Key> keys = new OrderedSet<Key>(new KeyOrder());
+    keys.add(new Key(3)); keys.add(new Key(1)); keys.add(new Key(2));
+    { borrow Key first = keys.keyAt(0); println(first.rankValue()); }
+    for (borrow Key key : keys) { println(key.rankValue()); }
+
+    PriorityQueue<Value> queue = new PriorityQueue<Value>(new ValueOrder());
+    queue.add(new Value(5)); queue.add(new Value(1)); queue.add(new Value(4));
+    queue.add(new Value(2)); queue.add(new Value(3));
+    { borrow Value root = queue.valueAt(0); println(root.amountValue()); }
+    int heapOrder = 0;
+    for (borrow Value value : queue) { heapOrder = heapOrder * 10 + value.amountValue(); }
+    println(heapOrder);
+
+    PriorityQueue<int> copiedQueue = new PriorityQueue<int>(new IntOrder());
+    copiedQueue.add(5); copiedQueue.add(1); copiedQueue.add(4);
+    copiedQueue.add(2); copiedQueue.add(3);
+    int copiedHeapOrder = 0;
+    for (int value : copiedQueue) { copiedHeapOrder = copiedHeapOrder * 10 + value; }
+    println(copiedHeapOrder);
+}
+"#,
+        b"1\n2\n3\n12\n21\n31\n66\n1\n1\n2\n3\n1\n12453\n12453\n",
+    );
+}
+
+#[test]
+fn ordered_and_iterator_traversal_loans_reject_conflicting_access() {
+    assert_rejected_with_code(
+        r#"
+class Key { int rank; Key(int rank) { this.rank = rank; } readonly int rankValue() { return this.rank; } }
+class KeyOrder implements Comparator<Key> {
+    public readonly int compare(borrow Key left, borrow Key right) { return left.rankValue() - right.rankValue(); }
+}
+void main() {
+    OrderedMap<Key, int> entries = new OrderedMap<Key, int>(new KeyOrder());
+    entries.put(new Key(1), 10);
+    for (borrow Key key, int value : entries) { entries.clear(); }
+}
+"#,
+        &["E3001"],
+    );
+    assert_rejected(
+        r#"
+class Key { int rank; Key(int rank) { this.rank = rank; } readonly int rankValue() { return this.rank; } }
+class KeyOrder implements Comparator<Key> {
+    public readonly int compare(borrow Key left, borrow Key right) { return left.rankValue() - right.rankValue(); }
+}
+void main() {
+    OrderedMap<Key, int> entries = new OrderedMap<Key, int>(new KeyOrder());
+    entries.put(new Key(1), 10);
+    for (borrow mut Key key, int value : entries) { }
+}
+"#,
+    );
+    assert_rejected_with_code(
+        r#"
+class Item { int value; Item(int value) { this.value = value; } readonly int read() { return this.value; } }
+class ItemOrder implements Comparator<Item> {
+    public readonly int compare(borrow Item left, borrow Item right) { return left.read() - right.read(); }
+}
+void main() {
+    PriorityQueue<Item> items = new PriorityQueue<Item>(new ItemOrder());
+    items.add(new Item(1));
+    for (borrow mut Item item : items) { }
+}
+"#,
+        &["E3003"],
+    );
+    assert_rejected_with_code(
+        r#"
+class Item { int value; Item(int value) { this.value = value; } readonly int read() { return this.value; } }
+class ItemOrder implements Comparator<Item> {
+    public readonly int compare(borrow Item left, borrow Item right) { return left.read() - right.read(); }
+}
+void main() {
+    OrderedSet<Item> items = new OrderedSet<Item>(new ItemOrder());
+    items.add(new Item(1));
+    for (borrow Item item : items) { items.clear(); }
+}
+"#,
+        &["E3001"],
+    );
+    assert_rejected_with_code(
+        r#"
+class Item { int value; Item(int value) { this.value = value; } readonly int read() { return this.value; } }
+class ItemOrder implements Comparator<Item> {
+    public readonly int compare(borrow Item left, borrow Item right) { return left.read() - right.read(); }
+}
+void main() {
+    PriorityQueue<Item> items = new PriorityQueue<Item>(new ItemOrder());
+    items.add(new Item(1));
+    for (borrow Item item : items) { items.pop(); }
+}
+"#,
+        &["E3001"],
+    );
+    assert_rejected_with_code(
+        "void main() { List<int> values = new List<int>(); values.add(1); Iterator<int> input = values.drain(); for (int item : input) { input.next(); } }",
+        &["E3001"],
+    );
+    assert_rejected_with_code(
+        "void main() { List<int> values = new List<int>(); values.add(1); Iterator<int> input = values.drain(); for (int item : input) { drop(input); } }",
+        &["E3002"],
+    );
+}
+
+#[test]
 fn traversal_adds_no_heap_allocations_beyond_map_construction() {
     let baseline = r#"
 void main() {
@@ -414,6 +575,46 @@ void main() {
     entries.put(3, 30);
     int total = 0;
     for (int key, int value : entries) { total = total + key + value; }
+    println(total);
+}
+"#;
+    assert_eq!(allocation_count(baseline), allocation_count(traversed));
+}
+
+#[test]
+fn ordered_collection_traversal_adds_no_heap_allocations() {
+    let baseline = r#"
+class IntOrder implements Comparator<int> {
+    public readonly int compare(int left, int right) {
+        if (left < right) { return -1; }
+        if (left > right) { return 1; }
+        return 0;
+    }
+}
+void main() {
+    OrderedMap<int, int> entries = new OrderedMap<int, int>(new IntOrder());
+    entries.put(1, 10); entries.put(2, 20); entries.put(3, 30);
+    PriorityQueue<int> queue = new PriorityQueue<int>(new IntOrder());
+    queue.add(1); queue.add(2); queue.add(3);
+    println(0);
+}
+"#;
+    let traversed = r#"
+class IntOrder implements Comparator<int> {
+    public readonly int compare(int left, int right) {
+        if (left < right) { return -1; }
+        if (left > right) { return 1; }
+        return 0;
+    }
+}
+void main() {
+    OrderedMap<int, int> entries = new OrderedMap<int, int>(new IntOrder());
+    entries.put(1, 10); entries.put(2, 20); entries.put(3, 30);
+    PriorityQueue<int> queue = new PriorityQueue<int>(new IntOrder());
+    queue.add(1); queue.add(2); queue.add(3);
+    int total = 0;
+    for (int key, int value : entries) { total = total + key + value; }
+    for (int value : queue) { total = total + value; }
     println(total);
 }
 "#;

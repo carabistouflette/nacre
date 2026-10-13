@@ -1,7 +1,7 @@
 use crate::codegen::ctype;
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
 use super::{
-    collections, ordering,
+    collections, iterators, ordering,
     support::{marker, replace_method_ids, replace_placeholders, result_id, variant},
 };
 
@@ -50,6 +50,89 @@ fn ordered_map_for_set(program: &t::Program, key: Type) -> &t::Class {
         matches!(class.native, Some(C::OrderedMap(candidate, Type::Unit)) if candidate == key)
     }).expect("OrderedSet specialization owns its shared OrderedMap<K, Unit> core")
 }
+fn value_at_mut_method(program: &t::Program, class_id: usize, value: Type) -> String {
+    let Some(function) = native_method(program, class_id, M::OrderedMapValueAtMut) else {
+        return String::new();
+    };
+    let index_type = function.params.first().expect("OrderedMap.valueAtMut index").1;
+    assert_eq!(index_type, Type::Int, "OrderedMap.valueAtMut index is int32");
+    let stored = ordering::borrow_storage(program, value, "p->table.items[index].value");
+    format!(
+        "static {} {}(ncr_obj_{class_id} *p, int32_t index, size_t line, size_t column) {{\n    if (index < 0 || index >= p->table.length) {{ ncr_fail(\"OrderedMap index out of bounds\", line, column); }}\n    return {};\n}}\n",
+        ctype(program, function.return_type), marker(M::OrderedMapValueAtMut), stored,
+    )
+}
+
+fn ordered_map_drain(
+    program: &t::Program,
+    class_id: usize,
+    key: Type,
+    value: Type,
+    method: M,
+    drain_keys: bool,
+) -> String {
+    let Some(drain) = native_method(program, class_id, method) else { return String::new(); };
+    let element = if drain_keys { key } else { value };
+    let (next_name, drop_name) = iterators::callback_names(drain.id);
+    let entry = format!("struct ncr_ordered_entry_{class_id}");
+    let next_body = if drain_keys {
+        format!(
+            "    {entry} *entries = raw;\n    if (*cursor >= length) {{ *available = false; return; }}\n    int32_t index = (*cursor)++;\n    *value = entries[index].key;\n    entries[index].key = {};\n    {}\n    entries[index].value = {};\n    *available = true;",
+            collections::zero(program, key),
+            collections::drop_element(value, "entries[index].value"),
+            collections::zero(program, value),
+        )
+    } else {
+        format!(
+            "    {entry} *entries = raw;\n    if (*cursor >= length) {{ *available = false; return; }}\n    int32_t index = (*cursor)++;\n    *value = entries[index].value;\n    entries[index].value = {};\n    {}\n    entries[index].key = {};\n    *available = true;",
+            collections::zero(program, value),
+            collections::drop_element(key, "entries[index].key"),
+            collections::zero(program, key),
+        )
+    };
+    let drop_body = format!(
+        "    {entry} *entries = raw;\n    for (int32_t index = cursor; index < length; ++index) {{\n        {}\n        {}\n    }}\n    ncr_deallocate(entries);",
+        collections::drop_element(key, "entries[index].key"),
+        collections::drop_element(value, "entries[index].value"),
+    );
+    let callbacks = iterators::drain_callbacks(program, drain.id, element, &next_body, &drop_body);
+    let setup = format!(
+        "iterator->state = p->table.items;\niterator->length = p->table.length;\niterator->ncr_next_fn = {next_name};\niterator->ncr_drop_fn = {drop_name};\np->table.items = NULL;\np->table.length = 0;\np->table.capacity = 0;"
+    );
+    format!("{callbacks}{}", iterators::drain_function(program, class_id, method, element, &setup))
+}
+
+fn ordered_set_key_at(program: &t::Program, class_id: usize, key: Type) -> String {
+    let Some(function) = native_method(program, class_id, M::OrderedSetKeyAt) else { return String::new(); };
+    let index_type = function.params.first().expect("OrderedSet.keyAt index").1;
+    assert_eq!(index_type, Type::Int, "OrderedSet.keyAt index is int32");
+    let stored = ordering::borrow_storage(program, key, "p->table.items[index].key");
+    format!(
+        "static {} {}(ncr_obj_{class_id} *p, int32_t index, size_t line, size_t column) {{\n    if (index < 0 || index >= p->table.length) {{ ncr_fail(\"OrderedSet index out of bounds\", line, column); }}\n    return {};\n}}\n",
+        ctype(program, function.return_type), marker(M::OrderedSetKeyAt), stored,
+    )
+}
+
+fn ordered_set_drain(program: &t::Program, class_id: usize, key: Type) -> String {
+    let Some(drain) = native_method(program, class_id, M::OrderedSetDrain) else { return String::new(); };
+    let map = ordered_map_for_set(program, key);
+    let (next_name, drop_name) = iterators::callback_names(drain.id);
+    let entry = format!("struct ncr_ordered_entry_{}", map.id);
+    let next_body = format!(
+        "    {entry} *entries = raw;\n    if (*cursor >= length) {{ *available = false; return; }}\n    int32_t index = (*cursor)++;\n    *value = entries[index].key;\n    entries[index].key = {};\n    entries[index].value = UINT8_C(0);\n    *available = true;",
+        collections::zero(program, key),
+    );
+    let drop_body = format!(
+        "    {entry} *entries = raw;\n    for (int32_t index = cursor; index < length; ++index) {{\n        {}\n    }}\n    ncr_deallocate(entries);",
+        collections::drop_element(key, "entries[index].key"),
+    );
+    let callbacks = iterators::drain_callbacks(program, drain.id, key, &next_body, &drop_body);
+    let setup = format!(
+        "iterator->state = p->table.items;\niterator->length = p->table.length;\niterator->ncr_next_fn = {next_name};\niterator->ncr_drop_fn = {drop_name};\np->table.items = NULL;\np->table.length = 0;\np->table.capacity = 0;"
+    );
+    format!("{callbacks}{}", iterators::drain_function(program, class_id, M::OrderedSetDrain, key, &setup))
+}
+
 
 pub(super) fn storage_definition(program: &t::Program, class_id: usize) -> String {
     let comparator = ctype(program, comparator_field(program, class_id));
@@ -186,11 +269,14 @@ pub(super) fn map_implementation(program: &t::Program, class_id: usize, key: Typ
         ("@KEY_AT_EXPR@", key_at_expr),
         ("@VALUE_AT_TYPE@", ctype(program, value_at.return_type)),
         ("@VALUE_AT_EXPR@", value_at_expr),
+        ("@VALUE_AT_MUT_METHOD@", &value_at_mut_method(program, class_id, value)),
         ("@OPTION_INDEX_TYPE@", ctype(program, floor.return_type)),
         ("@INDEX_NONE_TAG@", index_none_tag.to_string()),
         ("@INDEX_SOME_TAG@", index_some_tag.to_string()),
     ]);
     body = replace_method_ids(body, program, Some(class_id));
+    body.push_str(&ordered_map_drain(program, class_id, key, value, M::OrderedMapDrainKeys, true));
+    body.push_str(&ordered_map_drain(program, class_id, key, value, M::OrderedMapDrainValues, false));
     body
 }
 
@@ -210,8 +296,10 @@ pub(super) fn set_implementation(program: &t::Program, class_id: usize, key: Typ
         ("@QUERY_TYPE@", ctype(program, query)),
         ("@KEY_QUERY_EXPR@", key_query),
         ("@DROP_DUPLICATE_KEY@", collections::drop_element(key, "key")),
+        ("@ORDERED_SET_KEY_AT@", &ordered_set_key_at(program, class_id, key)),
     ]);
     body = replace_method_ids(body, program, Some(class_id));
     debug_assert!(!body.contains('@'), "unexpanded OrderedSet template placeholder");
+    body.push_str(&ordered_set_drain(program, class_id, key));
     body
 }

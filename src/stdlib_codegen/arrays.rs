@@ -1,6 +1,6 @@
 use crate::codegen::ctype;
 use crate::ir::{self as t, NativeMethod as M, Type};
-use super::support::{marker, result_id, variant};
+use super::{iterators, support::{marker, result_id, variant}};
 
 pub(super) fn array_fields(program: &t::Program, element: Type) -> String {
     format!("    {} *items;\n    int32_t length;\n", ctype(program, element))
@@ -106,7 +106,7 @@ pub(super) fn array_implementation(program: &t::Program, class_id: usize, elemen
     assert_eq!(set_index, Type::Int, "Array.set index must use int32");
     assert_eq!(set_value, element, "Array.set value must match its element type");
 
-    include_str!("../../stdlib/array.c.in")
+    let mut body = include_str!("../../stdlib/array.c.in")
         .replace("@ARRAY_TYPE@", &ctype(program, Type::Object(class_id)))
         .replace("@LIST_TYPE@", &ctype(program, Type::Object(list_class)))
         .replace("@ELEMENT@", &ctype(program, element))
@@ -116,7 +116,15 @@ pub(super) fn array_implementation(program: &t::Program, class_id: usize, elemen
         .replace("@BORROWED_GETTERS@", &borrowed_methods(program, class_id, element))
         .replace("@TRY_GET_METHOD@", &try_get_method(program, class_id, element))
         .replace("@ARRAY_SET@", marker(M::ArraySet))
-        .replace("@DROP_AT_INDEX@", &drop_element(element, "p->items[index]"))
+        .replace("@DROP_AT_INDEX@", &drop_element(element, "p->items[index]"));
+    body.push_str(&iterators::drain_function(
+        program,
+        class_id,
+        M::CollectionDrain,
+        element,
+        "iterator->items = p->items;\niterator->length = p->length;\np->items = NULL;\np->length = 0;",
+    ));
+    body
 }
 
 pub(super) fn zeroed_implementations(program: &t::Program) -> String {

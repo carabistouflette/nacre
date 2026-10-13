@@ -67,6 +67,15 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   arguments, and mapper extraction uses the element representation, not the
   input-interface representation. Hidden callback and element state remains
   subject to recursive sendability checks.
+- Collection traversal includes ordered maps/sets and priority queues with
+  comparator order, readonly ordered keys, and explicitly mutable affine map
+  values. Iterator traversal mutably advances the original iterator and preserves
+  loop loans, item destruction, and early-exit cleanup.
+- Arrays, deques, sets, priority queues, and maps now drain into owned iterators;
+  map key/value drains destroy the unused entry half. Ordered drains preserve
+  comparator order, deque and array drains preserve index order, and priority
+  queue drains expose heap-array order. Existing map/filter/take/skip/collect
+  adapters compose with every drain source.
 - ECDSA verification classifies malformed DER as `Ok(false)` using bounded,
   allocation-free validation; unsupported algorithms and backend failures remain
   errors. Consumer regressions cover empty, truncated, noncanonical, and
