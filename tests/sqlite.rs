@@ -101,7 +101,8 @@ Result<Unit, Text> exercise() {
     Text query = new Text("SELECT id AS id, text_value AS literal, blob_value AS payload, nullable, huge, real_value FROM sample");
     database.prepare(query)?;
     println(borrowedCountMatches(database, 6)?);
-    println(database.columnName(0)?.equalsString("id"));
+    Text columnName = database.columnName(0)?;
+    println(columnName.equalsString("id"));
     println(database.step()?);
     println(borrowedColumnType(database)?);
     println(database.columnType(1)?);
@@ -117,14 +118,16 @@ Result<Unit, Text> exercise() {
     boolean queryHasMore = database.step()?;
     println(!queryHasMore);
     println(!database.step()?);
-    database.prepare(new Text("SELECT CAST(x'' AS BLOB)"))?;
+    Text emptyBlobQuery = new Text("SELECT CAST(x'' AS BLOB)");
+    database.prepare(emptyBlobQuery)?;
     println(database.step()?);
     match (database.columnBlob(0)?) {
         None { println(false); }
         Some(bytes) { println(bytes.length() == 0L); }
     }
 
-    database.prepare(new Text("SELECT ?"))?;
+    Text parameterQuery = new Text("SELECT ?");
+    database.prepare(parameterQuery)?;
     database.bindLong(1, 42L)?;
     println(database.step()?);
     println(optionLongEquals(database.columnLong(0)?, 42L));
@@ -179,6 +182,9 @@ boolean longFailed(Result<long, Text> result) {
 boolean textFailed(Result<Text, Text> result) {
     match (result) { Ok(value) { return false; } Err(error) { return true; } }
 }
+boolean optionTextFailed(Result<Option<Text>, Text> result) {
+    match (result) { Ok(value) { return false; } Err(error) { return true; } }
+}
 boolean boolFailed(Result<boolean, Text> result) {
     match (result) { Ok(value) { return false; } Err(error) { return true; } }
 }
@@ -196,45 +202,62 @@ Result<Unit, Text> exercise() {
     println(databaseFailed(Database.open(badPath)));
     Text memory = new Text(":memory:");
     Database database = Database.open(memory)?;
-    println(unitFailed(database.prepare(new Text("SELECT 1\0"))));
-    database.execute(new Text("CREATE TABLE parent (id INTEGER PRIMARY KEY)"))?;
-    database.execute(new Text("CREATE TABLE child (parent_id INTEGER NOT NULL REFERENCES parent(id))"))?;
-    println(unitFailed(database.prepare(new Text("SELECT 1; PRAGMA foreign_keys=OFF"))));
-    println(longFailed(database.execute(new Text("INSERT INTO child VALUES(98)"))));
-    println(longFailed(database.execute(new Text("SELECT 1; PRAGMA foreign_keys=OFF"))));
-    println(longFailed(database.execute(new Text("INSERT INTO child VALUES(97)"))));
+    Text nulQuery = new Text("SELECT 1\0");
+    println(unitFailed(database.prepare(nulQuery)));
+    Text parentSchema = new Text("CREATE TABLE parent (id INTEGER PRIMARY KEY)");
+    database.execute(parentSchema)?;
+    Text childSchema = new Text("CREATE TABLE child (parent_id INTEGER NOT NULL REFERENCES parent(id))");
+    database.execute(childSchema)?;
+    Text rejectedPragmaTail = new Text("SELECT 1; PRAGMA foreign_keys=OFF");
+    println(unitFailed(database.prepare(rejectedPragmaTail)));
+    Text invalidChild98 = new Text("INSERT INTO child VALUES(98)");
+    println(longFailed(database.execute(invalidChild98)));
+    println(longFailed(database.execute(rejectedPragmaTail)));
+    Text invalidChild97 = new Text("INSERT INTO child VALUES(97)");
+    println(longFailed(database.execute(invalidChild97)));
     database.begin()?;
-    database.execute(new Text("INSERT INTO parent VALUES(1)"))?;
+    Text insertParent1 = new Text("INSERT INTO parent VALUES(1)");
+    database.execute(insertParent1)?;
     database.commit()?;
     database.begin()?;
-    database.execute(new Text("INSERT INTO parent VALUES(2)"))?;
+    Text insertParent2 = new Text("INSERT INTO parent VALUES(2)");
+    database.execute(insertParent2)?;
     database.rollback()?;
     database.begin()?;
-    println(longFailed(database.execute(new Text("INSERT INTO child VALUES(99)"))));
+    Text invalidChild99 = new Text("INSERT INTO child VALUES(99)");
+    println(longFailed(database.execute(invalidChild99)));
     database.rollback()?;
 
-    database.prepare(new Text("SELECT COUNT(*) FROM parent"))?;
+    Text countParents = new Text("SELECT COUNT(*) FROM parent");
+    database.prepare(countParents)?;
     println(database.step()?);
     Option<long> count = database.columnLong(0)?;
     println(optionLongEquals(count, 1L));
 
-    println(longFailed(database.execute(new Text("SELECT 1"))));
-    database.execute(new Text("CREATE TABLE marker (id INTEGER)"))?;
-    println(longFailed(database.execute(new Text("INSERT INTO marker VALUES(1); INSERT INTO marker VALUES(2)"))));
-    database.prepare(new Text("SELECT COUNT(*) FROM marker"))?;
+    Text rowQuery = new Text("SELECT 1");
+    println(longFailed(database.execute(rowQuery)));
+    Text markerSchema = new Text("CREATE TABLE marker (id INTEGER)");
+    database.execute(markerSchema)?;
+    Text multipleInserts = new Text("INSERT INTO marker VALUES(1); INSERT INTO marker VALUES(2)");
+    println(longFailed(database.execute(multipleInserts)));
+    Text countMarkers = new Text("SELECT COUNT(*) FROM marker");
+    database.prepare(countMarkers)?;
     println(database.step()?);
     println(optionLongEquals(database.columnLong(0)?, 0L));
 
-    database.prepare(new Text("SELECT 77; /* block comment */ -- trailing comment\n"))?;
-    println(unitFailed(database.prepare(new Text("SELECT 1; SELECT 2"))));
+    Text commentedQuery = new Text("SELECT 77; /* block comment */ -- trailing comment\n");
+    database.prepare(commentedQuery)?;
+    Text multipleQueries = new Text("SELECT 1; SELECT 2");
+    println(unitFailed(database.prepare(multipleQueries)));
     println(database.step()?);
     println(optionLongEquals(database.columnLong(0)?, 77L));
-    println(textFailed(database.columnText(0)));
+    println(optionTextFailed(database.columnText(0)));
     println(optionLongFailed(database.columnLong(1)));
     println(textFailed(database.columnName(1)));
     println(intFailed(database.columnType(1)));
 
-    database.prepare(new Text("SELECT ?"))?;
+    Text parameterQuery = new Text("SELECT ?");
+    database.prepare(parameterQuery)?;
     println(unitFailed(database.bindNull(0)));
     println(unitFailed(database.bindLong(2, 9L)));
     database.bindLong(1, 9L)?;
@@ -245,10 +268,11 @@ Result<Unit, Text> exercise() {
 
     database.close()?;
     database.close()?;
-    println(unitFailed(database.prepare(new Text("SELECT 1"))));
+    println(unitFailed(database.prepare(rowQuery)));
     println(boolFailed(database.step()));
     println(intFailed(database.columnCount()));
-    println(longFailed(database.execute(new Text("CREATE TABLE closed_test (id INTEGER)"))));
+    Text closedSchema = new Text("CREATE TABLE closed_test (id INTEGER)");
+    println(longFailed(database.execute(closedSchema)));
     return new Result<Unit, Text>.Ok(());
 }
 void main() {
@@ -269,27 +293,33 @@ boolean optionLongEquals(Option<long> option, long expected) {
 Result<Unit, Text> abandonTransaction(borrow Text path) {
     Database abandoned = Database.open(path)?;
     abandoned.begin()?;
-    abandoned.execute(new Text("INSERT INTO held VALUES(3)"))?;
-    abandoned.prepare(new Text("SELECT value FROM held"))?;
+    Text insert = new Text("INSERT INTO held VALUES(3)");
+    abandoned.execute(insert)?;
+    Text select = new Text("SELECT value FROM held");
+    abandoned.prepare(select)?;
     println(abandoned.step()?);
     return new Result<Unit, Text>.Ok(());
 }
 Result<Unit, Text> exercise(borrow Text path) {
     Database first = Database.open(path)?;
     Database second = Database.open(path)?;
-    first.execute(new Text("CREATE TABLE IF NOT EXISTS held (value INTEGER)"))?;
+    Text schema = new Text("CREATE TABLE IF NOT EXISTS held (value INTEGER)");
+    first.execute(schema)?;
     first.begin()?;
-    first.execute(new Text("INSERT INTO held VALUES(1)"))?;
+    Text firstInsert = new Text("INSERT INTO held VALUES(1)");
+    first.execute(firstInsert)?;
     second.setBusyTimeoutMillis(150L)?;
     long start = Time.monotonicNanos()?;
-    boolean busy = longFailed(second.execute(new Text("INSERT INTO held VALUES(2)")));
+    Text secondInsert = new Text("INSERT INTO held VALUES(2)");
+    boolean busy = longFailed(second.execute(secondInsert));
     long elapsed = Time.monotonicNanos()? - start;
     first.rollback()?;
     println(busy);
     println(elapsed >= 75000000L && elapsed < 5000000000L);
     abandonTransaction(path)?;
     Database verify = Database.open(path)?;
-    verify.prepare(new Text("SELECT COUNT(*) FROM held"))?;
+    Text count = new Text("SELECT COUNT(*) FROM held");
+    verify.prepare(count)?;
     println(verify.step()?);
     println(optionLongEquals(verify.columnLong(0)?, 0L));
     return new Result<Unit, Text>.Ok(());

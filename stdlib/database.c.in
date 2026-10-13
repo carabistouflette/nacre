@@ -330,6 +330,7 @@ static ncr_obj_@DB_STEP_RESULT@ @DATABASE_STEP@(
     }
     ncr_self->statement_reset_required = true;
     return NCR_DB_ERROR(@DB_STEP_RESULT@, "Database.step failed", ncr_line, ncr_column);
+}
 
 static ncr_obj_@DB_UNIT_RESULT@ @DATABASE_RESET@(
     ncr_obj_@DATABASE_CLASS_ID@ *ncr_self, size_t ncr_line, size_t ncr_column
