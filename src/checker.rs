@@ -17,6 +17,7 @@ struct FieldInfo { name: String, ty: Type, visibility: Visibility }
 struct ClassInfo {
     native: Option<t::NativeClass>,
     name: String, fields: Vec<FieldInfo>, variants: Option<Vec<t::Variant>>,
+    result: Option<t::ResultLayout>,
     methods: HashMap<String, usize>, constructor: Option<usize>, has_borrow: bool,
     is_interface: bool, interface_methods: Vec<usize>, implementations: Vec<(usize, Vec<usize>)>,
 }
@@ -124,7 +125,7 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
             return Err(Diagnostic::new(class.span, format!("type `{}` is declared more than once", class.qualified_name)));
         }
         tables.classes.push(ClassInfo { native: None, name: class.qualified_name.clone(), fields: Vec::new(),
-            variants: None, methods: HashMap::new(), constructor: None, has_borrow: false,
+            variants: None, result: None, methods: HashMap::new(), constructor: None, has_borrow: false,
             is_interface: class.is_interface, interface_methods: Vec::new(), implementations: Vec::new() });
     }
     for (id, class) in program.classes.iter().enumerate() {
@@ -163,6 +164,19 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
             })).collect::<Result<Vec<_>, Diagnostic>>()
         }).transpose()?;
         tables.classes[id].variants = variants;
+        let result = if class.is_builtin_result {
+            let invalid = || Diagnostic::new(class.span, "[E5006] malformed trusted Result definition");
+            let variants = tables.classes[id].variants.as_ref().ok_or_else(invalid)?;
+            if variants.len() != 2 { return Err(invalid()); }
+            let ok_variant = variants.iter().position(|variant| variant.name == "Ok").ok_or_else(invalid)?;
+            let err_variant = variants.iter().position(|variant| variant.name == "Err").ok_or_else(invalid)?;
+            let [ok_type] = variants[ok_variant].fields.as_slice() else { return Err(invalid()); };
+            let [err_type] = variants[err_variant].fields.as_slice() else { return Err(invalid()); };
+            Some(t::ResultLayout {
+                ok_variant, err_variant, ok_type: *ok_type, err_type: *err_type,
+            })
+        } else { None };
+        tables.classes[id].result = result;
         let mut names = HashSet::new();
         for field in &class.fields {
             if field.name == "System" {
@@ -426,7 +440,7 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
     }
     let classes = tables.classes.iter().enumerate().map(|(id, c)| t::Class {
         native: c.native, id, name: c.name.clone(), fields: c.fields.iter().map(|f| f.ty).collect(),
-        variants: c.variants.clone(), has_borrow: c.has_borrow,
+        variants: c.variants.clone(), result: c.result, has_borrow: c.has_borrow,
         borrowed_from: borrowed_from[id].clone(), is_interface: c.is_interface,
         interface_methods: c.interface_methods.clone(), implementations: c.implementations.clone()
     }).collect();
@@ -444,7 +458,8 @@ struct Checker<'a> {
 fn synthetic_expr(kind: a::ExprKind, span: Span) -> a::Expr {
     let depth = 1 + match &kind {
         a::ExprKind::Binary { left, right, .. } => left.depth.max(right.depth),
-        a::ExprKind::Unary { expr, .. } | a::ExprKind::Borrow { expr, .. } | a::ExprKind::Cast { expr, .. } => expr.depth,
+        a::ExprKind::Unary { expr, .. } | a::ExprKind::Borrow { expr, .. } |
+        a::ExprKind::Cast { expr, .. } | a::ExprKind::Try(expr) => expr.depth,
         a::ExprKind::Call { args, .. } | a::ExprKind::New { args, .. } | a::ExprKind::Variant { args, .. } =>
             args.iter().map(|arg| arg.depth).max().unwrap_or(0),
         a::ExprKind::MethodCall { receiver, args, .. } =>
@@ -1169,6 +1184,42 @@ impl Checker<'_> {
                 };
                 let inner = if target.is_numeric() { coerce_numeric(inner, target) } else { inner };
                 (t::ExprKind::Unary { op: *op, expr: Box::new(inner) }, target)
+            }
+            E::Try(inner) => {
+                let value = self.expression(inner)?;
+                let Type::Object(source_class) = value.ty else {
+                    return Err(Diagnostic::new(expr.span,
+                        "postfix `?` requires an owned built-in Result<T, E> value"));
+                };
+                if self.tables.is_view(value.ty) {
+                    return Err(Diagnostic::new(expr.span,
+                        "postfix `?` cannot extract a borrowed or view value"));
+                }
+                let Some(source) = self.tables.classes[source_class].result else {
+                    return Err(Diagnostic::new(expr.span,
+                        "postfix `?` requires the built-in Result<T, E> type"));
+                };
+                let Type::Object(return_result) = self.return_type else {
+                    return Err(Diagnostic::new(expr.span,
+                        "postfix `?` is only valid inside a function returning built-in Result<U, E>"));
+                };
+                let Some(target) = self.tables.classes[return_result].result else {
+                    return Err(Diagnostic::new(expr.span,
+                        "postfix `?` is only valid inside a function returning built-in Result<U, E>"));
+                };
+                if source.err_type != target.err_type {
+                    return Err(Diagnostic::new(expr.span, format!(
+                        "postfix `?` cannot propagate error type `{}` into `{}`",
+                        self.tables.type_name(source.err_type), self.tables.type_name(target.err_type))));
+                }
+                if matches!(source.ok_type, Type::Void | Type::Borrow { .. })
+                    || self.tables.is_view(source.ok_type)
+                    || matches!(source.err_type, Type::Void | Type::Borrow { .. })
+                    || self.tables.is_view(source.err_type) {
+                    return Err(Diagnostic::new(expr.span,
+                        "postfix `?` cannot extract borrowed or view values"));
+                }
+                (t::ExprKind::Try { value: Box::new(value), return_result }, source.ok_type)
             }
             E::Binary { op, left, right } => {
                 let left = self.expression(left)?;

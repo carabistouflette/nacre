@@ -1,0 +1,256 @@
+interface Code {
+    readonly int code();
+}
+
+class Marker implements Code {
+    int value;
+    public Marker(int value) { this.value = value; }
+    public readonly int code() { return this.value; }
+}
+
+class Box {
+    int value;
+    public Box(int value) { this.value = value; }
+    public readonly int code() { return this.value; }
+}
+
+enum Payload {
+    TextValue(Text);
+    Empty;
+}
+
+enum Problem {
+    TextFailure(Text);
+}
+
+class Pair {
+    Text label;
+    int value;
+    public Pair(Text label, int value) {
+        this.label = label;
+        this.value = value;
+    }
+    public readonly int getValue() { return this.value; }
+}
+
+Result<Text, Text> copyText(borrow Text input) {
+    Text copy = input.sliceBytes(0, input.byteLength())?;
+    return new Result<Text, Text>.Ok(copy);
+}
+
+Result<int, Text> accept(Text pending, int parsed) {
+    return new Result<int, Text>.Ok(parsed + pending.byteLength() - 7);
+}
+
+Result<int, Text> parseWithPending(borrow Text input) {
+    return accept(new Text("pending"), input.parseInt()?);
+}
+
+Result<Pair, Text> makePair(borrow Text input) {
+    return new Result<Pair, Text>.Ok(new Pair(new Text("nested"), input.parseInt()?));
+}
+
+Result<int, Text> pairValue(borrow Text input) {
+    Pair pair = makePair(input)?;
+    return new Result<int, Text>.Ok(pair.getValue());
+}
+
+Result<Box, Text> makeBox() {
+    return new Result<Box, Text>.Ok(new Box(43));
+}
+
+Result<int, Text> boxValue() {
+    Box box = makeBox()?;
+    return new Result<int, Text>.Ok(box.code());
+}
+
+Result<Payload, Text> makePayload() {
+    return new Result<Payload, Text>.Ok(new Payload.TextValue(new Text("enum payload")));
+}
+
+Result<Code, Text> makeInterface() {
+    return new Result<Code, Text>.Ok(new Marker(61));
+}
+
+Result<int, Text> interfaceValue() {
+    Code value = makeInterface()?;
+    return new Result<int, Text>.Ok(value.code());
+}
+
+Result<int, Box> failWithBox() {
+    return new Result<int, Box>.Err(new Box(71));
+}
+
+Result<int, Box> forwardBoxError() {
+    return new Result<int, Box>.Ok(failWithBox()?);
+}
+
+Result<int, Problem> failWithProblem() {
+    return new Result<int, Problem>.Err(new Problem.TextFailure(new Text("enum failure")));
+}
+
+Result<int, Problem> forwardProblemError() {
+    return new Result<int, Problem>.Ok(failWithProblem()?);
+}
+
+Result<int, Code> failWithInterface() {
+    return new Result<int, Code>.Err(new Marker(72));
+}
+
+Result<int, Code> forwardInterfaceError() {
+    return new Result<int, Code>.Ok(failWithInterface()?);
+}
+
+Result<boolean, Text> failBoolean() {
+    return new Result<boolean, Text>.Err(new Text("short-circuit failure"));
+}
+
+Result<boolean, Text> shortCircuitFailure() {
+    boolean reached = true && failBoolean()?;
+    return new Result<boolean, Text>.Ok(reached);
+}
+
+Result<int, Text> shortCircuitSkip() {
+    boolean andSkipped = false && failBoolean()?;
+    boolean orSkipped = true || failBoolean()?;
+    if (andSkipped || orSkipped) {
+        return new Result<int, Text>.Ok(1);
+    }
+    return new Result<int, Text>.Ok(0);
+}
+
+Result<boolean, Text> readiness(int row) {
+    if (row == 1) {
+        return new Result<boolean, Text>.Err(new Text("condition failure"));
+    }
+    return new Result<boolean, Text>.Ok(true);
+}
+
+Result<boolean, Text> ready() {
+    return new Result<boolean, Text>.Ok(true);
+}
+
+Result<int, Text> rowValue(int row) {
+    if (row == 1) {
+        return new Result<int, Text>.Err(new Text("inner failure"));
+    }
+    return new Result<int, Text>.Ok(row);
+}
+
+Result<int, Text> nestedLoopFailure() {
+    Text root = new Text("root");
+    int row = 0;
+    while (row < 2) {
+        Text rowOwner = new Text("row");
+        int column = 0;
+        while (column == 0 && ready()?) {
+            Text cellOwner = new Text("cell");
+            int value = rowValue(row)?;
+            column = value + 1;
+        }
+        row = row + 1;
+    }
+    return new Result<int, Text>.Ok(row);
+}
+
+Result<int, Text> loopConditionFailure() {
+    Text root = new Text("root");
+    int row = 0;
+    while (row < 2) {
+        Text rowOwner = new Text("row");
+        int column = 0;
+        while (column == 0 && readiness(row)?) {
+            column = 1;
+        }
+        row = row + 1;
+    }
+    return new Result<int, Text>.Ok(row);
+}
+
+void main() {
+    Text source = new Text("copied text");
+    match (copyText(source)) {
+        Ok(value) { println("TEXT OK"); value.print(); }
+        Err(error) { println("TEXT ERROR"); error.print(); }
+    }
+
+    Text number = new Text("41");
+    match (parseWithPending(number)) {
+        Ok(value) { println("PENDING ARG OK"); println(value); }
+        Err(error) { println("PENDING ARG ERROR"); error.print(); }
+    }
+
+    match (pairValue(number)) {
+        Ok(value) { println("NESTED CONSTRUCTOR OK"); println(value); }
+        Err(error) { println("NESTED CONSTRUCTOR ERROR"); error.print(); }
+    }
+
+    match (boxValue()) {
+        Ok(value) { println("OBJECT VALUE OK"); println(value); }
+        Err(error) { println("OBJECT VALUE ERROR"); error.print(); }
+    }
+
+    match (makePayload()) {
+        Ok(payload) {
+            match (payload) {
+                TextValue(value) { println("ENUM VALUE OK"); value.print(); }
+                Empty { println("ENUM VALUE EMPTY"); }
+            }
+        }
+        Err(error) { println("ENUM VALUE ERROR"); error.print(); }
+    }
+
+    match (interfaceValue()) {
+        Ok(value) { println("INTERFACE VALUE OK"); println(value); }
+        Err(error) { println("INTERFACE VALUE ERROR"); error.print(); }
+    }
+
+    match (forwardBoxError()) {
+        Ok(value) { println("OBJECT ERROR VALUE"); println(value); }
+        Err(error) { println("OBJECT ERROR"); println(error.code()); }
+    }
+    match (forwardProblemError()) {
+        Ok(value) { println("ENUM ERROR VALUE"); println(value); }
+        Err(problem) {
+            match (problem) {
+                TextFailure(error) { println("ENUM ERROR"); error.print(); }
+            }
+        }
+    }
+
+    match (forwardInterfaceError()) {
+        Ok(value) { println("INTERFACE ERROR VALUE"); println(value); }
+        Err(error) { println("INTERFACE ERROR"); println(error.code()); }
+    }
+
+    Text invalid = new Text("not a number");
+    match (parseWithPending(invalid)) {
+        Ok(value) { println("PENDING ARG UNEXPECTED"); println(value); }
+        Err(error) { println("PENDING ARG ERROR"); error.print(); }
+    }
+
+    match (pairValue(invalid)) {
+        Ok(value) { println("NESTED CONSTRUCTOR UNEXPECTED"); println(value); }
+        Err(error) { println("NESTED CONSTRUCTOR ERROR"); error.print(); }
+    }
+
+    match (shortCircuitSkip()) {
+        Ok(value) { println("SHORT-CIRCUIT SKIP OK"); println(value); }
+        Err(error) { println("SHORT-CIRCUIT SKIP ERROR"); error.print(); }
+    }
+    match (shortCircuitFailure()) {
+        Ok(value) { println("SHORT-CIRCUIT VALUE"); println(value); }
+        Err(error) { println("SHORT-CIRCUIT ERROR"); error.print(); }
+    }
+
+    match (nestedLoopFailure()) {
+        Ok(value) { println("NESTED LOOP VALUE"); println(value); }
+        Err(error) { println("NESTED LOOP ERROR"); error.print(); }
+    }
+
+    match (loopConditionFailure()) {
+        Ok(value) { println("LOOP CONDITION VALUE"); println(value); }
+        Err(error) { println("LOOP CONDITION ERROR"); error.print(); }
+    }
+
+}

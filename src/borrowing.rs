@@ -446,6 +446,7 @@ impl<'a> Analyzer<'a> {
                 self.end_since(mark, &HashSet::new(), "enum construction completed");
             }
             E::Call { .. } => { self.call(expr, None)?; }
+            E::Try { value, .. } => self.expression(value)?,
             E::Unary { expr, .. } => self.expression(expr)?,
             E::Binary { left, right, .. } => {
                 self.expression(left)?;

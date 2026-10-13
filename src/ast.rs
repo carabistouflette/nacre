@@ -46,6 +46,8 @@ pub struct Class {
     pub native: Option<NativeClass>,
     /// Prelude-owned declarations, including non-native Option/Result enums.
     pub is_builtin: bool,
+    /// Marks the trusted prelude Result template and its specializations.
+    pub is_builtin_result: bool,
     pub name: String, pub span: Span, pub fields: Vec<Field>,
     pub type_params: Vec<String>, pub implements: Vec<Type>, pub is_interface: bool,
     pub variants: Option<Vec<Variant>>,
@@ -95,6 +97,7 @@ pub enum ExprKind {
     Borrow { expr: Box<Expr>, mutable: bool },
     Cast { ty: Type, expr: Box<Expr> },
     Unary { op: UnaryOp, expr: Box<Expr> },
+    Try(Box<Expr>),
     Binary { op: BinaryOp, left: Box<Expr>, right: Box<Expr> },
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

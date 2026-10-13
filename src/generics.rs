@@ -273,7 +273,8 @@ impl Expander {
                 self.expression(receiver, env)?;
                 for arg in args { self.expression(arg, env)?; }
             }
-            E::Unary { expr, .. } | E::Borrow { expr, .. } | E::Cast { expr, .. } => self.expression(expr, env)?,
+            E::Unary { expr, .. } | E::Borrow { expr, .. } | E::Cast { expr, .. } |
+            E::Try(expr) => self.expression(expr, env)?,
             E::Binary { left, right, .. } => { self.expression(left, env)?; self.expression(right, env)?; }
             E::Char(_) | E::Int(_) | E::Long(_) | E::Double(_) | E::Unit
             | E::Boolean(_) | E::String(_) | E::Var(_) | E::This => {}

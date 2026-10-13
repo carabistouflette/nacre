@@ -236,6 +236,15 @@ impl Builder {
                 }
             }
             E::Unary { expr, .. } | E::Cast { value: expr, .. } | E::Upcast { value: expr, .. } => self.expression(expr, at),
+            E::Try { value, .. } => {
+                let at = self.expression(value, at);
+                let branch = self.step(at, Op::Nop("result-try"));
+                let ok = self.step(branch, Op::Nop("result-ok"));
+                let error = self.step(branch, Op::Nop("result-error"));
+                let error = self.cleanup(error, 0);
+                self.edge(error, self.return_exit);
+                ok
+            }
             E::Binary { op, left, right } => {
                 let at = self.expression(left, at);
                 if matches!(op, BinaryOp::And | BinaryOp::Or) {

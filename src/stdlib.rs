@@ -28,6 +28,7 @@ pub fn inject(program: &mut a::Program) -> Result<(), Diagnostic> {
                 .expect("prelude declaration is missing its builtin catalog entry");
             class.is_builtin = true;
             class.qualified_name = class.name.clone();
+            class.is_builtin_result = class.name == "Result";
             class.native = builtin.native_class();
             for method in &mut class.methods {
                 method.qualified_name = format!("{}::{}", class.qualified_name, method.name);

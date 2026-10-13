@@ -7,7 +7,7 @@ pub enum TokenKind {
     Class, Enum, Match, Interface, Implements, Module, Import, Public, Private, Static, New, This, Borrow, Mut, Readonly,
     Byte, CharType, Int, Long, Double, UnitType, Boolean, StringType, Void,
     If, Else, While, For, Return, Break, Continue, True, False,
-    LParen, RParen, LBrace, RBrace, Comma, Colon, Semicolon, Dot,
+    LParen, RParen, LBrace, RBrace, Comma, Colon, Semicolon, Dot, Question,
     Plus, Minus, Star, Slash, Percent, Tilde, Caret,
     Equal, EqualEqual, Bang, BangEqual, Less, LessEqual, Greater, GreaterEqual,
     ShiftLeft, ShiftRight, Ampersand, Pipe, AndAnd, OrOr, Eof,
@@ -62,7 +62,7 @@ pub fn lex(source: &str) -> Result<Vec<Token>, Diagnostic> {
                 '\'' => TokenKind::Character(lexer.character(start)?),
                 '(' => TokenKind::LParen, ')' => TokenKind::RParen,
                 '{' => TokenKind::LBrace, '}' => TokenKind::RBrace,
-                ',' => TokenKind::Comma, ':' => TokenKind::Colon, ';' => TokenKind::Semicolon, '.' => TokenKind::Dot,
+                ',' => TokenKind::Comma, ':' => TokenKind::Colon, ';' => TokenKind::Semicolon, '.' => TokenKind::Dot, '?' => TokenKind::Question,
                 '+' | '-' if lexer.peek() == Some(c) => {
                     lexer.bump();
                     return Err(Diagnostic::new(Span::new(start, lexer.pos), format!("`{c}{c}` is unsupported; use an assignment such as `i = i + 1`")));

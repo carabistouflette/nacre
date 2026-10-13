@@ -482,7 +482,7 @@ impl Resolver {
                 for argument in args { self.expression(argument, context)?; }
             }
             E::Field { base, .. } => self.expression(base, context)?,
-            E::Unary { expr, .. } | E::Borrow { expr, .. } => self.expression(expr, context)?,
+            E::Unary { expr, .. } | E::Borrow { expr, .. } | E::Try(expr) => self.expression(expr, context)?,
             E::Cast { ty, expr } => {
                 self.resolve_type(context.unit, &context.type_params, ty, expression.span)?;
                 self.expression(expr, context)?;

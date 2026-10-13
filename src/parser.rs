@@ -170,7 +170,7 @@ impl Parser {
         if variants.is_empty() {
             return Err(Diagnostic::new(start.join(end), "an enum must declare at least one variant"));
         }
-        Ok(Class { native: None, is_builtin: false, name, span: start.join(end), fields: Vec::new(), methods: Vec::new(),
+        Ok(Class { native: None, is_builtin: false, is_builtin_result: false, name, span: start.join(end), fields: Vec::new(), methods: Vec::new(),
             constructor: None, type_params, implements: Vec::new(), is_interface: false, variants: Some(variants),
             qualified_name: String::new(), unit: 0, visibility })
     }
@@ -246,7 +246,7 @@ impl Parser {
             }
         }
         let end = self.expect(&K::RBrace, "`}`")?.span;
-        Ok(Class { native: None, is_builtin: false, name, span: start.join(end), fields, methods, constructor, type_params, implements, is_interface,
+        Ok(Class { native: None, is_builtin: false, is_builtin_result: false, name, span: start.join(end), fields, methods, constructor, type_params, implements, is_interface,
             variants: None, qualified_name: String::new(), unit: 0, visibility })
     }
     fn ty(&mut self, allow_void: bool) -> Result<Type, Diagnostic> {
@@ -529,15 +529,23 @@ impl Parser {
     }
     fn postfix(&mut self) -> Result<Expr, Diagnostic> {
         let mut expr = self.primary()?;
-        while self.eat(&K::Dot) {
-            let (name, end) = self.ident()?;
-            let span = expr.span.join(end);
-            expr = if self.at(&K::LParen) {
-                let (args, end) = self.arguments()?;
-                make_expr(ExprKind::MethodCall { receiver: Box::new(expr), name, args }, span.join(end))?
+        loop {
+            if self.eat(&K::Dot) {
+                let (name, end) = self.ident()?;
+                let span = expr.span.join(end);
+                expr = if self.at(&K::LParen) {
+                    let (args, end) = self.arguments()?;
+                    make_expr(ExprKind::MethodCall { receiver: Box::new(expr), name, args }, span.join(end))?
+                } else {
+                    make_expr(ExprKind::Field { base: Box::new(expr), name }, span)?
+                };
+            } else if self.at(&K::Question) {
+                let end = self.bump().span;
+                let span = expr.span.join(end);
+                expr = make_expr(ExprKind::Try(Box::new(expr)), span)?;
             } else {
-                make_expr(ExprKind::Field { base: Box::new(expr), name }, span)?
-            };
+                break;
+            }
         }
         Ok(expr)
     }
@@ -620,7 +628,8 @@ fn number_literal(text: &str, span: Span) -> Result<ExprKind, Diagnostic> {
 fn make_expr(kind: ExprKind, span: Span) -> Result<Expr, Diagnostic> {
     let depth = 1 + match &kind {
         ExprKind::Binary { left, right, .. } => left.depth.max(right.depth),
-        ExprKind::Unary { expr, .. } | ExprKind::Borrow { expr, .. } | ExprKind::Cast { expr, .. } => expr.depth,
+        ExprKind::Unary { expr, .. } | ExprKind::Borrow { expr, .. } |
+        ExprKind::Cast { expr, .. } | ExprKind::Try(expr) => expr.depth,
         ExprKind::Call { args, .. } | ExprKind::New { args, .. } | ExprKind::Variant { args, .. } =>
             args.iter().map(|arg| arg.depth).max().unwrap_or(0),
         ExprKind::MethodCall { receiver, args, .. } =>

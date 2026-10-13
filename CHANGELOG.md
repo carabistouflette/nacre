@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Postfix `?` unwraps trusted built-in `Result` values or returns the exact
+  error payload after cleaning live locals and pending owned C temporaries.
+  Typed IR preserves the carrier layouts; calls, stores, enum wrapping and
+  returns explicitly transfer temporary ownership.
+
 - Text map keys are owned, queried by shared borrow without allocation, compared
   by exact UTF-8 bytes and immutable during paired key/value traversal. Integer
   and text keys share storage algorithms; cached text hashes avoid repeated work.

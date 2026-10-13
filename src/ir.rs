@@ -42,11 +42,19 @@ impl Type {
 pub struct Program { pub classes: Vec<Class>, pub functions: Vec<Function>, pub main: usize }
 #[derive(Debug, Clone)]
 pub struct Variant { pub name: String, pub fields: Vec<Type> }
+#[derive(Debug, Clone, Copy)]
+pub struct ResultLayout {
+    pub ok_variant: usize,
+    pub err_variant: usize,
+    pub ok_type: Type,
+    pub err_type: Type,
+}
 #[derive(Debug)]
 pub struct Class {
     pub native: Option<NativeClass>,
     pub id: usize, pub name: String, pub fields: Vec<Type>,
     pub variants: Option<Vec<Variant>>,
+    pub result: Option<ResultLayout>,
     pub has_borrow: bool,
     pub is_interface: bool,
     /// Interface method IDs in source order (the vtable slot order).
@@ -107,6 +115,7 @@ pub enum ExprKind {
     Variant { class: usize, variant: usize, args: Vec<Expr> },
     Call { target: CallTarget, receiver: Option<Place>, args: Vec<Expr> },
     Unary { op: UnaryOp, expr: Box<Expr> },
+    Try { value: Box<Expr>, return_result: usize },
     Binary { op: BinaryOp, left: Box<Expr>, right: Box<Expr> },
     Cast { value: Box<Expr> },
 }
