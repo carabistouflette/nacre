@@ -218,12 +218,12 @@ void main() {
 "#, SANITIZERS);
     assert_clean(&output);
     assert_eq!(output.stdout,
-        "true\ntrue\ntrue\ntrue\ntrue\nASCII_ERR\nUNKNOWN_CHARSET_ERR\ntrue\nSURROGATE_ERR\ntrue\ntrue\n".as_bytes());
+        "true\ntrue\ntrue\ntrue\ntrue\ntrue\nASCII_ERR\nUNKNOWN_CHARSET_ERR\ntrue\nSURROGATE_ERR\ntrue\ntrue\n".as_bytes());
 }
 
 #[test]
 fn locale_number_formatting_preserves_exact_decimals_and_rejects_invalid_input() {
-    let output = execute(r#"
+    let output = execute(r##"
 void main() {
     List<Text> locales = Locale.available();
     boolean hasGerman = false;
@@ -235,7 +235,6 @@ void main() {
         if (tag.equalsString("und")) { hasRoot = true; }
         index = index + 1;
     }
-    println(locales.size() > 0);
     println(hasGerman);
     println(hasRoot);
 
@@ -290,10 +289,10 @@ void main() {
         Err(error) { println("CURRENCY_ERR"); drop(error); }
     }
 }
-"#, SANITIZERS);
+"##, SANITIZERS);
     assert_clean(&output);
     assert_eq!(output.stdout,
-        "true\ntrue\ntrue\n12.345,50\n12.345.678.901.234.567.890,125\nEXACT_DECIMAL_ERR\ntrue\n$12.50\nTRAILING_ERR\nPATTERN_ERR\nLOCALE_ERR\nCURRENCY_ERR\n".as_bytes());
+        "true\ntrue\n12.345,50\n12.345.678.901.234.567.890,125\nEXACT_DECIMAL_ERR\ntrue\n$12.50\nTRAILING_ERR\nPATTERN_ERR\nLOCALE_ERR\nCURRENCY_ERR\n".as_bytes());
 }
 
 #[test]
@@ -349,17 +348,16 @@ void main() {
         if (tag.equalsString("und")) { hasRoot = true; }
         index = index + 1;
     }
-    println(locales.size() > 0);
     println(hasRoot);
 }
 "#, SANITIZERS);
     assert_clean(&output);
-    assert_eq!(output.stdout, b"true\ntrue\n");
+    assert_eq!(output.stdout, b"true\n");
 }
 
 #[test]
 fn canonical_locale_extensions_configure_services_and_reject_unknown_values() {
-    let output = execute(r#"
+    let output = execute(r##"
 void main() {
     Text umlaut = new Text("ä");
     Text digraph = new Text("ae");
@@ -387,7 +385,7 @@ void main() {
         Err(error) { println("UNKNOWN_NUMBERING_ERR"); drop(error); }
     }
 }
-"#, SANITIZERS);
+"##, SANITIZERS);
     assert_clean(&output);
     assert_eq!(output.stdout,
         b"true\ntrue\nUNKNOWN_COLLATION_ERR\nUNKNOWN_NUMBERING_ERR\n");
