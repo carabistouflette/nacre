@@ -56,7 +56,7 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
             C::Path | C::File | C::Directory | C::FileInfo |
             C::Console | C::Files | C::Args | C::Math | C::Time |
             C::Thread(_) | C::Mutex(_) | C::Guard(_) | C::Channel(_) |
-            C::Sender(_) | C::Receiver(_) =>
+            C::Sender(_) | C::Receiver(_) | C::Env | C::Command | C::Process | C::ProcessOutput =>
                 unreachable!("static or factory-only native class has no constructor"),
             C::SocketAddress | C::TcpListener | C::TcpStream | C::Datagram | C::UdpSocket =>
                 unreachable!("factory-only native class has no constructor"),
@@ -276,6 +276,28 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
         (C::UdpSocket, "localAddress") => M::UdpSocketLocalAddress,
         (C::UdpSocket, "close") => M::UdpSocketClose,
         (C::Args, "get") => M::ArgsGet,
+        (C::Env, "get") => M::EnvGet,
+        (C::Env, "set") => M::EnvSet,
+        (C::Env, "unset") => M::EnvUnset,
+        (C::Command, "create") => M::CommandCreate,
+        (C::Command, "addArg") => M::CommandAddArg,
+        (C::Command, "setEnv") => M::CommandSetEnv,
+        (C::Command, "redirectStdin") => M::CommandRedirectStdin,
+        (C::Command, "redirectStdout") => M::CommandRedirectStdout,
+        (C::Command, "redirectStderr") => M::CommandRedirectStderr,
+        (C::Command, "clearEnv") => M::CommandClearEnv,
+        (C::Command, "spawn") => M::CommandSpawn,
+        (C::Command, "output") => M::CommandOutput,
+        (C::Process, "wait") => M::ProcessWait,
+        (C::Process, "waitFor") => M::ProcessWaitFor,
+        (C::Process, "terminate") => M::ProcessTerminate,
+        (C::Process, "kill") => M::ProcessKill,
+        (C::ProcessOutput, "stdout") => M::ProcessOutputStdout,
+        (C::ProcessOutput, "stderr") => M::ProcessOutputStderr,
+        (C::ProcessOutput, "status") => M::ProcessOutputStatus,
+        (C::ProcessOutput, "stdoutTruncated") => M::ProcessOutputStdoutTruncated,
+        (C::ProcessOutput, "stderrTruncated") => M::ProcessOutputStderrTruncated,
+        (C::ProcessOutput, "timedOut") => M::ProcessOutputTimedOut,
         _ => unreachable!("compiler-owned native method"),
     }
 }

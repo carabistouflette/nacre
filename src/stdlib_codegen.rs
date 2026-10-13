@@ -19,6 +19,7 @@ mod network;
 mod monotonic;
 mod regex;
 mod concurrency;
+mod process;
 
 use crate::ast::MapKeyKind;
 use crate::ir::{self as t, NativeClass as C, Type};
@@ -34,6 +35,8 @@ pub fn fields(program: &t::Program, class: C, class_id: usize) -> String {
         C::Arrays => arrays::utility_fields(),
         C::ByteBuffer => buffer::fields(),
         C::Path | C::File | C::Directory | C::FileInfo | C::Files => filesystem::fields(program, class),
+        C::Env => io::fields(),
+        C::Command | C::Process | C::ProcessOutput => process::fields(program, class),
         C::Random => random::fields(),
         C::Math | C::Time | C::Console | C::Args => io::fields(),
         C::Regex | C::RegexMatch => regex::fields(program, class),
@@ -55,6 +58,8 @@ pub fn drop_fields(program: &t::Program, class: C, class_id: usize) -> String {
         C::Arrays => arrays::drop_utility_fields(),
         C::ByteBuffer => buffer::drop_fields(),
         C::Path | C::File | C::Directory | C::FileInfo | C::Files => filesystem::drop_fields(program, class),
+        C::Env => io::drop_fields(),
+        C::Command | C::Process | C::ProcessOutput => process::drop_fields(program, class),
         C::Random => random::drop_fields(),
         C::Math | C::Time | C::Console | C::Args => io::drop_fields(),
         C::Regex | C::RegexMatch => regex::drop_fields(program, class),
@@ -108,7 +113,8 @@ fn append_body(program: &t::Program, out: &mut String, class: &t::Class, native:
         C::Path | C::File | C::Directory | C::FileInfo => return,
         C::Thread(_) | C::Mutex(_) | C::Guard(_) | C::Channel(_) |
         C::Sender(_) | C::Receiver(_) => return,
-        C::Regex | C::RegexMatch | C::Console | C::Files | C::Args => return,
+        C::Regex | C::RegexMatch | C::Console | C::Files | C::Args |
+        C::Env | C::Command | C::Process | C::ProcessOutput => return,
     };
     body = body.replace("@ID@", &class.id.to_string());
     let receiver = match native { C::Arrays | C::ByteBuffer => None, _ => Some(class.id) };
@@ -153,6 +159,9 @@ pub fn implementations(program: &t::Program) -> String {
     if let Some(filesystem) = filesystem::implementations(program) {
         out.push_str(&filesystem);
         out.push('\n');
+    }
+    if let Some(processes) = process::implementations(program) {
+        out.push_str(&processes);
     }
     out
 }

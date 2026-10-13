@@ -128,6 +128,21 @@ pub(super) fn marker(method: M) -> &'static str {
         M::SenderSend => "@SENDER_SEND@", M::SenderCloneSender => "@SENDER_CLONE_SENDER@",
         M::SenderClose => "@SENDER_CLOSE@", M::ReceiverReceive => "@RECEIVER_RECEIVE@",
         M::ReceiverClose => "@RECEIVER_CLOSE@",
+        M::EnvGet => "@ENV_GET@", M::EnvSet => "@ENV_SET@", M::EnvUnset => "@ENV_UNSET@",
+        M::CommandCreate => "@COMMAND_CREATE@", M::CommandAddArg => "@COMMAND_ADD_ARG@",
+        M::CommandSetEnv => "@COMMAND_SET_ENV@", M::CommandRedirectStdin => "@COMMAND_REDIRECT_STDIN@",
+        M::CommandRedirectStdout => "@COMMAND_REDIRECT_STDOUT@",
+        M::CommandRedirectStderr => "@COMMAND_REDIRECT_STDERR@",
+        M::CommandClearEnv => "@COMMAND_CLEAR_ENV@", M::CommandSpawn => "@COMMAND_SPAWN@",
+        M::CommandOutput => "@COMMAND_OUTPUT@",
+        M::ProcessWait => "@PROCESS_WAIT@", M::ProcessWaitFor => "@PROCESS_WAIT_FOR@",
+        M::ProcessTerminate => "@PROCESS_TERMINATE@", M::ProcessKill => "@PROCESS_KILL@",
+        M::ProcessOutputStdout => "@PROCESS_OUTPUT_STDOUT@",
+        M::ProcessOutputStderr => "@PROCESS_OUTPUT_STDERR@",
+        M::ProcessOutputStatus => "@PROCESS_OUTPUT_STATUS@",
+        M::ProcessOutputStdoutTruncated => "@PROCESS_OUTPUT_STDOUT_TRUNCATED@",
+        M::ProcessOutputStderrTruncated => "@PROCESS_OUTPUT_STDERR_TRUNCATED@",
+        M::ProcessOutputTimedOut => "@PROCESS_OUTPUT_TIMED_OUT@",
     }
 }
 pub(super) fn native_function_if(program: &t::Program, is: impl Fn(M) -> bool) -> Option<&t::Function> {

@@ -1,0 +1,38 @@
+class Env {
+    public static Result<Option<Text>, Text> get(borrow Text name) {}
+    public static Result<Unit, Text> set(borrow Text name, borrow Text value) {}
+    public static Result<Unit, Text> unset(borrow Text name) {}
+}
+
+class Command {
+    public static Command create(Path executable) {}
+    public Result<Unit, Text> addArg(Text argument) {}
+    public Result<Unit, Text> setEnv(Text name, Text value) {}
+    public Result<Unit, Text> redirectStdin(File file) {}
+    public Result<Unit, Text> redirectStdout(File file) {}
+    public Result<Unit, Text> redirectStderr(File file) {}
+    public Result<Unit, Text> clearEnv() {}
+    public readonly Result<Process, Text> spawn() {}
+    public readonly Result<ProcessOutput, Text> output(long maxBytesPerStream, long timeoutMs) {}
+}
+
+class Process {
+    public Result<ExitStatus, Text> wait() {}
+    public Result<Option<ExitStatus>, Text> waitFor(long timeoutMs) {}
+    public Result<Unit, Text> terminate() {}
+    public Result<Unit, Text> kill() {}
+}
+
+enum ExitStatus {
+    Exited(long);
+    Signaled(int);
+}
+
+class ProcessOutput {
+    public readonly borrow ByteBuffer stdout() {}
+    public readonly borrow ByteBuffer stderr() {}
+    public readonly borrow ExitStatus status() {}
+    public readonly boolean stdoutTruncated() {}
+    public readonly boolean stderrTruncated() {}
+    public readonly boolean timedOut() {}
+}

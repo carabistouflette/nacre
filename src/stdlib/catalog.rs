@@ -34,6 +34,10 @@ enum NativeBuiltin {
     Channel,
     Sender,
     Receiver,
+    Env,
+    Command,
+    Process,
+    ProcessOutput,
 }
 
 impl NativeBuiltin {
@@ -78,6 +82,10 @@ impl NativeBuiltin {
             Self::Channel => NativeClass::Channel(Type::Named("T".to_owned())),
             Self::Sender => NativeClass::Sender(Type::Named("T".to_owned())),
             Self::Receiver => NativeClass::Receiver(Type::Named("T".to_owned())),
+            Self::Env => NativeClass::Env,
+            Self::Command => NativeClass::Command,
+            Self::Process => NativeClass::Process,
+            Self::ProcessOutput => NativeClass::ProcessOutput,
         }
     }
 }
@@ -181,6 +189,16 @@ pub(super) const PRELUDE_UNITS: &[PreludeUnit] = &[
             Builtin { name: "Sender", native: Some(NativeBuiltin::Sender) },
             Builtin { name: "Receiver", native: Some(NativeBuiltin::Receiver) },
             Builtin { name: "SendError", native: None },
+        ],
+    },
+    PreludeUnit {
+        source: include_str!("../../stdlib/prelude/systems.ncr"),
+        builtins: &[
+            Builtin { name: "Env", native: Some(NativeBuiltin::Env) },
+            Builtin { name: "Command", native: Some(NativeBuiltin::Command) },
+            Builtin { name: "Process", native: Some(NativeBuiltin::Process) },
+            Builtin { name: "ProcessOutput", native: Some(NativeBuiltin::ProcessOutput) },
+            Builtin { name: "ExitStatus", native: None }
         ],
     },
 ];

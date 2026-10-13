@@ -431,6 +431,14 @@
       "args": [],
       "expected_status": 0,
       "meaningful_outputs": ["Book added as resource #1", "Member added as #1", "Lent to member #1", "Due on logical day 14", "Borrower: Ada Ω", "Goodbye."]
+    },
+    {
+      "category": "systems",
+      "source": "examples/systems/process.ncr",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["global environment set", "child environment cleared", "child environment override set", "20", "false", "0"]
     }
   ]
 }

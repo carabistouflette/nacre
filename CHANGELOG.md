@@ -74,6 +74,12 @@
 - Reviewed fixes centralize key classification and the hash finalizer, skip
   hashing empty-map queries, and preserve readonly keys with mutable values
   without weakening root-wide loans. Named inventory exercises the public API.
+- POSIX Environment and affine Command/Process APIs synchronize environment
+  snapshots, resolve PATH without shell fallback, and provide bounded concurrent
+  capture, redirected files, monotonic waits, and deterministic child reaping.
+  Unreaped Process owners are SIGKILLed and synchronously reaped on drop, including
+  SIGTERM-resistant children. Process and ProcessOutput accessors specialize
+  independently of Command; Random retains its seeded constructor.
 - CI maintenance: update [checkout to 7.0.1](https://github.com/actions/checkout/releases/tag/v7.0.1),
   [setup-node to 7.1.0](https://github.com/actions/setup-node/releases/tag/v7.1.0),
   and [setup-python to 7.0.0](https://github.com/actions/setup-python/releases/tag/v7.0.0).

@@ -1,0 +1,1334 @@
+#include <fcntl.h>
+#include <poll.h>
+#include <pthread.h>
+#include <spawn.h>
+#include <sys/stat.h>
+#include <sys/ioctl.h>
+
+/* PROCESS_GROUP common */
+extern char **environ;
+
+static pthread_mutex_t ncr_process_environment_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+static bool ncr_process_text_is_valid(ncr_obj_@TEXT_CLASS@ *text) {
+    return text != NULL && text->length >= 0
+        && (text->length == 0 || text->bytes != NULL);
+}
+
+static bool ncr_process_has_nul(ncr_obj_@TEXT_CLASS@ *text) {
+    return text->length > 0 && memchr(text->bytes, 0, (size_t)text->length) != NULL;
+}
+
+static bool ncr_process_name_is_valid(ncr_obj_@TEXT_CLASS@ *name) {
+    return ncr_process_text_is_valid(name) && name->length > 0
+        && !ncr_process_has_nul(name)
+        && memchr(name->bytes, '=', (size_t)name->length) == NULL;
+}
+
+static size_t ncr_process_format_error(
+    char *message, size_t capacity, const char *operation, const char *domain, int failure
+) {
+    int length = snprintf(message, capacity, "%s failed (%s=%d)", operation, domain, failure);
+    if (length < 0) {
+        if (capacity > 0) { message[0] = '\0'; }
+        return 0;
+    }
+    return (size_t)length < capacity ? (size_t)length : capacity - 1;
+}
+
+static char *ncr_process_text_c_copy(
+    ncr_obj_@TEXT_CLASS@ *text, size_t line, size_t column, int *failure
+) {
+    size_t length = (size_t)text->length;
+    if (length == SIZE_MAX) { *failure = EOVERFLOW; return NULL; }
+    char *copy = ncr_allocate(length + 1, line, column);
+    if (length > 0) { memcpy(copy, text->bytes, length); }
+    copy[length] = '\0';
+    return copy;
+}
+/* PROCESS_GROUP_END common */
+/* PROCESS_GROUP env */
+
+static ncr_obj_@ENV_GET_RESULT@ @ENV_GET@(
+    ncr_obj_@TEXT_CLASS@ *ncr_v_@ENV_GET_NAME@, size_t ncr_line, size_t ncr_column
+) {
+    if (!ncr_process_name_is_valid(ncr_v_@ENV_GET_NAME@)) {
+        return @ENV_GET_ERROR@("Env.get: name must be nonempty and contain neither NUL nor '='", sizeof("Env.get: name must be nonempty and contain neither NUL nor '='") - 1, ncr_line, ncr_column);
+    }
+    int failure = 0;
+    char *name = ncr_process_text_c_copy(ncr_v_@ENV_GET_NAME@, ncr_line, ncr_column, &failure);
+    if (name == NULL) {
+        char message[192];
+        size_t length = ncr_process_format_error(message, sizeof(message), "Env.get/name", "errno", failure);
+        return @ENV_GET_ERROR@(message, length, ncr_line, ncr_column);
+    }
+    int lock_status = pthread_mutex_lock(&ncr_process_environment_mutex);
+    if (lock_status != 0) {
+        ncr_deallocate(name);
+        char message[192];
+        size_t length = ncr_process_format_error(message, sizeof(message), "Env.get/pthread_mutex_lock", "pthread", lock_status);
+        return @ENV_GET_ERROR@(message, length, ncr_line, ncr_column);
+    }
+    const char *value = getenv(name);
+    bool found = value != NULL;
+    unsigned char *copy = NULL;
+    size_t value_length = 0;
+    int copy_failure = 0;
+    if (value != NULL) {
+        value_length = strlen(value);
+        if (value_length > (size_t)INT32_MAX) {
+            copy_failure = EOVERFLOW;
+        } else if (value_length > 0) {
+            copy = ncr_allocate(value_length, ncr_line, ncr_column);
+            memcpy(copy, value, value_length);
+        }
+    }
+    int unlock_status = pthread_mutex_unlock(&ncr_process_environment_mutex);
+    ncr_deallocate(name);
+    if (copy_failure != 0) {
+        ncr_deallocate(copy);
+        return @ENV_GET_ERROR@("Env.get: environment value exceeds Text length range", sizeof("Env.get: environment value exceeds Text length range") - 1, ncr_line, ncr_column);
+    }
+    if (unlock_status != 0) {
+        ncr_deallocate(copy);
+        char message[192];
+        size_t length = ncr_process_format_error(message, sizeof(message), "Env.get/pthread_mutex_unlock", "pthread", unlock_status);
+        return @ENV_GET_ERROR@(message, length, ncr_line, ncr_column);
+    }
+    ncr_obj_@ENV_GET_OPTION@ option;
+    if (!found) {
+        option = (ncr_obj_@ENV_GET_OPTION@){ .tag = @ENV_GET_NONE_TAG@ };
+    } else {
+        if (!ncr_utf8_valid(copy, value_length)) {
+            ncr_deallocate(copy);
+            return @ENV_GET_ERROR@("Env.get: environment value is not valid UTF-8", sizeof("Env.get: environment value is not valid UTF-8") - 1, ncr_line, ncr_column);
+        }
+        ncr_obj_@TEXT_CLASS@ *text = @TEXT_TAKE@(copy, value_length, value_length, ncr_line, ncr_column);
+        option = (ncr_obj_@ENV_GET_OPTION@){
+            .tag = @ENV_GET_SOME_TAG@,
+            .data.v@ENV_GET_SOME_TAG@.f0 = text,
+        };
+    }
+    return (ncr_obj_@ENV_GET_RESULT@){
+        .tag = @ENV_GET_OK_TAG@,
+        .data.v@ENV_GET_OK_TAG@.f0 = option,
+    };
+}
+
+static ncr_obj_@ENV_SET_RESULT@ @ENV_SET@(
+    ncr_obj_@TEXT_CLASS@ *ncr_v_@ENV_SET_NAME@,
+    ncr_obj_@TEXT_CLASS@ *ncr_v_@ENV_SET_VALUE@,
+    size_t ncr_line, size_t ncr_column
+) {
+    if (!ncr_process_name_is_valid(ncr_v_@ENV_SET_NAME@)
+        || !ncr_process_text_is_valid(ncr_v_@ENV_SET_VALUE@)
+        || ncr_process_has_nul(ncr_v_@ENV_SET_VALUE@)) {
+        return @ENV_SET_ERROR@("Env.set: invalid name or value contains NUL", sizeof("Env.set: invalid name or value contains NUL") - 1, ncr_line, ncr_column);
+    }
+    int failure = 0;
+    char *name = ncr_process_text_c_copy(ncr_v_@ENV_SET_NAME@, ncr_line, ncr_column, &failure);
+    char *value = ncr_process_text_c_copy(ncr_v_@ENV_SET_VALUE@, ncr_line, ncr_column, &failure);
+    if (name == NULL || value == NULL) {
+        ncr_deallocate(name);
+        ncr_deallocate(value);
+        char message[192];
+        size_t length = ncr_process_format_error(message, sizeof(message), "Env.set/text conversion", "errno", failure);
+        return @ENV_SET_ERROR@(message, length, ncr_line, ncr_column);
+    }
+    int lock_status = pthread_mutex_lock(&ncr_process_environment_mutex);
+    if (lock_status != 0) {
+        ncr_deallocate(name);
+        ncr_deallocate(value);
+        char message[192];
+        size_t length = ncr_process_format_error(message, sizeof(message), "Env.set/pthread_mutex_lock", "pthread", lock_status);
+        return @ENV_SET_ERROR@(message, length, ncr_line, ncr_column);
+    }
+    int result = setenv(name, value, 1);
+    int failure_code = result == 0 ? 0 : errno;
+    int unlock_status = pthread_mutex_unlock(&ncr_process_environment_mutex);
+    ncr_deallocate(name);
+    ncr_deallocate(value);
+    if (failure_code != 0) {
+        char message[192];
+        size_t length = ncr_process_format_error(message, sizeof(message), "Env.set/setenv", "errno", failure_code);
+        return @ENV_SET_ERROR@(message, length, ncr_line, ncr_column);
+    }
+    if (unlock_status != 0) {
+        char message[192];
+        size_t length = ncr_process_format_error(message, sizeof(message), "Env.set/pthread_mutex_unlock", "pthread", unlock_status);
+        return @ENV_SET_ERROR@(message, length, ncr_line, ncr_column);
+    }
+    return (ncr_obj_@ENV_SET_RESULT@){
+        .tag = @ENV_SET_OK_TAG@,
+        .data.v@ENV_SET_OK_TAG@.f0 = UINT8_C(0),
+    };
+}
+
+static ncr_obj_@ENV_UNSET_RESULT@ @ENV_UNSET@(
+    ncr_obj_@TEXT_CLASS@ *ncr_v_@ENV_UNSET_NAME@, size_t ncr_line, size_t ncr_column
+) {
+    if (!ncr_process_name_is_valid(ncr_v_@ENV_UNSET_NAME@)) {
+        return @ENV_UNSET_ERROR@("Env.unset: name must be nonempty and contain neither NUL nor '='", sizeof("Env.unset: name must be nonempty and contain neither NUL nor '='") - 1, ncr_line, ncr_column);
+    }
+    int failure = 0;
+    char *name = ncr_process_text_c_copy(ncr_v_@ENV_UNSET_NAME@, ncr_line, ncr_column, &failure);
+    if (name == NULL) {
+        char message[192];
+        size_t length = ncr_process_format_error(message, sizeof(message), "Env.unset/name", "errno", failure);
+        return @ENV_UNSET_ERROR@(message, length, ncr_line, ncr_column);
+    }
+    int lock_status = pthread_mutex_lock(&ncr_process_environment_mutex);
+    if (lock_status != 0) {
+        ncr_deallocate(name);
+        char message[192];
+        size_t length = ncr_process_format_error(message, sizeof(message), "Env.unset/pthread_mutex_lock", "pthread", lock_status);
+        return @ENV_UNSET_ERROR@(message, length, ncr_line, ncr_column);
+    }
+    int result = unsetenv(name);
+    int failure_code = result == 0 ? 0 : errno;
+    int unlock_status = pthread_mutex_unlock(&ncr_process_environment_mutex);
+    ncr_deallocate(name);
+    if (failure_code != 0) {
+        char message[192];
+        size_t length = ncr_process_format_error(message, sizeof(message), "Env.unset/unsetenv", "errno", failure_code);
+        return @ENV_UNSET_ERROR@(message, length, ncr_line, ncr_column);
+    }
+    if (unlock_status != 0) {
+        char message[192];
+        size_t length = ncr_process_format_error(message, sizeof(message), "Env.unset/pthread_mutex_unlock", "pthread", unlock_status);
+        return @ENV_UNSET_ERROR@(message, length, ncr_line, ncr_column);
+    }
+    return (ncr_obj_@ENV_UNSET_RESULT@){
+        .tag = @ENV_UNSET_OK_TAG@,
+        .data.v@ENV_UNSET_OK_TAG@.f0 = UINT8_C(0),
+    };
+}
+/* PROCESS_GROUP_END env */
+/* PROCESS_GROUP command */
+
+static void ncr_process_reserve_texts(
+    ncr_obj_@TEXT_CLASS@ ***items, size_t *capacity, size_t required,
+    size_t line, size_t column
+) {
+    if (required <= *capacity) { return; }
+    size_t grown = *capacity == 0 ? 8 : *capacity;
+    while (grown < required) {
+        if (grown > SIZE_MAX / 2) { grown = required; break; }
+        grown *= 2;
+    }
+    if (grown > SIZE_MAX / sizeof(**items)) { ncr_fail("Command argument capacity overflow", line, column); }
+    ncr_obj_@TEXT_CLASS@ **next = ncr_allocate(grown * sizeof(*next), line, column);
+    if (*capacity > 0) { memcpy(next, *items, *capacity * sizeof(*next)); }
+    ncr_deallocate(*items);
+    *items = next;
+    *capacity = grown;
+}
+
+static void ncr_process_reserve_environment(
+    ncr_obj_@TEXT_CLASS@ ***names, ncr_obj_@TEXT_CLASS@ ***values,
+    size_t *capacity, size_t required, size_t line, size_t column
+) {
+    if (required <= *capacity) { return; }
+    size_t grown = *capacity == 0 ? 8 : *capacity;
+    while (grown < required) {
+        if (grown > SIZE_MAX / 2) { grown = required; break; }
+        grown *= 2;
+    }
+    if (grown > SIZE_MAX / sizeof(**names)) { ncr_fail("Command environment capacity overflow", line, column); }
+    ncr_obj_@TEXT_CLASS@ **next_names = ncr_allocate(grown * sizeof(*next_names), line, column);
+    ncr_obj_@TEXT_CLASS@ **next_values = ncr_allocate(grown * sizeof(*next_values), line, column);
+    if (*capacity > 0) {
+        memcpy(next_names, *names, *capacity * sizeof(*next_names));
+        memcpy(next_values, *values, *capacity * sizeof(*next_values));
+    }
+    ncr_deallocate(*names);
+    ncr_deallocate(*values);
+    *names = next_names;
+    *values = next_values;
+    *capacity = grown;
+}
+
+static bool ncr_process_text_equals(
+    ncr_obj_@TEXT_CLASS@ *left, ncr_obj_@TEXT_CLASS@ *right
+) {
+    return left->length == right->length
+        && (left->length == 0 || memcmp(left->bytes, right->bytes, (size_t)left->length) == 0);
+}
+
+static ncr_obj_@COMMAND_CLASS@ * @COMMAND_CREATE@(
+    ncr_obj_@PATH_CLASS@ *ncr_v_@COMMAND_CREATE_PATH@, size_t ncr_line, size_t ncr_column
+) {
+    (void)ncr_line; (void)ncr_column;
+    ncr_obj_@COMMAND_CLASS@ *command = ncr_allocate(sizeof(*command), ncr_line, ncr_column);
+    command->executable = ncr_v_@COMMAND_CREATE_PATH@;
+    return command;
+}
+
+static ncr_obj_@COMMAND_UNIT_RESULT@ @COMMAND_ADD_ARG@(
+    ncr_obj_@COMMAND_CLASS@ *command,
+    ncr_obj_@TEXT_CLASS@ *ncr_v_@COMMAND_ADD_ARG_VALUE@,
+    size_t ncr_line, size_t ncr_column
+) {
+    if (!ncr_process_text_is_valid(ncr_v_@COMMAND_ADD_ARG_VALUE@)
+        || ncr_process_has_nul(ncr_v_@COMMAND_ADD_ARG_VALUE@)) {
+        if (ncr_v_@COMMAND_ADD_ARG_VALUE@ != NULL) { ncr_drop_@TEXT_CLASS@(ncr_v_@COMMAND_ADD_ARG_VALUE@); }
+        return @COMMAND_ADD_ARG_ERROR@("Command.addArg: argument contains NUL or has invalid Text state", sizeof("Command.addArg: argument contains NUL or has invalid Text state") - 1, ncr_line, ncr_column);
+    }
+    if (command->argument_count == SIZE_MAX) {
+        ncr_drop_@TEXT_CLASS@(ncr_v_@COMMAND_ADD_ARG_VALUE@);
+        return @COMMAND_ADD_ARG_ERROR@("Command.addArg: too many arguments", sizeof("Command.addArg: too many arguments") - 1, ncr_line, ncr_column);
+    }
+    ncr_process_reserve_texts(&command->arguments, &command->argument_capacity,
+        command->argument_count + 1, ncr_line, ncr_column);
+    command->arguments[command->argument_count++] = ncr_v_@COMMAND_ADD_ARG_VALUE@;
+    return (ncr_obj_@COMMAND_UNIT_RESULT@){
+        .tag = @COMMAND_UNIT_OK_TAG@,
+        .data.v@COMMAND_UNIT_OK_TAG@.f0 = UINT8_C(0),
+    };
+}
+
+static ncr_obj_@COMMAND_UNIT_RESULT@ @COMMAND_SET_ENV@(
+    ncr_obj_@COMMAND_CLASS@ *command,
+    ncr_obj_@TEXT_CLASS@ *ncr_v_@COMMAND_SET_ENV_NAME@,
+    ncr_obj_@TEXT_CLASS@ *ncr_v_@COMMAND_SET_ENV_VALUE@,
+    size_t ncr_line, size_t ncr_column
+) {
+    if (!ncr_process_name_is_valid(ncr_v_@COMMAND_SET_ENV_NAME@)
+        || !ncr_process_text_is_valid(ncr_v_@COMMAND_SET_ENV_VALUE@)
+        || ncr_process_has_nul(ncr_v_@COMMAND_SET_ENV_VALUE@)) {
+        if (ncr_v_@COMMAND_SET_ENV_NAME@ != NULL) { ncr_drop_@TEXT_CLASS@(ncr_v_@COMMAND_SET_ENV_NAME@); }
+        if (ncr_v_@COMMAND_SET_ENV_VALUE@ != NULL) { ncr_drop_@TEXT_CLASS@(ncr_v_@COMMAND_SET_ENV_VALUE@); }
+        return @COMMAND_SET_ENV_ERROR@("Command.setEnv: invalid name or value contains NUL", sizeof("Command.setEnv: invalid name or value contains NUL") - 1, ncr_line, ncr_column);
+    }
+    for (size_t index = 0; index < command->environment_count; ++index) {
+        if (ncr_process_text_equals(command->environment_names[index], ncr_v_@COMMAND_SET_ENV_NAME@)) {
+            ncr_drop_@TEXT_CLASS@(command->environment_names[index]);
+            ncr_drop_@TEXT_CLASS@(command->environment_values[index]);
+            command->environment_names[index] = ncr_v_@COMMAND_SET_ENV_NAME@;
+            command->environment_values[index] = ncr_v_@COMMAND_SET_ENV_VALUE@;
+            return (ncr_obj_@COMMAND_UNIT_RESULT@){
+                .tag = @COMMAND_UNIT_OK_TAG@,
+                .data.v@COMMAND_UNIT_OK_TAG@.f0 = UINT8_C(0),
+            };
+        }
+    }
+    if (command->environment_count == SIZE_MAX) {
+        ncr_drop_@TEXT_CLASS@(ncr_v_@COMMAND_SET_ENV_NAME@);
+        ncr_drop_@TEXT_CLASS@(ncr_v_@COMMAND_SET_ENV_VALUE@);
+        return @COMMAND_SET_ENV_ERROR@("Command.setEnv: too many environment overrides", sizeof("Command.setEnv: too many environment overrides") - 1, ncr_line, ncr_column);
+    }
+    ncr_process_reserve_environment(&command->environment_names, &command->environment_values,
+        &command->environment_capacity, command->environment_count + 1, ncr_line, ncr_column);
+    command->environment_names[command->environment_count] = ncr_v_@COMMAND_SET_ENV_NAME@;
+    command->environment_values[command->environment_count] = ncr_v_@COMMAND_SET_ENV_VALUE@;
+    ++command->environment_count;
+    return (ncr_obj_@COMMAND_UNIT_RESULT@){
+        .tag = @COMMAND_UNIT_OK_TAG@,
+        .data.v@COMMAND_UNIT_OK_TAG@.f0 = UINT8_C(0),
+    };
+}
+
+static bool ncr_process_replace_redirect(
+    ncr_obj_@COMMAND_CLASS@ *command, ncr_obj_@FILE_CLASS@ *file,
+    int target, size_t line, size_t column
+) {
+    if (file == NULL || file->fd < 0) { return false; }
+    ncr_obj_@FILE_CLASS@ *previous = command->redirects[target];
+    command->redirects[target] = file;
+    if (previous != NULL) { ncr_drop_@FILE_CLASS@(previous); }
+    (void)line; (void)column;
+    return true;
+}
+
+static ncr_obj_@REDIRECT_STDIN_RESULT@ @COMMAND_REDIRECT_STDIN@(
+    ncr_obj_@COMMAND_CLASS@ *command, ncr_obj_@FILE_CLASS@ *ncr_v_@REDIRECT_STDIN_FILE@,
+    size_t ncr_line, size_t ncr_column
+) {
+    if (!ncr_process_replace_redirect(command, ncr_v_@REDIRECT_STDIN_FILE@, 0, ncr_line, ncr_column)) {
+        if (ncr_v_@REDIRECT_STDIN_FILE@ != NULL) { ncr_drop_@FILE_CLASS@(ncr_v_@REDIRECT_STDIN_FILE@); }
+        return @REDIRECT_STDIN_ERROR@("Command.redirectStdin: File is closed", sizeof("Command.redirectStdin: File is closed") - 1, ncr_line, ncr_column);
+    }
+    return (ncr_obj_@REDIRECT_STDIN_RESULT@){
+        .tag = @REDIRECT_STDIN_OK_TAG@,
+        .data.v@REDIRECT_STDIN_OK_TAG@.f0 = UINT8_C(0),
+    };
+}
+
+static ncr_obj_@REDIRECT_STDOUT_RESULT@ @COMMAND_REDIRECT_STDOUT@(
+    ncr_obj_@COMMAND_CLASS@ *command, ncr_obj_@FILE_CLASS@ *ncr_v_@REDIRECT_STDOUT_FILE@,
+    size_t ncr_line, size_t ncr_column
+) {
+    if (!ncr_process_replace_redirect(command, ncr_v_@REDIRECT_STDOUT_FILE@, 1, ncr_line, ncr_column)) {
+        if (ncr_v_@REDIRECT_STDOUT_FILE@ != NULL) { ncr_drop_@FILE_CLASS@(ncr_v_@REDIRECT_STDOUT_FILE@); }
+        return @REDIRECT_STDOUT_ERROR@("Command.redirectStdout: File is closed", sizeof("Command.redirectStdout: File is closed") - 1, ncr_line, ncr_column);
+    }
+    return (ncr_obj_@REDIRECT_STDOUT_RESULT@){
+        .tag = @REDIRECT_STDOUT_OK_TAG@,
+        .data.v@REDIRECT_STDOUT_OK_TAG@.f0 = UINT8_C(0),
+    };
+}
+
+static ncr_obj_@REDIRECT_STDERR_RESULT@ @COMMAND_REDIRECT_STDERR@(
+    ncr_obj_@COMMAND_CLASS@ *command, ncr_obj_@FILE_CLASS@ *ncr_v_@REDIRECT_STDERR_FILE@,
+    size_t ncr_line, size_t ncr_column
+) {
+    if (!ncr_process_replace_redirect(command, ncr_v_@REDIRECT_STDERR_FILE@, 2, ncr_line, ncr_column)) {
+        if (ncr_v_@REDIRECT_STDERR_FILE@ != NULL) { ncr_drop_@FILE_CLASS@(ncr_v_@REDIRECT_STDERR_FILE@); }
+        return @REDIRECT_STDERR_ERROR@("Command.redirectStderr: File is closed", sizeof("Command.redirectStderr: File is closed") - 1, ncr_line, ncr_column);
+    }
+    return (ncr_obj_@REDIRECT_STDERR_RESULT@){
+        .tag = @REDIRECT_STDERR_OK_TAG@,
+        .data.v@REDIRECT_STDERR_OK_TAG@.f0 = UINT8_C(0),
+    };
+}
+
+static ncr_obj_@CLEAR_ENV_RESULT@ @COMMAND_CLEAR_ENV@(
+    ncr_obj_@COMMAND_CLASS@ *command, size_t ncr_line, size_t ncr_column
+) {
+    (void)ncr_line; (void)ncr_column;
+    command->clear_environment = true;
+    return (ncr_obj_@CLEAR_ENV_RESULT@){
+        .tag = @CLEAR_ENV_OK_TAG@,
+        .data.v@CLEAR_ENV_OK_TAG@.f0 = UINT8_C(0),
+    };
+}
+
+static bool ncr_process_environment_entry_matches(
+    const char *entry, ncr_obj_@TEXT_CLASS@ *name
+) {
+    const char *equals = strchr(entry, '=');
+    return equals != NULL && (size_t)(equals - entry) == (size_t)name->length
+        && (name->length == 0 || memcmp(entry, name->bytes, (size_t)name->length) == 0);
+}
+
+static bool ncr_process_name_overridden(
+    ncr_obj_@COMMAND_CLASS@ *command, const char *entry
+) {
+    for (size_t index = 0; index < command->environment_count; ++index) {
+        if (ncr_process_environment_entry_matches(entry, command->environment_names[index])) { return true; }
+    }
+    return false;
+}
+
+static void ncr_process_free_environment(char **environment, size_t count) {
+    if (environment == NULL) { return; }
+    for (size_t index = 0; index < count; ++index) { ncr_deallocate(environment[index]); }
+    ncr_deallocate(environment);
+}
+
+static bool ncr_process_snapshot_environment(
+    ncr_obj_@COMMAND_CLASS@ *command, char ***out, size_t *out_count,
+    const char **domain, int *failure, size_t line, size_t column
+) {
+    *out = NULL;
+    *out_count = 0;
+    *domain = "errno";
+    size_t inherited_count = 0;
+    int lock_status = pthread_mutex_lock(&ncr_process_environment_mutex);
+    if (lock_status != 0) {
+        *domain = "pthread";
+        *failure = lock_status;
+        return false;
+    }
+    if (!command->clear_environment && environ != NULL) {
+        for (char **entry = environ; *entry != NULL; ++entry) {
+            if (inherited_count == SIZE_MAX) {
+                (void)pthread_mutex_unlock(&ncr_process_environment_mutex);
+                *failure = EOVERFLOW;
+                return false;
+            }
+            ++inherited_count;
+        }
+    }
+    if (inherited_count >= SIZE_MAX
+        || command->environment_count > SIZE_MAX - inherited_count - 1) {
+        int unlock_status = pthread_mutex_unlock(&ncr_process_environment_mutex);
+        if (unlock_status != 0) { *domain = "pthread"; *failure = unlock_status; }
+        else { *failure = EOVERFLOW; }
+        return false;
+    }
+    size_t capacity = inherited_count + command->environment_count + 1;
+    if (capacity > SIZE_MAX / sizeof(char *)) {
+        int unlock_status = pthread_mutex_unlock(&ncr_process_environment_mutex);
+        if (unlock_status != 0) { *domain = "pthread"; *failure = unlock_status; }
+        else { *failure = EOVERFLOW; }
+        return false;
+    }
+    char **environment = ncr_allocate(capacity * sizeof(*environment), line, column);
+    size_t count = 0;
+    if (!command->clear_environment && environ != NULL) {
+        for (char **entry = environ; *entry != NULL; ++entry) {
+            if (ncr_process_name_overridden(command, *entry)) { continue; }
+            size_t length = strlen(*entry);
+            if (length == SIZE_MAX) {
+                ncr_process_free_environment(environment, count);
+                int unlock_status = pthread_mutex_unlock(&ncr_process_environment_mutex);
+                if (unlock_status != 0) { *domain = "pthread"; *failure = unlock_status; }
+                else { *failure = EOVERFLOW; }
+                return false;
+            }
+            char *copy = ncr_allocate(length + 1, line, column);
+            memcpy(copy, *entry, length + 1);
+            environment[count++] = copy;
+        }
+    }
+    int unlock_status = pthread_mutex_unlock(&ncr_process_environment_mutex);
+    if (unlock_status != 0) {
+        ncr_process_free_environment(environment, count);
+        *domain = "pthread";
+        *failure = unlock_status;
+        return false;
+    }
+    for (size_t index = 0; index < command->environment_count; ++index) {
+        ncr_obj_@TEXT_CLASS@ *name = command->environment_names[index];
+        ncr_obj_@TEXT_CLASS@ *value = command->environment_values[index];
+        size_t name_length = (size_t)name->length;
+        size_t value_length = (size_t)value->length;
+        if (value_length > SIZE_MAX - 2 || name_length > SIZE_MAX - value_length - 2) {
+            ncr_process_free_environment(environment, count);
+            *failure = EOVERFLOW;
+            return false;
+        }
+        size_t length = name_length + value_length + 1;
+        char *entry = ncr_allocate(length + 1, line, column);
+        if (name_length > 0) { memcpy(entry, name->bytes, name_length); }
+        entry[name_length] = '=';
+        if (value_length > 0) { memcpy(entry + name_length + 1, value->bytes, value_length); }
+        entry[length] = '\0';
+        environment[count++] = entry;
+    }
+    environment[count] = NULL;
+    *out = environment;
+    *out_count = count;
+    return true;
+}
+
+static char *ncr_process_environment_value(char *const environment[], const char *name) {
+    size_t name_length = strlen(name);
+    for (size_t index = 0; environment[index] != NULL; ++index) {
+        const char *entry = environment[index];
+        const char *equals = strchr(entry, '=');
+        if (equals != NULL && (size_t)(equals - entry) == name_length
+            && memcmp(entry, name, name_length) == 0) {
+            return (char *)(equals + 1);
+        }
+    }
+    return NULL;
+}
+
+static bool ncr_process_build_argv(
+    ncr_obj_@COMMAND_CLASS@ *command, char ***out, size_t *out_count,
+    int *failure, size_t line, size_t column
+) {
+    *out = NULL;
+    *out_count = 0;
+    if (command->executable == NULL || command->executable->text == NULL
+        || !ncr_process_text_is_valid(command->executable->text)
+        || command->executable->text->length == 0
+        || ncr_process_has_nul(command->executable->text)) {
+        *failure = EINVAL;
+        return false;
+    }
+    if (command->argument_count > SIZE_MAX - 2) { *failure = EOVERFLOW; return false; }
+    size_t argument_count = command->argument_count + 1;
+    size_t pointer_count = argument_count + 1;
+    if (pointer_count > SIZE_MAX / sizeof(char *)) { *failure = EOVERFLOW; return false; }
+    char **arguments = ncr_allocate(pointer_count * sizeof(*arguments), line, column);
+    arguments[0] = ncr_process_text_c_copy(command->executable->text, line, column, failure);
+    if (arguments[0] == NULL) {
+        ncr_deallocate(arguments);
+        return false;
+    }
+    size_t count = 1;
+    for (size_t index = 0; index < command->argument_count; ++index) {
+        ncr_obj_@TEXT_CLASS@ *argument = command->arguments[index];
+        if (!ncr_process_text_is_valid(argument) || ncr_process_has_nul(argument)) {
+            for (size_t previous = 0; previous < count; ++previous) { ncr_deallocate(arguments[previous]); }
+            ncr_deallocate(arguments);
+            *failure = EINVAL;
+            return false;
+        }
+        arguments[count] = ncr_process_text_c_copy(argument, line, column, failure);
+        if (arguments[count] == NULL) {
+            for (size_t previous = 0; previous < count; ++previous) { ncr_deallocate(arguments[previous]); }
+            ncr_deallocate(arguments);
+            return false;
+        }
+        ++count;
+    }
+    arguments[count] = NULL;
+    *out = arguments;
+    *out_count = count;
+    return true;
+}
+
+static void ncr_process_free_argv(char **arguments, size_t count) {
+    if (arguments == NULL) { return; }
+    for (size_t index = 0; index < count; ++index) { ncr_deallocate(arguments[index]); }
+    ncr_deallocate(arguments);
+}
+
+static int ncr_process_add_redirect(
+    posix_spawn_file_actions_t *actions, int descriptor, int target,
+    int temporary_descriptors[3], size_t *temporary_count
+) {
+    int source = descriptor;
+    if (source < 0) {
+        int flags = fcntl(target, F_GETFD);
+        if (flags < 0) { return errno == EBADF ? 0 : errno; }
+        source = target;
+    }
+    if (source <= STDERR_FILENO) {
+        source = fcntl(source, F_DUPFD_CLOEXEC, STDERR_FILENO + 1);
+        if (source < 0) { return errno; }
+        temporary_descriptors[(*temporary_count)++] = source;
+    }
+    return posix_spawn_file_actions_adddup2(actions, source, target);
+}
+
+static void ncr_process_close_temporaries(int descriptors[3], size_t count) {
+    for (size_t index = 0; index < count; ++index) {
+        int descriptor = descriptors[index];
+        if (descriptor >= 0) { (void)close(descriptor); descriptors[index] = -1; }
+    }
+}
+
+static void ncr_process_kill_and_reap(pid_t pid) {
+    if (pid <= 0) { return; }
+    if (kill(pid, SIGKILL) != 0 && errno != ESRCH) {
+        ncr_fail("Process cleanup: SIGKILL failed", 0, 0);
+    }
+    int status;
+    pid_t waited;
+    do { waited = waitpid(pid, &status, 0); } while (waited < 0 && errno == EINTR);
+    if (waited != pid) { ncr_fail("Process cleanup: waitpid failed", 0, 0); }
+}
+
+static int ncr_process_spawn_path(
+    char *executable, char *const arguments[], char *const environment[],
+    posix_spawn_file_actions_t *actions, pid_t *pid
+) {
+    int result = posix_spawn(pid, executable, actions, NULL, arguments, environment);
+    if (result == 0) { return 0; }
+    return result;
+}
+
+static int ncr_process_spawn_resolved(
+    ncr_obj_@COMMAND_CLASS@ *command, char *const arguments[], char *const environment[],
+    posix_spawn_file_actions_t *actions, pid_t *pid,
+    size_t line, size_t column
+) {
+    ncr_obj_@TEXT_CLASS@ *executable = command->executable->text;
+    size_t executable_length = (size_t)executable->length;
+    char *slash = memchr(executable->bytes, '/', executable_length);
+    if (slash != NULL) {
+        return ncr_process_spawn_path(arguments[0], arguments, environment, actions, pid);
+    }
+    char *search_path = ncr_process_environment_value(environment, "PATH");
+    char *default_path = NULL;
+    if (search_path == NULL) {
+        size_t required = confstr(_CS_PATH, NULL, 0);
+        if (required == 0) {
+            search_path = "/bin:/usr/bin";
+        } else {
+            if (required > (size_t)INT64_MAX) { return EOVERFLOW; }
+            default_path = ncr_allocate(required, line, column);
+            size_t written = confstr(_CS_PATH, default_path, required);
+            if (written == 0 || written > required) {
+                ncr_deallocate(default_path);
+                return errno == 0 ? EINVAL : errno;
+            }
+            search_path = default_path;
+        }
+    }
+    size_t search_length = strlen(search_path);
+    size_t begin = 0;
+    bool denied = false;
+    int last_failure = ENOENT;
+    for (;;) {
+        size_t end = begin;
+        while (end < search_length && search_path[end] != ':') { ++end; }
+        size_t directory_length = end - begin;
+        size_t separator_length = directory_length == 0 ? 0 : 1;
+        if (directory_length > SIZE_MAX - separator_length
+            || directory_length + separator_length > SIZE_MAX - executable_length
+            || directory_length + separator_length + executable_length >= SIZE_MAX) {
+            ncr_deallocate(default_path);
+            return EOVERFLOW;
+        }
+        size_t candidate_length = directory_length + separator_length + executable_length;
+        if (candidate_length > (size_t)INT64_MAX) {
+            ncr_deallocate(default_path);
+            return EOVERFLOW;
+        }
+        char *candidate = ncr_allocate(candidate_length + 1, line, column);
+        if (directory_length > 0) {
+            memcpy(candidate, search_path + begin, directory_length);
+            candidate[directory_length] = '/';
+        }
+        memcpy(candidate + directory_length + separator_length, executable->bytes, executable_length);
+        candidate[candidate_length] = '\0';
+        int result = ncr_process_spawn_path(candidate, arguments, environment, actions, pid);
+        ncr_deallocate(candidate);
+        if (result == 0) {
+            ncr_deallocate(default_path);
+            return 0;
+        }
+        if (result == EACCES) {
+            denied = true;
+            last_failure = result;
+        } else if (result == ENOENT || result == ENOTDIR) {
+            last_failure = result;
+        } else {
+            ncr_deallocate(default_path);
+            return result;
+        }
+        if (end == search_length) { break; }
+        begin = end + 1;
+    }
+    ncr_deallocate(default_path);
+    return denied ? EACCES : last_failure;
+}
+
+static int ncr_process_spawn_command(
+    ncr_obj_@COMMAND_CLASS@ *command, bool override_descriptors,
+    int input_descriptor, int output_descriptor, int error_descriptor,
+    pid_t *pid, const char **operation, const char **domain,
+    size_t line, size_t column
+) {
+    if (!override_descriptors) {
+        for (size_t target = 0; target < 3; ++target) {
+            if (command->redirects[target] != NULL && command->redirects[target]->fd < 0) {
+                *operation = "Command.spawn/closed redirect";
+                *domain = "errno";
+                return EBADF;
+            }
+        }
+    }
+    char **arguments = NULL;
+    size_t argument_count = 0;
+    int failure = 0;
+    *operation = "Command.spawn/argv";
+    *domain = "errno";
+    if (!ncr_process_build_argv(command, &arguments, &argument_count, &failure, line, column)) { return failure; }
+    char **environment = NULL;
+    size_t environment_count = 0;
+    *operation = "Command.spawn/environment snapshot";
+    if (!ncr_process_snapshot_environment(command, &environment, &environment_count, domain, &failure, line, column)) {
+        ncr_process_free_argv(arguments, argument_count);
+        return failure;
+    }
+    posix_spawn_file_actions_t actions;
+    int action_status = posix_spawn_file_actions_init(&actions);
+    if (action_status != 0) {
+        *operation = "posix_spawn_file_actions_init";
+        *domain = "error";
+        ncr_process_free_environment(environment, environment_count);
+        ncr_process_free_argv(arguments, argument_count);
+        return action_status;
+    }
+    int temporary_descriptors[3] = {-1, -1, -1};
+    size_t temporary_count = 0;
+    int configured[3];
+    if (override_descriptors) {
+        configured[0] = input_descriptor;
+        configured[1] = output_descriptor;
+        configured[2] = error_descriptor;
+    } else {
+        configured[0] = command->redirects[0] == NULL ? -1 : command->redirects[0]->fd;
+        configured[1] = command->redirects[1] == NULL ? -1 : command->redirects[1]->fd;
+        configured[2] = command->redirects[2] == NULL ? -1 : command->redirects[2]->fd;
+    }
+    for (int target = 0; target < 3; ++target) {
+        action_status = ncr_process_add_redirect(&actions, configured[target], target,
+            temporary_descriptors, &temporary_count);
+        if (action_status != 0) {
+            *operation = "posix_spawn_file_actions_adddup2";
+            *domain = "error";
+            goto cleanup_actions;
+        }
+    }
+    *operation = "posix_spawn";
+    *domain = "error";
+    failure = ncr_process_spawn_resolved(command, arguments, environment, &actions, pid, line, column);
+    if (failure != 0) { goto cleanup_actions; }
+    action_status = posix_spawn_file_actions_destroy(&actions);
+    ncr_process_close_temporaries(temporary_descriptors, temporary_count);
+    ncr_process_free_environment(environment, environment_count);
+    ncr_process_free_argv(arguments, argument_count);
+    if (action_status != 0) {
+        ncr_process_kill_and_reap(*pid);
+        *pid = (pid_t)-1;
+        *operation = "posix_spawn_file_actions_destroy";
+        *domain = "error";
+        return action_status;
+    }
+    return 0;
+
+cleanup_actions:
+    (void)posix_spawn_file_actions_destroy(&actions);
+    ncr_process_close_temporaries(temporary_descriptors, temporary_count);
+    ncr_process_free_environment(environment, environment_count);
+    ncr_process_free_argv(arguments, argument_count);
+    return failure == 0 ? action_status : failure;
+}
+
+static ncr_obj_@COMMAND_SPAWN_RESULT@ @COMMAND_SPAWN@(
+    ncr_obj_@COMMAND_CLASS@ *command, size_t ncr_line, size_t ncr_column
+) {
+    ncr_obj_@PROCESS_CLASS@ *process = ncr_allocate(sizeof(*process), ncr_line, ncr_column);
+    process->pid = (pid_t)-1;
+    process->reaped = true;
+    const char *operation = NULL;
+    const char *domain = NULL;
+    pid_t pid = (pid_t)-1;
+    int failure = ncr_process_spawn_command(command, false, -1, -1, -1,
+        &pid, &operation, &domain, ncr_line, ncr_column);
+    if (failure != 0) {
+        ncr_drop_@PROCESS_CLASS@(process);
+        char message[192];
+        size_t length = ncr_process_format_error(message, sizeof(message), operation, domain, failure);
+        return @COMMAND_SPAWN_ERROR@(message, length, ncr_line, ncr_column);
+    }
+    process->pid = pid;
+    process->reaped = false;
+    return (ncr_obj_@COMMAND_SPAWN_RESULT@){
+        .tag = @COMMAND_SPAWN_OK_TAG@,
+        .data.v@COMMAND_SPAWN_OK_TAG@.f0 = process,
+    };
+}
+/* PROCESS_GROUP_END command */
+/* PROCESS_GROUP wait_helpers */
+
+static bool ncr_process_wait_blocking(
+    pid_t pid, int *wait_status, int *failure
+) {
+    for (;;) {
+        pid_t result = waitpid(pid, wait_status, 0);
+        if (result == pid) { return true; }
+        if (result < 0 && errno == EINTR) { continue; }
+        *failure = result < 0 ? errno : ECHILD;
+        return false;
+    }
+}
+
+static bool ncr_process_make_status(int wait_status, ncr_obj_@EXIT_STATUS_CLASS@ *status) {
+    if (WIFEXITED(wait_status)) {
+        *status = (ncr_obj_@EXIT_STATUS_CLASS@){
+            .tag = @EXITED_TAG@,
+            .data.v@EXITED_TAG@.f0 = (int64_t)WEXITSTATUS(wait_status),
+        };
+        return true;
+    }
+    if (WIFSIGNALED(wait_status)) {
+        *status = (ncr_obj_@EXIT_STATUS_CLASS@){
+            .tag = @SIGNALED_TAG@,
+            .data.v@SIGNALED_TAG@.f0 = (int32_t)WTERMSIG(wait_status),
+        };
+        return true;
+    }
+    return false;
+}
+/* PROCESS_GROUP_END wait_helpers */
+/* PROCESS_GROUP process */
+
+static ncr_obj_@PROCESS_WAIT_RESULT@ @PROCESS_WAIT@(
+    ncr_obj_@PROCESS_CLASS@ *process, size_t ncr_line, size_t ncr_column
+) {
+    if (process->pid <= 0 || process->reaped) {
+        return @PROCESS_WAIT_ERROR@("Process.wait: child has already been reaped", sizeof("Process.wait: child has already been reaped") - 1, ncr_line, ncr_column);
+    }
+    int wait_status = 0;
+    int failure = 0;
+    if (!ncr_process_wait_blocking(process->pid, &wait_status, &failure)) {
+        char message[192];
+        size_t length = ncr_process_format_error(message, sizeof(message), "Process.wait/waitpid", "errno", failure);
+        return @PROCESS_WAIT_ERROR@(message, length, ncr_line, ncr_column);
+    }
+    process->reaped = true;
+    ncr_obj_@EXIT_STATUS_CLASS@ status;
+    if (!ncr_process_make_status(wait_status, &status)) {
+        return @PROCESS_WAIT_ERROR@("Process.wait: waitpid returned an unsupported status", sizeof("Process.wait: waitpid returned an unsupported status") - 1, ncr_line, ncr_column);
+    }
+    return (ncr_obj_@PROCESS_WAIT_RESULT@){
+        .tag = @PROCESS_WAIT_OK_TAG@,
+        .data.v@PROCESS_WAIT_OK_TAG@.f0 = status,
+    };
+}
+
+static ncr_obj_@PROCESS_WAIT_FOR_RESULT@ @PROCESS_WAIT_FOR@(
+    ncr_obj_@PROCESS_CLASS@ *process, int64_t ncr_v_@PROCESS_WAIT_FOR_TIMEOUT@,
+    size_t ncr_line, size_t ncr_column
+) {
+    if (ncr_v_@PROCESS_WAIT_FOR_TIMEOUT@ < 0) {
+        return @PROCESS_WAIT_FOR_ERROR@("Process.waitFor: timeout must be non-negative", sizeof("Process.waitFor: timeout must be non-negative") - 1, ncr_line, ncr_column);
+    }
+    if (process->pid <= 0 || process->reaped) {
+        return @PROCESS_WAIT_FOR_ERROR@("Process.waitFor: child has already been reaped", sizeof("Process.waitFor: child has already been reaped") - 1, ncr_line, ncr_column);
+    }
+    bool bounded = ncr_v_@PROCESS_WAIT_FOR_TIMEOUT@ > 0;
+    int64_t deadline = 0;
+    if (bounded) {
+        int64_t now = 0;
+        int clock_failure = 0;
+        if (!ncr_time_monotonic_value(&now, &clock_failure)) {
+            char message[192];
+            size_t length = ncr_process_format_error(message, sizeof(message), "Process.waitFor/clock_gettime", "errno", clock_failure);
+            return @PROCESS_WAIT_FOR_ERROR@(message, length, ncr_line, ncr_column);
+        }
+        if (!ncr_time_deadline_after_millis(now, ncr_v_@PROCESS_WAIT_FOR_TIMEOUT@, &deadline)) {
+            return @PROCESS_WAIT_FOR_ERROR@("Process.waitFor: timeout exceeds monotonic deadline range", sizeof("Process.waitFor: timeout exceeds monotonic deadline range") - 1, ncr_line, ncr_column);
+        }
+    }
+    for (;;) {
+        int64_t now = 0;
+        if (bounded) {
+            int clock_failure = 0;
+            if (!ncr_time_monotonic_value(&now, &clock_failure)) {
+                char message[192];
+                size_t length = ncr_process_format_error(message, sizeof(message), "Process.waitFor/clock_gettime", "errno", clock_failure);
+                return @PROCESS_WAIT_FOR_ERROR@(message, length, ncr_line, ncr_column);
+            }
+            if (now >= deadline) {
+                ncr_obj_@PROCESS_WAIT_FOR_OPTION@ none = { .tag = @PROCESS_WAIT_FOR_NONE_TAG@ };
+                return (ncr_obj_@PROCESS_WAIT_FOR_RESULT@){
+                    .tag = @PROCESS_WAIT_FOR_OK_TAG@,
+                    .data.v@PROCESS_WAIT_FOR_OK_TAG@.f0 = none,
+                };
+            }
+        }
+        int wait_status = 0;
+        pid_t result = waitpid(process->pid, &wait_status, bounded ? WNOHANG : 0);
+        if (result < 0 && errno == EINTR) { continue; }
+        if (result == process->pid) {
+            process->reaped = true;
+            ncr_obj_@EXIT_STATUS_CLASS@ status;
+            if (!ncr_process_make_status(wait_status, &status)) {
+                return @PROCESS_WAIT_FOR_ERROR@("Process.waitFor: waitpid returned an unsupported status", sizeof("Process.waitFor: waitpid returned an unsupported status") - 1, ncr_line, ncr_column);
+            }
+            ncr_obj_@PROCESS_WAIT_FOR_OPTION@ some = {
+                .tag = @PROCESS_WAIT_FOR_SOME_TAG@,
+                .data.v@PROCESS_WAIT_FOR_SOME_TAG@.f0 = status,
+            };
+            return (ncr_obj_@PROCESS_WAIT_FOR_RESULT@){
+                .tag = @PROCESS_WAIT_FOR_OK_TAG@,
+                .data.v@PROCESS_WAIT_FOR_OK_TAG@.f0 = some,
+            };
+        }
+        if (result < 0) {
+            int failure = errno;
+            char message[192];
+            size_t length = ncr_process_format_error(message, sizeof(message), "Process.waitFor/waitpid", "errno", failure);
+            return @PROCESS_WAIT_FOR_ERROR@(message, length, ncr_line, ncr_column);
+        }
+        if (!bounded) { continue; }
+        int64_t remaining = deadline - now;
+        int64_t remaining_millis = remaining / INT64_C(1000000)
+            + (remaining % INT64_C(1000000) == 0 ? 0 : 1);
+        int delay = remaining_millis > 10 ? 10 : (int)remaining_millis;
+        if (delay < 1) { delay = 1; }
+        int poll_status = poll(NULL, 0, delay);
+        if (poll_status < 0 && errno != EINTR) {
+            int failure = errno;
+            char message[192];
+            size_t length = ncr_process_format_error(message, sizeof(message), "Process.waitFor/poll", "errno", failure);
+            return @PROCESS_WAIT_FOR_ERROR@(message, length, ncr_line, ncr_column);
+        }
+    }
+}
+
+static ncr_obj_@PROCESS_TERMINATE_RESULT@ @PROCESS_TERMINATE@(
+    ncr_obj_@PROCESS_CLASS@ *process, size_t ncr_line, size_t ncr_column
+) {
+    if (process->pid <= 0 || process->reaped) {
+        return @PROCESS_TERMINATE_ERROR@("Process.terminate: child has already been reaped", sizeof("Process.terminate: child has already been reaped") - 1, ncr_line, ncr_column);
+    }
+    if (kill(process->pid, SIGTERM) != 0 && errno != ESRCH) {
+        int failure = errno;
+        char message[192];
+        size_t length = ncr_process_format_error(message, sizeof(message), "Process.terminate/kill", "errno", failure);
+        return @PROCESS_TERMINATE_ERROR@(message, length, ncr_line, ncr_column);
+    }
+    return (ncr_obj_@PROCESS_TERMINATE_RESULT@){
+        .tag = @PROCESS_TERMINATE_OK_TAG@,
+        .data.v@PROCESS_TERMINATE_OK_TAG@.f0 = UINT8_C(0),
+    };
+}
+
+static ncr_obj_@PROCESS_KILL_RESULT@ @PROCESS_KILL@(
+    ncr_obj_@PROCESS_CLASS@ *process, size_t ncr_line, size_t ncr_column
+) {
+    if (process->pid <= 0 || process->reaped) {
+        return @PROCESS_KILL_ERROR@("Process.kill: child has already been reaped", sizeof("Process.kill: child has already been reaped") - 1, ncr_line, ncr_column);
+    }
+    if (kill(process->pid, SIGKILL) != 0 && errno != ESRCH) {
+        int failure = errno;
+        char message[192];
+        size_t length = ncr_process_format_error(message, sizeof(message), "Process.kill/kill", "errno", failure);
+        return @PROCESS_KILL_ERROR@(message, length, ncr_line, ncr_column);
+    }
+    return (ncr_obj_@PROCESS_KILL_RESULT@){
+        .tag = @PROCESS_KILL_OK_TAG@,
+        .data.v@PROCESS_KILL_OK_TAG@.f0 = UINT8_C(0),
+    };
+}
+/* PROCESS_GROUP_END process */
+/* PROCESS_GROUP capture */
+
+static ncr_obj_@BUFFER_CLASS@ *ncr_process_new_buffer(size_t line, size_t column) {
+    return ncr_allocate(sizeof(ncr_obj_@BUFFER_CLASS@), line, column);
+}
+
+static bool ncr_process_normalize_fd(int *descriptor, int *failure) {
+    if (*descriptor < 0 || *descriptor > STDERR_FILENO) { return true; }
+    int duplicate = fcntl(*descriptor, F_DUPFD_CLOEXEC, STDERR_FILENO + 1);
+    if (duplicate < 0) { *failure = errno; return false; }
+    int original = *descriptor;
+    *descriptor = duplicate;
+    if (close(original) != 0) { *failure = errno; return false; }
+    return true;
+}
+
+static bool ncr_process_make_pipe(int descriptors[2], int *failure) {
+    if (pipe2(descriptors, O_CLOEXEC) != 0) { *failure = errno; return false; }
+    if (!ncr_process_normalize_fd(&descriptors[0], failure)
+        || !ncr_process_normalize_fd(&descriptors[1], failure)) {
+        for (size_t index = 0; index < 2; ++index) {
+            if (descriptors[index] >= 0) { (void)close(descriptors[index]); descriptors[index] = -1; }
+        }
+        return false;
+    }
+    return true;
+}
+
+static bool ncr_process_set_nonblocking(int descriptor, int *failure) {
+    int flags = fcntl(descriptor, F_GETFL);
+    if (flags < 0) { *failure = errno; return false; }
+    if (fcntl(descriptor, F_SETFL, flags | O_NONBLOCK) < 0) { *failure = errno; return false; }
+    return true;
+}
+
+static bool ncr_process_close_descriptor(int *descriptor, int *failure) {
+    if (*descriptor < 0) { return true; }
+    int current = *descriptor;
+    *descriptor = -1;
+    if (close(current) != 0) { *failure = errno; return false; }
+    return true;
+}
+
+static bool ncr_process_capture_budget(
+    int *descriptor, ncr_obj_@BUFFER_CLASS@ *buffer, size_t maximum,
+    bool *truncated, int *failure, size_t line, size_t column, size_t budget
+) {
+    unsigned char discard[8192];
+    while (budget > 0) {
+        size_t remaining = maximum - buffer->length;
+        size_t request = budget;
+        unsigned char *destination = discard;
+        bool capturing = remaining > 0;
+        if (capturing) {
+            if (request > remaining) { request = remaining; }
+            @BUFFER_RESERVE@(buffer, buffer->length + request, line, column);
+            destination = buffer->bytes + buffer->length;
+        } else if (request > sizeof(discard)) {
+            request = sizeof(discard);
+        }
+        ssize_t count = read(*descriptor, destination, request);
+        if (count > 0) {
+            size_t bytes = (size_t)count;
+            budget -= bytes;
+            if (capturing) { buffer->length += bytes; }
+            else { *truncated = true; }
+            continue;
+        }
+        if (count == 0) { return ncr_process_close_descriptor(descriptor, failure); }
+        int read_failure = errno;
+        if (read_failure == EINTR) { continue; }
+        if (read_failure == EAGAIN || read_failure == EWOULDBLOCK) { return true; }
+        *failure = read_failure;
+        return false;
+    }
+    return true;
+}
+
+static bool ncr_process_capture_ready(
+    int *descriptor, ncr_obj_@BUFFER_CLASS@ *buffer, size_t maximum,
+    bool *truncated, int *failure, size_t line, size_t column
+) {
+    return ncr_process_capture_budget(descriptor, buffer, maximum, truncated,
+        failure, line, column, 64 * 1024);
+}
+
+static bool ncr_process_capture_prefix(
+    int *descriptor, ncr_obj_@BUFFER_CLASS@ *buffer, size_t maximum,
+    bool *truncated, int *failure, size_t line, size_t column
+) {
+    if (*descriptor < 0) { return true; }
+    int available = 0;
+    if (ioctl(*descriptor, FIONREAD, &available) != 0) { *failure = errno; return false; }
+    if (available < 0) { *failure = EIO; return false; }
+    return ncr_process_capture_budget(descriptor, buffer, maximum, truncated,
+        failure, line, column, (size_t)available);
+}
+
+static bool ncr_process_deadline_expired(
+    bool bounded, int64_t deadline, bool *expired, int *failure
+) {
+    *expired = false;
+    if (!bounded) { return true; }
+    int64_t now = 0;
+    if (!ncr_time_monotonic_value(&now, failure)) { return false; }
+    *expired = now >= deadline;
+    return true;
+}
+
+static int ncr_process_poll_timeout(
+    bool bounded, int64_t deadline, int *failure
+) {
+    if (!bounded) { return 10; }
+    int64_t now = 0;
+    if (!ncr_time_monotonic_value(&now, failure)) { return -1; }
+    if (now >= deadline) { return 0; }
+    int64_t remaining = deadline - now;
+    int64_t millis = remaining / INT64_C(1000000)
+        + (remaining % INT64_C(1000000) == 0 ? 0 : 1);
+    return millis > 10 ? 10 : (int)(millis < 1 ? 1 : millis);
+}
+
+static ncr_obj_@COMMAND_OUTPUT_RESULT@ @COMMAND_OUTPUT@(
+    ncr_obj_@COMMAND_CLASS@ *command,
+    int64_t ncr_v_@COMMAND_OUTPUT_MAX@,
+    int64_t ncr_v_@COMMAND_OUTPUT_TIMEOUT@,
+    size_t ncr_line, size_t ncr_column
+) {
+    if (ncr_v_@COMMAND_OUTPUT_MAX@ < 0) {
+        return @COMMAND_OUTPUT_ERROR@("Command.output: maxBytesPerStream must be non-negative", sizeof("Command.output: maxBytesPerStream must be non-negative") - 1, ncr_line, ncr_column);
+    }
+    if ((uint64_t)ncr_v_@COMMAND_OUTPUT_MAX@ > (uint64_t)SIZE_MAX) {
+        return @COMMAND_OUTPUT_ERROR@("Command.output: maxBytesPerStream exceeds size_t range", sizeof("Command.output: maxBytesPerStream exceeds size_t range") - 1, ncr_line, ncr_column);
+    }
+    if (ncr_v_@COMMAND_OUTPUT_TIMEOUT@ < 0) {
+        return @COMMAND_OUTPUT_ERROR@("Command.output: timeoutMs must be non-negative", sizeof("Command.output: timeoutMs must be non-negative") - 1, ncr_line, ncr_column);
+    }
+    if (command->redirects[0] != NULL || command->redirects[1] != NULL || command->redirects[2] != NULL) {
+        return @COMMAND_OUTPUT_ERROR@("Command.output: configured redirects cannot be combined with capture", sizeof("Command.output: configured redirects cannot be combined with capture") - 1, ncr_line, ncr_column);
+    }
+    bool bounded = ncr_v_@COMMAND_OUTPUT_TIMEOUT@ > 0;
+    int64_t deadline = 0;
+    if (bounded) {
+        int64_t now = 0;
+        int failure = 0;
+        if (!ncr_time_monotonic_value(&now, &failure)) {
+            char message[192];
+            size_t length = ncr_process_format_error(message, sizeof(message), "Command.output/clock_gettime", "errno", failure);
+            return @COMMAND_OUTPUT_ERROR@(message, length, ncr_line, ncr_column);
+        }
+        if (!ncr_time_deadline_after_millis(now, ncr_v_@COMMAND_OUTPUT_TIMEOUT@, &deadline)) {
+            return @COMMAND_OUTPUT_ERROR@("Command.output: timeout exceeds monotonic deadline range", sizeof("Command.output: timeout exceeds monotonic deadline range") - 1, ncr_line, ncr_column);
+        }
+    }
+
+    ncr_obj_@PROCESS_OUTPUT_CLASS@ *output = ncr_allocate(sizeof(*output), ncr_line, ncr_column);
+    output->stdout_buffer = ncr_process_new_buffer(ncr_line, ncr_column);
+    output->stderr_buffer = ncr_process_new_buffer(ncr_line, ncr_column);
+    output->status.tag = -1;
+    int stdout_pipe[2] = {-1, -1};
+    int stderr_pipe[2] = {-1, -1};
+    int null_descriptor = -1;
+    pid_t pid = (pid_t)-1;
+    bool child_reaped = false;
+    size_t maximum = (size_t)ncr_v_@COMMAND_OUTPUT_MAX@;
+    int failure = 0;
+    const char *operation = NULL;
+    const char *domain = "errno";
+    ncr_obj_@EXIT_STATUS_CLASS@ status = { .tag = -1 };
+
+    if (!ncr_process_make_pipe(stdout_pipe, &failure)) { operation = "Command.output/pipe2(stdout)"; goto failed; }
+    if (!ncr_process_make_pipe(stderr_pipe, &failure)) { operation = "Command.output/pipe2(stderr)"; goto failed; }
+    null_descriptor = open("/dev/null", O_RDONLY | O_CLOEXEC);
+    if (null_descriptor < 0) { failure = errno; operation = "Command.output/open(/dev/null)"; goto failed; }
+    if (!ncr_process_normalize_fd(&null_descriptor, &failure)) { operation = "Command.output/normalize /dev/null"; goto failed; }
+    if (!ncr_process_set_nonblocking(stdout_pipe[0], &failure)) { operation = "Command.output/fcntl(stdout)"; goto failed; }
+    if (!ncr_process_set_nonblocking(stderr_pipe[0], &failure)) { operation = "Command.output/fcntl(stderr)"; goto failed; }
+
+    failure = ncr_process_spawn_command(command, true, null_descriptor,
+        stdout_pipe[1], stderr_pipe[1], &pid, &operation, &domain, ncr_line, ncr_column);
+    if (failure != 0) { goto failed; }
+    if (!ncr_process_close_descriptor(&null_descriptor, &failure)) { operation = "Command.output/close(/dev/null)"; goto failed; }
+    if (!ncr_process_close_descriptor(&stdout_pipe[1], &failure)) { operation = "Command.output/close(stdout writer)"; goto failed; }
+    if (!ncr_process_close_descriptor(&stderr_pipe[1], &failure)) { operation = "Command.output/close(stderr writer)"; goto failed; }
+
+    for (;;) {
+        int wait_status = 0;
+        if (!child_reaped) {
+            pid_t waited;
+            for (;;) {
+                waited = waitpid(pid, &wait_status, WNOHANG);
+                if (waited >= 0 || errno != EINTR) { break; }
+                if (bounded) {
+                    bool interrupted_timeout = false;
+                    if (!ncr_process_deadline_expired(true, deadline, &interrupted_timeout, &failure)) {
+                        operation = "Command.output/clock_gettime";
+                        goto failed;
+                    }
+                    if (interrupted_timeout) { waited = 0; break; }
+                }
+            }
+            if (waited == pid) {
+                child_reaped = true;
+                if (!ncr_process_make_status(wait_status, &status)) {
+                    failure = ECHILD;
+                    operation = "Command.output/waitpid status";
+                    goto failed;
+                }
+                output->status = status;
+            } else if (waited < 0) {
+                failure = errno;
+                operation = "Command.output/waitpid";
+                goto failed;
+            }
+        }
+
+        bool expired = false;
+        if (!ncr_process_deadline_expired(bounded, deadline, &expired, &failure)) {
+            operation = "Command.output/clock_gettime";
+            goto failed;
+        }
+        if (expired) {
+            if (!child_reaped) {
+                if (kill(pid, SIGKILL) != 0 && errno != ESRCH) {
+                    failure = errno;
+                    operation = "Command.output/kill";
+                    goto failed;
+                }
+                int wait_failure = 0;
+                if (!ncr_process_wait_blocking(pid, &wait_status, &wait_failure)) {
+                    failure = wait_failure;
+                    operation = "Command.output/waitpid after timeout";
+                    goto failed;
+                }
+                child_reaped = true;
+                if (!ncr_process_make_status(wait_status, &status)) {
+                    failure = ECHILD;
+                    operation = "Command.output/waitpid status after timeout";
+                    goto failed;
+                }
+                output->status = status;
+            }
+            if (!ncr_process_capture_prefix(&stdout_pipe[0], output->stdout_buffer, maximum,
+                    &output->stdout_truncated, &failure, ncr_line, ncr_column)) {
+                operation = "Command.output/read(stdout after timeout)";
+                goto failed;
+            }
+            if (!ncr_process_capture_prefix(&stderr_pipe[0], output->stderr_buffer, maximum,
+                    &output->stderr_truncated, &failure, ncr_line, ncr_column)) {
+                operation = "Command.output/read(stderr after timeout)";
+                goto failed;
+            }
+            if (!ncr_process_close_descriptor(&stdout_pipe[0], &failure)) { operation = "Command.output/close(stdout after timeout)"; goto failed; }
+            if (!ncr_process_close_descriptor(&stderr_pipe[0], &failure)) { operation = "Command.output/close(stderr after timeout)"; goto failed; }
+            output->timed_out = true;
+            return (ncr_obj_@COMMAND_OUTPUT_RESULT@){
+                .tag = @COMMAND_OUTPUT_OK_TAG@,
+                .data.v@COMMAND_OUTPUT_OK_TAG@.f0 = output,
+            };
+        }
+        if (child_reaped && stdout_pipe[0] < 0 && stderr_pipe[0] < 0) {
+            return (ncr_obj_@COMMAND_OUTPUT_RESULT@){
+                .tag = @COMMAND_OUTPUT_OK_TAG@,
+                .data.v@COMMAND_OUTPUT_OK_TAG@.f0 = output,
+            };
+        }
+
+        struct pollfd descriptors[2] = {
+            { .fd = stdout_pipe[0], .events = POLLIN | POLLHUP | POLLERR, .revents = 0 },
+            { .fd = stderr_pipe[0], .events = POLLIN | POLLHUP | POLLERR, .revents = 0 },
+        };
+        int poll_timeout = ncr_process_poll_timeout(bounded, deadline, &failure);
+        if (poll_timeout < 0) { operation = "Command.output/clock_gettime"; goto failed; }
+        int poll_status = poll(descriptors, 2, poll_timeout);
+        if (poll_status < 0) {
+            if (errno == EINTR) { continue; }
+            failure = errno;
+            operation = "Command.output/poll";
+            goto failed;
+        }
+        for (size_t index = 0; index < 2; ++index) {
+            if (descriptors[index].revents & POLLNVAL) {
+                failure = EBADF;
+                operation = "Command.output/poll invalid descriptor";
+                goto failed;
+            }
+        }
+        if (descriptors[0].revents != 0
+            && !ncr_process_capture_ready(&stdout_pipe[0], output->stdout_buffer, maximum,
+                &output->stdout_truncated, &failure, ncr_line, ncr_column)) {
+            operation = "Command.output/read(stdout)";
+            goto failed;
+        }
+        if (descriptors[1].revents != 0
+            && !ncr_process_capture_ready(&stderr_pipe[0], output->stderr_buffer, maximum,
+                &output->stderr_truncated, &failure, ncr_line, ncr_column)) {
+            operation = "Command.output/read(stderr)";
+            goto failed;
+        }
+    }
+
+failed:
+    if (pid > 0 && !child_reaped) { ncr_process_kill_and_reap(pid); }
+    if (null_descriptor >= 0) { (void)close(null_descriptor); }
+    if (stdout_pipe[0] >= 0) { (void)close(stdout_pipe[0]); }
+    if (stdout_pipe[1] >= 0) { (void)close(stdout_pipe[1]); }
+    if (stderr_pipe[0] >= 0) { (void)close(stderr_pipe[0]); }
+    if (stderr_pipe[1] >= 0) { (void)close(stderr_pipe[1]); }
+    ncr_drop_@PROCESS_OUTPUT_CLASS@(output);
+    if (operation == NULL) { operation = "Command.output"; }
+    char message[192];
+    size_t length = ncr_process_format_error(message, sizeof(message), operation, domain, failure);
+    return @COMMAND_OUTPUT_ERROR@(message, length, ncr_line, ncr_column);
+}
+/* PROCESS_GROUP_END capture */
+/* PROCESS_GROUP output */
+
+static ncr_obj_@BUFFER_CLASS@ * @PROCESS_OUTPUT_STDOUT@(
+    ncr_obj_@PROCESS_OUTPUT_CLASS@ *output, size_t ncr_line, size_t ncr_column
+) {
+    (void)ncr_line; (void)ncr_column;
+    return output->stdout_buffer;
+}
+
+static ncr_obj_@BUFFER_CLASS@ * @PROCESS_OUTPUT_STDERR@(
+    ncr_obj_@PROCESS_OUTPUT_CLASS@ *output, size_t ncr_line, size_t ncr_column
+) {
+    (void)ncr_line; (void)ncr_column;
+    return output->stderr_buffer;
+}
+
+static ncr_obj_@EXIT_STATUS_CLASS@ * @PROCESS_OUTPUT_STATUS@(
+    ncr_obj_@PROCESS_OUTPUT_CLASS@ *output, size_t ncr_line, size_t ncr_column
+) {
+    (void)ncr_line; (void)ncr_column;
+    return &output->status;
+}
+
+static bool @PROCESS_OUTPUT_STDOUT_TRUNCATED@(
+    ncr_obj_@PROCESS_OUTPUT_CLASS@ *output, size_t ncr_line, size_t ncr_column
+) {
+    (void)ncr_line; (void)ncr_column;
+    return output->stdout_truncated;
+}
+
+static bool @PROCESS_OUTPUT_STDERR_TRUNCATED@(
+    ncr_obj_@PROCESS_OUTPUT_CLASS@ *output, size_t ncr_line, size_t ncr_column
+) {
+    (void)ncr_line; (void)ncr_column;
+    return output->stderr_truncated;
+}
+
+static bool @PROCESS_OUTPUT_TIMED_OUT@(
+    ncr_obj_@PROCESS_OUTPUT_CLASS@ *output, size_t ncr_line, size_t ncr_column
+) {
+    (void)ncr_line; (void)ncr_column;
+    return output->timed_out;
+}
+/* PROCESS_GROUP_END output */

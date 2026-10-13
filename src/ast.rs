@@ -45,6 +45,7 @@ pub enum NativeClass {
     Console, Files, Args, Math, Random, Time,
     SocketAddress, TcpListener, TcpStream, Datagram, UdpSocket,
     Thread(Type), Mutex(Type), Guard(Type), Channel(Type), Sender(Type), Receiver(Type),
+    Env, Command, Process, ProcessOutput,
 }
 #[derive(Debug, Clone)]
 pub struct Variant { pub name: String, pub fields: Vec<Type>, pub span: Span }

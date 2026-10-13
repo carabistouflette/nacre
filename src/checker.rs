@@ -56,7 +56,7 @@ impl Tables {
     fn is_static_native(&self, id: usize) -> bool {
         matches!(self.classes[id].native,
             Some(t::NativeClass::Arrays | t::NativeClass::Console | t::NativeClass::Files |
-                t::NativeClass::Args | t::NativeClass::Math | t::NativeClass::Time))
+                t::NativeClass::Args | t::NativeClass::Math | t::NativeClass::Time | t::NativeClass::Env))
     }
     fn type_name(&self, ty: Type) -> String {
         match ty {
@@ -120,7 +120,9 @@ impl Tables {
                         t::NativeClass::Random | t::NativeClass::Time |
                         t::NativeClass::SocketAddress | t::NativeClass::TcpListener |
                         t::NativeClass::TcpStream | t::NativeClass::Datagram |
-                        t::NativeClass::UdpSocket) | None => None,
+                        t::NativeClass::UdpSocket | t::NativeClass::Env |
+                        t::NativeClass::Command | t::NativeClass::Process |
+                        t::NativeClass::ProcessOutput) | None => None,
                 };
                 if let Some(element) = native_type {
                     sendable &= value_sendable(tables, element, states);
@@ -243,6 +245,10 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
             Some(a::NativeClass::Channel(_)) => Some(t::NativeClass::Channel(Type::Void)),
             Some(a::NativeClass::Sender(_)) => Some(t::NativeClass::Sender(Type::Void)),
             Some(a::NativeClass::Receiver(_)) => Some(t::NativeClass::Receiver(Type::Void)),
+            Some(a::NativeClass::Env) => Some(t::NativeClass::Env),
+            Some(a::NativeClass::Command) => Some(t::NativeClass::Command),
+            Some(a::NativeClass::Process) => Some(t::NativeClass::Process),
+            Some(a::NativeClass::ProcessOutput) => Some(t::NativeClass::ProcessOutput),
             None => None,
         };
     }

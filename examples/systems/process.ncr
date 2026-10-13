@@ -1,0 +1,52 @@
+void main() {
+    Text variable = new Text("NACRE_PROCESS_EXAMPLE");
+    Text globalValue = new Text("global value");
+    match (Env.set(variable, globalValue)) {
+        Ok(_) { println("global environment set"); }
+        Err(error) { error.print(); return; }
+    }
+    match (Env.get(variable)) {
+        Ok(option) {
+            match (option) {
+                Some(value) { println("global environment read"); }
+                None { println("unexpected missing environment value"); }
+            }
+        }
+        Err(error) { error.print(); return; }
+    }
+
+    match (Path.fromText(new Text("/usr/bin/printf"))) {
+        Ok(executable) {
+            Command command = Command.create(executable);
+            match (command.clearEnv()) {
+                Ok(_) { println("child environment cleared"); }
+                Err(error) { error.print(); return; }
+            }
+            match (command.setEnv(new Text("NACRE_PROCESS_EXAMPLE"), new Text("child value"))) {
+                Ok(_) { println("child environment override set"); }
+                Err(error) { error.print(); return; }
+            }
+            match (command.addArg(new Text("%s\n"))) {
+                Ok(_) {}
+                Err(error) { error.print(); return; }
+            }
+            match (command.addArg(new Text("literal space ; $()"))) {
+                Ok(_) {}
+                Err(error) { error.print(); return; }
+            }
+            match (command.output(64L, 5000L)) {
+                Ok(captured) {
+                    borrow ByteBuffer stdout = captured.stdout();
+                    println(stdout.length());
+                    println(captured.stdoutTruncated());
+                    match (captured.status()) {
+                        Exited(code) { println(code); }
+                        Signaled(signal) { println(signal); }
+                    }
+                }
+                Err(error) { error.print(); }
+            }
+        }
+        Err(error) { error.print(); }
+    }
+}
