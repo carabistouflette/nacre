@@ -89,8 +89,8 @@ fn has_any(program: &t::Program, methods: &[M]) -> bool {
 pub(super) fn implementation(program: &t::Program) -> String {
     const NETWORK_METHODS: &[M] = &[
         M::SocketAddressResolve, M::SocketAddressToText,
-        M::TcpListenerBind, M::TcpListenerAccept, M::TcpListenerLocalAddress, M::TcpListenerClose,
         M::TcpStreamConnect, M::TcpStreamReadSome, M::TcpStreamWriteSome, M::TcpStreamWriteAll,
+        M::TcpStreamRead, M::TcpStreamWrite, M::TcpStreamFlush,
         M::TcpStreamPeerAddress, M::TcpStreamLocalAddress, M::TcpStreamClose,
         M::DatagramSource, M::DatagramBytesRead, M::DatagramTruncated,
         M::UdpSocketBind, M::UdpSocketSendTo, M::UdpSocketReceiveFrom, M::UdpSocketLocalAddress, M::UdpSocketClose,
@@ -108,6 +108,7 @@ pub(super) fn implementation(program: &t::Program) -> String {
     let to_text = method_if(program, M::SocketAddressToText);
     let listener_methods = [M::TcpListenerBind, M::TcpListenerAccept, M::TcpListenerLocalAddress, M::TcpListenerClose];
     let stream_methods = [M::TcpStreamConnect, M::TcpStreamReadSome, M::TcpStreamWriteSome, M::TcpStreamWriteAll,
+        M::TcpStreamRead, M::TcpStreamWrite, M::TcpStreamFlush,
         M::TcpStreamPeerAddress, M::TcpStreamLocalAddress, M::TcpStreamClose];
     let udp_methods = [M::UdpSocketBind, M::UdpSocketSendTo, M::UdpSocketReceiveFrom, M::UdpSocketLocalAddress, M::UdpSocketClose];
     let datagram_methods = [M::DatagramSource, M::DatagramBytesRead, M::DatagramTruncated];
@@ -192,6 +193,9 @@ pub(super) fn implementation(program: &t::Program) -> String {
         let read = method(program, M::TcpStreamReadSome);
         let write = method(program, M::TcpStreamWriteSome);
         let write_all = method(program, M::TcpStreamWriteAll);
+        let default_read = method(program, M::TcpStreamRead);
+        let default_write = method(program, M::TcpStreamWrite);
+        let flush = method(program, M::TcpStreamFlush);
         let text = native_class_id(program, |native| matches!(native, C::Text));
         let address_result = method_if(program, M::TcpStreamPeerAddress)
             .or_else(|| method_if(program, M::TcpListenerLocalAddress))
@@ -215,6 +219,14 @@ pub(super) fn implementation(program: &t::Program) -> String {
         add(&mut substitutions, "@WRITE_OFFSET_ID@", param(write, 1));
         add(&mut substitutions, "@WRITE_MAX_ID@", param(write, 2));
         add(&mut substitutions, "@WRITE_TIMEOUT_ID@", param(write, 3));
+        add(&mut substitutions, "@READ_DEFAULT_DESTINATION_ID@", param(default_read, 0));
+        add(&mut substitutions, "@READ_DEFAULT_MAX_ID@", param(default_read, 1));
+        add(&mut substitutions, "@WRITE_DEFAULT_SOURCE_ID@", param(default_write, 0));
+        add(&mut substitutions, "@WRITE_DEFAULT_OFFSET_ID@", param(default_write, 1));
+        add(&mut substitutions, "@WRITE_DEFAULT_MAX_ID@", param(default_write, 2));
+        assert_eq!(result_id(default_read), result_id(read), "default TCP read shares the readSome result type");
+        assert_eq!(result_id(default_write), result_id(write), "default TCP write shares the writeSome result type");
+        assert_eq!(result_id(flush), result_id(write_all), "TCP flush shares the writeAll unit result type");
         add_result_type(&mut substitutions, program, "@UNIT_RESULT_TYPE@", write_all);
         add_result(&mut substitutions, program, "@UNIT_RESULT_ID@", write_all);
         add_ok_tag(&mut substitutions, program, "@UNIT_RESULT_OK_TAG@", write_all);

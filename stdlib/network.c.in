@@ -475,6 +475,31 @@ static ncr_obj_@UNIT_RESULT_TYPE@ @TCP_STREAM_WRITE_ALL@(ncr_obj_@TCP_STREAM_ID@
         .data.v@UNIT_RESULT_OK_TAG@.f0 = UINT8_C(0)
     };
 }
+static ncr_obj_@LONG_RESULT_TYPE@ @TCP_STREAM_READ@(ncr_obj_@TCP_STREAM_ID@ *p,
+    ncr_obj_@BUFFER_ID@ *ncr_v_@READ_DEFAULT_DESTINATION_ID@,
+    int64_t ncr_v_@READ_DEFAULT_MAX_ID@, size_t ncr_line, size_t ncr_column) {
+    return @TCP_STREAM_READ_SOME@(p, ncr_v_@READ_DEFAULT_DESTINATION_ID@,
+        ncr_v_@READ_DEFAULT_MAX_ID@, INT64_C(0), ncr_line, ncr_column);
+}
+
+static ncr_obj_@LONG_RESULT_TYPE@ @TCP_STREAM_WRITE@(ncr_obj_@TCP_STREAM_ID@ *p,
+    ncr_obj_@BUFFER_ID@ *ncr_v_@WRITE_DEFAULT_SOURCE_ID@,
+    int64_t ncr_v_@WRITE_DEFAULT_OFFSET_ID@, int64_t ncr_v_@WRITE_DEFAULT_MAX_ID@,
+    size_t ncr_line, size_t ncr_column) {
+    return @TCP_STREAM_WRITE_SOME@(p, ncr_v_@WRITE_DEFAULT_SOURCE_ID@,
+        ncr_v_@WRITE_DEFAULT_OFFSET_ID@, ncr_v_@WRITE_DEFAULT_MAX_ID@,
+        INT64_C(0), ncr_line, ncr_column);
+}
+
+static ncr_obj_@UNIT_RESULT_TYPE@ @TCP_STREAM_FLUSH@(ncr_obj_@TCP_STREAM_ID@ *p,
+    size_t ncr_line, size_t ncr_column) {
+    (void)p; (void)ncr_line; (void)ncr_column;
+    return (ncr_obj_@UNIT_RESULT_TYPE@){
+        .tag = @UNIT_RESULT_OK_TAG@,
+        .data.v@UNIT_RESULT_OK_TAG@.f0 = UINT8_C(0)
+    };
+}
+
 
 static ncr_obj_@ADDRESS_RESULT_TYPE@ @TCP_STREAM_PEER_ADDRESS@(ncr_obj_@TCP_STREAM_ID@ *p, size_t ncr_line, size_t ncr_column) {
     return ncr_network_get_address(p->fd, true, "TcpStream.peerAddress", ncr_line, ncr_column);

@@ -1,0 +1,118 @@
+// ByteSource and ByteSink are allocation-free interfaces; native implementations
+// use their concrete object directly in the generated vtable.
+interface ByteSource {
+    Result<long, Text> read(borrow mut ByteBuffer destination, long maxBytes);
+}
+
+interface ByteSink {
+    Result<long, Text> write(borrow ByteBuffer source, long offset, long maxBytes);
+    Result<Unit, Text> flush();
+}
+
+class BinaryReader {
+    public BinaryReader(ByteBuffer bytes, boolean littleEndian) {}
+    public readonly long position() {}
+    public readonly long remaining() {}
+    public Result<Unit, Text> seek(long position) {}
+    public Result<byte, Text> readByte() {}
+    public Result<int, Text> readInt16() {}
+    public Result<int, Text> readInt32() {}
+    public Result<long, Text> readInt64() {}
+    public Result<double, Text> readDouble() {}
+    public Result<ByteBuffer, Text> readBytes(long length) {}
+    public Result<Text, Text> readUtf8(long length) {}
+}
+
+class BinaryWriter {
+    public BinaryWriter(long capacity, boolean littleEndian) {}
+    public readonly long position() {}
+    public Result<Unit, Text> writeByte(byte value) {}
+    public Result<Unit, Text> writeInt16(int value) {}
+    public Result<Unit, Text> writeInt32(int value) {}
+    public Result<Unit, Text> writeInt64(long value) {}
+    public Result<Unit, Text> writeDouble(double value) {}
+    public Result<Unit, Text> writeBytes(borrow ByteBuffer source) {}
+    public Result<Unit, Text> writeUtf8(borrow Text value) {}
+    public readonly borrow ByteBuffer bytes() {}
+    public static ByteBuffer finish(BinaryWriter writer) {}
+}
+
+class Streams {
+    // maxBytes bounds bytes consumed; copy returns the number transferred and
+    // flushes the sink, without implying that a network peer has received them.
+    public static Result<long, Text> copy(borrow mut ByteSource source, borrow mut ByteSink sink, long maxBytes, long bufferSize) {
+        if (maxBytes < 0L || bufferSize <= 0L) {
+            return new Result<long, Text>.Err(new Text("Streams.copy requires maxBytes >= 0 and bufferSize > 0"));
+        }
+        if (maxBytes == 0L) {
+            sink.flush()?;
+            return new Result<long, Text>.Ok(0L);
+        }
+
+        long chunkCapacity = bufferSize;
+        if (chunkCapacity > maxBytes) { chunkCapacity = maxBytes; }
+        ByteBuffer buffer = ByteBuffer.withCapacity(chunkCapacity)?;
+        long copied = 0L;
+        while (copied < maxBytes) {
+            buffer.clear();
+            long requested = maxBytes - copied;
+            if (requested > chunkCapacity) { requested = chunkCapacity; }
+            long count = source.read(buffer, requested)?;
+            if (count < 0L || count > requested || buffer.length() != count) {
+                return new Result<long, Text>.Err(new Text("ByteSource.read returned an invalid byte count"));
+            }
+            if (count == 0L) { break; }
+
+            long offset = 0L;
+            while (offset < count) {
+                long written = sink.write(buffer, offset, count - offset)?;
+                if (written <= 0L || written > count - offset) {
+                    return new Result<long, Text>.Err(new Text("ByteSink.write made no progress or returned an invalid byte count"));
+                }
+                offset = offset + written;
+            }
+            copied = copied + count;
+        }
+        sink.flush()?;
+        return new Result<long, Text>.Ok(copied);
+    }
+
+    // Reads at most maxBytes. Reaching the bound returns the prefix read so far;
+    // this never consumes an extra byte merely to probe whether more input exists.
+    public static Result<ByteBuffer, Text> readAll(borrow mut ByteSource source, long maxBytes, long bufferSize) {
+        if (maxBytes < 0L || bufferSize <= 0L) {
+            return new Result<ByteBuffer, Text>.Err(new Text("Streams.readAll requires maxBytes >= 0 and bufferSize > 0"));
+        }
+        long chunkCapacity = bufferSize;
+        if (chunkCapacity > maxBytes) { chunkCapacity = maxBytes; }
+        ByteBuffer output = ByteBuffer.withCapacity(chunkCapacity)?;
+        if (maxBytes == 0L) { return new Result<ByteBuffer, Text>.Ok(output); }
+        ByteBuffer chunk = ByteBuffer.withCapacity(chunkCapacity)?;
+        while (output.length() < maxBytes) {
+            chunk.clear();
+            long requested = maxBytes - output.length();
+            if (requested > chunkCapacity) { requested = chunkCapacity; }
+            long count = source.read(chunk, requested)?;
+            if (count < 0L || count > requested || chunk.length() != count) {
+                return new Result<ByteBuffer, Text>.Err(new Text("ByteSource.read returned an invalid byte count"));
+            }
+            if (count == 0L) { break; }
+            output.appendBytes(chunk)?;
+        }
+        return new Result<ByteBuffer, Text>.Ok(output);
+    }
+
+    public static Result<Unit, Text> writeAll(borrow mut ByteSink sink, borrow ByteBuffer source) {
+        long offset = 0L;
+        long length = source.length();
+        while (offset < length) {
+            long written = sink.write(source, offset, length - offset)?;
+            if (written <= 0L || written > length - offset) {
+                return new Result<Unit, Text>.Err(new Text("ByteSink.write made no progress or returned an invalid byte count"));
+            }
+            offset = offset + written;
+        }
+        sink.flush()?;
+        return new Result<Unit, Text>.Ok(());
+    }
+}

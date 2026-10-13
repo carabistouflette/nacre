@@ -10,11 +10,16 @@ class TcpListener {
     public Result<Unit, Text> close() {}
 }
 
-class TcpStream {
+class TcpStream implements ByteSource, ByteSink {
     public static Result<TcpStream, Text> connect(borrow SocketAddress address, long timeoutMs) {}
     public Result<long, Text> readSome(borrow mut ByteBuffer destination, long maxBytes, long timeoutMs) {}
     public Result<long, Text> writeSome(borrow ByteBuffer source, long offset, long maxBytes, long timeoutMs) {}
     public Result<Unit, Text> writeAll(borrow ByteBuffer source, long timeoutMs) {}
+    // Interface operations use timeout 0 (unbounded), matching native poll semantics.
+    public Result<long, Text> read(borrow mut ByteBuffer destination, long maxBytes) {}
+    public Result<long, Text> write(borrow ByteBuffer source, long offset, long maxBytes) {}
+    // Flush has no userspace buffer and does not imply network delivery.
+    public Result<Unit, Text> flush() {}
     public Result<SocketAddress, Text> peerAddress() {}
     public Result<SocketAddress, Text> localAddress() {}
     public Result<Unit, Text> close() {}

@@ -1,0 +1,368 @@
+/* BINARY_GROUP_BEGIN reader */
+_Static_assert(sizeof(double) == sizeof(uint64_t), "BinaryReader requires 64-bit double");
+_Static_assert(FLT_RADIX == 2 && DBL_MANT_DIG == 53 && DBL_MIN_EXP == -1021 && DBL_MAX_EXP == 1024,
+    "BinaryReader requires IEEE-754 binary64 double");
+
+static bool ncr_binary_reader_has_@READER_ID@(const ncr_obj_@READER_ID@ *p, uint64_t count) {
+    return count <= (uint64_t)p->bytes->length - (uint64_t)p->position;
+}
+
+static void @BINARY_READER_NEW@(ncr_obj_@READER_ID@ *ncr_self,
+    ncr_obj_@BUFFER_ID@ *ncr_v_@READER_BYTES_ID@, bool ncr_v_@READER_ENDIAN_ID@,
+    size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column;
+    ncr_self->bytes = ncr_v_@READER_BYTES_ID@;
+    ncr_self->position = 0;
+    ncr_self->little_endian = ncr_v_@READER_ENDIAN_ID@;
+}
+
+static int64_t @BINARY_READER_POSITION@(ncr_obj_@READER_ID@ *ncr_self, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column;
+    return ncr_self->position;
+}
+
+static int64_t @BINARY_READER_REMAINING@(ncr_obj_@READER_ID@ *ncr_self, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column;
+    return (int64_t)ncr_self->bytes->length - ncr_self->position;
+}
+
+static ncr_obj_@READER_SEEK_RESULT@ @BINARY_READER_SEEK@(ncr_obj_@READER_ID@ *ncr_self,
+    int64_t ncr_v_@READER_SEEK_POSITION_ID@, size_t ncr_line, size_t ncr_column) {
+    if (ncr_v_@READER_SEEK_POSITION_ID@ < 0
+        || (uint64_t)ncr_v_@READER_SEEK_POSITION_ID@ > (uint64_t)ncr_self->bytes->length) {
+        static const char message[] = "BinaryReader.seek: position is outside the buffer";
+        return @READER_SEEK_ERROR@(message, sizeof(message) - 1, ncr_line, ncr_column);
+    }
+    ncr_self->position = ncr_v_@READER_SEEK_POSITION_ID@;
+    return (ncr_obj_@READER_SEEK_RESULT@){ .tag = @READER_SEEK_OK_TAG@, .data.v@READER_SEEK_OK_TAG@.f0 = UINT8_C(0) };
+}
+
+static ncr_obj_@READER_BYTE_RESULT@ @BINARY_READER_READ_BYTE@(ncr_obj_@READER_ID@ *ncr_self,
+    size_t ncr_line, size_t ncr_column) {
+    if (!ncr_binary_reader_has_@READER_ID@(ncr_self, UINT64_C(1))) {
+        static const char message[] = "BinaryReader.readByte: insufficient bytes";
+        return @READER_BYTE_ERROR@(message, sizeof(message) - 1, ncr_line, ncr_column);
+    }
+    uint8_t value = ncr_self->bytes->bytes[(size_t)ncr_self->position];
+    ++ncr_self->position;
+    return (ncr_obj_@READER_BYTE_RESULT@){ .tag = @READER_BYTE_OK_TAG@, .data.v@READER_BYTE_OK_TAG@.f0 = value };
+}
+
+static ncr_obj_@READER_INT16_RESULT@ @BINARY_READER_READ_INT16@(ncr_obj_@READER_ID@ *ncr_self,
+    size_t ncr_line, size_t ncr_column) {
+    if (!ncr_binary_reader_has_@READER_ID@(ncr_self, UINT64_C(2))) {
+        static const char message[] = "BinaryReader.readInt16: insufficient bytes";
+        return @READER_INT16_ERROR@(message, sizeof(message) - 1, ncr_line, ncr_column);
+    }
+    const unsigned char *bytes = ncr_self->bytes->bytes + (size_t)ncr_self->position;
+    uint16_t bits;
+    if (ncr_self->little_endian) {
+        bits = (uint16_t)((uint16_t)bytes[0] | ((uint16_t)bytes[1] << 8));
+    } else {
+        bits = (uint16_t)(((uint16_t)bytes[0] << 8) | (uint16_t)bytes[1]);
+    }
+    int32_t value = bits <= (uint16_t)INT16_MAX
+        ? (int32_t)bits : (int32_t)bits - INT32_C(65536);
+    ncr_self->position += INT64_C(2);
+    return (ncr_obj_@READER_INT16_RESULT@){ .tag = @READER_INT16_OK_TAG@, .data.v@READER_INT16_OK_TAG@.f0 = value };
+}
+
+static ncr_obj_@READER_INT32_RESULT@ @BINARY_READER_READ_INT32@(ncr_obj_@READER_ID@ *ncr_self,
+    size_t ncr_line, size_t ncr_column) {
+    if (!ncr_binary_reader_has_@READER_ID@(ncr_self, UINT64_C(4))) {
+        static const char message[] = "BinaryReader.readInt32: insufficient bytes";
+        return @READER_INT32_ERROR@(message, sizeof(message) - 1, ncr_line, ncr_column);
+    }
+    const unsigned char *bytes = ncr_self->bytes->bytes + (size_t)ncr_self->position;
+    uint32_t bits;
+    if (ncr_self->little_endian) {
+        bits = (uint32_t)bytes[0] | ((uint32_t)bytes[1] << 8)
+            | ((uint32_t)bytes[2] << 16) | ((uint32_t)bytes[3] << 24);
+    } else {
+        bits = ((uint32_t)bytes[0] << 24) | ((uint32_t)bytes[1] << 16)
+            | ((uint32_t)bytes[2] << 8) | (uint32_t)bytes[3];
+    }
+    int64_t signed_value = bits <= (uint32_t)INT32_MAX
+        ? (int64_t)bits : (int64_t)bits - INT64_C(4294967296);
+    int32_t value = (int32_t)signed_value;
+    ncr_self->position += INT64_C(4);
+    return (ncr_obj_@READER_INT32_RESULT@){ .tag = @READER_INT32_OK_TAG@, .data.v@READER_INT32_OK_TAG@.f0 = value };
+}
+
+static ncr_obj_@READER_INT64_RESULT@ @BINARY_READER_READ_INT64@(ncr_obj_@READER_ID@ *ncr_self,
+    size_t ncr_line, size_t ncr_column) {
+    if (!ncr_binary_reader_has_@READER_ID@(ncr_self, UINT64_C(8))) {
+        static const char message[] = "BinaryReader.readInt64: insufficient bytes";
+        return @READER_INT64_ERROR@(message, sizeof(message) - 1, ncr_line, ncr_column);
+    }
+    const unsigned char *bytes = ncr_self->bytes->bytes + (size_t)ncr_self->position;
+    uint64_t bits;
+    if (ncr_self->little_endian) {
+        bits = (uint64_t)bytes[0] | ((uint64_t)bytes[1] << 8)
+            | ((uint64_t)bytes[2] << 16) | ((uint64_t)bytes[3] << 24)
+            | ((uint64_t)bytes[4] << 32) | ((uint64_t)bytes[5] << 40)
+            | ((uint64_t)bytes[6] << 48) | ((uint64_t)bytes[7] << 56);
+    } else {
+        bits = ((uint64_t)bytes[0] << 56) | ((uint64_t)bytes[1] << 48)
+            | ((uint64_t)bytes[2] << 40) | ((uint64_t)bytes[3] << 32)
+            | ((uint64_t)bytes[4] << 24) | ((uint64_t)bytes[5] << 16)
+            | ((uint64_t)bytes[6] << 8) | (uint64_t)bytes[7];
+    }
+    int64_t value = (bits & UINT64_C(0x8000000000000000)) == 0
+        ? (int64_t)bits : -INT64_C(1) - (int64_t)(~bits);
+    ncr_self->position += INT64_C(8);
+    return (ncr_obj_@READER_INT64_RESULT@){ .tag = @READER_INT64_OK_TAG@, .data.v@READER_INT64_OK_TAG@.f0 = value };
+}
+
+static ncr_obj_@READER_DOUBLE_RESULT@ @BINARY_READER_READ_DOUBLE@(ncr_obj_@READER_ID@ *ncr_self,
+    size_t ncr_line, size_t ncr_column) {
+    if (!ncr_binary_reader_has_@READER_ID@(ncr_self, UINT64_C(8))) {
+        static const char message[] = "BinaryReader.readDouble: insufficient bytes";
+        return @READER_DOUBLE_ERROR@(message, sizeof(message) - 1, ncr_line, ncr_column);
+    }
+    const unsigned char *bytes = ncr_self->bytes->bytes + (size_t)ncr_self->position;
+    uint64_t bits;
+    if (ncr_self->little_endian) {
+        bits = (uint64_t)bytes[0] | ((uint64_t)bytes[1] << 8)
+            | ((uint64_t)bytes[2] << 16) | ((uint64_t)bytes[3] << 24)
+            | ((uint64_t)bytes[4] << 32) | ((uint64_t)bytes[5] << 40)
+            | ((uint64_t)bytes[6] << 48) | ((uint64_t)bytes[7] << 56);
+    } else {
+        bits = ((uint64_t)bytes[0] << 56) | ((uint64_t)bytes[1] << 48)
+            | ((uint64_t)bytes[2] << 40) | ((uint64_t)bytes[3] << 32)
+            | ((uint64_t)bytes[4] << 24) | ((uint64_t)bytes[5] << 16)
+            | ((uint64_t)bytes[6] << 8) | (uint64_t)bytes[7];
+    }
+    double value;
+    memcpy(&value, &bits, sizeof(value));
+    ncr_self->position += INT64_C(8);
+    return (ncr_obj_@READER_DOUBLE_RESULT@){ .tag = @READER_DOUBLE_OK_TAG@, .data.v@READER_DOUBLE_OK_TAG@.f0 = value };
+}
+
+static ncr_obj_@READER_BYTES_RESULT@ @BINARY_READER_READ_BYTES@(ncr_obj_@READER_ID@ *ncr_self,
+    int64_t ncr_v_@READER_BYTES_LENGTH_ID@, size_t ncr_line, size_t ncr_column) {
+    if (ncr_v_@READER_BYTES_LENGTH_ID@ < 0) {
+        static const char message[] = "BinaryReader.readBytes: length must be non-negative";
+        return @READER_BYTES_ERROR@(message, sizeof(message) - 1, ncr_line, ncr_column);
+    }
+    uint64_t count = (uint64_t)ncr_v_@READER_BYTES_LENGTH_ID@;
+    if (!ncr_binary_reader_has_@READER_ID@(ncr_self, count)) {
+        static const char message[] = "BinaryReader.readBytes: insufficient bytes";
+        return @READER_BYTES_ERROR@(message, sizeof(message) - 1, ncr_line, ncr_column);
+    }
+    if (count > (uint64_t)SIZE_MAX) {
+        static const char message[] = "BinaryReader.readBytes: length exceeds size_t range";
+        return @READER_BYTES_ERROR@(message, sizeof(message) - 1, ncr_line, ncr_column);
+    }
+    size_t size = (size_t)count;
+    ncr_obj_@BUFFER_ID@ *result = ncr_allocate(sizeof(*result), ncr_line, ncr_column);
+    result->bytes = NULL;
+    result->length = 0;
+    result->capacity = 0;
+    if (size > 0) {
+        result->bytes = ncr_allocate(size, ncr_line, ncr_column);
+        memcpy(result->bytes, ncr_self->bytes->bytes + (size_t)ncr_self->position, size);
+        result->length = size;
+        result->capacity = size;
+    }
+    ncr_self->position += ncr_v_@READER_BYTES_LENGTH_ID@;
+    return (ncr_obj_@READER_BYTES_RESULT@){ .tag = @READER_BYTES_OK_TAG@, .data.v@READER_BYTES_OK_TAG@.f0 = result };
+}
+
+static ncr_obj_@READER_UTF8_RESULT@ @BINARY_READER_READ_UTF8@(ncr_obj_@READER_ID@ *ncr_self,
+    int64_t ncr_v_@READER_UTF8_LENGTH_ID@, size_t ncr_line, size_t ncr_column) {
+    if (ncr_v_@READER_UTF8_LENGTH_ID@ < 0) {
+        static const char message[] = "BinaryReader.readUtf8: length must be non-negative";
+        return @READER_UTF8_ERROR@(message, sizeof(message) - 1, ncr_line, ncr_column);
+    }
+    uint64_t count = (uint64_t)ncr_v_@READER_UTF8_LENGTH_ID@;
+    if (!ncr_binary_reader_has_@READER_ID@(ncr_self, count)) {
+        static const char message[] = "BinaryReader.readUtf8: insufficient bytes";
+        return @READER_UTF8_ERROR@(message, sizeof(message) - 1, ncr_line, ncr_column);
+    }
+    if (count > (uint64_t)INT32_MAX) {
+        static const char message[] = "BinaryReader.readUtf8: length exceeds Text range";
+        return @READER_UTF8_ERROR@(message, sizeof(message) - 1, ncr_line, ncr_column);
+    }
+    const unsigned char *input = count == 0 ? (const unsigned char *)""
+        : ncr_self->bytes->bytes + (size_t)ncr_self->position;
+    if (!ncr_utf8_valid(input, (size_t)count)) {
+        static const char message[] = "BinaryReader.readUtf8: invalid UTF-8";
+        return @READER_UTF8_ERROR@(message, sizeof(message) - 1, ncr_line, ncr_column);
+    }
+    ncr_obj_@TEXT_ID@ *text = ncr_text_from_bytes_@TEXT_ID@(input, (size_t)count, ncr_line, ncr_column);
+    ncr_self->position += ncr_v_@READER_UTF8_LENGTH_ID@;
+    return (ncr_obj_@READER_UTF8_RESULT@){ .tag = @READER_UTF8_OK_TAG@, .data.v@READER_UTF8_OK_TAG@.f0 = text };
+}
+/* BINARY_GROUP_END reader */
+
+/* BINARY_GROUP_BEGIN writer */
+_Static_assert(sizeof(double) == sizeof(uint64_t), "BinaryWriter requires 64-bit double");
+_Static_assert(FLT_RADIX == 2 && DBL_MANT_DIG == 53 && DBL_MIN_EXP == -1021 && DBL_MAX_EXP == 1024,
+    "BinaryWriter requires IEEE-754 binary64 double");
+
+static bool ncr_binary_writer_prepare_@WRITER_ID@(ncr_obj_@WRITER_ID@ *p, size_t amount,
+    size_t ncr_line, size_t ncr_column) {
+    uint64_t used = (uint64_t)p->buffer->length;
+    if (used > (uint64_t)INT64_MAX
+        || (uint64_t)amount > (uint64_t)INT64_MAX - used
+        || amount > SIZE_MAX - p->buffer->length) {
+        return false;
+    }
+    ncr_byte_buffer_reserve_@BUFFER_ID@(p->buffer, p->buffer->length + amount, ncr_line, ncr_column);
+    return true;
+}
+
+static void @BINARY_WRITER_NEW@(ncr_obj_@WRITER_ID@ *ncr_self,
+    int64_t ncr_v_@WRITER_CAPACITY_ID@, bool ncr_v_@WRITER_ENDIAN_ID@,
+    size_t ncr_line, size_t ncr_column) {
+    if (ncr_v_@WRITER_CAPACITY_ID@ < 0) {
+        ncr_fail("BinaryWriter capacity must be non-negative", ncr_line, ncr_column);
+    }
+    if ((uint64_t)ncr_v_@WRITER_CAPACITY_ID@ > (uint64_t)SIZE_MAX) {
+        ncr_fail("BinaryWriter capacity exceeds size_t range", ncr_line, ncr_column);
+    }
+    ncr_obj_@BUFFER_ID@ *buffer = ncr_allocate(sizeof(*buffer), ncr_line, ncr_column);
+    buffer->bytes = NULL;
+    buffer->length = 0;
+    buffer->capacity = 0;
+    if (ncr_v_@WRITER_CAPACITY_ID@ > 0) {
+        ncr_byte_buffer_reserve_@BUFFER_ID@(buffer, (size_t)ncr_v_@WRITER_CAPACITY_ID@, ncr_line, ncr_column);
+    }
+    ncr_self->buffer = buffer;
+    ncr_self->little_endian = ncr_v_@WRITER_ENDIAN_ID@;
+}
+
+static int64_t @BINARY_WRITER_POSITION@(ncr_obj_@WRITER_ID@ *ncr_self, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column;
+    return (int64_t)ncr_self->buffer->length;
+}
+
+static ncr_obj_@WRITER_RESULT@ @BINARY_WRITER_WRITE_BYTE@(ncr_obj_@WRITER_ID@ *ncr_self,
+    uint8_t ncr_v_@WRITER_WRITE_BYTE_VALUE_ID@, size_t ncr_line, size_t ncr_column) {
+    if (!ncr_binary_writer_prepare_@WRITER_ID@(ncr_self, 1, ncr_line, ncr_column)) {
+        static const char message[] = "BinaryWriter.writeByte: buffer length overflow";
+        return @WRITER_RESULT_ERROR@(message, sizeof(message) - 1, ncr_line, ncr_column);
+    }
+    ncr_self->buffer->bytes[ncr_self->buffer->length] = ncr_v_@WRITER_WRITE_BYTE_VALUE_ID@;
+    ++ncr_self->buffer->length;
+    return (ncr_obj_@WRITER_RESULT@){ .tag = @WRITER_RESULT_OK_TAG@, .data.v@WRITER_RESULT_OK_TAG@.f0 = UINT8_C(0) };
+}
+
+static ncr_obj_@WRITER_RESULT@ @BINARY_WRITER_WRITE_INT16@(ncr_obj_@WRITER_ID@ *ncr_self,
+    int32_t ncr_v_@WRITER_WRITE_INT16_VALUE_ID@, size_t ncr_line, size_t ncr_column) {
+    if (ncr_v_@WRITER_WRITE_INT16_VALUE_ID@ < INT16_MIN || ncr_v_@WRITER_WRITE_INT16_VALUE_ID@ > INT16_MAX) {
+        static const char message[] = "BinaryWriter.writeInt16: value is outside the signed 16-bit range";
+        return @WRITER_RESULT_ERROR@(message, sizeof(message) - 1, ncr_line, ncr_column);
+    }
+    if (!ncr_binary_writer_prepare_@WRITER_ID@(ncr_self, 2, ncr_line, ncr_column)) {
+        static const char message[] = "BinaryWriter.writeInt16: buffer length overflow";
+        return @WRITER_RESULT_ERROR@(message, sizeof(message) - 1, ncr_line, ncr_column);
+    }
+    uint16_t bits = (uint16_t)ncr_v_@WRITER_WRITE_INT16_VALUE_ID@;
+    size_t offset = ncr_self->buffer->length;
+    if (ncr_self->little_endian) {
+        ncr_self->buffer->bytes[offset] = (unsigned char)bits;
+        ncr_self->buffer->bytes[offset + 1] = (unsigned char)(bits >> 8);
+    } else {
+        ncr_self->buffer->bytes[offset] = (unsigned char)(bits >> 8);
+        ncr_self->buffer->bytes[offset + 1] = (unsigned char)bits;
+    }
+    ncr_self->buffer->length += 2;
+    return (ncr_obj_@WRITER_RESULT@){ .tag = @WRITER_RESULT_OK_TAG@, .data.v@WRITER_RESULT_OK_TAG@.f0 = UINT8_C(0) };
+}
+
+static ncr_obj_@WRITER_RESULT@ @BINARY_WRITER_WRITE_INT32@(ncr_obj_@WRITER_ID@ *ncr_self,
+    int32_t ncr_v_@WRITER_WRITE_INT32_VALUE_ID@, size_t ncr_line, size_t ncr_column) {
+    if (!ncr_binary_writer_prepare_@WRITER_ID@(ncr_self, 4, ncr_line, ncr_column)) {
+        static const char message[] = "BinaryWriter.writeInt32: buffer length overflow";
+        return @WRITER_RESULT_ERROR@(message, sizeof(message) - 1, ncr_line, ncr_column);
+    }
+    uint32_t bits = (uint32_t)ncr_v_@WRITER_WRITE_INT32_VALUE_ID@;
+    size_t offset = ncr_self->buffer->length;
+    for (size_t index = 0; index < 4; ++index) {
+        size_t shift = ncr_self->little_endian ? index * 8 : (3 - index) * 8;
+        ncr_self->buffer->bytes[offset + index] = (unsigned char)(bits >> shift);
+    }
+    ncr_self->buffer->length += 4;
+    return (ncr_obj_@WRITER_RESULT@){ .tag = @WRITER_RESULT_OK_TAG@, .data.v@WRITER_RESULT_OK_TAG@.f0 = UINT8_C(0) };
+}
+
+static ncr_obj_@WRITER_RESULT@ @BINARY_WRITER_WRITE_INT64@(ncr_obj_@WRITER_ID@ *ncr_self,
+    int64_t ncr_v_@WRITER_WRITE_INT64_VALUE_ID@, size_t ncr_line, size_t ncr_column) {
+    if (!ncr_binary_writer_prepare_@WRITER_ID@(ncr_self, 8, ncr_line, ncr_column)) {
+        static const char message[] = "BinaryWriter.writeInt64: buffer length overflow";
+        return @WRITER_RESULT_ERROR@(message, sizeof(message) - 1, ncr_line, ncr_column);
+    }
+    uint64_t bits = (uint64_t)ncr_v_@WRITER_WRITE_INT64_VALUE_ID@;
+    size_t offset = ncr_self->buffer->length;
+    for (size_t index = 0; index < 8; ++index) {
+        size_t shift = ncr_self->little_endian ? index * 8 : (7 - index) * 8;
+        ncr_self->buffer->bytes[offset + index] = (unsigned char)(bits >> shift);
+    }
+    ncr_self->buffer->length += 8;
+    return (ncr_obj_@WRITER_RESULT@){ .tag = @WRITER_RESULT_OK_TAG@, .data.v@WRITER_RESULT_OK_TAG@.f0 = UINT8_C(0) };
+}
+
+static ncr_obj_@WRITER_RESULT@ @BINARY_WRITER_WRITE_DOUBLE@(ncr_obj_@WRITER_ID@ *ncr_self,
+    double ncr_v_@WRITER_WRITE_DOUBLE_VALUE_ID@, size_t ncr_line, size_t ncr_column) {
+    if (!ncr_binary_writer_prepare_@WRITER_ID@(ncr_self, 8, ncr_line, ncr_column)) {
+        static const char message[] = "BinaryWriter.writeDouble: buffer length overflow";
+        return @WRITER_RESULT_ERROR@(message, sizeof(message) - 1, ncr_line, ncr_column);
+    }
+    uint64_t bits;
+    memcpy(&bits, &ncr_v_@WRITER_WRITE_DOUBLE_VALUE_ID@, sizeof(bits));
+    size_t offset = ncr_self->buffer->length;
+    for (size_t index = 0; index < 8; ++index) {
+        size_t shift = ncr_self->little_endian ? index * 8 : (7 - index) * 8;
+        ncr_self->buffer->bytes[offset + index] = (unsigned char)(bits >> shift);
+    }
+    ncr_self->buffer->length += 8;
+    return (ncr_obj_@WRITER_RESULT@){ .tag = @WRITER_RESULT_OK_TAG@, .data.v@WRITER_RESULT_OK_TAG@.f0 = UINT8_C(0) };
+}
+
+static ncr_obj_@WRITER_RESULT@ @BINARY_WRITER_WRITE_BYTES@(ncr_obj_@WRITER_ID@ *ncr_self,
+    ncr_obj_@BUFFER_ID@ *ncr_v_@WRITER_WRITE_BYTES_SOURCE_ID@, size_t ncr_line, size_t ncr_column) {
+    size_t amount = ncr_v_@WRITER_WRITE_BYTES_SOURCE_ID@->length;
+    if (!ncr_binary_writer_prepare_@WRITER_ID@(ncr_self, amount, ncr_line, ncr_column)) {
+        static const char message[] = "BinaryWriter.writeBytes: buffer length overflow";
+        return @WRITER_RESULT_ERROR@(message, sizeof(message) - 1, ncr_line, ncr_column);
+    }
+    if (amount > 0) {
+        memcpy(ncr_self->buffer->bytes + ncr_self->buffer->length,
+            ncr_v_@WRITER_WRITE_BYTES_SOURCE_ID@->bytes, amount);
+    }
+    ncr_self->buffer->length += amount;
+    return (ncr_obj_@WRITER_RESULT@){ .tag = @WRITER_RESULT_OK_TAG@, .data.v@WRITER_RESULT_OK_TAG@.f0 = UINT8_C(0) };
+}
+
+static ncr_obj_@WRITER_RESULT@ @BINARY_WRITER_WRITE_UTF8@(ncr_obj_@WRITER_ID@ *ncr_self,
+    ncr_obj_@TEXT_ID@ *ncr_v_@WRITER_WRITE_UTF8_TEXT_ID@, size_t ncr_line, size_t ncr_column) {
+    size_t amount = (size_t)ncr_v_@WRITER_WRITE_UTF8_TEXT_ID@->length;
+    if (!ncr_binary_writer_prepare_@WRITER_ID@(ncr_self, amount, ncr_line, ncr_column)) {
+        static const char message[] = "BinaryWriter.writeUtf8: buffer length overflow";
+        return @WRITER_RESULT_ERROR@(message, sizeof(message) - 1, ncr_line, ncr_column);
+    }
+    if (amount > 0) {
+        memcpy(ncr_self->buffer->bytes + ncr_self->buffer->length,
+            ncr_v_@WRITER_WRITE_UTF8_TEXT_ID@->bytes, amount);
+    }
+    ncr_self->buffer->length += amount;
+    return (ncr_obj_@WRITER_RESULT@){ .tag = @WRITER_RESULT_OK_TAG@, .data.v@WRITER_RESULT_OK_TAG@.f0 = UINT8_C(0) };
+}
+
+static ncr_obj_@BUFFER_ID@ *@BINARY_WRITER_BYTES@(ncr_obj_@WRITER_ID@ *ncr_self,
+    size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column;
+    return ncr_self->buffer;
+}
+
+static ncr_obj_@BUFFER_ID@ *@BINARY_WRITER_FINISH@(ncr_obj_@WRITER_ID@ *ncr_v_@WRITER_FINISH_ID@,
+    size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column;
+    ncr_obj_@BUFFER_ID@ *buffer = ncr_v_@WRITER_FINISH_ID@->buffer;
+    ncr_v_@WRITER_FINISH_ID@->buffer = NULL;
+    ncr_drop_@WRITER_ID@(ncr_v_@WRITER_FINISH_ID@);
+    return buffer;
+}
+/* BINARY_GROUP_END writer */
