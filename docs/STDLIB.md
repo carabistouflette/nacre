@@ -1736,6 +1736,10 @@ DNS helper requests are supplied by the caller; DNS does not depend on higher-le
 transport types.
 ## TLS
 
+`TlsConfig`, `TlsStream`, `WebSocket`, and `WebSocketMessage` are compiler-owned
+native prelude types; their names are reserved and cannot be redeclared by
+application code.
+
 ```java
 static Result<TlsConfig, Text> TlsConfig.client()
 static Result<TlsConfig, Text> TlsConfig.clientWithCa(borrow Path caFile)

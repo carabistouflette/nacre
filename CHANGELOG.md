@@ -124,6 +124,9 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   `ws`/`wss` upgrades, masked client frames, bounded message assembly, ping, and
   peer close handshakes. Both surfaces reuse shared socket, DNS, IDNA, and path
   helpers rather than duplicating platform conversion logic.
+  Compiler catalogs now register these native class/method identities for prelude
+  injection and typed IR emission; VS Code, Zed, and Tree-sitter recognize their
+  public builtin type names.
 - Datagram accessors are emitted independently of UdpSocket specialization,
   including unoptimized native compilation of standalone borrowed helpers.
 - `Uri` adds owned RFC 3986 parsing, explicit normalization/resolution,

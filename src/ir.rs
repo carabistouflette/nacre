@@ -138,6 +138,7 @@ pub enum NativeClass {
     Unicode, Character, Charset, Locale,
     CryptoKey, CryptoDigest, CryptoMac, Certificate,
     Watcher, WatchEvent, BinaryReader, BinaryWriter, Uri, Dns,
+    TlsConfig, TlsStream, WebSocket, WebSocketMessage,
     Datagram, UdpSocket, HttpRequest, HttpResponse, Thread(Type), Mutex(Type), Guard(Type), Channel(Type),
     Sender(Type), Receiver(Type), Env, Command, Process, ProcessOutput, Database,
 }
@@ -272,4 +273,12 @@ pub enum NativeMethod {
     DatabaseColumnDouble, DatabaseColumnText, DatabaseColumnBlob, DatabaseChanges,
     DatabaseLastInsertRowId, DatabaseExecute, DatabaseBegin, DatabaseCommit,
     DatabaseRollback, DatabaseSetBusyTimeoutMillis, DatabaseClose,
+    TlsConfigClient, TlsConfigClientWithCa, TlsConfigClientWithIdentity,
+    TlsConfigServer, TlsConfigServerWithClientAuth,
+    TlsStreamConnect, TlsStreamAccept, TlsStreamReadSome, TlsStreamWriteSome,
+    TlsStreamWriteAll, TlsStreamCipher, TlsStreamProtocol, TlsStreamPeerCertificate,
+    TlsStreamClose, TlsStreamRead, TlsStreamWrite, TlsStreamFlush,
+    WebSocketConnect, WebSocketConnectTls, WebSocketSendText, WebSocketSendBinary,
+    WebSocketPing, WebSocketReceive, WebSocketClose,
+    WebSocketMessageIsText, WebSocketMessageBody, WebSocketMessageAsText,
 }

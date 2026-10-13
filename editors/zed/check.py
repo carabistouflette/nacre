@@ -93,7 +93,12 @@ def main():
             ("Text", "Text"),
             ("Thread", "Thread<long>"),
             ("Time", "Time"),
+            ("TlsConfig", "TlsConfig"),
+            ("TlsStream", "TlsStream"),
             ("UdpSocket", "UdpSocket"),
+            ("Uri", "Uri"),
+            ("WebSocket", "WebSocket"),
+            ("WebSocketMessage", "WebSocketMessage"),
         ]
         type_source = (
             "void standardTypes("

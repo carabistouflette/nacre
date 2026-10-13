@@ -68,6 +68,7 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
             C::Console | C::Files | C::Args | C::Math | C::Time | C::DateTime |
             C::Compression | C::Checksums | C::BigInt | C::BigDecimal |
             C::CryptoKey | C::CryptoDigest | C::CryptoMac | C::Certificate |
+            C::TlsConfig | C::TlsStream | C::WebSocket | C::WebSocketMessage |
             C::Thread(_) | C::Mutex(_) | C::Guard(_) | C::Channel(_) |
             C::Sender(_) | C::Receiver(_) | C::Env | C::Command | C::Process | C::ProcessOutput |
             C::Uri | C::Dns =>
@@ -620,6 +621,33 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
         (C::Dns, "resolve") => M::DnsResolve,
         (C::Dns, "reverse") => M::DnsReverse,
         (C::Dns, "localHostName") => M::DnsLocalHostName,
+        (C::TlsConfig, "client") => M::TlsConfigClient,
+        (C::TlsConfig, "clientWithCa") => M::TlsConfigClientWithCa,
+        (C::TlsConfig, "clientWithIdentity") => M::TlsConfigClientWithIdentity,
+        (C::TlsConfig, "server") => M::TlsConfigServer,
+        (C::TlsConfig, "serverWithClientAuth") => M::TlsConfigServerWithClientAuth,
+        (C::TlsStream, "connect") => M::TlsStreamConnect,
+        (C::TlsStream, "accept") => M::TlsStreamAccept,
+        (C::TlsStream, "readSome") => M::TlsStreamReadSome,
+        (C::TlsStream, "writeSome") => M::TlsStreamWriteSome,
+        (C::TlsStream, "writeAll") => M::TlsStreamWriteAll,
+        (C::TlsStream, "cipher") => M::TlsStreamCipher,
+        (C::TlsStream, "protocol") => M::TlsStreamProtocol,
+        (C::TlsStream, "peerCertificate") => M::TlsStreamPeerCertificate,
+        (C::TlsStream, "close") => M::TlsStreamClose,
+        (C::TlsStream, "read") => M::TlsStreamRead,
+        (C::TlsStream, "write") => M::TlsStreamWrite,
+        (C::TlsStream, "flush") => M::TlsStreamFlush,
+        (C::WebSocket, "connect") => M::WebSocketConnect,
+        (C::WebSocket, "connectTls") => M::WebSocketConnectTls,
+        (C::WebSocket, "sendText") => M::WebSocketSendText,
+        (C::WebSocket, "sendBinary") => M::WebSocketSendBinary,
+        (C::WebSocket, "ping") => M::WebSocketPing,
+        (C::WebSocket, "receive") => M::WebSocketReceive,
+        (C::WebSocket, "close") => M::WebSocketClose,
+        (C::WebSocketMessage, "isText") => M::WebSocketMessageIsText,
+        (C::WebSocketMessage, "body") => M::WebSocketMessageBody,
+        (C::WebSocketMessage, "asText") => M::WebSocketMessageAsText,
         (C::Args, "get") => M::ArgsGet,
         (C::Env, "get") => M::EnvGet,
         (C::Env, "set") => M::EnvSet,

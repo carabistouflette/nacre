@@ -32,6 +32,7 @@ pub enum NativeClass {
     SocketAddress, TcpListener, TcpStream, Datagram, UdpSocket, HttpRequest, HttpResponse,
     CryptoKey, CryptoDigest, CryptoMac, Certificate,
     Watcher, WatchEvent, BinaryReader, BinaryWriter, Uri, Dns,
+    TlsConfig, TlsStream, WebSocket, WebSocketMessage,
     Thread(Type), Mutex(Type), Guard(Type), Channel(Type), Sender(Type), Receiver(Type),
     Env, Command, Process, ProcessOutput, Database,
 }

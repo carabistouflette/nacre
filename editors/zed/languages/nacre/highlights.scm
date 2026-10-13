@@ -4,7 +4,7 @@
 (primitive_type) @type.builtin
 (numeric_type) @type.builtin
 ((type_identifier) @type.builtin
- (#match? @type.builtin "^(Array|Arrays|ByteBuffer|Channel|Command|Comparator|Console|Datagram|Deque|Directory|Env|ExitStatus|File|FileInfo|Files|Guard|List|Map|Math|Mutex|Option|Path|Process|ProcessOutput|Random|Receiver|Regex|RegexMatch|Result|SendError|Sender|Set|SocketAddress|Task|TcpListener|TcpStream|Text|Thread|Time|UdpSocket)$"))
+ (#match? @type.builtin "^(Array|Arrays|ByteBuffer|Channel|Command|Comparator|Console|Datagram|Deque|Directory|Env|ExitStatus|File|FileInfo|Files|Guard|List|Map|Math|Mutex|Option|Path|Process|ProcessOutput|Random|Receiver|Regex|RegexMatch|Result|SendError|Sender|Set|SocketAddress|Task|TcpListener|TcpStream|Text|Thread|Time|TlsConfig|TlsStream|UdpSocket|Uri|WebSocket|WebSocketMessage)$"))
 (parameter name: (identifier) @variable.parameter)
 (class_declaration name: (identifier) @type)
 (interface_declaration name: (identifier) @type)

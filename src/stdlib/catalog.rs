@@ -59,6 +59,10 @@ enum NativeBuiltin {
     Certificate,
     Uri,
     Dns,
+    TlsConfig,
+    TlsStream,
+    WebSocket,
+    WebSocketMessage,
     Thread,
     Mutex,
     Guard,
@@ -153,6 +157,10 @@ impl NativeBuiltin {
             Self::Certificate => NativeClass::Certificate,
             Self::Uri => NativeClass::Uri,
             Self::Dns => NativeClass::Dns,
+            Self::TlsConfig => NativeClass::TlsConfig,
+            Self::TlsStream => NativeClass::TlsStream,
+            Self::WebSocket => NativeClass::WebSocket,
+            Self::WebSocketMessage => NativeClass::WebSocketMessage,
             Self::Thread => NativeClass::Thread(Type::Named("T".to_owned())),
             Self::Mutex => NativeClass::Mutex(Type::Named("T".to_owned())),
             Self::Guard => NativeClass::Guard(Type::Named("T".to_owned())),
@@ -370,6 +378,20 @@ pub(super) const PRELUDE_UNITS: &[PreludeUnit] = &[
     PreludeUnit {
         source: include_str!("../../stdlib/prelude/database.ncr"),
         builtins: &[Builtin { name: "Database", native: Some(NativeBuiltin::Database) }],
+    },
+    PreludeUnit {
+        source: include_str!("../../stdlib/prelude/tls.ncr"),
+        builtins: &[
+            Builtin { name: "TlsConfig", native: Some(NativeBuiltin::TlsConfig) },
+            Builtin { name: "TlsStream", native: Some(NativeBuiltin::TlsStream) },
+        ],
+    },
+    PreludeUnit {
+        source: include_str!("../../stdlib/prelude/websocket.ncr"),
+        builtins: &[
+            Builtin { name: "WebSocket", native: Some(NativeBuiltin::WebSocket) },
+            Builtin { name: "WebSocketMessage", native: Some(NativeBuiltin::WebSocketMessage) },
+        ],
     },
 ];
 

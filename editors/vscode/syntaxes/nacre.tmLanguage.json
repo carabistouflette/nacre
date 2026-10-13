@@ -285,7 +285,7 @@
         },
         {
           "name": "support.type.builtin.nacre",
-          "match": "\\b(?:String|Array|Arrays|List|Map|Set|Deque|Comparator|Text|Option|Result|ByteBuffer|Regex|RegexMatch|Console|Files|Args|Math|Random|Time|Path|File|FileInfo|Directory|Env|Command|Process|ExitStatus|ProcessOutput|Task|Thread|Mutex|Guard|Channel|Sender|Receiver|SendError|SocketAddress|TcpListener|TcpStream|UdpSocket|Datagram)\\b"
+          "match": "\\b(?:String|Array|Arrays|List|Map|Set|Deque|Comparator|Text|Option|Result|ByteBuffer|Regex|RegexMatch|Console|Files|Args|Math|Random|Time|Path|File|FileInfo|Directory|Env|Command|Process|ExitStatus|ProcessOutput|Task|Thread|Mutex|Guard|Channel|Sender|Receiver|SendError|SocketAddress|TcpListener|TcpStream|UdpSocket|Datagram|TlsConfig|TlsStream|Uri|WebSocket|WebSocketMessage)\\b"
         }
       ]
     },

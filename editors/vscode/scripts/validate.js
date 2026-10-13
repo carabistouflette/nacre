@@ -300,7 +300,12 @@ async function main() {
     ['Text', 'Text'],
     ['Thread', 'Thread<long>'],
     ['Time', 'Time'],
-    ['UdpSocket', 'UdpSocket']
+    ['TlsConfig', 'TlsConfig'],
+    ['TlsStream', 'TlsStream'],
+    ['UdpSocket', 'UdpSocket'],
+    ['Uri', 'Uri'],
+    ['WebSocket', 'WebSocket'],
+    ['WebSocketMessage', 'WebSocketMessage']
   ];
   const standardTypeLine = tokenize(
     grammar,
