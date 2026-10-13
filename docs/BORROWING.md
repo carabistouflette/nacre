@@ -132,18 +132,21 @@ alias domain.
 index, so active loans still reject them. Recoverable runtime failure does not
 relax static ownership requirements. `tryGet` copies copyable scalar values only.
 
-## Map value references
+## Map and Set key/value references
 
-`Map<int,V>` and `Map<Text,V>` provide shared `getRef(key)` and exclusive
-`getMut(key)` access for affine values. The result derives from the complete map
-root, with the same object/inline-enum/interface representation rules as List
-access. Missing borrowed lookup is fatal; `containsKey` is a copied presence
-observation, not a retained loan.
+`Map<K,V>` provides shared `getRef(key)` and exclusive `getMut(key)` access for
+affine values. The result derives from the complete map root, with the same
+object/inline-enum/interface representation rules as List access. Missing borrowed
+lookup is fatal; `containsKey` is a presence observation, not a retained loan.
 
-For `Map<Text,V>`, the map owns each stored key. `put` consumes a `Text` key;
-`containsKey`, `tryRemove`, and value lookups take `borrow Text`, which remains
-borrowed only for the call. Replacing an equal key retains the stored key and
-returns the replaced value.
+Map and Set key query declarations borrow their generic key for the call. Scalar
+and static `String` specializations are passed by value; `Text`, class, interface,
+and enum queries remain shared borrows and are neither consumed nor retained.
+`put` and `add` consume owned keys. For equal map keys, replacement retains
+the stored key, drops the incoming key, and returns the old value.
+`tryRemove` drops the stored key and transfers any removed value. A custom
+`Hasher<K>` receives only readonly borrowed keys; the collection owns and drops
+the policy interface value.
 
 References block conflicting put, tryRemove, clear, movement, destruction, and
 ancestor-field replacement. Different keys do not grant independent alias
@@ -155,15 +158,16 @@ traversal of an ID list may coexist with shared map lookup, but not mutation of
 that sibling map. End those scopes before mutation; there is no NLL or early
 release operation. A Catalog in the lending example follows this rule explicitly.
 
-Two-binding map traversal holds the same root loan across the whole loop. Integer
-keys are copied; Text keys are exposed as readonly `borrow Text`. Copyable scalar
-values copy, while affine value bindings borrow occupied slots:
+Two-binding map traversal holds the same root loan across the whole loop. Scalar
+and static `String` keys are copied; owned `Text`, class, interface, and enum keys
+are exposed as readonly shared borrows. Copyable scalar values copy, while affine
+value bindings borrow occupied slots:
 `for (int key, borrow V value : intMap)` and
 `for (borrow Text key, borrow V value : textMap)`. `borrow mut V` permits mutation
 through the current value binding, not independent map access. Bindings end per
 iteration; existing loop cleanup handles all exits. Receiver-derived borrowed
 returns retain the caller's root loan; local-owned values cannot escape.
-[STDLIB.md](STDLIB.md) documents Text-key maps; [MAP_TRAVERSAL.md](MAP_TRAVERSAL.md)
+[STDLIB.md](STDLIB.md) documents collection policies; [MAP_TRAVERSAL.md](MAP_TRAVERSAL.md)
 defines the base traversal stability and ordering contract.
 
 ## Replacing owned fields

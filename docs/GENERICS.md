@@ -133,12 +133,16 @@ is copyable: `byte`, `char`, `int`, `long`, `double`, `Unit`, `boolean`, or
 methods on lists and deques return owners in specialized inline `Option<T>`.
 `Array<T>` is fixed-length and its constructor consumes a `List<T>`.
 
-`Map<K,V>` accepts exactly two type arguments and supports only `int` or owned
-`Text` keys. A `Map<Text,V>` owns stored keys; query operations take a borrowed
-`Text`. Copied map-value `tryGet` is available for copyable `V`; affine values
-use `getRef`/`getMut`. `put` and `tryRemove` return specialized inline
-`Option<V>`. `Set<T>` supports the same `int` and `Text` key types. Text queries
-borrow their query value, while insertion transfers an owned key.
+`Map<K,V>` accepts exactly two type arguments. Default hashing covers `byte`,
+`char`, `int`, `long`, `double`, `Unit`, `boolean`, static `String`, and owned
+`Text`; custom class, interface, or enum keys require `Map<K,V>.withHasher`.
+`Set<T>` supports the same key policies through `Set<T>.withHasher`. Custom-key
+specializations prune the default constructor and retain only the explicit policy
+factory; builtin specializations prune that factory. Query declarations borrow
+generic keys, then specialize copyable keys to value parameters and leave
+object-like keys borrowed. Copied map-value `tryGet` is available for copyable
+`V`; affine values use `getRef`/`getMut`. `put` and `tryRemove` return specialized
+inline `Option<V>`.
 
 Collection values remain invariant: `Map<int,Dog>` is not
 `Map<int,Animal>`. An individual owner or borrow can still be converted to an

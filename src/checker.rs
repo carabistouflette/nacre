@@ -98,7 +98,7 @@ impl Tables {
                 }
                 sendable &= has_implementation;
             } else if sendable {
-                let native_type = match class.native {
+                let (native_first, native_second, native_third) = match class.native {
                     Some(t::NativeClass::List(element)
                         | t::NativeClass::Array(element)
                         | t::NativeClass::Deque(element)
@@ -106,18 +106,25 @@ impl Tables {
                         | t::NativeClass::Mutex(element)
                         | t::NativeClass::Channel(element)
                         | t::NativeClass::Sender(element)
-                        | t::NativeClass::Receiver(element)) => Some(element),
-                    Some(t::NativeClass::Map(_, value)) => Some(value),
+                        | t::NativeClass::Receiver(element)) => (Some(element), None, None),
+                    Some(t::NativeClass::Map { key, value, hasher }) =>
+                        (Some(key), Some(value), hasher),
+                    Some(t::NativeClass::Set { key, hasher }) => (Some(key), hasher, None),
                     Some(t::NativeClass::Guard(_)) => {
                         states[id] = 3;
                         return false;
                     }
-                    Some(t::NativeClass::Set(_) | t::NativeClass::OrderedMap(_, _) |
-                        t::NativeClass::OrderedSet(_) | t::NativeClass::PriorityQueue(_) |
-                        t::NativeClass::BitSet | t::NativeClass::ListIterator(_) |
-                        t::NativeClass::MapIterator(_, _) | t::NativeClass::FilterIterator(_) |
-                        t::NativeClass::TakeIterator(_) | t::NativeClass::SkipIterator(_) |
-                        t::NativeClass::Iterators(_) | t::NativeClass::Text |
+                    Some(t::NativeClass::OrderedMap(key, value)
+                        | t::NativeClass::MapIterator(key, value)) =>
+                        (Some(key), Some(value), None),
+                    Some(t::NativeClass::OrderedSet(element)
+                        | t::NativeClass::PriorityQueue(element)
+                        | t::NativeClass::ListIterator(element)
+                        | t::NativeClass::FilterIterator(element)
+                        | t::NativeClass::TakeIterator(element)
+                        | t::NativeClass::SkipIterator(element)
+                        | t::NativeClass::Iterators(element)) => (Some(element), None, None),
+                    Some(t::NativeClass::BitSet | t::NativeClass::Text |
                         t::NativeClass::BigInt | t::NativeClass::BigDecimal |
                         t::NativeClass::Regex | t::NativeClass::RegexMatch |
                         t::NativeClass::Arrays | t::NativeClass::ByteBuffer | t::NativeClass::Encoding |
@@ -133,10 +140,10 @@ impl Tables {
                         t::NativeClass::UdpSocket | t::NativeClass::HttpRequest |
                         t::NativeClass::HttpResponse | t::NativeClass::Env |
                         t::NativeClass::Command | t::NativeClass::Process |
-                        t::NativeClass::ProcessOutput) | None => None,
+                        t::NativeClass::ProcessOutput) | None => (None, None, None),
                 };
-                if let Some(element) = native_type {
-                    sendable &= value_sendable(tables, element, states);
+                for native_type in [native_first, native_second, native_third].into_iter().flatten() {
+                    sendable &= value_sendable(tables, native_type, states);
                 }
                 sendable &= match class.native {
                     Some(t::NativeClass::OrderedMap(key, value)) =>
@@ -172,13 +179,13 @@ impl Tables {
         }
         value_sendable(self, ty, &mut vec![0; self.classes.len()])
     }
-    fn map_key_binding_type(&self, key: a::MapKeyKind) -> Type {
-        match key {
-            a::MapKeyKind::Int => Type::Int,
-            a::MapKeyKind::Text => {
-                let class = self.classes.iter().position(|class| matches!(class.native, Some(t::NativeClass::Text)))
-                    .expect("native Text class accompanies Map<Text, V>");
-                Type::Borrow { class, mutable: false }
+    fn map_key_binding_type(&self, key: Type) -> Type {
+        if key.is_copy() {
+            key
+        } else {
+            Type::Borrow {
+                class: key.object_class().expect("custom map key is an owned class or enum"),
+                mutable: false,
             }
         }
     }
@@ -240,18 +247,16 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
             Some(a::NativeClass::List(_)) => Some(t::NativeClass::List(Type::Void)),
             Some(a::NativeClass::Array(_)) => Some(t::NativeClass::Array(Type::Void)),
             Some(a::NativeClass::Deque(_)) => Some(t::NativeClass::Deque(Type::Void)),
-            Some(a::NativeClass::Map { key_kind: Some(key_kind), .. }) =>
-                Some(t::NativeClass::Map(*key_kind, Type::Void)),
-            Some(a::NativeClass::Map { .. }) =>
-                return Err(Diagnostic::new(class.span, "[E5004] Map<K, V> key classification is missing")),
+            Some(a::NativeClass::Map { .. }) => Some(t::NativeClass::Map {
+                key: Type::Void, value: Type::Void, hasher: None,
+            }),
             Some(a::NativeClass::Arrays) => Some(t::NativeClass::Arrays),
             Some(a::NativeClass::ByteBuffer) => Some(t::NativeClass::ByteBuffer),
             Some(a::NativeClass::Encoding) => Some(t::NativeClass::Encoding),
-            Some(a::NativeClass::Set { key_kind: Some(key_kind), .. }) =>
-                Some(t::NativeClass::Set(*key_kind)),
-            Some(a::NativeClass::Set { .. }) =>
-                return Err(Diagnostic::new(class.span, "[E5004] Set<T> key classification is missing")),
-            Some(a::NativeClass::Comparator(_)) => None,
+            Some(a::NativeClass::Set { .. }) => Some(t::NativeClass::Set {
+                key: Type::Void, hasher: None,
+            }),
+            Some(a::NativeClass::Comparator(_) | a::NativeClass::Hasher(_)) => None,
             Some(a::NativeClass::OrderedMap { .. }) =>
                 Some(t::NativeClass::OrderedMap(Type::Void, Type::Void)),
             Some(a::NativeClass::OrderedSet(_)) => Some(t::NativeClass::OrderedSet(Type::Void)),
@@ -310,12 +315,20 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
             Some(a::NativeClass::Deque(element)) => {
                 tables.classes[id].native = Some(t::NativeClass::Deque(tables.resolve_type(element, class.span)?));
             }
-            Some(a::NativeClass::Map { value, .. }) => {
-                let Some(t::NativeClass::Map(key_kind, _)) = tables.classes[id].native
-                    else { unreachable!("specialized native Map key metadata"); };
-                tables.classes[id].native = Some(t::NativeClass::Map(
-                    key_kind, tables.resolve_type(value, class.span)?,
-                ));
+            Some(a::NativeClass::Map { key, value, hasher }) => {
+                let key = tables.resolve_type(key, class.span)?;
+                let value = tables.resolve_type(value, class.span)?;
+                let hasher = hasher.as_ref()
+                    .map(|policy| tables.resolve_type(policy, class.span))
+                    .transpose()?;
+                tables.classes[id].native = Some(t::NativeClass::Map { key, value, hasher });
+            }
+            Some(a::NativeClass::Set { key, hasher }) => {
+                let key = tables.resolve_type(key, class.span)?;
+                let hasher = hasher.as_ref()
+                    .map(|policy| tables.resolve_type(policy, class.span))
+                    .transpose()?;
+                tables.classes[id].native = Some(t::NativeClass::Set { key, hasher });
             }
             Some(a::NativeClass::OrderedMap { key, value }) => {
                 tables.classes[id].native = Some(t::NativeClass::OrderedMap(
@@ -416,9 +429,17 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
         for (id, info) in tables.classes.iter().enumerate() {
             let contains_view = |ty: Type| ty.is_borrow()
                 || ty.object_class().is_some_and(|child| has_borrow[child]);
+            let native_contains_view = match info.native {
+                Some(t::NativeClass::Map { key, value, hasher }) =>
+                    contains_view(key) || contains_view(value) || hasher.is_some_and(contains_view),
+                Some(t::NativeClass::Set { key, hasher }) =>
+                    contains_view(key) || hasher.is_some_and(contains_view),
+                _ => false,
+            };
             if !has_borrow[id] && (info.fields.iter().any(|f| contains_view(f.ty))
                 || info.variants.as_ref().is_some_and(|variants|
-                    variants.iter().any(|v| v.fields.iter().copied().any(contains_view)))) {
+                    variants.iter().any(|v| v.fields.iter().copied().any(contains_view)))
+                || native_contains_view) {
                 has_borrow[id] = true;
                 changed = true;
             }
@@ -433,7 +454,14 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
                     return Err(Diagnostic::new(class.span, "[E5003] List<T> and Deque<T> require copied values or owned objects; local views and borrows are not allowed"));
                 }
             }
-            Some(t::NativeClass::Map(_, value)) if tables.is_view(value) || matches!(value, Type::Void | Type::Borrow { .. }) => {
+            Some(t::NativeClass::Map { key, .. })
+                if tables.is_view(key) || matches!(key, Type::Void | Type::Borrow { .. }) =>
+            {
+                return Err(Diagnostic::new(class.span, "[E5005] Map<K, V> requires an owned key without a borrow or local view"));
+            }
+            Some(t::NativeClass::Map { value, .. })
+                if tables.is_view(value) || matches!(value, Type::Void | Type::Borrow { .. }) =>
+            {
                 return Err(Diagnostic::new(class.span, "[E5005] Map<K, V> requires an owned value without a borrow or local view"));
             }
             Some(t::NativeClass::OrderedMap(key, value))
@@ -460,6 +488,11 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
             {
                 return Err(Diagnostic::new(class.span,
                     "[E5003] MapIterator<T, U> requires owned input and output values without borrows or local views"));
+            }
+            Some(t::NativeClass::Set { key, .. })
+                if tables.is_view(key) || matches!(key, Type::Void | Type::Borrow { .. }) =>
+            {
+                return Err(Diagnostic::new(class.span, "[E5005] Set<T> requires an owned key without a borrow or local view"));
             }
             _ => {}
         }
@@ -933,17 +966,17 @@ impl Checker<'_> {
         let source_class = source_type.object_class()
             .ok_or_else(|| Diagnostic::new(collection.span, "collection must be a named or borrowed List, Array, Deque, Map, or Set"))?;
         match self.tables.classes[source_class].native {
-            Some(t::NativeClass::Map(_, _)) => {
+            Some(t::NativeClass::Map { .. }) => {
                 if key.is_none() {
                     return Err(Diagnostic::new(header_span, "Map<K, V> requires two typed bindings: key and value"));
                 }
                 return self.for_each_map(stmt, place, value, source_type, source_class);
             }
-            Some(t::NativeClass::Set(key_kind)) => {
+            Some(t::NativeClass::Set { key: set_key, .. }) => {
                 if key.is_some() {
                     return Err(Diagnostic::new(header_span, "Set<T> allows only one readonly key binding"));
                 }
-                return self.for_each_set(stmt, place, value, source_type, source_class, key_kind);
+                return self.for_each_set(stmt, place, value, source_type, source_class, set_key);
             }
             Some(t::NativeClass::List(_) | t::NativeClass::Array(_) | t::NativeClass::Deque(_)) => {
                 if key.is_some() {
@@ -1067,7 +1100,7 @@ impl Checker<'_> {
 
     fn for_each_map(&mut self, stmt: &a::Stmt, place: Option<Place>, value: Option<t::Expr>,
                     source_type: Type, map_class: usize) -> Result<t::Stmt, Diagnostic> {
-        let Some(t::NativeClass::Map(map_key, map_value)) = self.tables.classes[map_class].native
+        let Some(t::NativeClass::Map { key: map_key, value: map_value, .. }) = self.tables.classes[map_class].native
             else { unreachable!("checked map traversal class"); };
         let a::StmtKind::ForEach { ty: header, name, key: Some((key_header, key_name)),
                                   collection, body, header_span } = &stmt.kind
@@ -1160,12 +1193,12 @@ impl Checker<'_> {
 
 
     fn for_each_set(&mut self, stmt: &a::Stmt, place: Option<Place>, value: Option<t::Expr>,
-                    source_type: Type, set_class: usize, key_kind: a::MapKeyKind) -> Result<t::Stmt, Diagnostic> {
+                    source_type: Type, set_class: usize, key: Type) -> Result<t::Stmt, Diagnostic> {
         let a::StmtKind::ForEach { ty: header, name, key: None, collection, body, header_span } = &stmt.kind
             else { unreachable!("checked single-binding Set traversal"); };
         let header_span = *header_span;
         let span = stmt.span;
-        let key_binding_type = self.tables.map_key_binding_type(key_kind);
+        let key_binding_type = self.tables.map_key_binding_type(key);
         let header_type = self.tables.resolve_type(header, header_span)?;
         if matches!(header_type, Type::Borrow { mutable: true, .. }) {
             return Err(Diagnostic::new(header_span, "[E3003] Set keys are available only through readonly traversal"));
@@ -1485,7 +1518,15 @@ impl Checker<'_> {
             return Err(Diagnostic::new(span, "construct an enum with `new Enum.Variant(...)`, not `new Enum(...)`"));
         }
         let constructor = self.tables.classes[class].constructor
-            .ok_or_else(|| Diagnostic::new(span, "this class has no constructor"))?;
+            .ok_or_else(|| match self.tables.classes[class].native {
+                Some(t::NativeClass::Map { key, value, hasher: Some(_) }) => Diagnostic::new(span, format!(
+                    "[E5004] Map<{}, {}> has no default hash policy; use Map.withHasher(Hasher<{}>)",
+                    self.tables.type_name(key), self.tables.type_name(value), self.tables.type_name(key))),
+                Some(t::NativeClass::Set { key, hasher: Some(_) }) => Diagnostic::new(span, format!(
+                    "[E5004] Set<{}> has no default hash policy; use Set.withHasher(Hasher<{}>)",
+                    self.tables.type_name(key), self.tables.type_name(key))),
+                _ => Diagnostic::new(span, "this class has no constructor"),
+            })?;
         let sig = self.tables.signatures[constructor].clone();
         self.accessible(sig.visibility, class, span, "constructor")?;
         let args = self.check_args(&sig, args, span)?;

@@ -10,25 +10,6 @@ impl Type {
     pub fn is_copy(&self) -> bool { self.is_primitive() }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MapKeyKind { Int, Text }
-impl MapKeyKind {
-    /// The complete set of source-level Map key types, classified at specialization.
-    pub fn classify(ty: &Type) -> Option<Self> {
-        match ty {
-            Type::Int => Some(Self::Int),
-            Type::Named(name) if name == "Text" => Some(Self::Text),
-            _ => None,
-        }
-    }
-    /// Text lookups borrow their key; integer query parameters already copy.
-    pub fn query_type(self) -> Option<Type> {
-        match self {
-            Self::Int => None,
-            Self::Text => Some(Type::Borrow { name: "Text".to_owned(), args: Vec::new(), mutable: false }),
-        }
-    }
-}
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Visibility { Public, Private }
 #[derive(Debug, Clone)]
 pub struct Program { pub units: Vec<SourceUnit>, pub functions: Vec<Function>, pub classes: Vec<Class> }
@@ -39,8 +20,8 @@ pub struct Import { pub path: String, pub wildcard: bool, pub span: Span }
 #[derive(Debug, Clone)]
 pub enum NativeClass {
     List(Type), Array(Type), Deque(Type),
-    Map { key: Type, value: Type, key_kind: Option<MapKeyKind> },
-    Set { key: Type, key_kind: Option<MapKeyKind> }, Comparator(Type),
+    Map { key: Type, value: Type, hasher: Option<Type> },
+    Set { key: Type, hasher: Option<Type> }, Comparator(Type), Hasher(Type),
     OrderedMap { key: Type, value: Type }, OrderedSet(Type), PriorityQueue(Type), BitSet,
     Predicate(Type),
     ListIterator(Type), MapIterator(Type, Type), FilterIterator(Type),

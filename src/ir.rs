@@ -1,6 +1,6 @@
 //! Resolved, typed, structured IR. Moves and explicit drops are visible.
 //! ownership.rs lowers this into an analysis CFG; codegen inserts lexical drops.
-use crate::ast::{BinaryOp, MapKeyKind, UnaryOp};
+use crate::ast::{BinaryOp, UnaryOp};
 use crate::diagnostic::Span;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -127,7 +127,9 @@ pub enum CallTarget { Function(usize), Println }
 /// Trusted standard-library storage, never exposed as source fields.
 #[derive(Debug, Clone, Copy)]
 pub enum NativeClass {
-    List(Type), Array(Type), Deque(Type), Map(MapKeyKind, Type), Set(MapKeyKind),
+    List(Type), Array(Type), Deque(Type),
+    Map { key: Type, value: Type, hasher: Option<Type> },
+    Set { key: Type, hasher: Option<Type> },
     OrderedMap(Type, Type), OrderedSet(Type), PriorityQueue(Type), BitSet,
     ListIterator(Type), MapIterator(Type, Type), FilterIterator(Type),
     TakeIterator(Type), SkipIterator(Type), Iterators(Type),
@@ -155,9 +157,9 @@ pub enum NativeMethod {
     DirectoryOpen, DirectoryNextName, DirectoryClose,
     FileInfoSize, FileInfoIsFile, FileInfoIsDirectory, FileInfoIsSymlink,
     FilesMetadata, FilesCreateDirectory, FilesRemoveFile, FilesRemoveDirectory, FilesRename,
-    MapNew, MapContainsKey, MapSize, MapIsEmpty, MapPut, MapTryRemove, MapTryGet,
+    MapNew, MapWithHasher, MapContainsKey, MapSize, MapIsEmpty, MapPut, MapTryRemove, MapTryGet,
     MapGetRef, MapGetMut, MapClear,
-    SetNew, SetAdd, SetContains, SetSize, SetIsEmpty, SetRemove, SetClear,
+    SetNew, SetWithHasher, SetAdd, SetContains, SetSize, SetIsEmpty, SetRemove, SetClear,
     ListDrain, ListCollect,
     OrderedMapNew, OrderedMapPut, OrderedMapTryRemove, OrderedMapContains, OrderedMapTryGet,
     OrderedMapGetRef, OrderedMapGetMut, OrderedMapKeyAt, OrderedMapValueAt,

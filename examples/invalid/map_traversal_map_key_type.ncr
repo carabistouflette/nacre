@@ -1,5 +1,5 @@
 void main() {
-    // Rejected: map keys may be int or owned Text, not boolean.
+    // Rejected: the traversal binding must match the map key type.
     Map<boolean, int> entries = new Map<boolean, int>();
     for (int key, int value : entries) { }
 }

@@ -1,7 +1,6 @@
-use crate::ast::MapKeyKind;
 use crate::codegen::ctype;
-use crate::ir::{self as t, NativeMethod as M, Type};
-use super::support::{marker, result_id, text_class, variant};
+use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
+use super::support::{marker, result_id, variant};
 pub(super) fn list_fields(program: &t::Program, element: Type) -> String {
     format!("    {} *items;\n    int32_t length;\n    int32_t capacity;\n", ctype(program, element))
 }
@@ -9,39 +8,30 @@ pub(super) fn list_fields(program: &t::Program, element: Type) -> String {
 pub(super) fn map_fields(class_id: usize) -> String {
     format!("    struct ncr_hash_table_{class_id} table;\n")
 }
-pub(super) fn hash_table_definition(class_id: usize) -> String {
+pub(super) fn hash_table_definition(program: &t::Program, class_id: usize, hasher: Option<Type>) -> String {
+    let hasher_field = hasher.map(|ty| format!("    {} hasher;\n", ctype(program, ty))).unwrap_or_default();
     format!(
-        "struct ncr_hash_table_{class_id} {{\n    struct ncr_map_entry_{class_id} *entries;\n    int32_t length;\n    int32_t capacity;\n}};\n",
+        "struct ncr_hash_table_{class_id} {{\n    struct ncr_map_entry_{class_id} *entries;\n    int32_t length;\n    int32_t capacity;\n{hasher_field}}};\n",
     )
 }
 const MAP_HASH_FINALIZER: &str = concat!(
-    "    value ^= value >> 16;\n",
-    "    value *= UINT32_C(0x7feb352d);\n",
-    "    value ^= value >> 15;\n",
-    "    value *= UINT32_C(0x846ca68b);\n",
-    "    value ^= value >> 16;\n",
+    "    value ^= value >> 30;\n",
+    "    value *= UINT64_C(0xbf58476d1ce4e5b9);\n",
+    "    value ^= value >> 27;\n",
+    "    value *= UINT64_C(0x94d049bb133111eb);\n",
+    "    value ^= value >> 31;\n",
     "    return value;\n",
 );
-fn map_key_type(program: &t::Program, key: MapKeyKind) -> Type {
-    match key {
-        MapKeyKind::Int => Type::Int,
-        MapKeyKind::Text => Type::Object(text_class(program).expect("native Text class accompanies Map<Text, V>")),
-    }
+fn is_text_key(program: &t::Program, key: Type) -> bool {
+    matches!(key, Type::Object(id) if matches!(program.classes[id].native, Some(C::Text)))
 }
-fn drop_map_key(program: &t::Program, key: MapKeyKind, expression: &str) -> String {
-    match key {
-        MapKeyKind::Int => String::new(),
-        MapKeyKind::Text => format!(
-            "ncr_drop_{}({expression});",
-            text_class(program).expect("native Text class accompanies Map<Text, V>"),
-        ),
-    }
+fn drop_map_key(key: Type, expression: &str) -> String {
+    drop_element(key, expression)
 }
-pub(super) fn map_entry_definition(program: &t::Program, class_id: usize, key: MapKeyKind, value: Type) -> String {
-    let hash = if key == MapKeyKind::Text { "    uint32_t hash;\n" } else { "" };
+pub(super) fn map_entry_definition(program: &t::Program, class_id: usize, key: Type, value: Type) -> String {
     format!(
-        "struct ncr_map_entry_{class_id} {{\n    {} key;\n{}    {} value;\n    bool occupied;\n}};\n",
-        ctype(program, map_key_type(program, key)), hash, ctype(program, value),
+        "struct ncr_map_entry_{class_id} {{\n    {} key;\n    uint64_t hash;\n    {} value;\n    bool occupied;\n}};\n",
+        ctype(program, key), ctype(program, value),
     )
 }
 fn map_borrowed_value(program: &t::Program, borrow_type: Type, stored: &str) -> String {
@@ -61,6 +51,8 @@ pub(super) fn map_slot_expression(
     let entry = format!("{map}->table.entries[{index}]");
     match kind {
         t::MapSlotKind::Occupied => format!("{entry}.occupied"),
+        t::MapSlotKind::Key if value_type.is_borrow() =>
+            map_borrowed_value(program, value_type, &format!("{entry}.key")),
         t::MapSlotKind::Key => format!("{entry}.key"),
         t::MapSlotKind::Value if value_type.is_borrow() =>
             map_borrowed_value(program, value_type, &format!("{entry}.value")),
@@ -79,16 +71,21 @@ pub(super) fn drop_list_fields(element: Type) -> String {
         drop_element(element, "p->items[p->length]"))
 }
 
-pub(super) fn drop_hash_table_fields(program: &t::Program, key: MapKeyKind, value: Type, table: &str) -> String {
+pub(super) fn drop_hash_table_fields(key: Type, value: Type, hasher: Option<Type>, table: &str) -> String {
     let entries = format!("{table}.entries");
+    let drop_policy = match hasher {
+        Some(Type::Object(id)) => format!("ncr_drop_{id}({table}.hasher);"),
+        Some(_) => unreachable!("Hasher policy must be an owned interface value"),
+        None => String::new(),
+    };
     format!(
-        "    for (int32_t index = 0; index < {table}.capacity; ++index) {{\n        if ({entries}[index].occupied) {{\n            {}\n            {}\n        }}\n    }}\n    ncr_deallocate({entries});\n",
-        drop_map_key(program, key, &format!("{entries}[index].key")),
+        "    for (int32_t index = 0; index < {table}.capacity; ++index) {{\n        if ({entries}[index].occupied) {{\n            {}\n            {}\n        }}\n    }}\n    ncr_deallocate({entries});\n    {drop_policy}\n",
+        drop_map_key(key, &format!("{entries}[index].key")),
         drop_element(value, &format!("{entries}[index].value")))
 }
 
-pub(super) fn drop_map_fields(program: &t::Program, key: MapKeyKind, value: Type) -> String {
-    drop_hash_table_fields(program, key, value, "p->table")
+pub(super) fn drop_map_fields(key: Type, value: Type, hasher: Option<Type>) -> String {
+    drop_hash_table_fields(key, value, hasher, "p->table")
 }
 pub(super) fn zero(program: &t::Program, ty: Type) -> String {
     match ty {
@@ -202,6 +199,111 @@ fn map_native_function(
         function.receiver == Some(map_class) && function.native.is_some_and(&is)
     })
 }
+fn map_query_view(program: &t::Program, key: Type, query_type: Type, expression: &str) -> String {
+    if let Type::Borrow { class, .. } = query_type {
+        if key == Type::Object(class) && program.classes[class].variants.is_some() {
+            return format!("&({expression})");
+        }
+    }
+    expression.to_owned()
+}
+
+fn hasher_slots(program: &t::Program, hasher: Type) -> (usize, usize) {
+    let Type::Object(interface) = hasher else {
+        unreachable!("Hasher policy must be an interface object");
+    };
+    assert!(program.classes[interface].is_interface, "Hasher policy must be an interface");
+    let slot = |suffix: &str| {
+        program.classes[interface].interface_methods.iter().position(|id| {
+            program.functions[*id].name.ends_with(suffix)
+        }).expect("Hasher interface method is present")
+    };
+    (slot(".hash"), slot(".equals"))
+}
+
+fn content_hash_body(map_class: usize, bytes: &str, length: &str) -> String {
+    format!(
+        "    (void)table;\n    const unsigned char *bytes = {bytes};\n    size_t length = {length};\n    uint64_t value = UINT64_C(14695981039346656037);\n    for (size_t index = 0; index < length; ++index) {{\n        value ^= (uint64_t)bytes[index];\n        value *= UINT64_C(1099511628211);\n    }}\n    value ^= (uint64_t)length;\n    value *= UINT64_C(1099511628211);\n    return ncr_map_finish_hash_{map_class}(value);\n"
+    )
+}
+
+fn map_hash_body(program: &t::Program, map_class: usize, key: Type, hasher: Option<Type>) -> String {
+    if let Some(hasher) = hasher {
+        let (hash_slot, _) = hasher_slots(program, hasher);
+        return format!(
+            "    uint64_t value = (uint64_t)table->hasher.vtable->m{hash_slot}(table->hasher.data, key);\n    return ncr_map_finish_hash_{map_class}(value);\n"
+        );
+    }
+    match key {
+        Type::Byte | Type::Char | Type::Int | Type::Long | Type::Boolean => format!(
+            "    (void)table;\n    uint64_t value = (uint64_t)key;\n    return ncr_map_finish_hash_{map_class}(value);\n"
+        ),
+        Type::Unit => format!(
+            "    (void)table;\n    (void)key;\n    uint64_t value = UINT64_C(0);\n    return ncr_map_finish_hash_{map_class}(value);\n"
+        ),
+        Type::Double => format!(
+            "    (void)table;\n    uint64_t value;\n    if (isnan(key)) {{ value = UINT64_C(0x7ff8000000000000); }}\n    else if (key == 0.0) {{ value = UINT64_C(0); }}\n    else {{ memcpy(&value, &key, sizeof(value)); }}\n    return ncr_map_finish_hash_{map_class}(value);\n"
+        ),
+        Type::String => content_hash_body(map_class, "key.data", "key.length"),
+        Type::Object(_) if is_text_key(program, key) =>
+            content_hash_body(map_class, "key->bytes", "(size_t)key->length"),
+        _ => unreachable!("checker only instantiates builtin hashing for supported key types"),
+    }
+}
+
+fn map_key_equal(
+    program: &t::Program, key: Type, hasher: Option<Type>, query_type: Type,
+) -> String {
+    if let Some(hasher) = hasher {
+        let (_, equals_slot) = hasher_slots(program, hasher);
+        let stored = map_query_view(program, key, query_type, "entry->key");
+        return format!(
+            "table->hasher.vtable->m{equals_slot}(table->hasher.data, {stored}, key)"
+        );
+    }
+    if is_text_key(program, key) {
+        return "entry->key->length == key->length && (key->length == 0 || memcmp(entry->key->bytes, key->bytes, (size_t)key->length) == 0)".to_owned();
+    }
+    match key {
+        Type::String => "entry->key.length == key.length && (key.length == 0 || memcmp(entry->key.data, key.data, key.length) == 0)".to_owned(),
+        Type::Double => "entry->key == key || (isnan(entry->key) && isnan(key))".to_owned(),
+        _ => "entry->key == key".to_owned(),
+    }
+}
+
+fn map_hash_helpers(map_class: usize) -> String {
+    format!(
+        "static uint64_t ncr_map_finish_hash_{map_class}(uint64_t value) {{\n{MAP_HASH_FINALIZER}}}\nstatic uint32_t ncr_map_bucket_{map_class}(uint64_t hash) {{\n    return (uint32_t)(hash ^ (hash >> 32));\n}}\n"
+    )
+}
+
+fn map_table_initializers(map_class: usize) -> String {
+    format!(
+        "static void ncr_map_init_{map_class}(struct ncr_hash_table_{map_class} *table) {{\n    table->entries = NULL;\n    table->length = 0;\n    table->capacity = 0;\n}}\n"
+    )
+}
+
+fn map_initializer_methods(program: &t::Program, map_class: usize, hasher: Option<Type>) -> String {
+    let map_type = ctype(program, Type::Object(map_class));
+    let mut methods = String::new();
+    if map_native_function(program, map_class, |method| matches!(method, M::MapNew)).is_some() {
+        methods.push_str(&format!(
+            "static void @MAP_NEW@({map_type} p, size_t line, size_t column) {{\n    (void)line;\n    (void)column;\n    ncr_map_init_{map_class}(&p->table);\n}}\n"
+        ));
+    }
+    if let Some(policy) = hasher {
+        let factory_name = format!("{}.withHasher", program.classes[map_class].name);
+        assert!(program.functions.iter().any(|function| {
+            function.name == factory_name && function.native == Some(M::MapWithHasher)
+        }), "custom Map specialization must retain Map.withHasher");
+        methods.push_str(&format!(
+            "static {map_type} @MAP_WITH_HASHER@({} hasher, size_t line, size_t column) {{\n    {map_type} p = ncr_allocate(sizeof(*p), line, column);\n    ncr_map_init_{map_class}(&p->table);\n    p->table.hasher = hasher;\n    return p;\n}}\n",
+            ctype(program, policy),
+        ));
+    }
+    methods
+}
+
 
 fn borrowed_map_method(program: &t::Program, function: &t::Function, value_class: usize) -> String {
     let Type::Borrow { class, .. } = function.return_type else {
@@ -241,11 +343,12 @@ fn try_get_map_method(program: &t::Program, map_class: usize, value: Type) -> St
         .replace("@ELEMENT@", &ctype(program, value))
 }
 
-pub(super) fn map_implementation(program: &t::Program, map_class: usize, key: MapKeyKind, value: Type) -> String {
-    let key_type = map_key_type(program, key);
+pub(super) fn map_implementation(
+    program: &t::Program, map_class: usize, key: Type, value: Type, hasher: Option<Type>,
+) -> String {
     let put = map_native_function(program, map_class, |method| matches!(method, M::MapPut))
         .expect("compiler-owned Map.put method is present");
-    assert_eq!(put.params.first().expect("Map.put key parameter").1, key_type,
+    assert_eq!(put.params.first().expect("Map.put key parameter").1, key,
         "Map.put must take an owned key");
     let contains = map_native_function(program, map_class, |method| matches!(method, M::MapContainsKey))
         .expect("compiler-owned Map.containsKey method is present");
@@ -259,45 +362,25 @@ pub(super) fn map_implementation(program: &t::Program, map_class: usize, key: Ma
     let (none_tag, some_tag) = option_tags(program, put, value);
     let borrowed = borrowed_map_methods(program, map_class, value);
     let try_get = try_get_map_method(program, map_class, value);
-    let (hash_query_prefix, key_equal, old_hash, scan_hash, store_hash) = match key {
-        MapKeyKind::Int => (
-            "    uint32_t value = (uint32_t)key;\n",
-            "entry->key == key",
-            "ncr_map_hash_@ID@(old->key)",
-            "ncr_map_hash_@ID@(entry->key)",
-            "",
-        ),
-        MapKeyKind::Text => (
-            concat!(
-                "    uint32_t value = UINT32_C(2166136261);\n",
-                "    for (int32_t index = 0; index < key->length; ++index) {\n",
-                "        value ^= (uint32_t)key->bytes[index];\n",
-                "        value *= UINT32_C(16777619);\n",
-                "    }\n",
-                "    value ^= (uint32_t)key->length;\n",
-            ),
-            concat!(
-                "entry->hash == hash && ",
-                "entry->key->length == key->length && ",
-                "(key->length == 0 || memcmp(entry->key->bytes, key->bytes, (size_t)key->length) == 0)",
-            ),
-            "old->hash",
-            "entry->hash",
-            "table->entries[target].hash = hash;",
-        ),
-    };
+    let hash_helpers = map_hash_helpers(map_class);
+    let table_initializers = map_table_initializers(map_class);
+    let initializer_methods = map_initializer_methods(program, map_class, hasher);
+    let hash_body = map_hash_body(program, map_class, key, hasher);
+    let key_equal = map_key_equal(program, key, hasher, query_type);
+    let key_query = map_query_view(program, key, query_type, "key");
     include_str!("../../stdlib/map.c.in")
         .replace("@ENTRY_TYPE@", &format!("struct ncr_map_entry_{map_class}"))
-        .replace("@KEY_TYPE@", &ctype(program, key_type))
+        .replace("@KEY_TYPE@", &ctype(program, key))
         .replace("@QUERY_TYPE@", &ctype(program, query_type))
-        .replace("@HASH_QUERY_PREFIX@", hash_query_prefix)
-        .replace("@HASH_FINALIZER@", MAP_HASH_FINALIZER)
-        .replace("@KEY_EQUAL@", key_equal)
-        .replace("@OLD_HASH@", old_hash)
-        .replace("@SCAN_HASH@", scan_hash)
-        .replace("@STORE_HASH@", store_hash)
-        .replace("@DROP_DUPLICATE_KEY@", &drop_map_key(program, key, "key"))
-        .replace("@DROP_KEY_AT_INDEX@", &drop_map_key(program, key, "table->entries[index].key"))
+        .replace("@HASH_FINALIZER@", &hash_helpers)
+        .replace("@TABLE_INITIALIZERS@", &table_initializers)
+        .replace("@MAP_INITIALIZER_METHODS@", &initializer_methods)
+        .replace("@HASH_BODY@", &hash_body)
+        .replace("@KEY_QUERY@", &key_query)
+        .replace("@KEY_EQUAL@", &key_equal)
+        .replace("@STORE_HASH@", "table->entries[target].hash = hash;")
+        .replace("@DROP_DUPLICATE_KEY@", &drop_map_key(key, "key"))
+        .replace("@DROP_KEY_AT_INDEX@", &drop_map_key(key, "table->entries[index].key"))
         .replace("@ELEMENT@", &ctype(program, value))
         .replace("@DROP_VALUE@", &drop_element(value, "table->entries[index].value"))
         .replace("@OPTION_TYPE@", &ctype(program, put.return_type))

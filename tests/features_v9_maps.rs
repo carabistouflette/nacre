@@ -384,9 +384,6 @@ fn missing_borrowed_key_fails_with_call_location() {
 #[test]
 fn map_types_and_borrow_domains_reject_invalid_programs() {
     for source in [
-        "void main() { Map<boolean, int> invalid = new Map<boolean, int>(); }",
-        "void main() { Map<String, int> invalid = new Map<String, int>(); }",
-        "class Box {} void main() { Map<Box, int> invalid = new Map<Box, int>(); }",
         "void main() { Map<int> invalid = new Map<int>(); }",
         "void main() { Map<int, int, int> invalid = new Map<int, int, int>(); }",
         "class Box {} void main() { Map<int, Box> values = new Map<int, Box>(); values.tryGet(0); }",
@@ -479,4 +476,274 @@ void main() {
     println(interfaces.isEmpty());
 }
 "#, b"10\n30\n20\n40\n40\ntrue\n10\n30\n20\n40\n40\ntrue\n10\n30\n20\n40\n40\ntrue\n");
+}
+
+#[test]
+fn builtin_map_set_key_families_keep_value_semantics() {
+    assert_native(r#"
+    void main() {
+        Map<byte, int> bytes = new Map<byte, int>();
+        bytes.put((byte)0, 10);
+        bytes.put((byte)255, 20);
+        println(bytes.size());
+        match (bytes.tryGet((byte)0)) { None {} Some(value) { println(value); } }
+        match (bytes.tryGet((byte)255)) { None {} Some(value) { println(value); } }
+
+        Map<char, int> chars = new Map<char, int>();
+        chars.put('A', 30);
+        chars.put('Ω', 40);
+        println(chars.size());
+        match (chars.tryGet('Ω')) { None {} Some(value) { println(value); } }
+        match (chars.tryGet('A')) { None {} Some(value) { println(value); } }
+
+        Map<long, int> longs = new Map<long, int>();
+        longs.put(1L, 1);
+        longs.put(4294967297L, 2);
+        longs.put(-9223372036854775808L, 3);
+        println(longs.size());
+        match (longs.tryGet(4294967297L)) { None {} Some(value) { println(value); } }
+        match (longs.tryGet(-9223372036854775808L)) { None {} Some(value) { println(value); } }
+
+        Map<double, int> doubles = new Map<double, int>();
+        double firstNaN = 0.0 / 0.0;
+        double secondNaN = -0.0 / 0.0;
+        doubles.put(firstNaN, 50);
+        doubles.put(-0.0, 60);
+        match (doubles.put(0.0, 61)) { None {} Some(value) { println(value); } }
+        match (doubles.put(secondNaN, 51)) { None {} Some(value) { println(value); } }
+        println(doubles.size());
+        match (doubles.tryGet(firstNaN)) { None {} Some(value) { println(value); } }
+        match (doubles.tryGet(-0.0)) { None {} Some(value) { println(value); } }
+
+        Map<boolean, int> flags = new Map<boolean, int>();
+        flags.put(true, 1);
+        flags.put(false, 2);
+        println(flags.size());
+        match (flags.tryGet(false)) { None {} Some(value) { println(value); } }
+
+        Map<Unit, int> units = new Map<Unit, int>();
+        units.put((), 3);
+        match (units.put((), 4)) { None {} Some(value) { println(value); } }
+        println(units.size());
+        match (units.tryGet(())) { None {} Some(value) { println(value); } }
+
+        Map<String, int> strings = new Map<String, int>();
+        strings.put("a\0b", 1);
+        strings.put("a\0c", 2);
+        match (strings.put("a\0b", 3)) { None {} Some(value) { println(value); } }
+        println(strings.size());
+        match (strings.tryGet("a\0b")) { None {} Some(value) { println(value); } }
+        match (strings.tryGet("a\0c")) { None {} Some(value) { println(value); } }
+
+        Map<Text, int> texts = new Map<Text, int>();
+        texts.put(new Text("é"), 70);
+        texts.put(new Text("é\0"), 80);
+        println(texts.size());
+        match (texts.tryGet(new Text("é"))) { None {} Some(value) { println(value); } }
+        match (texts.tryGet(new Text("é\0"))) { None {} Some(value) { println(value); } }
+
+        Set<boolean> truth = new Set<boolean>();
+        truth.add(true);
+        truth.add(true);
+        truth.add(false);
+        println(truth.size());
+        println(truth.contains(false));
+        println(truth.remove(true));
+        println(truth.size());
+    }
+    "#, b"2\n10\n20\n2\n40\n30\n3\n2\n3\n60\n50\n2\n51\n61\n2\n2\n3\n1\n4\n1\n2\n3\n2\n3\n70\n80\n2\ntrue\ntrue\n1\n");
+}
+
+#[test]
+fn custom_class_interface_and_enum_keys_transfer_owned_hashers() {
+    assert_native(r#"
+    interface Named {
+        readonly int id();
+        readonly borrow Text label();
+    }
+    class CollisionKey implements Hasher<CollisionKey> {
+        private int identifier;
+        private Text labelText;
+        CollisionKey(int identifier, Text labelText) {
+            this.identifier = identifier;
+            this.labelText = labelText;
+        }
+        public readonly int id() { return this.identifier; }
+        public readonly borrow Text label() { return this.labelText; }
+        public readonly long hash(borrow CollisionKey value) { return (long)(value.identifier % 2); }
+        public readonly boolean equals(borrow CollisionKey left, borrow CollisionKey right) {
+            return left.identifier == right.identifier;
+        }
+    }
+    class Record implements Named {
+        private int identifier;
+        private Text labelText;
+        Record(int identifier, Text labelText) {
+            this.identifier = identifier;
+            this.labelText = labelText;
+        }
+        public readonly int id() { return this.identifier; }
+        public readonly borrow Text label() { return this.labelText; }
+    }
+    class NamedHasher implements Hasher<Named> {
+        private Text marker;
+        NamedHasher() { this.marker = new Text("owned policy"); }
+        public readonly long hash(borrow Named value) { return (long)(value.id() % 2); }
+        public readonly boolean equals(borrow Named left, borrow Named right) {
+            return left.id() == right.id();
+        }
+    }
+    enum Shade { Red; Green; Blue; }
+    class ShadeHasher implements Hasher<Shade> {
+        public readonly long hash(borrow Shade value) {
+            match (value) {
+                Red { return 1L; }
+                Green { return 1L; }
+                Blue { return 1L; }
+            }
+            return 1L;
+        }
+        public readonly boolean equals(borrow Shade left, borrow Shade right) {
+            boolean same = false;
+            match (left) {
+                Red { match (right) { Red { same = true; } Green {} Blue {} } }
+                Green { match (right) { Red {} Green { same = true; } Blue {} } }
+                Blue { match (right) { Red {} Green {} Blue { same = true; } } }
+            }
+            return same;
+        }
+    }
+    void main() {
+        Map<CollisionKey, int> classKeys =
+            Map<CollisionKey, int>.withHasher(new CollisionKey(-1, new Text("class policy")));
+        classKeys.put(new CollisionKey(1, new Text("stored")), 10);
+        match (classKeys.put(new CollisionKey(1, new Text("incoming")), 20)) {
+            None {} Some(value) { println(value); }
+        }
+        for (borrow CollisionKey key, int value : classKeys) {
+            println(key.label().equalsString("stored"));
+            println(value);
+        }
+        int id = 2;
+        while (id < 16) {
+            classKeys.put(new CollisionKey(id, new Text("key")), id);
+            id = id + 1;
+        }
+        println(classKeys.size());
+        CollisionKey query = new CollisionKey(8, new Text("query"));
+        println(classKeys.containsKey(query));
+        match (classKeys.tryRemove(query)) { None {} Some(value) { println(value); } }
+        println(classKeys.size());
+        classKeys.put(new CollisionKey(8, new Text("replacement")), 88);
+        match (classKeys.put(new CollisionKey(8, new Text("discarded")), 99)) {
+            None {} Some(value) { println(value); }
+        }
+        for (borrow CollisionKey key, int value : classKeys) {
+            if (key.id() == 8) {
+                println(key.label().equalsString("replacement"));
+                println(value);
+            }
+        }
+        classKeys.clear();
+        println(classKeys.isEmpty());
+
+        Map<Named, int> interfaceKeys =
+            Map<Named, int>.withHasher(new NamedHasher());
+        interfaceKeys.put(new Record(7, new Text("kept")), 70);
+        match (interfaceKeys.put(new Record(7, new Text("incoming")), 71)) {
+            None {} Some(value) { println(value); }
+        }
+        for (borrow Named key, int value : interfaceKeys) {
+            println(key.label().equalsString("kept"));
+            println(value);
+        }
+        Named interfaceQuery = new Record(7, new Text("query"));
+        match (interfaceKeys.tryRemove(interfaceQuery)) { None {} Some(value) { println(value); } }
+        println(interfaceKeys.isEmpty());
+
+        Set<Shade> shades = Set<Shade>.withHasher(new ShadeHasher());
+        shades.add(new Shade.Red());
+        shades.add(new Shade.Green());
+        shades.add(new Shade.Red());
+        println(shades.size());
+        Shade green = new Shade.Green();
+        println(shades.contains(green));
+        Shade redQuery = new Shade.Red();
+        println(shades.remove(redQuery));
+        boolean sawGreen = false;
+        for (borrow Shade shade : shades) {
+            match (shade) { Green { sawGreen = true; } Red {} Blue {} }
+        }
+        println(sawGreen);
+        Map<Shade, int> enumKeys = Map<Shade, int>.withHasher(new ShadeHasher());
+        enumKeys.put(new Shade.Red(), 10);
+        enumKeys.put(new Shade.Green(), 20);
+        match (enumKeys.put(new Shade.Red(), 11)) {
+            None {} Some(value) { println(value); }
+        }
+        boolean sawRed = false;
+        boolean sawStoredGreen = false;
+        for (borrow Shade shade, int value : enumKeys) {
+            match (shade) {
+                Red { sawRed = value == 11; }
+                Green { sawStoredGreen = value == 20; }
+                Blue {}
+            }
+        }
+        println(sawRed && sawStoredGreen);
+        println(enumKeys.size());
+    }
+    "#, b"10\ntrue\n20\n15\ntrue\n8\n14\n88\ntrue\n99\n70\ntrue\n70\ntrue\n2\ntrue\ntrue\ntrue\n10\ntrue\n2\n");
+}
+
+
+#[test]
+fn custom_key_constructors_and_concrete_policy_sendability_are_checked() {
+    for source in [
+        "class Key {} void main() { Map<Key, int> values = new Map<Key, int>(); }",
+        "class Key {} void main() { Set<Key> values = new Set<Key>(); }",
+    ] {
+        let error = validate(source).expect_err("custom key accepted without a hasher");
+        assert!(error.message.contains("E5004"), "{}", error.render("map_key_policy.ncr", source));
+    }
+
+    let view_bearing_hasher = r#"
+    class Key {}
+    class BorrowingHasher implements Hasher<Key> {
+        borrow Key captured;
+        BorrowingHasher(borrow Key captured) { this.captured = captured; }
+        public readonly long hash(borrow Key value) { return 1L; }
+        public readonly boolean equals(borrow Key left, borrow Key right) { return true; }
+    }
+    void main() {}
+    "#;
+    let error = validate(view_bearing_hasher).expect_err("view-bearing Hasher was erased");
+    assert!(error.message.contains("E4005"), "{}", error.render("map_key_policy.ncr", view_bearing_hasher));
+
+    let non_sendable_concrete_policy = r#"
+    interface Task<T> { T run(); }
+    class Key {}
+    class GuardHasher implements Hasher<Key> {
+        Guard<int> guard;
+        GuardHasher(Guard<int> guard) { this.guard = guard; }
+        public readonly long hash(borrow Key value) { return 1L; }
+        public readonly boolean equals(borrow Key left, borrow Key right) { return true; }
+    }
+    class Worker implements Task<Unit> {
+        Map<Key, int> values;
+        Worker(Map<Key, int> values) { this.values = values; }
+        public Unit run() { return (); }
+    }
+    Result<Unit, Text> sendMap() {
+        Mutex<int> mutex = Mutex<int>.create(0)?;
+        Guard<int> guard = mutex.lock()?;
+        Map<Key, int> values = Map<Key, int>.withHasher(new GuardHasher(guard));
+        Thread<Unit> thread = Thread<Unit>.spawn(new Worker(values))?;
+        thread.join()?;
+        return new Result<Unit, Text>.Ok(());
+    }
+    void main() { match (sendMap()) { Ok(unit) {} Err(error) { error.print(); } } }
+    "#;
+    let error = validate(non_sendable_concrete_policy).expect_err("Map hid a non-sendable concrete Hasher");
+    assert!(error.message.contains("E7101"), "{}", error.render("map_key_policy.ncr", non_sendable_concrete_policy));
 }

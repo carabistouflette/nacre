@@ -21,6 +21,7 @@ enum NativeBuiltin {
     TakeIterator,
     SkipIterator,
     Iterators,
+    Hasher,
     Text,
     Arrays,
     ByteBuffer,
@@ -69,11 +70,11 @@ impl NativeBuiltin {
             Self::Map => NativeClass::Map {
                 key: Type::Named("K".to_owned()),
                 value: Type::Named("V".to_owned()),
-                key_kind: None,
+                hasher: None,
             },
             Self::Set => NativeClass::Set {
                 key: Type::Named("T".to_owned()),
-                key_kind: None,
+                hasher: None,
             },
             Self::Comparator => NativeClass::Comparator(Type::Named("T".to_owned())),
             Self::OrderedMap => NativeClass::OrderedMap {
@@ -93,6 +94,7 @@ impl NativeBuiltin {
             Self::TakeIterator => NativeClass::TakeIterator(Type::Named("T".to_owned())),
             Self::SkipIterator => NativeClass::SkipIterator(Type::Named("T".to_owned())),
             Self::Iterators => NativeClass::Iterators(Type::Named("T".to_owned())),
+            Self::Hasher => NativeClass::Hasher(Type::Named("T".to_owned())),
             Self::Text => NativeClass::Text,
             Self::BigInt => NativeClass::BigInt,
             Self::BigDecimal => NativeClass::BigDecimal,
@@ -192,6 +194,7 @@ pub(super) const PRELUDE_UNITS: &[PreludeUnit] = &[
             Builtin { name: "TakeIterator", native: Some(NativeBuiltin::TakeIterator) },
             Builtin { name: "SkipIterator", native: Some(NativeBuiltin::SkipIterator) },
             Builtin { name: "Iterators", native: Some(NativeBuiltin::Iterators) },
+            Builtin { name: "Hasher", native: Some(NativeBuiltin::Hasher) },
         ],
     },
     PreludeUnit {

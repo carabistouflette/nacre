@@ -15,7 +15,11 @@ fn supports_default_ordering(ty: &Type) -> bool {
     matches!(ty, Type::Byte | Type::Char | Type::Int | Type::Long | Type::Double | Type::Boolean | Type::String)
 }
 
-fn rewrite_borrowed_parameter_to_value(
+fn supports_default_hashing(ty: &Type) -> bool {
+    ty.is_copy() || matches!(ty, Type::Named(name) if name == "Text")
+}
+
+fn rewrite_borrowed_type_parameter_to_value(
     methods: &mut [a::Function],
     method_name: &str,
     index: usize,
@@ -31,7 +35,7 @@ fn rewrite_borrowed_parameter_to_value(
 }
 
 fn rewrite_borrowed_t_parameter_to_value(methods: &mut [a::Function], method_name: &str, index: usize) {
-    rewrite_borrowed_parameter_to_value(methods, method_name, index, "T");
+    rewrite_borrowed_type_parameter_to_value(methods, method_name, index, "T");
 }
 
 fn rewrite_borrowed_return_to_value(methods: &mut [a::Function], method_name: &str, parameter_name: &str) {
@@ -56,7 +60,7 @@ fn prune_list_methods(class: &mut a::Class, element: &Type) {
         class.methods.retain(|method| !matches!(method.name.as_str(), "sort" | "binarySearch"));
     }
     if element.is_copy() {
-        rewrite_borrowed_t_parameter_to_value(&mut class.methods, "binarySearchBy", 1);
+        rewrite_borrowed_type_parameter_to_value(&mut class.methods, "binarySearchBy", 1, "T");
     }
 }
 
@@ -68,17 +72,6 @@ fn prune_map_value_methods(class: &mut a::Class, value: &Type) {
     }
 }
 
-fn set_text_query_parameters(class: &mut a::Class, key_kind: a::MapKeyKind, names: &[&str]) {
-    if let Some(query_type) = key_kind.query_type() {
-        for method in &mut class.methods {
-            if names.contains(&method.name.as_str()) {
-                let parameter = method.params.first_mut()
-                    .expect("compiler-owned collection query has a key parameter");
-                parameter.ty = query_type.clone();
-            }
-        }
-    }
-}
 
 #[derive(Clone)]
 struct Request { template: String, name: String, args: Vec<Type>, span: Span }
@@ -225,8 +218,7 @@ impl Expander {
         }
     }
     fn class(&mut self, class: &mut a::Class, env: &Environment) -> Result<(), Diagnostic> {
-        let mut erase_comparator_marker = false;
-        let mut erase_predicate_marker = false;
+        let mut erase_native_interface_marker = false;
         let mut native = class.native.take();
         match &mut native {
             Some(a::NativeClass::List(element)) => {
@@ -261,7 +253,7 @@ impl Expander {
                         "contains", "tryRemove", "tryGet", "getRef", "getMut",
                         "floorIndex", "ceilingIndex", "lowerIndex", "higherIndex",
                     ] {
-                        rewrite_borrowed_parameter_to_value(&mut class.methods, method_name, 0, "K");
+                        rewrite_borrowed_type_parameter_to_value(&mut class.methods, method_name, 0, "K");
                     }
                     rewrite_borrowed_return_to_value(&mut class.methods, "keyAt", "K");
                 }
@@ -278,7 +270,7 @@ impl Expander {
                 }, env, class.span, 0)?;
                 if key.is_copy() {
                     for method_name in ["contains", "remove"] {
-                        rewrite_borrowed_parameter_to_value(&mut class.methods, method_name, 0, "T");
+                        rewrite_borrowed_type_parameter_to_value(&mut class.methods, method_name, 0, "T");
                     }
                 }
                 self.ty(&Type::Applied {
@@ -322,25 +314,48 @@ impl Expander {
                 if element.is_copy() {
                     rewrite_borrowed_t_parameter_to_value(&mut class.methods, "test", 0);
                 }
-                erase_predicate_marker = true;
+                erase_native_interface_marker = true;
             }
             Some(a::NativeClass::BitSet) => {}
-            Some(a::NativeClass::Map { key, value, key_kind }) => {
+            Some(a::NativeClass::Map { key, value, hasher }) => {
                 *key = self.ty(key, env, class.span, 0)?;
                 *value = self.ty(value, env, class.span, 0)?;
-                let kind = a::MapKeyKind::classify(key)
-                    .ok_or_else(|| Diagnostic::new(class.span, "[E5004] Map<K, V> requires int or owned Text keys"))?;
-                *key_kind = Some(kind);
-                set_text_query_parameters(class, kind,
-                    &["containsKey", "tryRemove", "tryGet", "getRef", "getMut"]);
+                if supports_default_hashing(key) {
+                    *hasher = None;
+                    class.methods.retain(|method| method.name != "withHasher");
+                } else {
+                    let policy = Type::Applied {
+                        name: "Hasher".to_owned(),
+                        args: vec![key.clone()],
+                    };
+                    *hasher = Some(self.ty(&policy, env, class.span, 0)?);
+                    class.constructor = None;
+                }
+                if key.is_copy() {
+                    for method in ["containsKey", "tryRemove", "tryGet", "getRef", "getMut"] {
+                        rewrite_borrowed_type_parameter_to_value(&mut class.methods, method, 0, "K");
+                    }
+                }
                 prune_map_value_methods(class, value);
             }
-            Some(a::NativeClass::Set { key, key_kind }) => {
+            Some(a::NativeClass::Set { key, hasher }) => {
                 *key = self.ty(key, env, class.span, 0)?;
-                let kind = a::MapKeyKind::classify(key)
-                    .ok_or_else(|| Diagnostic::new(class.span, "[E5004] Set<T> requires int or owned Text keys"))?;
-                *key_kind = Some(kind);
-                set_text_query_parameters(class, kind, &["contains", "remove"]);
+                if supports_default_hashing(key) {
+                    *hasher = None;
+                    class.methods.retain(|method| method.name != "withHasher");
+                } else {
+                    let policy = Type::Applied {
+                        name: "Hasher".to_owned(),
+                        args: vec![key.clone()],
+                    };
+                    *hasher = Some(self.ty(&policy, env, class.span, 0)?);
+                    class.constructor = None;
+                }
+                if key.is_copy() {
+                    for method in ["contains", "remove"] {
+                        rewrite_borrowed_type_parameter_to_value(&mut class.methods, method, 0, "T");
+                    }
+                }
                 let map = Type::Applied {
                     name: "Map".to_owned(),
                     args: vec![key.clone(), Type::Unit],
@@ -350,10 +365,19 @@ impl Expander {
             Some(a::NativeClass::Comparator(element)) => {
                 *element = self.ty(element, env, class.span, 0)?;
                 if element.is_copy() {
-                    rewrite_borrowed_t_parameter_to_value(&mut class.methods, "compare", 0);
-                    rewrite_borrowed_t_parameter_to_value(&mut class.methods, "compare", 1);
+                    rewrite_borrowed_type_parameter_to_value(&mut class.methods, "compare", 0, "T");
+                    rewrite_borrowed_type_parameter_to_value(&mut class.methods, "compare", 1, "T");
                 }
-                erase_comparator_marker = true;
+                erase_native_interface_marker = true;
+            }
+            Some(a::NativeClass::Hasher(element)) => {
+                *element = self.ty(element, env, class.span, 0)?;
+                if element.is_copy() {
+                    rewrite_borrowed_type_parameter_to_value(&mut class.methods, "hash", 0, "T");
+                    rewrite_borrowed_type_parameter_to_value(&mut class.methods, "equals", 0, "T");
+                    rewrite_borrowed_type_parameter_to_value(&mut class.methods, "equals", 1, "T");
+                }
+                erase_native_interface_marker = true;
             }
             Some(a::NativeClass::Thread(element))
             | Some(a::NativeClass::Mutex(element))
@@ -384,7 +408,7 @@ impl Expander {
             }
             _ => {}
         }
-        if !erase_comparator_marker && !erase_predicate_marker {
+        if !erase_native_interface_marker {
             class.native = native;
         }
         // Files' native text I/O uses the shared ByteBuffer reserve implementation.

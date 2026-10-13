@@ -271,7 +271,7 @@ fn collection_borrows_and_unsupported_specializations_are_rejected() {
         "class Box {} void main() { Deque<Box> values = new Deque<Box>(); values.get(0); }",
         "E5002",
     );
-    assert!(validate("void main() { Set<boolean> values = new Set<boolean>(); }").is_err());
+    validate("void main() { Set<boolean> values = new Set<boolean>(); }").unwrap();
     assert!(validate("class Box {} void main() { List<Box> values = new List<Box>(); values.sort(); }").is_err());
 }
 

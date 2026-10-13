@@ -45,9 +45,10 @@ class Deque<T> {
 
 class Set<T> {
     public Set() {}
+    public static Set<T> withHasher(Hasher<T> hasher) {}
     public void add(T key) {}
-    public readonly boolean contains(T key) {}
-    public boolean remove(T key) {}
+    public readonly boolean contains(borrow T key) {}
+    public boolean remove(borrow T key) {}
     public readonly int size() {}
     public readonly boolean isEmpty() {}
     public void clear() {}
@@ -55,6 +56,11 @@ class Set<T> {
 
 interface Comparator<T> {
     readonly int compare(borrow T left, borrow T right);
+}
+
+interface Hasher<T> {
+    readonly long hash(borrow T value);
+    readonly boolean equals(borrow T left, borrow T right);
 }
 
 class Array<T> {
@@ -79,14 +85,15 @@ class Arrays {
 
 class Map<K, V> {
     public Map() {}
-    public readonly boolean containsKey(K key) {}
+    public static Map<K, V> withHasher(Hasher<K> hasher) {}
+    public readonly boolean containsKey(borrow K key) {}
     public readonly int size() {}
     public readonly boolean isEmpty() {}
     public Option<V> put(K key, V value) {}
-    public Option<V> tryRemove(K key) {}
-    public readonly Option<V> tryGet(K key) {}
-    public readonly borrow V getRef(K key) {}
-    public borrow mut V getMut(K key) {}
+    public Option<V> tryRemove(borrow K key) {}
+    public readonly Option<V> tryGet(borrow K key) {}
+    public readonly borrow V getRef(borrow K key) {}
+    public borrow mut V getMut(borrow K key) {}
     public void clear() {}
 }
 

@@ -150,12 +150,13 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   Typed IR preserves the carrier layouts; calls, stores, enum wrapping and
   returns explicitly transfer temporary ownership.
 
-- Text map keys are owned, queried by shared borrow without allocation, compared
-  by exact UTF-8 bytes and immutable during paired key/value traversal. Integer
-  and text keys share storage algorithms; cached text hashes avoid repeated work.
-- Reviewed fixes centralize key classification and the hash finalizer, skip
-  hashing empty-map queries, and preserve readonly keys with mutable values
-  without weakening root-wide loans. Named inventory exercises the public API.
+- Map/Set default hashing covers scalar, `Unit`, static `String`, and owned `Text`
+  keys. Double NaNs compare/hash equally and signed zeros share a hash; strings and
+  Text compare exact-length UTF-8 bytes.
+- Custom class/interface/enum keys use an explicitly owned `Hasher<T>` supplied
+  through `withHasher`. Borrowed queries, retained equal Map keys, dropped Set
+  duplicates, cached 64-bit hashes across growth, and recursive policy sendability
+  preserve affine ownership without callbacks during relocation.
 - POSIX Environment and affine Command/Process APIs synchronize environment
   snapshots, resolve PATH without shell fallback, and provide bounded concurrent
   capture, redirected files, monotonic waits, and deterministic child reaping.

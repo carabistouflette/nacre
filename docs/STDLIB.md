@@ -451,48 +451,72 @@ borrowed indexed access, not `Option<borrow T>`.
 
 ### `Set<T>` and `Map<K, V>`
 
-The only supported set keys and map keys are `int` and owned `Text`. No static
-`String`, `Path`, or user-defined hash/equality type is supported. `Text` key
-comparison is exact UTF-8 byte equality, including embedded NUL; there is no
-normalization or case folding.
+Default hashing is available for `byte`, `char`, `int`, `long`, `double`,
+`boolean`, `Unit`, static `String`, and owned `Text` keys. Integer-like values,
+booleans, and `Unit` use value equality. Double keys treat all NaNs as equal and
+canonicalize signed zero for hashing. `String` and `Text` keys compare their exact
+length-delimited UTF-8 bytes, including embedded NUL; there is no normalization or
+case folding.
+
+Class, interface, and enum keys require an explicit owned `Hasher<T>` policy:
 
 ```java
+interface Hasher<T> {
+    readonly long hash(borrow T value);
+    readonly boolean equals(borrow T left, borrow T right);
+}
+
 Set<T>()
+static Set<T> withHasher(Hasher<T> hasher)
 void add(T key)
-readonly boolean contains(T key)
-boolean remove(T key)
+readonly boolean contains(borrow T key)
+boolean remove(borrow T key)
 readonly int size()
 readonly boolean isEmpty()
 void clear()
 
 Map<K, V>()
-readonly boolean containsKey(K key)
+static Map<K, V> withHasher(Hasher<K> hasher)
+readonly boolean containsKey(borrow K key)
 readonly int size()
 readonly boolean isEmpty()
 Option<V> put(K key, V value)
-Option<V> tryRemove(K key)
-readonly Option<V> tryGet(K key)                   // copied value specializations only
-readonly borrow V getRef(K key)                    // affine value specializations only
-borrow mut V getMut(K key)                          // affine value specializations only
+Option<V> tryRemove(borrow K key)
+readonly Option<V> tryGet(borrow K key)              // copied value specializations only
+readonly borrow V getRef(borrow K key)               // affine value specializations only
+borrow mut V getMut(borrow K key)                     // affine value specializations only
 void clear()
 ```
 
-For `Map<int, V>`/`Set<int>`, integer queries copy. For `Map<Text, V>`/`Set<Text>`,
-`put`/`add` take an owned `Text` key, while lookups and removals take a shared
-`borrow Text` query; the query is not consumed or stored. Equal-key replacement
-retains the existing map key and returns the replaced value in `Some`. `put`
-returns `None` for a new key; `tryRemove` transfers a removed value in `Some`, or
-returns `None` when absent. Insertion or growth can allocate; allocation failure
-is fatal. Map and set iteration order is unspecified.
+`hash` and `equals` are readonly borrowed queries. Equal keys must return the same
+hash, and a stored key's hash/equality behavior must remain stable. Custom-key
+specializations have no zero-argument constructor; construct them with
+`Map<K, V>.withHasher` or `Set<T>.withHasher`. The factory consumes the policy
+interface value; the collection owns and drops it once. Growth relocates cached
+hashes and owned entries without calling user hashers again.
 
-`tryGet` copies only copied value types; affine values require `getRef`/`getMut`.
-Absent borrowed lookup is a fatal boundary error. `Map` traversal uses two bindings,
-for example `for (int key, borrow Value value : map)` or
-`for (borrow Text key, int value : map)`. Text map keys are readonly borrowed
-bindings. Set traversal accepts one readonly key binding. All these loops hold a
-whole-root loan for their complete lexical extent; different entries do not grant
-disjoint mutable access. See [MAP_TRAVERSAL.md](MAP_TRAVERSAL.md) for the base
-map traversal contract.
+Concrete `Hasher<T>` implementations cannot carry local borrowed fields. A
+cross-thread transfer recursively checks concrete implementations behind the
+policy interface and rejects view-bearing or otherwise non-sendable policies.
+
+Insertion transfers an owned key. Map replacement retains the stored equal key,
+drops the incoming key, and returns the old value in `Some`; Set duplicates drop
+the incoming key. `put` returns `None` for a new key; `tryRemove` drops the stored
+key and transfers a removed value in `Some`, or returns `None` when absent.
+Insertion or growth can allocate; allocation failure is fatal. Map and set
+iteration order is unspecified.
+
+Generic query declarations borrow keys; scalar and static `String` specializations
+copy the value without an implicit clone, while object, interface, enum, and
+`Text` queries use readonly borrows. `tryGet` copies only copied value types;
+affine values require `getRef`/`getMut`. Absent borrowed lookup is a fatal
+boundary error. `Map`
+traversal uses two bindings, for example
+`for (int key, borrow Value value : map)` or
+`for (borrow Text key, int value : map)`. Set traversal accepts one readonly key
+binding. These loops hold a whole-root loan for their complete lexical extent;
+different entries do not grant disjoint mutable access. See
+[MAP_TRAVERSAL.md](MAP_TRAVERSAL.md) for the base map traversal contract.
 
 
 ## Ordered collections, priority queues, bit sets, and iterators

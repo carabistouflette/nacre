@@ -1,16 +1,16 @@
 /* Shared native open-addressed hash-table core for Map and Set storage. */
-static uint32_t ncr_map_hash_@ID@(@QUERY_TYPE@ key) {
-@HASH_QUERY_PREFIX@
-@HASH_FINALIZER@}
+@HASH_FINALIZER@
+static uint64_t ncr_map_hash_@ID@(struct ncr_hash_table_@ID@ *table, @QUERY_TYPE@ key) {
+@HASH_BODY@}
 
-static int32_t ncr_map_find_@ID@(struct ncr_hash_table_@ID@ *table, @QUERY_TYPE@ key, uint32_t hash) {
+static int32_t ncr_map_find_@ID@(struct ncr_hash_table_@ID@ *table, @QUERY_TYPE@ key, uint64_t hash) {
     if (table->capacity == 0) { return -1; }
     uint32_t mask = (uint32_t)table->capacity - UINT32_C(1);
-    uint32_t index = hash & mask;
+    uint32_t index = ncr_map_bucket_@ID@(hash) & mask;
     for (int32_t probes = 0; probes < table->capacity; ++probes) {
         @ENTRY_TYPE@ *entry = &table->entries[index];
         if (!entry->occupied) { return -1; }
-        if (@KEY_EQUAL@) { return (int32_t)index; }
+        if (entry->hash == hash && (@KEY_EQUAL@)) { return (int32_t)index; }
         index = (index + UINT32_C(1)) & mask;
     }
     return -1;
@@ -19,7 +19,7 @@ static int32_t ncr_map_find_@ID@(struct ncr_hash_table_@ID@ *table, @QUERY_TYPE@
 /* Query entry points share the empty-table fast path and compute one hash. */
 static int32_t ncr_map_query_@ID@(struct ncr_hash_table_@ID@ *table, @QUERY_TYPE@ key) {
     if (table->length == 0) { return -1; }
-    return ncr_map_find_@ID@(table, key, ncr_map_hash_@ID@(key));
+    return ncr_map_find_@ID@(table, key, ncr_map_hash_@ID@(table, key));
 }
 
 static void ncr_map_grow_@ID@(struct ncr_hash_table_@ID@ *table, size_t line, size_t column) {
@@ -42,14 +42,14 @@ static void ncr_map_grow_@ID@(struct ncr_hash_table_@ID@ *table, size_t line, si
     for (int32_t index = 0; index < table->capacity; ++index) {
         if (!table->entries[index].occupied) { continue; }
         @ENTRY_TYPE@ *old = &table->entries[index];
-        uint32_t target = @OLD_HASH@ & mask;
+        uint32_t target = ncr_map_bucket_@ID@(old->hash) & mask;
         while (entries[target].occupied) {
             target = (target + UINT32_C(1)) & mask;
         }
         entries[target] = *old;
         old->occupied = false;
     }
-    /* Raw relocation transfers each owner; old entries are never destroyed. */
+    /* Raw relocation transfers each owner; cached hashes avoid policy callbacks. */
     ncr_deallocate(table->entries);
     table->entries = entries;
     table->capacity = capacity;
@@ -57,8 +57,8 @@ static void ncr_map_grow_@ID@(struct ncr_hash_table_@ID@ *table, size_t line, si
 
 static @OPTION_TYPE@ ncr_map_put_@ID@(struct ncr_hash_table_@ID@ *table, @KEY_TYPE@ key,
                                        @ELEMENT@ value, size_t line, size_t column) {
-    uint32_t hash = ncr_map_hash_@ID@(key);
-    int32_t index = ncr_map_find_@ID@(table, key, hash);
+    uint64_t hash = ncr_map_hash_@ID@(table, @KEY_QUERY@);
+    int32_t index = ncr_map_find_@ID@(table, @KEY_QUERY@, hash);
     if (index >= 0) {
         @DROP_DUPLICATE_KEY@
         @ELEMENT@ previous = table->entries[index].value;
@@ -69,7 +69,7 @@ static @OPTION_TYPE@ ncr_map_put_@ID@(struct ncr_hash_table_@ID@ *table, @KEY_TY
         ncr_map_grow_@ID@(table, line, column);
     }
     uint32_t mask = (uint32_t)table->capacity - UINT32_C(1);
-    uint32_t target = hash & mask;
+    uint32_t target = ncr_map_bucket_@ID@(hash) & mask;
     while (table->entries[target].occupied) {
         target = (target + UINT32_C(1)) & mask;
     }
@@ -91,7 +91,7 @@ static @OPTION_TYPE@ ncr_map_remove_@ID@(struct ncr_hash_table_@ID@ *table, @QUE
     uint32_t scan = (hole + UINT32_C(1)) & mask;
     while (table->entries[scan].occupied) {
         @ENTRY_TYPE@ *entry = &table->entries[scan];
-        uint32_t home = @SCAN_HASH@ & mask;
+        uint32_t home = ncr_map_bucket_@ID@(entry->hash) & mask;
         if (((hole - home) & mask) < ((scan - home) & mask)) {
             table->entries[hole] = *entry;
             hole = scan;
@@ -113,12 +113,8 @@ static void ncr_map_clear_@ID@(struct ncr_hash_table_@ID@ *table) {
     table->length = 0;
 }
 
-static void @MAP_NEW@(ncr_obj_@ID@ *p, size_t line, size_t column) {
-    (void)line; (void)column;
-    p->table.entries = NULL;
-    p->table.length = 0;
-    p->table.capacity = 0;
-}
+@TABLE_INITIALIZERS@
+@MAP_INITIALIZER_METHODS@
 static bool @MAP_CONTAINS_KEY@(ncr_obj_@ID@ *p, @QUERY_TYPE@ key, size_t line, size_t column) {
     (void)line; (void)column;
     return ncr_map_query_@ID@(&p->table, key) >= 0;

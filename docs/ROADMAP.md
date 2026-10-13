@@ -22,9 +22,9 @@ representations and shared cleanup paths over speculative abstractions.
 - Source-unit modules and named or wildcard imports resolved across the complete
   explicitly selected source bundle. This does not add separate compilation,
   external dependencies, or a package manager.
-- Built-in affine collections, including lists, deques, arrays, sets, and maps
-  with signed integer or owned UTF-8 text keys. Generic specialization and
-  ownership rules still apply to their values.
+- Built-in affine collections, including lists, deques, arrays, sets, and maps.
+  Map/Set default keys cover scalar, `Unit`, static `String`, and owned `Text`;
+  custom class/interface/enum keys use an owned `Hasher<T>` policy.
 - UTF-8 `Text`, binary buffers, console and file APIs, paths and metadata,
   POSIX regular expressions, math/random/time utilities, processes, threads,
   mutexes, channels, and blocking TCP/UDP APIs.

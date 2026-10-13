@@ -1,10 +1,5 @@
 /* Set composes the Map<K, Unit> table core; keys have one storage/hash policy. */
-static void @SET_NEW@(ncr_obj_@ID@ *p, size_t line, size_t column) {
-    (void)line; (void)column;
-    p->table.entries = NULL;
-    p->table.length = 0;
-    p->table.capacity = 0;
-}
+@SET_INITIALIZER_METHODS@
 static void @SET_ADD@(ncr_obj_@ID@ *p, @KEY_TYPE@ key, size_t line, size_t column) {
     (void)ncr_map_put_@TABLE_ID@(&p->table, key, UINT8_C(0), line, column);
 }

@@ -409,16 +409,16 @@ fn invalid_text_key_bindings_hash_mutation_and_root_aliases_are_rejected() {
 }
 
 #[test]
-fn invalid_text_keys_and_escaping_local_borrows_are_rejected() {
+fn escaping_local_borrows_and_default_custom_keys_are_rejected() {
     for source in [
         include_str!("../examples/invalid/text_map_escape_key.ncr"),
         include_str!("../examples/invalid/text_map_escape_value.ncr"),
-        include_str!("../examples/invalid/text_map_string_key.ncr"),
-        include_str!("../examples/invalid/text_map_boolean_key.ncr"),
-        include_str!("../examples/invalid/text_map_custom_key.ncr"),
     ] {
         assert_rejected(source);
     }
+    let custom = include_str!("../examples/invalid/text_map_custom_key.ncr");
+    let error = validate(custom).expect_err("custom key accepted without Hasher");
+    assert!(error.message.contains("E5004"), "{}", error.render("text_map_keys.ncr", custom));
 }
 
 #[test]

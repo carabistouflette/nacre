@@ -90,9 +90,9 @@ place         = ( identifier | "this" ) { "." identifier } ;
 ```
 
 All control-flow bodies require braces. A `for` header has one typed binding for
-list or set traversal, or two for map traversal. Integer keys use `int`; Text
-keys use readonly `borrow Text`. Map value bindings use a copyable value type or
-`borrow V`/`borrow mut V` for affine value types. The collection expression is
+list or set traversal, or two for map traversal. Scalar and static `String` keys
+are copied; owned `Text`, class, interface, and enum keys use readonly borrows.
+Map value bindings use a copyable value type or `borrow V`/`borrow mut V` for affine value types. The collection expression is
 evaluated once and must be a stable place; traversal holds a lexical loan on the
 complete collection root. Map and set order is unspecified; `OrderedMap` and
 `OrderedSet` provide comparator order. `Iterator<T>` is an explicit owned library

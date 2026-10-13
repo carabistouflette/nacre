@@ -31,7 +31,6 @@ mod process;
 mod crypto;
 mod big_numbers;
 
-use crate::ast::MapKeyKind;
 use crate::ir::{self as t, NativeClass as C, Type};
 
 pub(crate) fn preamble(program: &t::Program) -> String {
@@ -50,8 +49,8 @@ pub fn fields(program: &t::Program, class: C, class_id: usize) -> String {
         C::List(element) => collections::list_fields(program, element),
         C::Array(element) => arrays::array_fields(program, element),
         C::Deque(element) => deque::fields(program, element),
-        C::Map(_, _) => collections::map_fields(class_id),
-        C::Set(key) => set::fields(program, key),
+        C::Map { .. } => collections::map_fields(class_id),
+        C::Set { key, hasher } => set::fields(program, key, hasher),
         C::OrderedMap(_, _) | C::OrderedSet(_) => ordered::fields(program, class, class_id),
         C::PriorityQueue(_) => priority::fields(program, class, class_id),
         C::BitSet => bitset::fields(program, class, class_id),
@@ -84,8 +83,8 @@ pub fn drop_fields(program: &t::Program, class: C, class_id: usize) -> String {
         C::List(element) => collections::drop_list_fields(element),
         C::Array(element) => arrays::drop_array_fields(element),
         C::Deque(element) => deque::drop_fields(element),
-        C::Map(key, value) => collections::drop_map_fields(program, key, value),
-        C::Set(key) => set::drop_fields(program, key),
+        C::Map { key, value, hasher } => collections::drop_map_fields(key, value, hasher),
+        C::Set { key, hasher } => set::drop_fields(key, hasher),
         C::OrderedMap(_, _) | C::OrderedSet(_) => ordered::drop_fields(class),
         C::PriorityQueue(_) => priority::drop_fields(class),
         C::BitSet => bitset::drop_fields(program, class, class_id),
@@ -113,8 +112,8 @@ pub fn drop_fields(program: &t::Program, class: C, class_id: usize) -> String {
     }
 }
 
-pub fn hash_table_definition(class_id: usize) -> String {
-    collections::hash_table_definition(class_id)
+pub fn hash_table_definition(program: &t::Program, class_id: usize, hasher: Option<Type>) -> String {
+    collections::hash_table_definition(program, class_id, hasher)
 }
 
 pub(crate) fn drop_helper_prototypes(program: &t::Program) -> String {
@@ -123,7 +122,7 @@ pub(crate) fn drop_helper_prototypes(program: &t::Program) -> String {
     out
 }
 
-pub fn map_entry_definition(program: &t::Program, class_id: usize, key: MapKeyKind, value: Type) -> String {
+pub fn map_entry_definition(program: &t::Program, class_id: usize, key: Type, value: Type) -> String {
     collections::map_entry_definition(program, class_id, key, value)
 }
 pub fn ordered_storage_definition(program: &t::Program, class_id: usize) -> String {
@@ -157,8 +156,8 @@ fn append_body(program: &t::Program, out: &mut String, class: &t::Class, native:
         }
         C::Array(element) => arrays::array_implementation(program, class.id, element),
         C::Deque(element) => deque::implementation(program, class.id, element),
-        C::Map(key, value) => collections::map_implementation(program, class.id, key, value),
-        C::Set(key) => set::implementation(program, class.id, key),
+        C::Map { key, value, hasher } => collections::map_implementation(program, class.id, key, value, hasher),
+        C::Set { key, hasher } => set::implementation(program, class.id, key, hasher),
         C::OrderedMap(key, value) => ordered::map_implementation(program, class.id, key, value),
         C::OrderedSet(key) => ordered::set_implementation(program, class.id, key),
         C::PriorityQueue(element) => priority::implementation(program, class.id, element),
@@ -209,7 +208,7 @@ pub fn implementations(program: &t::Program) -> String {
     // Set invokes these specialized table-core functions directly; emit the
     // authoritative Map instantiations before their composing Set wrappers.
     for class in &program.classes {
-        if let Some(native @ C::Map(_, _)) = class.native {
+        if let Some(native @ C::Map { .. }) = class.native {
             append_body(program, &mut out, class, native);
         }
     }
@@ -221,7 +220,7 @@ pub fn implementations(program: &t::Program) -> String {
     }
     for class in &program.classes {
         if let Some(native) = class.native {
-            if !matches!(native, C::Map(_, _) | C::OrderedMap(_, _) | C::ByteBuffer) {
+            if !matches!(native, C::Map { .. } | C::OrderedMap(_, _) | C::ByteBuffer) {
                 append_body(program, &mut out, class, native);
             }
         }

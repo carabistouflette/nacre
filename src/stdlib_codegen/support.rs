@@ -43,7 +43,8 @@ pub(super) fn marker(method: M) -> &'static str {
         M::DequeGetMut => "@DEQUE_GET_MUT@", M::DequeSet => "@DEQUE_SET@",
         M::DequeTryGet => "@DEQUE_TRY_GET@", M::DequeClear => "@DEQUE_CLEAR@",
         M::DequeReserve => "@DEQUE_RESERVE@",
-        M::SetNew => "@SET_NEW@", M::SetAdd => "@SET_ADD@",
+        M::SetNew => "@SET_NEW@", M::SetWithHasher => "@SET_WITH_HASHER@",
+        M::SetAdd => "@SET_ADD@",
         M::SetContains => "@SET_CONTAINS@", M::SetSize => "@SET_SIZE@",
         M::SetIsEmpty => "@SET_IS_EMPTY@", M::SetRemove => "@SET_REMOVE@",
         M::SetClear => "@SET_CLEAR@",
@@ -105,11 +106,12 @@ pub(super) fn marker(method: M) -> &'static str {
         M::DirectoryClose => "@DIRECTORY_CLOSE@",
         M::FileInfoSize => "@FILE_INFO_SIZE@", M::FileInfoIsFile => "@FILE_INFO_IS_FILE@",
         M::FileInfoIsDirectory => "@FILE_INFO_IS_DIRECTORY@", M::FileInfoIsSymlink => "@FILE_INFO_IS_SYMLINK@",
-        M::MapNew => "@MAP_NEW@", M::MapContainsKey => "@MAP_CONTAINS_KEY@",
-        M::MapSize => "@MAP_SIZE@", M::MapIsEmpty => "@MAP_IS_EMPTY@",
-        M::MapPut => "@MAP_PUT@", M::MapTryRemove => "@MAP_TRY_REMOVE@",
-        M::MapTryGet => "@MAP_TRY_GET@", M::MapGetRef => "@MAP_GET_REF@",
-        M::MapGetMut => "@MAP_GET_MUT@", M::MapClear => "@MAP_CLEAR@",
+        M::MapNew => "@MAP_NEW@", M::MapWithHasher => "@MAP_WITH_HASHER@",
+        M::MapContainsKey => "@MAP_CONTAINS_KEY@", M::MapSize => "@MAP_SIZE@",
+        M::MapIsEmpty => "@MAP_IS_EMPTY@", M::MapPut => "@MAP_PUT@",
+        M::MapTryRemove => "@MAP_TRY_REMOVE@", M::MapTryGet => "@MAP_TRY_GET@",
+        M::MapGetRef => "@MAP_GET_REF@", M::MapGetMut => "@MAP_GET_MUT@",
+        M::MapClear => "@MAP_CLEAR@",
         M::TextNew => "@TEXT_NEW@",
         M::TextAppend => "@TEXT_APPEND@", M::TextAppendInt => "@TEXT_APPEND_INT@",
         M::TextAppendByte => "@TEXT_APPEND_BYTE@", M::TextAppendChar => "@TEXT_APPEND_CHAR@",
@@ -340,8 +342,11 @@ pub(super) fn replace_method_ids(
     receiver: Option<usize>,
 ) -> String {
     for function in &program.functions {
-        if receiver.is_some_and(|class| function.receiver != Some(class)) {
-            continue;
+        if let Some(class) = receiver {
+            let is_static_factory = function.receiver.is_none()
+                && matches!(function.native, Some(M::MapWithHasher | M::SetWithHasher))
+                && function.name == format!("{}.withHasher", program.classes[class].name);
+            if function.receiver != Some(class) && !is_static_factory { continue; }
         }
         if let Some(method) = function.native {
             body = body.replace(marker(method), &format!("ncr_fn_{}", function.id));

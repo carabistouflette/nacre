@@ -203,16 +203,18 @@ dynamic destruction for interface values. `pop` and `remove` clear the stored
 slot before transferring its value to the caller. `Text` owns a byte buffer;
 that buffer is not returned as a static `String` view.
 
-Map storage is a single buffer of entries containing an `int` or owned `Text`
-key, a value, occupancy, and (for Text keys) a cached hash. Entry structure
-definitions follow complete ordinary/interface/enum layouts and precede drop
-bodies, so inline values have their real C size. Unsigned hashing and
-open-addressing support every signed integer key and Text keys. Checked growth
-raw-relocates owners; backward-shift deletion repairs probe chains without
-tombstones or allocation. Replacing an entry returns the previous value rather
-than dropping it. Text lookup borrows the query; borrowed value lookup returns
-an object pointer, enum slot address, or interface fat pointer according to the
-concrete value layout.
+Map and Set share one open-addressed table core. Each entry stores its resolved key
+and value representations, a cached 64-bit hash, and an occupancy bit; custom-key
+tables additionally own one `Hasher<K>` interface value by value. The
+table record follows the interface-object layout needed by that policy, and entry
+definitions follow complete ordinary/interface/enum layouts before drop bodies.
+Default hashing covers scalar and `Unit` keys, static `String`, and owned `Text`;
+custom class/interface/enum keys use borrowed readonly hash/equality callbacks.
+Checked growth raw-relocates owners and cached hashes without re-calling callbacks.
+Backward-shift deletion repairs probe chains without tombstones or allocation.
+Replacement returns the previous value rather than dropping it. Borrowed value
+lookup returns an object pointer, enum slot address, or interface value according
+to the concrete value layout.
 
 Each map remains one alias domain. Native argument sequencing and projected
 receiver freezing remain in force; separate keys do not provide disjoint
