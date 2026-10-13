@@ -126,7 +126,7 @@ pub enum CallTarget { Function(usize), Println }
 
 /// Trusted standard-library storage, never exposed as source fields.
 #[derive(Debug, Clone, Copy)]
-pub enum NativeClass { List(Type), Array(Type), Deque(Type), Map(MapKeyKind, Type), Set(MapKeyKind), Text, Regex, RegexMatch, Arrays, ByteBuffer, Path, File, Directory, FileInfo, Console, Files, Args, Math, Random, Time, SocketAddress, TcpListener, TcpStream, Datagram, UdpSocket, Thread(Type), Mutex(Type), Guard(Type), Channel(Type), Sender(Type), Receiver(Type), Env, Command, Process, ProcessOutput }
+pub enum NativeClass { List(Type), Array(Type), Deque(Type), Map(MapKeyKind, Type), Set(MapKeyKind), Text, Regex, RegexMatch, Arrays, ByteBuffer, Encoding, Path, File, Directory, FileInfo, Console, Files, Args, Math, Random, Time, SocketAddress, TcpListener, TcpStream, Datagram, UdpSocket, Thread(Type), Mutex(Type), Guard(Type), Channel(Type), Sender(Type), Receiver(Type), Env, Command, Process, ProcessOutput }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NativeMethod {
     ListNew, ListAdd, ListSize, ListCapacity, ListIsEmpty, ListGet, ListGetRef, ListGetMut,
@@ -139,6 +139,8 @@ pub enum NativeMethod {
     ArraysBytes, ArraysChars, ArraysInts, ArraysLongs, ArraysDoubles, ArraysBooleans, ArraysUnits,
     ByteBufferWithCapacity, ByteBufferLength, ByteBufferCapacity, ByteBufferGet, ByteBufferSet,
     ByteBufferAppend, ByteBufferAppendBytes, ByteBufferClear, ByteBufferTruncate,
+    EncodingHexEncode, EncodingHexDecode, EncodingBase64Encode, EncodingBase64Decode,
+    EncodingBase64UrlEncode, EncodingBase64UrlDecode, EncodingUtf8Encode, EncodingUtf8Decode,
     PathFromText, PathClone, PathJoin, PathIsAbsolute, PathAsText,
     FileOpenRead, FileCreate, FileOpenAppend, FileReadSome, FileWriteSome, FileWriteAll, FileFlush, FileClose,
     DirectoryOpen, DirectoryNextName, DirectoryClose,

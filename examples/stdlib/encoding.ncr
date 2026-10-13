@@ -1,0 +1,20 @@
+void main() {
+    Text source = new Text("foo");
+    ByteBuffer bytes = Encoding.utf8Encode(source);
+    Text hex = Encoding.hexEncode(bytes);
+    Text basic = Encoding.base64Encode(bytes);
+    Text url = Encoding.base64UrlEncode(bytes);
+    hex.print();
+    basic.print();
+    url.print();
+
+    match (Encoding.base64Decode(basic)) {
+        Err(error) { println("Base64 decode failed"); }
+        Ok(decoded) {
+            match (Encoding.utf8Decode(decoded)) {
+                Err(error) { println("UTF-8 decode failed"); }
+                Ok(text) { text.print(); }
+            }
+        }
+    }
+}

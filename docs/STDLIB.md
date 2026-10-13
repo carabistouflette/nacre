@@ -142,6 +142,35 @@ range return `Err`; `get`/`set` out of bounds are fatal runtime diagnostics.
 not specified as a latency or allocation-count guarantee; out-of-memory remains
 fatal. Stream and file reads append to existing contents rather than clearing them.
 
+## `Encoding`
+
+`Encoding` provides strict native conversions between arbitrary bytes and owned
+UTF-8 `Text`. Every returned `Text` or `ByteBuffer` is an affine owner; decoders
+return an owned diagnostic `Text` in `Err` for invalid input.
+
+```java
+static Text hexEncode(borrow ByteBuffer bytes)
+static Result<ByteBuffer, Text> hexDecode(borrow Text text)
+static Text base64Encode(borrow ByteBuffer bytes)
+static Result<ByteBuffer, Text> base64Decode(borrow Text text)
+static Text base64UrlEncode(borrow ByteBuffer bytes)
+static Result<ByteBuffer, Text> base64UrlDecode(borrow Text text)
+static ByteBuffer utf8Encode(borrow Text text)
+static Result<Text, Text> utf8Decode(borrow ByteBuffer bytes)
+```
+
+Hex encoding uses lowercase digits. Hex decoding accepts either digit case and
+rejects odd-length or non-hex input. Basic Base64 encoding uses the RFC 4648
+alphabet and canonical padding; its decoder requires padding where needed.
+Base64URL uses `-` and `_` and emits canonical unpadded text; its decoder accepts
+either canonical padded or unpadded input. Both Base64 decoders reject whitespace,
+the other variant's alphabet, malformed padding, impossible lengths, and
+nonzero discarded bits.
+
+UTF-8 encoding copies every byte of valid `Text`, including embedded NUL. UTF-8
+decoding preserves NUL and returns `Err` for truncated, overlong, surrogate, or
+out-of-range encodings, or input too large for `Text`; invalid data is never replaced.
+
 ## `Option<T>` and `Result<T, E>`
 
 ```java

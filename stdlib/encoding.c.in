@@ -1,0 +1,272 @@
+/* Binary/text conversions live on the trusted affine Encoding surface. */
+static ncr_obj_@TEXT_ID@ *ncr_encoding_text_take_@ID@(
+    unsigned char *bytes, size_t length, size_t line, size_t column
+) {
+    if (length > (size_t)INT32_MAX) { ncr_fail("Text is too large", line, column); }
+    return @TEXT_TAKE_BYTES@(bytes, length, length, line, column);
+}
+
+static ncr_obj_@TEXT_ID@ *ncr_encoding_text_copy_@ID@(
+    const unsigned char *bytes, size_t length, size_t line, size_t column
+) {
+    if (length > (size_t)INT32_MAX) { ncr_fail("Text is too large", line, column); }
+    if (length <= @TEXT_INLINE_CAPACITY@) {
+        ncr_obj_@TEXT_ID@ *text = ncr_allocate(sizeof(*text), line, column);
+        @TEXT_INIT@(text);
+        if (length > 0) { memcpy(text->inline_storage, bytes, length); }
+        text->length = (int32_t)length;
+        return text;
+    }
+    unsigned char *copy = ncr_allocate(length, line, column);
+    memcpy(copy, bytes, length);
+    return ncr_encoding_text_take_@ID@(copy, length, line, column);
+}
+
+static ncr_obj_@BUFFER_ID@ *ncr_encoding_buffer_new_@ID@(
+    size_t line, size_t column
+) {
+    ncr_obj_@BUFFER_ID@ *buffer = ncr_allocate(sizeof(*buffer), line, column);
+    return buffer;
+}
+
+static ncr_obj_@BUFFER_ID@ *ncr_encoding_buffer_with_capacity_@ID@(
+    size_t capacity, size_t line, size_t column
+) {
+    ncr_obj_@BUFFER_ID@ *buffer = ncr_encoding_buffer_new_@ID@(line, column);
+    if (capacity > 0) { @BUFFER_RESERVE@(buffer, capacity, line, column); }
+    return buffer;
+}
+
+@HEX_ENCODE_SIGNATURE@ {
+    const size_t input_length = @HEX_ENCODE_BYTES@->length;
+    if (input_length > (size_t)INT32_MAX / 2) { ncr_fail("Text is too large", ncr_line, ncr_column); }
+    const size_t output_length = input_length * 2;
+    unsigned char local[16];
+    const bool heap = output_length > sizeof(local);
+    unsigned char *output = heap ? ncr_allocate(output_length, ncr_line, ncr_column) : local;
+    static const unsigned char digits[] = "0123456789abcdef";
+    for (size_t index = 0; index < input_length; ++index) {
+        const unsigned char value = @HEX_ENCODE_BYTES@->bytes[index];
+        output[index * 2] = digits[value >> 4];
+        output[index * 2 + 1] = digits[value & 0x0fu];
+    }
+    return heap
+        ? ncr_encoding_text_take_@ID@(output, output_length, ncr_line, ncr_column)
+        : ncr_encoding_text_copy_@ID@(output, output_length, ncr_line, ncr_column);
+}
+
+static int ncr_encoding_hex_digit_@ID@(unsigned char byte) {
+    if (byte >= '0' && byte <= '9') { return (int)(byte - '0'); }
+    if (byte >= 'a' && byte <= 'f') { return (int)(byte - 'a') + 10; }
+    if (byte >= 'A' && byte <= 'F') { return (int)(byte - 'A') + 10; }
+    return -1;
+}
+
+@HEX_DECODE_SIGNATURE@ {
+    const unsigned char *input = @HEX_DECODE_TEXT@->bytes;
+    const size_t input_length = (size_t)@HEX_DECODE_TEXT@->length;
+    if ((input_length & 1u) != 0) {
+        static const char message[] = "Encoding.hexDecode: odd hexadecimal length";
+        return @HEX_DECODE_ERROR@(message, sizeof(message) - 1, ncr_line, ncr_column);
+    }
+    for (size_t index = 0; index < input_length; ++index) {
+        if (ncr_encoding_hex_digit_@ID@(input[index]) < 0) {
+            static const char message[] = "Encoding.hexDecode: invalid hexadecimal digit";
+            return @HEX_DECODE_ERROR@(message, sizeof(message) - 1, ncr_line, ncr_column);
+        }
+    }
+    const size_t decoded_length = input_length / 2;
+    ncr_obj_@BUFFER_ID@ *decoded = ncr_encoding_buffer_with_capacity_@ID@(decoded_length, ncr_line, ncr_column);
+    for (size_t index = 0; index < decoded_length; ++index) {
+        const unsigned int high = (unsigned int)ncr_encoding_hex_digit_@ID@(input[index * 2]);
+        const unsigned int low = (unsigned int)ncr_encoding_hex_digit_@ID@(input[index * 2 + 1]);
+        decoded->bytes[index] = (unsigned char)((high << 4) | low);
+    }
+    decoded->length = decoded_length;
+    return (ncr_obj_@HEX_DECODE_RESULT@){
+        .tag = @HEX_DECODE_OK_TAG@,
+        .data.v@HEX_DECODE_OK_TAG@.f0 = decoded
+    };
+}
+
+static ncr_obj_@TEXT_ID@ *ncr_encoding_base64_encode_@ID@(
+    ncr_obj_@BUFFER_ID@ *input, bool url, size_t line, size_t column
+) {
+    const size_t input_length = input->length;
+    const size_t groups = input_length / 3;
+    const size_t remainder = input_length % 3;
+    const size_t tail_length = remainder == 0 ? 0 : (url ? remainder + 1 : 4);
+    if (groups > ((size_t)INT32_MAX - tail_length) / 4) {
+        ncr_fail("Text is too large", line, column);
+    }
+    const size_t output_length = groups * 4 + tail_length;
+    unsigned char local[16];
+    const bool heap = output_length > sizeof(local);
+    unsigned char *output = heap ? ncr_allocate(output_length, line, column) : local;
+    static const unsigned char basic_alphabet[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    static const unsigned char url_alphabet[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    const unsigned char *alphabet = url ? url_alphabet : basic_alphabet;
+    size_t source = 0;
+    size_t target = 0;
+    const size_t complete_length = groups * 3;
+    while (source < complete_length) {
+        const unsigned int first = input->bytes[source++];
+        const unsigned int second = input->bytes[source++];
+        const unsigned int third = input->bytes[source++];
+        output[target++] = alphabet[first >> 2];
+        output[target++] = alphabet[((first & 0x03u) << 4) | (second >> 4)];
+        output[target++] = alphabet[((second & 0x0fu) << 2) | (third >> 6)];
+        output[target++] = alphabet[third & 0x3fu];
+    }
+    if (remainder == 1) {
+        const unsigned int first = input->bytes[source];
+        output[target++] = alphabet[first >> 2];
+        output[target++] = alphabet[(first & 0x03u) << 4];
+        if (!url) { output[target++] = '='; output[target++] = '='; }
+    } else if (remainder == 2) {
+        const unsigned int first = input->bytes[source++];
+        const unsigned int second = input->bytes[source];
+        output[target++] = alphabet[first >> 2];
+        output[target++] = alphabet[((first & 0x03u) << 4) | (second >> 4)];
+        output[target++] = alphabet[(second & 0x0fu) << 2];
+        if (!url) { output[target++] = '='; }
+    }
+    return heap
+        ? ncr_encoding_text_take_@ID@(output, output_length, line, column)
+        : ncr_encoding_text_copy_@ID@(output, output_length, line, column);
+}
+
+@BASE64_ENCODE_SIGNATURE@ {
+    return ncr_encoding_base64_encode_@ID@(@BASE64_ENCODE_BYTES@, false, ncr_line, ncr_column);
+}
+
+static int ncr_encoding_base64_sextet_@ID@(unsigned char byte, bool url) {
+    if (byte >= 'A' && byte <= 'Z') { return (int)(byte - 'A'); }
+    if (byte >= 'a' && byte <= 'z') { return (int)(byte - 'a') + 26; }
+    if (byte >= '0' && byte <= '9') { return (int)(byte - '0') + 52; }
+    if (byte == (url ? '-' : '+')) { return 62; }
+    if (byte == (url ? '_' : '/')) { return 63; }
+    return -1;
+}
+
+static bool ncr_encoding_base64_shape_@ID@(
+    const unsigned char *input, size_t length, bool url, size_t *decoded_length
+) {
+    if (length == 0) { *decoded_length = 0; return true; }
+    size_t data_length = length;
+    while (data_length > 0 && input[data_length - 1] == '=') { --data_length; }
+    const size_t padding = length - data_length;
+    if (padding > 2) { return false; }
+    if (!url) {
+        if (length % 4 != 0) { return false; }
+        if ((padding == 0 && data_length % 4 != 0)
+            || (padding == 1 && data_length % 4 != 3)
+            || (padding == 2 && data_length % 4 != 2)) { return false; }
+    } else if (padding > 0) {
+        if (length % 4 != 0
+            || (padding == 1 && data_length % 4 != 3)
+            || (padding == 2 && data_length % 4 != 2)) { return false; }
+    } else if (length % 4 == 1) {
+        return false;
+    }
+    const size_t remainder = data_length % 4;
+    if (remainder == 1) { return false; }
+    for (size_t index = 0; index < data_length; ++index) {
+        if (ncr_encoding_base64_sextet_@ID@(input[index], url) < 0) { return false; }
+    }
+    if (remainder == 2) {
+        const int last = ncr_encoding_base64_sextet_@ID@(input[data_length - 1], url);
+        if ((last & 0x0f) != 0) { return false; }
+    } else if (remainder == 3) {
+        const int last = ncr_encoding_base64_sextet_@ID@(input[data_length - 1], url);
+        if ((last & 0x03) != 0) { return false; }
+    }
+    *decoded_length = (data_length / 4) * 3 + (remainder == 0 ? 0 : remainder - 1);
+    return true;
+}
+
+static ncr_obj_@BASE64_DECODE_RESULT@ ncr_encoding_base64_decode_@ID@(
+    ncr_obj_@TEXT_ID@ *input, bool url, size_t line, size_t column
+) {
+    const unsigned char *source_bytes = input->bytes;
+    const size_t input_length = (size_t)input->length;
+    size_t decoded_length;
+    if (!ncr_encoding_base64_shape_@ID@(source_bytes, input_length, url, &decoded_length)) {
+        static const char basic_message[] = "Encoding.base64Decode: invalid or noncanonical Base64";
+        static const char url_message[] = "Encoding.base64UrlDecode: invalid or noncanonical Base64URL";
+        const char *message = url ? url_message : basic_message;
+        const size_t message_length = url ? sizeof(url_message) - 1 : sizeof(basic_message) - 1;
+        return @BASE64_DECODE_ERROR@(message, message_length, line, column);
+    }
+    size_t data_length = input_length;
+    while (data_length > 0 && source_bytes[data_length - 1] == '=') { --data_length; }
+    ncr_obj_@BUFFER_ID@ *decoded = ncr_encoding_buffer_with_capacity_@ID@(decoded_length, line, column);
+    size_t source = 0;
+    size_t target = 0;
+    while (source + 4 <= data_length) {
+        const unsigned int first = (unsigned int)ncr_encoding_base64_sextet_@ID@(source_bytes[source++], url);
+        const unsigned int second = (unsigned int)ncr_encoding_base64_sextet_@ID@(source_bytes[source++], url);
+        const unsigned int third = (unsigned int)ncr_encoding_base64_sextet_@ID@(source_bytes[source++], url);
+        const unsigned int fourth = (unsigned int)ncr_encoding_base64_sextet_@ID@(source_bytes[source++], url);
+        decoded->bytes[target++] = (unsigned char)((first << 2) | (second >> 4));
+        decoded->bytes[target++] = (unsigned char)((second << 4) | (third >> 2));
+        decoded->bytes[target++] = (unsigned char)((third << 6) | fourth);
+    }
+    const size_t remainder = data_length - source;
+    if (remainder == 2) {
+        const unsigned int first = (unsigned int)ncr_encoding_base64_sextet_@ID@(source_bytes[source++], url);
+        const unsigned int second = (unsigned int)ncr_encoding_base64_sextet_@ID@(source_bytes[source], url);
+        decoded->bytes[target++] = (unsigned char)((first << 2) | (second >> 4));
+    } else if (remainder == 3) {
+        const unsigned int first = (unsigned int)ncr_encoding_base64_sextet_@ID@(source_bytes[source++], url);
+        const unsigned int second = (unsigned int)ncr_encoding_base64_sextet_@ID@(source_bytes[source++], url);
+        const unsigned int third = (unsigned int)ncr_encoding_base64_sextet_@ID@(source_bytes[source], url);
+        decoded->bytes[target++] = (unsigned char)((first << 2) | (second >> 4));
+        decoded->bytes[target++] = (unsigned char)((second << 4) | (third >> 2));
+    }
+    decoded->length = decoded_length;
+    return (ncr_obj_@BASE64_DECODE_RESULT@){
+        .tag = @BASE64_DECODE_OK_TAG@,
+        .data.v@BASE64_DECODE_OK_TAG@.f0 = decoded
+    };
+}
+
+@BASE64_DECODE_SIGNATURE@ {
+    return ncr_encoding_base64_decode_@ID@(@BASE64_DECODE_TEXT@, false, ncr_line, ncr_column);
+}
+
+@BASE64_URL_ENCODE_SIGNATURE@ {
+    return ncr_encoding_base64_encode_@ID@(@BASE64_URL_ENCODE_BYTES@, true, ncr_line, ncr_column);
+}
+
+@BASE64_URL_DECODE_SIGNATURE@ {
+    return ncr_encoding_base64_decode_@ID@(@BASE64_URL_DECODE_TEXT@, true, ncr_line, ncr_column);
+}
+
+@UTF8_ENCODE_SIGNATURE@ {
+    const size_t length = (size_t)@UTF8_ENCODE_TEXT@->length;
+    ncr_obj_@BUFFER_ID@ *encoded = ncr_encoding_buffer_with_capacity_@ID@(length, ncr_line, ncr_column);
+    if (length > 0) {
+        memcpy(encoded->bytes, @UTF8_ENCODE_TEXT@->bytes, length);
+        encoded->length = length;
+    }
+    return encoded;
+}
+
+@UTF8_DECODE_SIGNATURE@ {
+    const size_t length = @UTF8_DECODE_BYTES@->length;
+    const unsigned char *input = @UTF8_DECODE_BYTES@->bytes;
+    if (length > (size_t)INT32_MAX) {
+        static const char message[] = "Encoding.utf8Decode: Text is too large";
+        return @UTF8_DECODE_ERROR@(message, sizeof(message) - 1, ncr_line, ncr_column);
+    }
+    if (!ncr_utf8_valid(input, length)) {
+        static const char message[] = "Encoding.utf8Decode: invalid UTF-8";
+        return @UTF8_DECODE_ERROR@(message, sizeof(message) - 1, ncr_line, ncr_column);
+    }
+    ncr_obj_@TEXT_ID@ *decoded = ncr_encoding_text_copy_@ID@(input, length, ncr_line, ncr_column);
+    return (ncr_obj_@UTF8_DECODE_RESULT@){
+        .tag = @UTF8_DECODE_OK_TAG@,
+        .data.v@UTF8_DECODE_OK_TAG@.f0 = decoded
+    };
+}

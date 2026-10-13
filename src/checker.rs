@@ -55,7 +55,7 @@ impl Tables {
     }
     fn is_static_native(&self, id: usize) -> bool {
         matches!(self.classes[id].native,
-            Some(t::NativeClass::Arrays | t::NativeClass::Console | t::NativeClass::Files |
+            Some(t::NativeClass::Arrays | t::NativeClass::Encoding | t::NativeClass::Console | t::NativeClass::Files |
                 t::NativeClass::Args | t::NativeClass::Math | t::NativeClass::Time | t::NativeClass::Env))
     }
     fn type_name(&self, ty: Type) -> String {
@@ -112,7 +112,7 @@ impl Tables {
                     }
                     Some(t::NativeClass::Set(_) | t::NativeClass::Text |
                         t::NativeClass::Regex | t::NativeClass::RegexMatch |
-                        t::NativeClass::Arrays | t::NativeClass::ByteBuffer |
+                        t::NativeClass::Arrays | t::NativeClass::ByteBuffer | t::NativeClass::Encoding |
                         t::NativeClass::Path | t::NativeClass::File |
                         t::NativeClass::Directory | t::NativeClass::FileInfo |
                         t::NativeClass::Console | t::NativeClass::Files |
@@ -219,6 +219,7 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
                 return Err(Diagnostic::new(class.span, "[E5004] Map<K, V> key classification is missing")),
             Some(a::NativeClass::Arrays) => Some(t::NativeClass::Arrays),
             Some(a::NativeClass::ByteBuffer) => Some(t::NativeClass::ByteBuffer),
+            Some(a::NativeClass::Encoding) => Some(t::NativeClass::Encoding),
             Some(a::NativeClass::Set { key_kind: Some(key_kind), .. }) =>
                 Some(t::NativeClass::Set(*key_kind)),
             Some(a::NativeClass::Set { .. }) =>

@@ -1,6 +1,7 @@
 //! The native standard-library templates are part of the trusted C backend.
 //! All source calls still pass normal type, ownership and borrowing checks.
 mod arrays;
+mod encoding;
 mod buffer;
 mod collections;
 mod filesystem;
@@ -33,6 +34,7 @@ pub fn fields(program: &t::Program, class: C, class_id: usize) -> String {
         C::Set(key) => set::fields(program, key),
         C::Text => text::fields(),
         C::Arrays => arrays::utility_fields(),
+        C::Encoding => io::fields(),
         C::ByteBuffer => buffer::fields(),
         C::Path | C::File | C::Directory | C::FileInfo | C::Files => filesystem::fields(program, class),
         C::Env => io::fields(),
@@ -57,6 +59,7 @@ pub fn drop_fields(program: &t::Program, class: C, class_id: usize) -> String {
         C::Text => text::drop_fields(),
         C::Arrays => arrays::drop_utility_fields(),
         C::ByteBuffer => buffer::drop_fields(),
+        C::Encoding => io::drop_fields(),
         C::Path | C::File | C::Directory | C::FileInfo | C::Files => filesystem::drop_fields(program, class),
         C::Env => io::drop_fields(),
         C::Command | C::Process | C::ProcessOutput => process::drop_fields(program, class),
@@ -109,6 +112,7 @@ fn append_body(program: &t::Program, out: &mut String, class: &t::Class, native:
         C::Time => time::implementation(program),
         C::Arrays => arrays::zeroed_implementations(program),
         C::ByteBuffer => buffer::implementation(program, class.id),
+        C::Encoding => encoding::implementation(program, class.id),
         C::SocketAddress | C::TcpListener | C::TcpStream | C::Datagram | C::UdpSocket => return,
         C::Path | C::File | C::Directory | C::FileInfo => return,
         C::Thread(_) | C::Mutex(_) | C::Guard(_) | C::Channel(_) |
@@ -117,7 +121,7 @@ fn append_body(program: &t::Program, out: &mut String, class: &t::Class, native:
         C::Env | C::Command | C::Process | C::ProcessOutput => return,
     };
     body = body.replace("@ID@", &class.id.to_string());
-    let receiver = match native { C::Arrays | C::ByteBuffer => None, _ => Some(class.id) };
+    let receiver = match native { C::Arrays | C::ByteBuffer | C::Encoding => None, _ => Some(class.id) };
     body = support::replace_method_ids(body, program, receiver);
     debug_assert!(!body.contains('@'), "unexpanded standard-library placeholder");
     out.push_str(&body);

@@ -433,6 +433,14 @@
       "meaningful_outputs": ["Book added as resource #1", "Member added as #1", "Lent to member #1", "Due on logical day 14", "Borrower: Ada Ω", "Goodbye."]
     },
     {
+      "category": "text",
+      "source": "examples/stdlib/encoding.ncr",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["666f6f", "Zm9v", "foo"]
+    },
+    {
       "category": "systems",
       "source": "examples/systems/process.ncr",
       "stdin": "",

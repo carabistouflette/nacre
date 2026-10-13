@@ -1,0 +1,10 @@
+class Encoding {
+    public static Text hexEncode(borrow ByteBuffer bytes) {}
+    public static Result<ByteBuffer, Text> hexDecode(borrow Text text) {}
+    public static Text base64Encode(borrow ByteBuffer bytes) {}
+    public static Result<ByteBuffer, Text> base64Decode(borrow Text text) {}
+    public static Text base64UrlEncode(borrow ByteBuffer bytes) {}
+    public static Result<ByteBuffer, Text> base64UrlDecode(borrow Text text) {}
+    public static ByteBuffer utf8Encode(borrow Text text) {}
+    public static Result<Text, Text> utf8Decode(borrow ByteBuffer bytes) {}
+}

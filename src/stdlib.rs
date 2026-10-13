@@ -52,7 +52,7 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
             C::Set(_) => M::SetNew,
             C::Text => M::TextNew,
             C::Random => M::RandomNew,
-            C::Regex | C::RegexMatch | C::Arrays | C::ByteBuffer |
+            C::Regex | C::RegexMatch | C::Arrays | C::ByteBuffer | C::Encoding |
             C::Path | C::File | C::Directory | C::FileInfo |
             C::Console | C::Files | C::Args | C::Math | C::Time |
             C::Thread(_) | C::Mutex(_) | C::Guard(_) | C::Channel(_) |
@@ -100,6 +100,14 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
         (C::ByteBuffer, "appendBytes") => M::ByteBufferAppendBytes,
         (C::ByteBuffer, "clear") => M::ByteBufferClear,
         (C::ByteBuffer, "truncate") => M::ByteBufferTruncate,
+        (C::Encoding, "hexEncode") => M::EncodingHexEncode,
+        (C::Encoding, "hexDecode") => M::EncodingHexDecode,
+        (C::Encoding, "base64Encode") => M::EncodingBase64Encode,
+        (C::Encoding, "base64Decode") => M::EncodingBase64Decode,
+        (C::Encoding, "base64UrlEncode") => M::EncodingBase64UrlEncode,
+        (C::Encoding, "base64UrlDecode") => M::EncodingBase64UrlDecode,
+        (C::Encoding, "utf8Encode") => M::EncodingUtf8Encode,
+        (C::Encoding, "utf8Decode") => M::EncodingUtf8Decode,
         (C::List(_), "sort") => M::ListSort,
         (C::List(_), "sortBy") => M::ListSortBy,
         (C::List(_), "binarySearch") => M::ListBinarySearch,

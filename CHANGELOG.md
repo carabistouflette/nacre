@@ -3,6 +3,11 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Native `Encoding` converts affine byte buffers to lowercase hex, canonical
+  padded RFC 4648 Base64, canonical unpadded Base64URL, and strict UTF-8 `Text`.
+  Decoders reject malformed alphabets, padding, discarded bits, and invalid
+  scalar encodings while preserving embedded NUL.
+
 - Floating min/max normalize signed-zero ties explicitly rather than relying on
   host libm's unspecified tie sign; both operand orders and same-sign zeros are
   covered by generated-program sanitizer regressions.
