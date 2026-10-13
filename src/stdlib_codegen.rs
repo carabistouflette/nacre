@@ -1,6 +1,7 @@
 //! The native standard-library templates are part of the trusted C backend.
 //! All source calls still pass normal type, ownership and borrowing checks.
 mod arrays;
+mod uuid;
 mod encoding;
 mod compression;
 mod buffer;
@@ -71,6 +72,7 @@ pub fn fields(program: &t::Program, class: C, class_id: usize) -> String {
         C::Encoding => io::fields(),
         C::Unicode | C::Character | C::Charset => arrays::utility_fields(),
         C::Locale => arrays::utility_fields(),
+        C::Uuid => uuid::fields(),
         C::ByteBuffer => buffer::fields(),
         C::Compression | C::Checksums => io::fields(),
         C::Path | C::File | C::Directory | C::FileInfo | C::Watcher | C::WatchEvent | C::Files =>
@@ -116,6 +118,7 @@ pub fn drop_fields(program: &t::Program, class: C, class_id: usize) -> String {
         C::Unicode | C::Character | C::Charset => arrays::drop_utility_fields(),
         C::Locale => arrays::drop_utility_fields(),
         C::ByteBuffer => buffer::drop_fields(),
+        C::Uuid => uuid::drop_fields(),
         C::Encoding => io::drop_fields(),
         C::Compression | C::Checksums => io::drop_fields(),
         C::Path | C::File | C::Directory | C::FileInfo | C::Watcher | C::WatchEvent | C::Files =>
@@ -206,6 +209,7 @@ fn append_body(program: &t::Program, out: &mut String, class: &t::Class, native:
         C::DateTime => date_time::implementation(program),
         C::Arrays => arrays::zeroed_implementations(program),
         C::ByteBuffer => buffer::implementation(program, class.id),
+        C::Uuid => uuid::implementation(program, class.id),
         C::BinaryReader | C::BinaryWriter => binary::implementation(program, class.id, native),
         C::Database => database::implementation(program, class.id),
         C::SocketAddress | C::TcpListener | C::TcpStream | C::Datagram | C::UdpSocket |
@@ -222,7 +226,7 @@ fn append_body(program: &t::Program, out: &mut String, class: &t::Class, native:
     };
     body = body.replace("@ID@", &class.id.to_string());
     let receiver = match native {
-        C::Arrays | C::ByteBuffer | C::Encoding | C::Crypto | C::Database => None,
+        C::Arrays | C::ByteBuffer | C::Encoding | C::Crypto | C::Uuid | C::Database => None,
         _ => Some(class.id),
     };
     body = support::replace_method_ids(body, program, receiver);

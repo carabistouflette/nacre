@@ -37,6 +37,10 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   a zero size argument. Private PEM import rejects encryption. Certificate
   parsing validates ASN.1 validity times and preserves checked signed Unix
   seconds, including dates before the epoch.
+- Affine `Uuid` owners parse canonical UUID text and network-order bytes, preserve
+  long bit patterns, format canonical lowercase text, and compare unsigned
+  network-byte order. OpenSSL supplies RFC v4 randomness and EVP-backed RFC v3/v5
+  namespace hashing; MD5/SHA-1 are documented as identity-only.
 
 - Native `Encoding` converts affine byte buffers to lowercase hex, canonical
   padded RFC 4648 Base64, canonical unpadded Base64URL, and strict UTF-8 `Text`.

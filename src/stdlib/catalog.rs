@@ -27,6 +27,7 @@ enum NativeBuiltin {
     ByteBuffer,
     Encoding,
     Crypto,
+    Uuid,
     Regex,
     RegexMatch,
     Path,
@@ -126,6 +127,7 @@ impl NativeBuiltin {
             Self::Encoding => NativeClass::Encoding,
             Self::Crypto => NativeClass::Crypto,
             Self::Path => NativeClass::Path,
+            Self::Uuid => NativeClass::Uuid,
             Self::File => NativeClass::File,
             Self::Directory => NativeClass::Directory,
             Self::FileInfo => NativeClass::FileInfo,
@@ -294,6 +296,10 @@ pub(super) const PRELUDE_UNITS: &[PreludeUnit] = &[
         ],
     },
 
+    PreludeUnit {
+        source: include_str!("../../stdlib/prelude/uuid.ncr"),
+        builtins: &[Builtin { name: "Uuid", native: Some(NativeBuiltin::Uuid) }],
+    },
     PreludeUnit {
         source: include_str!("../../stdlib/prelude/filesystem.ncr"),
         builtins: &[

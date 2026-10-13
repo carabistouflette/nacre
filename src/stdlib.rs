@@ -73,7 +73,7 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
             C::Sender(_) | C::Receiver(_) | C::Env | C::Command | C::Process | C::ProcessOutput |
             C::Uri | C::Dns =>
                 unreachable!("static or factory-only native class has no constructor"),
-            C::SocketAddress | C::TcpListener | C::TcpStream | C::Datagram | C::UdpSocket |
+            C::Uuid | C::SocketAddress | C::TcpListener | C::TcpStream | C::Datagram | C::UdpSocket |
             C::HttpRequest | C::HttpResponse | C::ListIterator(_) | C::Iterators(_) |
             C::Database =>
                 unreachable!("factory-only native class has no constructor"),
@@ -148,6 +148,21 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
         (C::Encoding, "base64UrlDecode") => M::EncodingBase64UrlDecode,
         (C::Encoding, "utf8Encode") => M::EncodingUtf8Encode,
         (C::Encoding, "utf8Decode") => M::EncodingUtf8Decode,
+        (C::Uuid, "parse") => M::UuidParse,
+        (C::Uuid, "fromBytes") => M::UuidFromBytes,
+        (C::Uuid, "fromLongs") => M::UuidFromLongs,
+        (C::Uuid, "random") => M::UuidRandom,
+        (C::Uuid, "nameMd5") => M::UuidNameMd5,
+        (C::Uuid, "nameSha1") => M::UuidNameSha1,
+        (C::Uuid, "clone") => M::UuidClone,
+        (C::Uuid, "toText") => M::UuidToText,
+        (C::Uuid, "toBytes") => M::UuidToBytes,
+        (C::Uuid, "mostSignificantBits") => M::UuidMostSignificantBits,
+        (C::Uuid, "leastSignificantBits") => M::UuidLeastSignificantBits,
+        (C::Uuid, "version") => M::UuidVersion,
+        (C::Uuid, "variant") => M::UuidVariant,
+        (C::Uuid, "equals") => M::UuidEquals,
+        (C::Uuid, "compareTo") => M::UuidCompareTo,
         (C::List(_), "sort") => M::ListSort,
         (C::List(_), "sortBy") => M::ListSortBy,
         (C::List(_), "binarySearch") => M::ListBinarySearch,

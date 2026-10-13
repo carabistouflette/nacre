@@ -322,6 +322,53 @@ range return `Err`; `get`/`set` out of bounds are fatal runtime diagnostics.
 not specified as a latency or allocation-count guarantee; out-of-memory remains
 fatal. Stream and file reads append to existing contents rather than clearing them.
 
+## `Uuid`
+
+`Uuid` is an affine owner of one 16-byte UUID value. Factory and conversion
+methods return unique owners; no implicit clone, shared ownership, or collection
+key support is provided.
+
+```java
+static Result<Uuid, Text> parse(borrow Text text)
+static Result<Uuid, Text> fromBytes(borrow ByteBuffer bytes)
+static Uuid fromLongs(long most, long least)
+static Result<Uuid, Text> random()
+static Result<Uuid, Text> nameMd5(borrow Uuid namespace, borrow ByteBuffer name)
+static Result<Uuid, Text> nameSha1(borrow Uuid namespace, borrow ByteBuffer name)
+
+readonly Uuid clone()
+readonly Text toText()
+readonly ByteBuffer toBytes()
+readonly long mostSignificantBits()
+readonly long leastSignificantBits()
+readonly int version()
+readonly int variant()
+readonly boolean equals(borrow Uuid other)
+readonly int compareTo(borrow Uuid other)
+```
+
+`parse` accepts exactly 36 ASCII bytes in canonical `8-4-4-4-12` hexadecimal
+form, with upper- or lowercase input; every other shape, separator, or digit
+returns `Err`, including embedded NUL. `toText` always emits lowercase canonical
+text. `fromBytes` requires exactly 16 bytes and interprets them in network order.
+`fromLongs` stores each signed `long`'s bit pattern, most-significant half first.
+The two bit accessors reverse that mapping.
+
+`random` uses OpenSSL's secure random generator and sets the RFC v4 version and
+variant bits. `nameMd5` and `nameSha1` hash the 16 namespace bytes followed by
+every name byte using OpenSSL EVP, then set the RFC v3 or v5 version and variant
+bits. MD5 and SHA-1 here are only for standard UUID identity derivation; they are
+not security, authentication, or integrity primitives. Hashing or random-source
+failures return `Err`.
+
+`version` returns the high nibble of byte 6. `variant` returns the RFC variant
+number: `0` for the NCS-compatible `0` prefix, `2` for the RFC `10` prefix, `6`
+for the Microsoft `110` prefix, and `7` for the future `111` prefix. `compareTo`
+orders all 16 bytes lexicographically as unsigned network-order bytes and returns
+a negative, zero, or positive integer. `clone` is the explicit way to create a
+second independent UUID owner.
+
+
 ## `Encoding`
 
 `Encoding` provides strict native conversions between arbitrary bytes and owned

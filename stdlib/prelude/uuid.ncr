@@ -1,0 +1,18 @@
+class Uuid {
+    public static Result<Uuid, Text> parse(borrow Text text) {}
+    public static Result<Uuid, Text> fromBytes(borrow ByteBuffer bytes) {}
+    public static Uuid fromLongs(long most, long least) {}
+    public static Result<Uuid, Text> random() {}
+    public static Result<Uuid, Text> nameMd5(borrow Uuid namespace, borrow ByteBuffer name) {}
+    public static Result<Uuid, Text> nameSha1(borrow Uuid namespace, borrow ByteBuffer name) {}
+
+    public readonly Uuid clone() {}
+    public readonly Text toText() {}
+    public readonly ByteBuffer toBytes() {}
+    public readonly long mostSignificantBits() {}
+    public readonly long leastSignificantBits() {}
+    public readonly int version() {}
+    public readonly int variant() {}
+    public readonly boolean equals(borrow Uuid other) {}
+    public readonly int compareTo(borrow Uuid other) {}
+}

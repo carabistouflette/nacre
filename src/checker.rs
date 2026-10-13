@@ -130,7 +130,7 @@ impl Tables {
                         t::NativeClass::BigInt | t::NativeClass::BigDecimal |
                         t::NativeClass::Regex | t::NativeClass::RegexMatch |
                         t::NativeClass::Arrays | t::NativeClass::ByteBuffer | t::NativeClass::Encoding |
-                        t::NativeClass::Crypto |
+                        t::NativeClass::Crypto | t::NativeClass::Uuid |
                         t::NativeClass::Path | t::NativeClass::File |
                         t::NativeClass::Directory | t::NativeClass::FileInfo |
                         t::NativeClass::Watcher | t::NativeClass::WatchEvent |
@@ -264,6 +264,7 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
             Some(a::NativeClass::Arrays) => Some(t::NativeClass::Arrays),
             Some(a::NativeClass::ByteBuffer) => Some(t::NativeClass::ByteBuffer),
             Some(a::NativeClass::Encoding) => Some(t::NativeClass::Encoding),
+            Some(a::NativeClass::Uuid) => Some(t::NativeClass::Uuid),
             Some(a::NativeClass::Set { .. }) => Some(t::NativeClass::Set {
                 key: Type::Void, hasher: None,
             }),
