@@ -1,4 +1,5 @@
 // PCRE2-8 uses UTF-8 and Unicode properties; patterns use PCRE2 syntax.
+// Byte-wise \C is rejected: captures must preserve validated UTF-8 Text.
 // Pattern and subject lengths are explicit, so embedded NUL is matched as text.
 // matches anchors both ends; search follows PCRE2's leftmost-first semantics.
 // Match, depth, or heap limit exhaustion returns Err instead of reporting no match.

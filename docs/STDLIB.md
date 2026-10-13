@@ -1311,6 +1311,8 @@ engine to backtrack between alternatives until it finds a full match or proves
 there is none. `search` returns PCRE2's leftmost-first match or `Ok(None)`;
 alternatives at the same position are tried in pattern order rather than using
 POSIX leftmost-longest selection.
+The byte-wise `\C` escape is rejected at compilation because it can split a
+Unicode scalar and produce a capture that violates the validated `Text` invariant.
 
 Patterns and subjects are passed with explicit byte lengths. Embedded NUL is
 ordinary text in patterns, subjects, and captures; regex APIs do not truncate at
@@ -1324,8 +1326,9 @@ absent or out-of-range group are fatal runtime boundary errors.
 Each PCRE2 execution is limited to 1,000,000 match-loop iterations per candidate
 start position, depth 1,000, and 16 MiB of backtracking heap. Exceeding a limit
 returns `Err`, never `false` or `Ok(None)`; PCRE2 allocation and execution errors
-also return `Err`. Matching state is per call; compiled patterns are shared
-read-only. Programs using `Regex` require PCRE2 10.30+ 8-bit development headers
+also return `Err`. Matching state is per call; each compiled pattern owns one
+immutable limit context reused across calls. Programs using `Regex` require
+PCRE2 10.30+ 8-bit development headers
 when building and the `libpcre2-8` runtime library.
 
 ## Math, random numbers, and time

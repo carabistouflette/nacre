@@ -3,6 +3,9 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- PCRE2 Regex rejects byte-wise `\C` patterns at compilation to preserve validated
+  UTF-8 capture invariants. Each compiled Regex owns an immutable bounded match
+  context reused across calls; execution data remains private to each call.
 - Files.list uses the owned List representation without an extra pointer level.
   Binary and database templates share placeholder validation, and database
   emission uses native class presence rather than a second expression traversal.

@@ -1,4 +1,4 @@
-/* Each call gets private PCRE2 match data and a bounded context. */
+/* Each call owns match data; immutable limits belong to the compiled Regex. */
 #define NCR_REGEX_MATCH_LIMIT UINT32_C(1000000)
 #define NCR_REGEX_DEPTH_LIMIT UINT32_C(1000)
 #define NCR_REGEX_HEAP_LIMIT_KIB UINT32_C(16384)
@@ -18,23 +18,6 @@ static bool ncr_regex_text_bytes(
     return true;
 }
 
-static int ncr_regex_execute(
-    const pcre2_code *compiled, PCRE2_SPTR subject, PCRE2_SIZE subject_length,
-    uint32_t options, pcre2_match_data *match_data
-) {
-    pcre2_match_context *context = pcre2_match_context_create(NULL);
-    if (context == NULL) { return PCRE2_ERROR_NOMEMORY; }
-    if (pcre2_set_match_limit(context, NCR_REGEX_MATCH_LIMIT) != 0
-        || pcre2_set_depth_limit(context, NCR_REGEX_DEPTH_LIMIT) != 0
-        || pcre2_set_heap_limit(context, NCR_REGEX_HEAP_LIMIT_KIB) != 0) {
-        pcre2_match_context_free(context);
-        return PCRE2_ERROR_INTERNAL;
-    }
-    int status = pcre2_match(
-        compiled, subject, subject_length, 0, options, match_data, context);
-    pcre2_match_context_free(context);
-    return status;
-}
 
 static const char *ncr_regex_execution_error(
     int error_code, const char *operation, char *buffer, size_t capacity,
@@ -137,7 +120,7 @@ static ncr_obj_@COMPILE_RESULT@ @REGEX_COMPILE@(
     int error_code = 0;
     PCRE2_SIZE error_offset = PCRE2_UNSET;
     pcre2_code *compiled = pcre2_compile(
-        pattern_bytes, pattern_length, PCRE2_UTF | PCRE2_UCP,
+        pattern_bytes, pattern_length, PCRE2_UTF | PCRE2_UCP | PCRE2_NEVER_BACKSLASH_C,
         &error_code, &error_offset, NULL);
     if (compiled == NULL) {
         return ncr_regex_compile_error(
@@ -154,8 +137,23 @@ static ncr_obj_@COMPILE_RESULT@ @REGEX_COMPILE@(
         static const char message[] = "Regex.compile: capture count exceeds int32 range";
         return @COMPILE_ERR@(message, sizeof(message) - 1, line, column);
     }
+    pcre2_match_context *context = pcre2_match_context_create(NULL);
+    if (context == NULL) {
+        pcre2_code_free(compiled);
+        static const char message[] = "Regex.compile: PCRE2 could not allocate match context";
+        return @COMPILE_ERR@(message, sizeof(message) - 1, line, column);
+    }
+    if (pcre2_set_match_limit(context, NCR_REGEX_MATCH_LIMIT) != 0
+        || pcre2_set_depth_limit(context, NCR_REGEX_DEPTH_LIMIT) != 0
+        || pcre2_set_heap_limit(context, NCR_REGEX_HEAP_LIMIT_KIB) != 0) {
+        pcre2_match_context_free(context);
+        pcre2_code_free(compiled);
+        static const char message[] = "Regex.compile: PCRE2 could not configure match limits";
+        return @COMPILE_ERR@(message, sizeof(message) - 1, line, column);
+    }
     ncr_obj_@REGEX_CLASS@ *result = ncr_allocate(sizeof(*result), line, column);
     result->compiled = compiled;
+    result->context = context;
     result->group_count = (int32_t)(capture_count + 1u);
     return (ncr_obj_@COMPILE_RESULT@){
         .tag = @COMPILE_OK_TAG@,
@@ -179,9 +177,9 @@ static ncr_obj_@MATCHES_RESULT@ @REGEX_MATCHES@(
         static const char message[] = "Regex.matches: PCRE2 could not allocate match state";
         return @MATCHES_ERR@(message, sizeof(message) - 1, line, column);
     }
-    int status = ncr_regex_execute(
-        regex->compiled, subject_bytes, subject_length,
-        PCRE2_ANCHORED | PCRE2_ENDANCHORED, match_data);
+    int status = pcre2_match(
+        regex->compiled, subject_bytes, subject_length, 0,
+        PCRE2_ANCHORED | PCRE2_ENDANCHORED, match_data, regex->context);
     if (status == PCRE2_ERROR_NOMATCH) {
         pcre2_match_data_free(match_data);
         return (ncr_obj_@MATCHES_RESULT@){
@@ -233,7 +231,8 @@ static ncr_obj_@SEARCH_RESULT@ @REGEX_SEARCH@(
         static const char message[] = "Regex.search: PCRE2 could not allocate match state";
         return @SEARCH_ERR@(message, sizeof(message) - 1, line, column);
     }
-    int status = ncr_regex_execute(regex->compiled, subject_bytes, subject_length, 0, match_data);
+    int status = pcre2_match(
+        regex->compiled, subject_bytes, subject_length, 0, 0, match_data, regex->context);
     if (status == PCRE2_ERROR_NOMATCH) {
         pcre2_match_data_free(match_data);
         @OPTION_TYPE@ none = { .tag = @OPTION_NONE_TAG@ };

@@ -379,12 +379,12 @@ void main() {
                 Err(error) { println("Unicode full match errored"); drop(error); }
                 Ok(value) { println(value); }
             }
-            Text partial = new Text("xÄbc-äBC");
+            Text partial = new Text("1Äbc-äBC");
             match (regex.matches(partial)) {
                 Err(error) { println("Unicode partial match errored"); drop(error); }
                 Ok(value) { println(value); }
             }
-            Text searched = new Text("xÄbc-äBCy");
+            Text searched = new Text("1Äbc-äBC2");
             match (regex.search(searched)) {
                 Err(error) { println("Unicode search errored"); drop(error); }
                 Ok(found) {
@@ -454,7 +454,6 @@ void main() {
                             println(capture.end(0));
                             borrow Text group = capture.group(0);
                             group.print();
-                            println();
                         }
                     }
                 }
@@ -483,7 +482,6 @@ void main() {
                             println(capture.end(0));
                             borrow Text matched = capture.group(0);
                             matched.print();
-                            println();
                         }
                     }
                 }
@@ -540,10 +538,8 @@ void main() {
             println(capture.end(0));
             borrow Text whole = capture.group(0);
             whole.print();
-            println();
             borrow Text group = capture.group(1);
             group.print();
-            println();
         }
     }
 }
@@ -692,4 +688,25 @@ fn text_scalar_index_is_checked_and_opaque_regex_has_no_constructor() {
 fn utf8_regex_example_runs_as_a_native_program() {
     let output = execute(include_str!("../examples/text/utf8_regex.ncr"));
     assert_eq!(output.stdout, "12\n6\nalpha\n🚀\nbeta\n2\n6\n10\n🚀\nbytes=15 scalars=12\n".as_bytes());
+}
+
+#[test]
+fn regex_rejects_byte_wise_patterns_that_can_split_utf8_captures() {
+    let output = execute(r#"
+void main() {
+    Text pattern = new Text("\\C");
+    match (Regex.compile(pattern)) {
+        Err(error) { println(true); }
+        Ok(regex) {
+            Text subject = new Text("é");
+            match (regex.search(subject)) {
+                Err(error) { println(false); }
+                Ok(found) { println(false); }
+            }
+        }
+    }
+}
+"#);
+    assert_eq!(output.stdout, b"true\n");
+    assert_clean_memory(&output);
 }

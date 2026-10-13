@@ -19,7 +19,7 @@ pub(super) fn preamble(program: &t::Program) -> String {
 
 pub(super) fn fields(_program: &t::Program, class: C) -> String {
     match class {
-        C::Regex => "    pcre2_code *compiled;\n    int32_t group_count;\n".to_owned(),
+        C::Regex => "    pcre2_code *compiled;\n    pcre2_match_context *context;\n    int32_t group_count;\n".to_owned(),
         C::RegexMatch => "    unsigned char *capture_storage; /* Text pointers, then start and end byte offsets. */\n    int32_t group_count;\n".to_owned(),
         _ => unreachable!("regex field request for a non-regex native class"),
     }
@@ -27,7 +27,7 @@ pub(super) fn fields(_program: &t::Program, class: C) -> String {
 
 pub(super) fn drop_fields(program: &t::Program, class: C) -> String {
     match class {
-        C::Regex => "    if (p->compiled != NULL) { pcre2_code_free(p->compiled); }\n".to_owned(),
+        C::Regex => "    pcre2_match_context_free(p->context);\n    pcre2_code_free(p->compiled);\n".to_owned(),
         C::RegexMatch => {
             let text = text_class(program).expect("RegexMatch captures own Text");
             format!(
