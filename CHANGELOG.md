@@ -29,6 +29,8 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   Generic immutable `borrow T` declarations adapt copied arguments to values;
   nominal borrows and mutable-borrow restrictions remain unchanged. Obsolete
   rejection cases and nominal-only documentation were removed.
+  Source-text assertions about vtable layout and allocator call sites were removed;
+  native interface CLI checks retain output and ownership-balance verification.
 
 - Adds reusable affine `Codec<T>` and `Serialization<T>` APIs with a canonical
   big-endian `NCRS`/version-1 frame, primitive, length-prefixed UTF-8 and byte

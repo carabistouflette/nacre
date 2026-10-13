@@ -42,21 +42,6 @@ fn interface_c_is_deterministic() { assert_eq!(compile_to_c(INTERFACES).unwrap()
 #[test]
 fn generic_c_is_deterministic() { assert_eq!(compile_to_c(GENERICS).unwrap(), compile_to_c(GENERICS).unwrap()); }
 #[test]
-fn vtables_have_typed_methods_and_destructors() {
-    let c = compile_to_c(INTERFACES).unwrap();
-    assert!(c.contains("void *data; const struct ncr_vtable_"));
-    assert!(c.contains("void (*destroy)(void *)"));
-    assert!(c.contains("ncr_self.vtable->m0(ncr_self.data)"));
-    assert!(c.contains("p.vtable->destroy(p.data)"));
-}
-#[test]
-fn upcast_creates_no_extra_heap_object() {
-    let source = "interface I{}class C implements I{}void main(){C c=new C();I i=c;}";
-    let c = compile_to_c(source).unwrap();
-    assert_eq!(c.matches("ncr_allocate(sizeof(").count(), 1);
-    assert!(c.contains("ownership transferred"));
-}
-#[test]
 fn interface_upcast_preserves_flow_moves() {
     let text = emit_flow("interface I{}class C implements I{}void main(){C c=new C();I i=c;}").unwrap();
     assert!(text.contains("Move") || text.contains("move"));
