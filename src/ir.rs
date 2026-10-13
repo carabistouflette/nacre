@@ -126,7 +126,13 @@ pub enum CallTarget { Function(usize), Println }
 
 /// Trusted standard-library storage, never exposed as source fields.
 #[derive(Debug, Clone, Copy)]
-pub enum NativeClass { List(Type), Array(Type), Deque(Type), Map(MapKeyKind, Type), Set(MapKeyKind), Text, Regex, RegexMatch, Arrays, ByteBuffer, Encoding, Path, File, Directory, FileInfo, Console, Files, Args, Math, Random, Time, SocketAddress, TcpListener, TcpStream, Datagram, UdpSocket, Thread(Type), Mutex(Type), Guard(Type), Channel(Type), Sender(Type), Receiver(Type), Env, Command, Process, ProcessOutput }
+pub enum NativeClass {
+    List(Type), Array(Type), Deque(Type), Map(MapKeyKind, Type), Set(MapKeyKind),
+    Text, Regex, RegexMatch, Arrays, ByteBuffer, Encoding, Crypto, Path, File, Directory, FileInfo,
+    Console, Files, Args, Math, Random, Time, SocketAddress, TcpListener, TcpStream,
+    Datagram, UdpSocket, Thread(Type), Mutex(Type), Guard(Type), Channel(Type),
+    Sender(Type), Receiver(Type), Env, Command, Process, ProcessOutput
+}
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NativeMethod {
     ListNew, ListAdd, ListSize, ListCapacity, ListIsEmpty, ListGet, ListGetRef, ListGetMut,
@@ -169,6 +175,8 @@ pub enum NativeMethod {
     MathIncrementExactInt, MathIncrementExactLong, MathDecrementExactInt, MathDecrementExactLong,
     MathFloorDivInt, MathFloorDivLong, MathFloorModInt, MathFloorModLong,
     RandomNew, RandomFromSystem, RandomReseed, RandomNextLong, RandomNextInt, RandomNextDouble,
+    CryptoRandomBytes, CryptoDigest, CryptoHmac, CryptoPbkdf2, CryptoHkdf,
+    CryptoAesGcmEncrypt, CryptoAesGcmDecrypt, CryptoConstantTimeEquals,
     TimeMonotonicNanos, TimeUnixMillis, TimeSleepMillis, TimeDeadlineAfterMillis,
     SocketAddressResolve, SocketAddressToText,
     TcpListenerBind, TcpListenerAccept, TcpListenerLocalAddress, TcpListenerClose,

@@ -1,0 +1,510 @@
+/* nacre-link: crypto */
+#include <openssl/core_names.h>
+#include <openssl/crypto.h>
+#include <openssl/evp.h>
+#include <openssl/kdf.h>
+#include <openssl/params.h>
+#include <openssl/rand.h>
+
+#define NCR_CRYPTO_MAX_OUTPUT ((size_t)INT_MAX)
+#define NCR_CRYPTO_GCM_NONCE_LENGTH 12u
+#define NCR_CRYPTO_GCM_TAG_LENGTH 16u
+
+static const unsigned char ncr_crypto_empty_byte = 0;
+
+static const unsigned char *ncr_crypto_input(const unsigned char *bytes, size_t length) {
+    return length == 0 ? &ncr_crypto_empty_byte : bytes;
+}
+
+static bool ncr_crypto_buffer_valid(const ncr_obj_@BYTE_BUFFER_CLASS@ *buffer) {
+    return buffer != NULL && (buffer->length == 0 || buffer->bytes != NULL);
+}
+
+static ncr_obj_@BYTE_BUFFER_CLASS@ *ncr_crypto_buffer_new(size_t length, size_t line, size_t column) {
+    ncr_obj_@BYTE_BUFFER_CLASS@ *buffer = ncr_allocate(sizeof(*buffer), line, column);
+    if (length > 0) {
+        buffer->bytes = ncr_allocate(length, line, column);
+    }
+    buffer->length = length;
+    buffer->capacity = length;
+    return buffer;
+}
+
+static void ncr_crypto_buffer_discard(ncr_obj_@BYTE_BUFFER_CLASS@ *buffer) {
+    if (buffer == NULL) { return; }
+    if (buffer->bytes != NULL) {
+        OPENSSL_cleanse(buffer->bytes, buffer->capacity);
+        ncr_deallocate(buffer->bytes);
+    }
+    ncr_deallocate(buffer);
+}
+
+static ncr_obj_@RESULT@ ncr_crypto_error(const char *message, size_t length, size_t line, size_t column) {
+    return @ERROR_RESULT_FN@(message, length, line, column);
+}
+
+static ncr_obj_@RESULT@ ncr_crypto_success(ncr_obj_@BYTE_BUFFER_CLASS@ *buffer) {
+    return (ncr_obj_@RESULT@){
+        .tag = @RESULT_OK_TAG@,
+        .data.v@RESULT_OK_TAG@.f0 = buffer
+    };
+}
+
+struct ncr_crypto_digest_spec {
+    const char *name;
+    size_t name_length;
+    size_t output_length;
+};
+
+static int ncr_crypto_digest_spec_for(
+    const ncr_obj_@TEXT_CLASS@ *algorithm,
+    const struct ncr_crypto_digest_spec **spec
+) {
+    static const struct ncr_crypto_digest_spec supported[] = {
+        { "SHA256", sizeof("SHA256") - 1, 32 },
+        { "SHA384", sizeof("SHA384") - 1, 48 },
+        { "SHA512", sizeof("SHA512") - 1, 64 },
+        { "SHA3-256", sizeof("SHA3-256") - 1, 32 },
+        { "SHA3-384", sizeof("SHA3-384") - 1, 48 },
+        { "SHA3-512", sizeof("SHA3-512") - 1, 64 },
+    };
+    if (algorithm == NULL || algorithm->length < 0
+        || (algorithm->length > 0 && algorithm->bytes == NULL)) {
+        return -1;
+    }
+    size_t length = (size_t)algorithm->length;
+    if (length > 0 && memchr(algorithm->bytes, '\0', length) != NULL) { return -1; }
+    for (size_t index = 0; index < sizeof(supported) / sizeof(supported[0]); ++index) {
+        if (length == supported[index].name_length
+            && memcmp(algorithm->bytes, supported[index].name, length) == 0) {
+            *spec = &supported[index];
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static bool ncr_crypto_output_length(int64_t requested, size_t *length) {
+    if (requested < 0 || (uint64_t)requested > (uint64_t)NCR_CRYPTO_MAX_OUTPUT
+        || (uint64_t)requested > (uint64_t)SIZE_MAX) {
+        return false;
+    }
+    *length = (size_t)requested;
+    return true;
+}
+
+static ncr_obj_@RESULT@ @CRYPTO_RANDOM_BYTES@(int64_t ncr_v_@RANDOM_LENGTH@, size_t ncr_line, size_t ncr_column) {
+    static const char invalid_length[] = "Crypto.randomBytes: length is outside the supported capacity";
+    static const char random_failed[] = "Crypto.randomBytes: secure random generation failed";
+    size_t length;
+    if (!ncr_crypto_output_length(ncr_v_@RANDOM_LENGTH@, &length)) {
+        return ncr_crypto_error(invalid_length, sizeof(invalid_length) - 1, ncr_line, ncr_column);
+    }
+    ncr_obj_@BYTE_BUFFER_CLASS@ *output = ncr_crypto_buffer_new(length, ncr_line, ncr_column);
+    if (length > 0 && RAND_bytes(output->bytes, (int)length) != 1) {
+        ncr_crypto_buffer_discard(output);
+        return ncr_crypto_error(random_failed, sizeof(random_failed) - 1, ncr_line, ncr_column);
+    }
+    return ncr_crypto_success(output);
+}
+
+static ncr_obj_@RESULT@ @CRYPTO_DIGEST@(
+    ncr_obj_@TEXT_CLASS@ *ncr_v_@DIGEST_ALGORITHM@,
+    ncr_obj_@BYTE_BUFFER_CLASS@ *ncr_v_@DIGEST_DATA@,
+    size_t ncr_line, size_t ncr_column
+) {
+    static const char invalid_algorithm[] = "Crypto.digest: invalid algorithm name";
+    static const char unsupported_algorithm[] = "Crypto.digest: unsupported digest algorithm";
+    static const char invalid_data[] = "Crypto.digest: invalid byte buffer";
+    static const char operation_failed[] = "Crypto.digest: OpenSSL operation failed";
+    const struct ncr_crypto_digest_spec *spec = NULL;
+    int algorithm_status = ncr_crypto_digest_spec_for(ncr_v_@DIGEST_ALGORITHM@, &spec);
+    if (algorithm_status < 0) {
+        return ncr_crypto_error(invalid_algorithm, sizeof(invalid_algorithm) - 1, ncr_line, ncr_column);
+    }
+    if (algorithm_status == 0) {
+        return ncr_crypto_error(unsupported_algorithm, sizeof(unsupported_algorithm) - 1, ncr_line, ncr_column);
+    }
+    if (!ncr_crypto_buffer_valid(ncr_v_@DIGEST_DATA@)) {
+        return ncr_crypto_error(invalid_data, sizeof(invalid_data) - 1, ncr_line, ncr_column);
+    }
+
+    EVP_MD *digest = EVP_MD_fetch(NULL, spec->name, NULL);
+    EVP_MD_CTX *context = digest == NULL ? NULL : EVP_MD_CTX_new();
+    ncr_obj_@BYTE_BUFFER_CLASS@ *output = ncr_crypto_buffer_new(spec->output_length, ncr_line, ncr_column);
+    bool succeeded = context != NULL && EVP_DigestInit_ex2(context, digest, NULL) == 1;
+    if (succeeded && ncr_v_@DIGEST_DATA@->length > 0) {
+        succeeded = EVP_DigestUpdate(context, ncr_v_@DIGEST_DATA@->bytes,
+            ncr_v_@DIGEST_DATA@->length) == 1;
+    }
+    unsigned int written = 0;
+    if (succeeded) {
+        succeeded = EVP_DigestFinal_ex(context, output->bytes, &written) == 1
+            && written == spec->output_length;
+    }
+    EVP_MD_CTX_free(context);
+    EVP_MD_free(digest);
+    if (!succeeded) {
+        ncr_crypto_buffer_discard(output);
+        return ncr_crypto_error(operation_failed, sizeof(operation_failed) - 1, ncr_line, ncr_column);
+    }
+    return ncr_crypto_success(output);
+}
+
+static ncr_obj_@RESULT@ @CRYPTO_HMAC@(
+    ncr_obj_@TEXT_CLASS@ *ncr_v_@HMAC_ALGORITHM@,
+    ncr_obj_@BYTE_BUFFER_CLASS@ *ncr_v_@HMAC_KEY@,
+    ncr_obj_@BYTE_BUFFER_CLASS@ *ncr_v_@HMAC_DATA@,
+    size_t ncr_line, size_t ncr_column
+) {
+    static const char invalid_algorithm[] = "Crypto.hmac: invalid algorithm name";
+    static const char unsupported_algorithm[] = "Crypto.hmac: unsupported digest algorithm";
+    static const char invalid_data[] = "Crypto.hmac: invalid byte buffer";
+    static const char operation_failed[] = "Crypto.hmac: OpenSSL operation failed";
+    const struct ncr_crypto_digest_spec *spec = NULL;
+    int algorithm_status = ncr_crypto_digest_spec_for(ncr_v_@HMAC_ALGORITHM@, &spec);
+    if (algorithm_status < 0) {
+        return ncr_crypto_error(invalid_algorithm, sizeof(invalid_algorithm) - 1, ncr_line, ncr_column);
+    }
+    if (algorithm_status == 0) {
+        return ncr_crypto_error(unsupported_algorithm, sizeof(unsupported_algorithm) - 1, ncr_line, ncr_column);
+    }
+    if (!ncr_crypto_buffer_valid(ncr_v_@HMAC_KEY@) || !ncr_crypto_buffer_valid(ncr_v_@HMAC_DATA@)) {
+        return ncr_crypto_error(invalid_data, sizeof(invalid_data) - 1, ncr_line, ncr_column);
+    }
+
+    EVP_MAC *mac = EVP_MAC_fetch(NULL, "HMAC", NULL);
+    EVP_MAC_CTX *context = mac == NULL ? NULL : EVP_MAC_CTX_new(mac);
+    char digest_name[sizeof("SHA3-384")];
+    memcpy(digest_name, spec->name, spec->name_length);
+    digest_name[spec->name_length] = '\0';
+    OSSL_PARAM parameters[] = {
+        OSSL_PARAM_construct_utf8_string(OSSL_MAC_PARAM_DIGEST, digest_name, 0),
+        OSSL_PARAM_construct_end()
+    };
+    ncr_obj_@BYTE_BUFFER_CLASS@ *output = ncr_crypto_buffer_new(spec->output_length, ncr_line, ncr_column);
+    bool succeeded = context != NULL
+        && EVP_MAC_init(context,
+            ncr_crypto_input(ncr_v_@HMAC_KEY@->bytes, ncr_v_@HMAC_KEY@->length),
+            ncr_v_@HMAC_KEY@->length, parameters) == 1;
+    if (succeeded && ncr_v_@HMAC_DATA@->length > 0) {
+        succeeded = EVP_MAC_update(context, ncr_v_@HMAC_DATA@->bytes, ncr_v_@HMAC_DATA@->length) == 1;
+    }
+    size_t written = 0;
+    if (succeeded) {
+        succeeded = EVP_MAC_final(context, output->bytes, &written, spec->output_length) == 1
+            && written == spec->output_length;
+    }
+    EVP_MAC_CTX_free(context);
+    EVP_MAC_free(mac);
+    OPENSSL_cleanse(digest_name, sizeof(digest_name));
+    if (!succeeded) {
+        ncr_crypto_buffer_discard(output);
+        return ncr_crypto_error(operation_failed, sizeof(operation_failed) - 1, ncr_line, ncr_column);
+    }
+    return ncr_crypto_success(output);
+}
+
+static ncr_obj_@RESULT@ @CRYPTO_PBKDF2@(
+    ncr_obj_@TEXT_CLASS@ *ncr_v_@PBKDF2_ALGORITHM@,
+    ncr_obj_@BYTE_BUFFER_CLASS@ *ncr_v_@PBKDF2_PASSWORD@,
+    ncr_obj_@BYTE_BUFFER_CLASS@ *ncr_v_@PBKDF2_SALT@,
+    int32_t ncr_v_@PBKDF2_ITERATIONS@,
+    int64_t ncr_v_@PBKDF2_OUTPUT_LENGTH@,
+    size_t ncr_line, size_t ncr_column
+) {
+    static const char invalid_algorithm[] = "Crypto.pbkdf2: invalid algorithm name";
+    static const char unsupported_algorithm[] = "Crypto.pbkdf2: unsupported digest algorithm";
+    static const char invalid_data[] = "Crypto.pbkdf2: invalid byte buffer";
+    static const char invalid_iterations[] = "Crypto.pbkdf2: iterations must be positive";
+    static const char invalid_length[] = "Crypto.pbkdf2: output length is outside the supported capacity";
+    static const char operation_failed[] = "Crypto.pbkdf2: OpenSSL operation failed";
+    const struct ncr_crypto_digest_spec *spec = NULL;
+    int algorithm_status = ncr_crypto_digest_spec_for(ncr_v_@PBKDF2_ALGORITHM@, &spec);
+    if (algorithm_status < 0) {
+        return ncr_crypto_error(invalid_algorithm, sizeof(invalid_algorithm) - 1, ncr_line, ncr_column);
+    }
+    if (algorithm_status == 0) {
+        return ncr_crypto_error(unsupported_algorithm, sizeof(unsupported_algorithm) - 1, ncr_line, ncr_column);
+    }
+    if (!ncr_crypto_buffer_valid(ncr_v_@PBKDF2_PASSWORD@) || !ncr_crypto_buffer_valid(ncr_v_@PBKDF2_SALT@)) {
+        return ncr_crypto_error(invalid_data, sizeof(invalid_data) - 1, ncr_line, ncr_column);
+    }
+    if (ncr_v_@PBKDF2_ITERATIONS@ <= 0) {
+        return ncr_crypto_error(invalid_iterations, sizeof(invalid_iterations) - 1, ncr_line, ncr_column);
+    }
+    size_t output_length;
+    if (!ncr_crypto_output_length(ncr_v_@PBKDF2_OUTPUT_LENGTH@, &output_length)) {
+        return ncr_crypto_error(invalid_length, sizeof(invalid_length) - 1, ncr_line, ncr_column);
+    }
+    ncr_obj_@BYTE_BUFFER_CLASS@ *output = ncr_crypto_buffer_new(output_length, ncr_line, ncr_column);
+    if (output_length == 0) { return ncr_crypto_success(output); }
+
+    EVP_KDF *kdf = EVP_KDF_fetch(NULL, "PBKDF2", NULL);
+    EVP_KDF_CTX *context = kdf == NULL ? NULL : EVP_KDF_CTX_new(kdf);
+    char digest_name[sizeof("SHA3-384")];
+    memcpy(digest_name, spec->name, spec->name_length);
+    digest_name[spec->name_length] = '\0';
+    unsigned int iterations = (unsigned int)ncr_v_@PBKDF2_ITERATIONS@;
+    int pkcs5_compatibility = 1;
+    OSSL_PARAM parameters[] = {
+        OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_PASSWORD,
+            (void *)ncr_crypto_input(ncr_v_@PBKDF2_PASSWORD@->bytes, ncr_v_@PBKDF2_PASSWORD@->length),
+            ncr_v_@PBKDF2_PASSWORD@->length),
+        OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_SALT,
+            (void *)ncr_crypto_input(ncr_v_@PBKDF2_SALT@->bytes, ncr_v_@PBKDF2_SALT@->length),
+            ncr_v_@PBKDF2_SALT@->length),
+        OSSL_PARAM_construct_utf8_string(OSSL_KDF_PARAM_DIGEST, digest_name, 0),
+        OSSL_PARAM_construct_uint(OSSL_KDF_PARAM_ITER, &iterations),
+        OSSL_PARAM_construct_int(OSSL_KDF_PARAM_PKCS5, &pkcs5_compatibility),
+        OSSL_PARAM_construct_end()
+    };
+    bool succeeded = context != NULL
+        && EVP_KDF_derive(context, output->bytes, output_length, parameters) == 1;
+    EVP_KDF_CTX_free(context);
+    EVP_KDF_free(kdf);
+    OPENSSL_cleanse(digest_name, sizeof(digest_name));
+    if (!succeeded) {
+        ncr_crypto_buffer_discard(output);
+        return ncr_crypto_error(operation_failed, sizeof(operation_failed) - 1, ncr_line, ncr_column);
+    }
+    return ncr_crypto_success(output);
+}
+
+static ncr_obj_@RESULT@ @CRYPTO_HKDF@(
+    ncr_obj_@TEXT_CLASS@ *ncr_v_@HKDF_ALGORITHM@,
+    ncr_obj_@BYTE_BUFFER_CLASS@ *ncr_v_@HKDF_KEY@,
+    ncr_obj_@BYTE_BUFFER_CLASS@ *ncr_v_@HKDF_SALT@,
+    ncr_obj_@BYTE_BUFFER_CLASS@ *ncr_v_@HKDF_INFO@,
+    int64_t ncr_v_@HKDF_OUTPUT_LENGTH@,
+    size_t ncr_line, size_t ncr_column
+) {
+    static const char invalid_algorithm[] = "Crypto.hkdf: invalid algorithm name";
+    static const char unsupported_algorithm[] = "Crypto.hkdf: unsupported digest algorithm";
+    static const char invalid_data[] = "Crypto.hkdf: invalid byte buffer";
+    static const char invalid_length[] = "Crypto.hkdf: output length exceeds the RFC 5869 limit or capacity";
+    static const char operation_failed[] = "Crypto.hkdf: OpenSSL operation failed";
+    const struct ncr_crypto_digest_spec *spec = NULL;
+    int algorithm_status = ncr_crypto_digest_spec_for(ncr_v_@HKDF_ALGORITHM@, &spec);
+    if (algorithm_status < 0) {
+        return ncr_crypto_error(invalid_algorithm, sizeof(invalid_algorithm) - 1, ncr_line, ncr_column);
+    }
+    if (algorithm_status == 0) {
+        return ncr_crypto_error(unsupported_algorithm, sizeof(unsupported_algorithm) - 1, ncr_line, ncr_column);
+    }
+    if (!ncr_crypto_buffer_valid(ncr_v_@HKDF_KEY@) || !ncr_crypto_buffer_valid(ncr_v_@HKDF_SALT@)
+        || !ncr_crypto_buffer_valid(ncr_v_@HKDF_INFO@)) {
+        return ncr_crypto_error(invalid_data, sizeof(invalid_data) - 1, ncr_line, ncr_column);
+    }
+    size_t output_length;
+    if (!ncr_crypto_output_length(ncr_v_@HKDF_OUTPUT_LENGTH@, &output_length)
+        || output_length > 255u * spec->output_length) {
+        return ncr_crypto_error(invalid_length, sizeof(invalid_length) - 1, ncr_line, ncr_column);
+    }
+    ncr_obj_@BYTE_BUFFER_CLASS@ *output = ncr_crypto_buffer_new(output_length, ncr_line, ncr_column);
+    if (output_length == 0) { return ncr_crypto_success(output); }
+
+    EVP_KDF *kdf = EVP_KDF_fetch(NULL, "HKDF", NULL);
+    EVP_KDF_CTX *context = kdf == NULL ? NULL : EVP_KDF_CTX_new(kdf);
+    char digest_name[sizeof("SHA3-384")];
+    memcpy(digest_name, spec->name, spec->name_length);
+    digest_name[spec->name_length] = '\0';
+    OSSL_PARAM parameters[] = {
+        OSSL_PARAM_construct_utf8_string(OSSL_KDF_PARAM_DIGEST, digest_name, 0),
+        OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_KEY,
+            (void *)ncr_crypto_input(ncr_v_@HKDF_KEY@->bytes, ncr_v_@HKDF_KEY@->length),
+            ncr_v_@HKDF_KEY@->length),
+        OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_SALT,
+            (void *)ncr_crypto_input(ncr_v_@HKDF_SALT@->bytes, ncr_v_@HKDF_SALT@->length),
+            ncr_v_@HKDF_SALT@->length),
+        OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_INFO,
+            (void *)ncr_crypto_input(ncr_v_@HKDF_INFO@->bytes, ncr_v_@HKDF_INFO@->length),
+            ncr_v_@HKDF_INFO@->length),
+        OSSL_PARAM_construct_end()
+    };
+    bool succeeded = context != NULL
+        && EVP_KDF_derive(context, output->bytes, output_length, parameters) == 1;
+    EVP_KDF_CTX_free(context);
+    EVP_KDF_free(kdf);
+    OPENSSL_cleanse(digest_name, sizeof(digest_name));
+    if (!succeeded) {
+        ncr_crypto_buffer_discard(output);
+        return ncr_crypto_error(operation_failed, sizeof(operation_failed) - 1, ncr_line, ncr_column);
+    }
+    return ncr_crypto_success(output);
+}
+
+static EVP_CIPHER *ncr_crypto_gcm_cipher(size_t key_length) {
+    switch (key_length) {
+        case 16: return EVP_CIPHER_fetch(NULL, "AES-128-GCM", NULL);
+        case 24: return EVP_CIPHER_fetch(NULL, "AES-192-GCM", NULL);
+        case 32: return EVP_CIPHER_fetch(NULL, "AES-256-GCM", NULL);
+        default: return NULL;
+    }
+}
+
+static ncr_obj_@RESULT@ @CRYPTO_AES_GCM_ENCRYPT@(
+    ncr_obj_@BYTE_BUFFER_CLASS@ *ncr_v_@AES_ENCRYPT_KEY@,
+    ncr_obj_@BYTE_BUFFER_CLASS@ *ncr_v_@AES_ENCRYPT_NONCE@,
+    ncr_obj_@BYTE_BUFFER_CLASS@ *ncr_v_@AES_ENCRYPT_PLAINTEXT@,
+    ncr_obj_@BYTE_BUFFER_CLASS@ *ncr_v_@AES_ENCRYPT_AAD@,
+    size_t ncr_line, size_t ncr_column
+) {
+    static const char invalid_buffer[] = "Crypto.aesGcmEncrypt: invalid byte buffer";
+    static const char invalid_key[] = "Crypto.aesGcmEncrypt: key must be 16, 24, or 32 bytes";
+    static const char invalid_nonce[] = "Crypto.aesGcmEncrypt: nonce must be exactly 12 bytes";
+    static const char input_too_large[] = "Crypto.aesGcmEncrypt: input exceeds the supported capacity";
+    static const char operation_failed[] = "Crypto.aesGcmEncrypt: OpenSSL operation failed";
+    if (!ncr_crypto_buffer_valid(ncr_v_@AES_ENCRYPT_KEY@)
+        || !ncr_crypto_buffer_valid(ncr_v_@AES_ENCRYPT_NONCE@)
+        || !ncr_crypto_buffer_valid(ncr_v_@AES_ENCRYPT_PLAINTEXT@)
+        || !ncr_crypto_buffer_valid(ncr_v_@AES_ENCRYPT_AAD@)) {
+        return ncr_crypto_error(invalid_buffer, sizeof(invalid_buffer) - 1, ncr_line, ncr_column);
+    }
+    if (ncr_v_@AES_ENCRYPT_KEY@->length != 16 && ncr_v_@AES_ENCRYPT_KEY@->length != 24
+        && ncr_v_@AES_ENCRYPT_KEY@->length != 32) {
+        return ncr_crypto_error(invalid_key, sizeof(invalid_key) - 1, ncr_line, ncr_column);
+    }
+    if (ncr_v_@AES_ENCRYPT_NONCE@->length != NCR_CRYPTO_GCM_NONCE_LENGTH) {
+        return ncr_crypto_error(invalid_nonce, sizeof(invalid_nonce) - 1, ncr_line, ncr_column);
+    }
+    if (ncr_v_@AES_ENCRYPT_PLAINTEXT@->length > NCR_CRYPTO_MAX_OUTPUT - NCR_CRYPTO_GCM_TAG_LENGTH
+        || ncr_v_@AES_ENCRYPT_AAD@->length > NCR_CRYPTO_MAX_OUTPUT) {
+        return ncr_crypto_error(input_too_large, sizeof(input_too_large) - 1, ncr_line, ncr_column);
+    }
+    size_t plaintext_length = ncr_v_@AES_ENCRYPT_PLAINTEXT@->length;
+    size_t output_length = plaintext_length + NCR_CRYPTO_GCM_TAG_LENGTH;
+    EVP_CIPHER *cipher = ncr_crypto_gcm_cipher(ncr_v_@AES_ENCRYPT_KEY@->length);
+    EVP_CIPHER_CTX *context = cipher == NULL ? NULL : EVP_CIPHER_CTX_new();
+    ncr_obj_@BYTE_BUFFER_CLASS@ *output = ncr_crypto_buffer_new(output_length, ncr_line, ncr_column);
+    bool succeeded = context != NULL
+        && EVP_EncryptInit_ex2(context, cipher, NULL, NULL, NULL) == 1
+        && EVP_CIPHER_CTX_ctrl(context, EVP_CTRL_AEAD_SET_IVLEN, (int)NCR_CRYPTO_GCM_NONCE_LENGTH, NULL) == 1
+        && EVP_EncryptInit_ex2(context, NULL, ncr_v_@AES_ENCRYPT_KEY@->bytes,
+            ncr_v_@AES_ENCRYPT_NONCE@->bytes, NULL) == 1;
+    int written = 0;
+    if (succeeded && ncr_v_@AES_ENCRYPT_AAD@->length > 0) {
+        succeeded = EVP_EncryptUpdate(context, NULL, &written, ncr_v_@AES_ENCRYPT_AAD@->bytes,
+            (int)ncr_v_@AES_ENCRYPT_AAD@->length) == 1;
+    }
+    written = 0;
+    if (succeeded && plaintext_length > 0) {
+        succeeded = EVP_EncryptUpdate(context, output->bytes, &written,
+            ncr_v_@AES_ENCRYPT_PLAINTEXT@->bytes, (int)plaintext_length) == 1;
+    }
+    int final_length = 0;
+    if (succeeded) {
+        succeeded = EVP_EncryptFinal_ex(context, output->bytes + (size_t)written, &final_length) == 1;
+    }
+    size_t ciphertext_length = (size_t)written + (size_t)final_length;
+    if (succeeded) {
+        succeeded = ciphertext_length == plaintext_length
+            && EVP_CIPHER_CTX_ctrl(context, EVP_CTRL_AEAD_GET_TAG, (int)NCR_CRYPTO_GCM_TAG_LENGTH,
+                output->bytes + ciphertext_length) == 1;
+    }
+    EVP_CIPHER_CTX_free(context);
+    EVP_CIPHER_free(cipher);
+    if (!succeeded) {
+        ncr_crypto_buffer_discard(output);
+        return ncr_crypto_error(operation_failed, sizeof(operation_failed) - 1, ncr_line, ncr_column);
+    }
+    return ncr_crypto_success(output);
+}
+
+static ncr_obj_@RESULT@ @CRYPTO_AES_GCM_DECRYPT@(
+    ncr_obj_@BYTE_BUFFER_CLASS@ *ncr_v_@AES_DECRYPT_KEY@,
+    ncr_obj_@BYTE_BUFFER_CLASS@ *ncr_v_@AES_DECRYPT_NONCE@,
+    ncr_obj_@BYTE_BUFFER_CLASS@ *ncr_v_@AES_DECRYPT_CIPHERTEXT@,
+    ncr_obj_@BYTE_BUFFER_CLASS@ *ncr_v_@AES_DECRYPT_AAD@,
+    size_t ncr_line, size_t ncr_column
+) {
+    static const char invalid_buffer[] = "Crypto.aesGcmDecrypt: invalid byte buffer";
+    static const char invalid_key[] = "Crypto.aesGcmDecrypt: key must be 16, 24, or 32 bytes";
+    static const char invalid_nonce[] = "Crypto.aesGcmDecrypt: nonce must be exactly 12 bytes";
+    static const char truncated[] = "Crypto.aesGcmDecrypt: ciphertext and 16-byte tag are required";
+    static const char input_too_large[] = "Crypto.aesGcmDecrypt: input exceeds the supported capacity";
+    static const char operation_failed[] = "Crypto.aesGcmDecrypt: OpenSSL operation failed";
+    static const char authentication_failed[] = "Crypto.aesGcmDecrypt: authentication failed";
+    if (!ncr_crypto_buffer_valid(ncr_v_@AES_DECRYPT_KEY@)
+        || !ncr_crypto_buffer_valid(ncr_v_@AES_DECRYPT_NONCE@)
+        || !ncr_crypto_buffer_valid(ncr_v_@AES_DECRYPT_CIPHERTEXT@)
+        || !ncr_crypto_buffer_valid(ncr_v_@AES_DECRYPT_AAD@)) {
+        return ncr_crypto_error(invalid_buffer, sizeof(invalid_buffer) - 1, ncr_line, ncr_column);
+    }
+    if (ncr_v_@AES_DECRYPT_KEY@->length != 16 && ncr_v_@AES_DECRYPT_KEY@->length != 24
+        && ncr_v_@AES_DECRYPT_KEY@->length != 32) {
+        return ncr_crypto_error(invalid_key, sizeof(invalid_key) - 1, ncr_line, ncr_column);
+    }
+    if (ncr_v_@AES_DECRYPT_NONCE@->length != NCR_CRYPTO_GCM_NONCE_LENGTH) {
+        return ncr_crypto_error(invalid_nonce, sizeof(invalid_nonce) - 1, ncr_line, ncr_column);
+    }
+    if (ncr_v_@AES_DECRYPT_CIPHERTEXT@->length < NCR_CRYPTO_GCM_TAG_LENGTH) {
+        return ncr_crypto_error(truncated, sizeof(truncated) - 1, ncr_line, ncr_column);
+    }
+    if (ncr_v_@AES_DECRYPT_CIPHERTEXT@->length > NCR_CRYPTO_MAX_OUTPUT
+        || ncr_v_@AES_DECRYPT_AAD@->length > NCR_CRYPTO_MAX_OUTPUT) {
+        return ncr_crypto_error(input_too_large, sizeof(input_too_large) - 1, ncr_line, ncr_column);
+    }
+    size_t ciphertext_length = ncr_v_@AES_DECRYPT_CIPHERTEXT@->length - NCR_CRYPTO_GCM_TAG_LENGTH;
+    ncr_obj_@BYTE_BUFFER_CLASS@ *output = ncr_crypto_buffer_new(ciphertext_length, ncr_line, ncr_column);
+    EVP_CIPHER *cipher = ncr_crypto_gcm_cipher(ncr_v_@AES_DECRYPT_KEY@->length);
+    EVP_CIPHER_CTX *context = cipher == NULL ? NULL : EVP_CIPHER_CTX_new();
+    unsigned char empty_output[EVP_MAX_BLOCK_LENGTH] = { 0 };
+    unsigned char *plaintext_output = ciphertext_length == 0 ? empty_output : output->bytes;
+    bool succeeded = context != NULL
+        && EVP_DecryptInit_ex2(context, cipher, NULL, NULL, NULL) == 1
+        && EVP_CIPHER_CTX_ctrl(context, EVP_CTRL_AEAD_SET_IVLEN, (int)NCR_CRYPTO_GCM_NONCE_LENGTH, NULL) == 1
+        && EVP_DecryptInit_ex2(context, NULL, ncr_v_@AES_DECRYPT_KEY@->bytes,
+            ncr_v_@AES_DECRYPT_NONCE@->bytes, NULL) == 1;
+    int written = 0;
+    if (succeeded && ncr_v_@AES_DECRYPT_AAD@->length > 0) {
+        succeeded = EVP_DecryptUpdate(context, NULL, &written, ncr_v_@AES_DECRYPT_AAD@->bytes,
+            (int)ncr_v_@AES_DECRYPT_AAD@->length) == 1;
+    }
+    written = 0;
+    if (succeeded && ciphertext_length > 0) {
+        succeeded = EVP_DecryptUpdate(context, plaintext_output, &written,
+            ncr_v_@AES_DECRYPT_CIPHERTEXT@->bytes, (int)ciphertext_length) == 1;
+    }
+    if (succeeded) {
+        succeeded = EVP_CIPHER_CTX_ctrl(context, EVP_CTRL_AEAD_SET_TAG,
+            (int)NCR_CRYPTO_GCM_TAG_LENGTH,
+            (void *)(ncr_v_@AES_DECRYPT_CIPHERTEXT@->bytes + ciphertext_length)) == 1;
+    }
+    int final_length = 0;
+    bool final_attempted = false;
+    if (succeeded) {
+        final_attempted = true;
+        succeeded = EVP_DecryptFinal_ex(context, plaintext_output + (size_t)written, &final_length) == 1;
+    }
+    if (succeeded) {
+        succeeded = (size_t)written + (size_t)final_length == ciphertext_length;
+    }
+    EVP_CIPHER_CTX_free(context);
+    EVP_CIPHER_free(cipher);
+    OPENSSL_cleanse(empty_output, sizeof(empty_output));
+    if (!succeeded) {
+        ncr_crypto_buffer_discard(output);
+        const char *message = final_attempted ? authentication_failed : operation_failed;
+        size_t message_length = final_attempted
+            ? sizeof("Crypto.aesGcmDecrypt: authentication failed") - 1
+            : sizeof("Crypto.aesGcmDecrypt: OpenSSL operation failed") - 1;
+        return ncr_crypto_error(message, message_length, ncr_line, ncr_column);
+    }
+    return ncr_crypto_success(output);
+}
+
+static bool @CRYPTO_CONSTANT_TIME_EQUALS@(
+    ncr_obj_@BYTE_BUFFER_CLASS@ *ncr_v_@COMPARE_LEFT@,
+    ncr_obj_@BYTE_BUFFER_CLASS@ *ncr_v_@COMPARE_RIGHT@,
+    size_t ncr_line, size_t ncr_column
+) {
+    (void)ncr_line;
+    (void)ncr_column;
+    if (!ncr_crypto_buffer_valid(ncr_v_@COMPARE_LEFT@)
+        || !ncr_crypto_buffer_valid(ncr_v_@COMPARE_RIGHT@)) { return false; }
+    if (ncr_v_@COMPARE_LEFT@->length != ncr_v_@COMPARE_RIGHT@->length) { return false; }
+    if (ncr_v_@COMPARE_LEFT@->length == 0) { return true; }
+    return CRYPTO_memcmp(ncr_v_@COMPARE_LEFT@->bytes, ncr_v_@COMPARE_RIGHT@->bytes,
+        ncr_v_@COMPARE_LEFT@->length) == 0;
+}

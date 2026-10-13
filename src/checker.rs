@@ -56,7 +56,8 @@ impl Tables {
     fn is_static_native(&self, id: usize) -> bool {
         matches!(self.classes[id].native,
             Some(t::NativeClass::Arrays | t::NativeClass::Encoding | t::NativeClass::Console | t::NativeClass::Files |
-                t::NativeClass::Args | t::NativeClass::Math | t::NativeClass::Time | t::NativeClass::Env))
+                t::NativeClass::Args | t::NativeClass::Math | t::NativeClass::Time |
+                t::NativeClass::Env | t::NativeClass::Crypto))
     }
     fn type_name(&self, ty: Type) -> String {
         match ty {
@@ -113,6 +114,7 @@ impl Tables {
                     Some(t::NativeClass::Set(_) | t::NativeClass::Text |
                         t::NativeClass::Regex | t::NativeClass::RegexMatch |
                         t::NativeClass::Arrays | t::NativeClass::ByteBuffer | t::NativeClass::Encoding |
+                        t::NativeClass::Crypto |
                         t::NativeClass::Path | t::NativeClass::File |
                         t::NativeClass::Directory | t::NativeClass::FileInfo |
                         t::NativeClass::Console | t::NativeClass::Files |
@@ -234,6 +236,7 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
             Some(a::NativeClass::Args) => Some(t::NativeClass::Args),
             Some(a::NativeClass::Math) => Some(t::NativeClass::Math),
             Some(a::NativeClass::Random) => Some(t::NativeClass::Random),
+            Some(a::NativeClass::Crypto) => Some(t::NativeClass::Crypto),
             Some(a::NativeClass::Time) => Some(t::NativeClass::Time),
             Some(a::NativeClass::SocketAddress) => Some(t::NativeClass::SocketAddress),
             Some(a::NativeClass::TcpListener) => Some(t::NativeClass::TcpListener),

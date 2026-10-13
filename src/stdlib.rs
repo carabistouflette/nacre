@@ -52,7 +52,7 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
             C::Set(_) => M::SetNew,
             C::Text => M::TextNew,
             C::Random => M::RandomNew,
-            C::Regex | C::RegexMatch | C::Arrays | C::ByteBuffer | C::Encoding |
+            C::Regex | C::RegexMatch | C::Arrays | C::ByteBuffer | C::Encoding | C::Crypto |
             C::Path | C::File | C::Directory | C::FileInfo |
             C::Console | C::Files | C::Args | C::Math | C::Time |
             C::Thread(_) | C::Mutex(_) | C::Guard(_) | C::Channel(_) |
@@ -265,6 +265,14 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
         (C::Math, "floorDivLong") => M::MathFloorDivLong,
         (C::Math, "floorModInt") => M::MathFloorModInt,
         (C::Math, "floorModLong") => M::MathFloorModLong,
+        (C::Crypto, "randomBytes") => M::CryptoRandomBytes,
+        (C::Crypto, "digest") => M::CryptoDigest,
+        (C::Crypto, "hmac") => M::CryptoHmac,
+        (C::Crypto, "pbkdf2") => M::CryptoPbkdf2,
+        (C::Crypto, "hkdf") => M::CryptoHkdf,
+        (C::Crypto, "aesGcmEncrypt") => M::CryptoAesGcmEncrypt,
+        (C::Crypto, "aesGcmDecrypt") => M::CryptoAesGcmDecrypt,
+        (C::Crypto, "constantTimeEquals") => M::CryptoConstantTimeEquals,
         (C::Random, "fromSystem") => M::RandomFromSystem,
         (C::Random, "reseed") => M::RandomReseed,
         (C::Random, "nextLong") => M::RandomNextLong,

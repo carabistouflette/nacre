@@ -8,6 +8,10 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   Decoders reject malformed alphabets, padding, discarded bits, and invalid
   scalar encodings while preserving embedded NUL.
 
+- Static `Crypto` adds OpenSSL 3 EVP/RAND digests, HMAC, PBKDF2, HKDF, AES-GCM,
+  CSPRNG bytes, and constant-time equality with borrowed inputs and affine outputs.
+  Authentication failures wipe unexposed plaintext; unsupported digests and invalid
+  lengths return generic `Err` diagnostics.
 - Floating min/max normalize signed-zero ties explicitly rather than relying on
   host libm's unspecified tie sign; both operand orders and same-sign zeros are
   covered by generated-program sanitizer regressions.

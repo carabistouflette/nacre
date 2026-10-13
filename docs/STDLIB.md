@@ -171,6 +171,44 @@ UTF-8 encoding copies every byte of valid `Text`, including embedded NUL. UTF-8
 decoding preserves NUL and returns `Err` for truncated, overlong, surrogate, or
 out-of-range encodings, or input too large for `Text`; invalid data is never replaced.
 
+## `Crypto`
+
+`Crypto` exposes focused primitives implemented with OpenSSL 3 EVP and RAND APIs.
+Its byte-buffer inputs are borrowed; successful byte outputs are new affine owners.
+Algorithm names are exact, case-sensitive spellings: `SHA256`, `SHA384`, `SHA512`,
+`SHA3-256`, `SHA3-384`, and `SHA3-512`. Unsupported names and names containing
+embedded NUL return `Err`; there is no algorithm fallback. Recoverable operation
+errors use generic diagnostics and never include key, password, salt, or input bytes.
+
+```java
+static Result<ByteBuffer, Text> randomBytes(long length)
+static Result<ByteBuffer, Text> digest(borrow Text algorithm, borrow ByteBuffer data)
+static Result<ByteBuffer, Text> hmac(borrow Text algorithm, borrow ByteBuffer key, borrow ByteBuffer data)
+static Result<ByteBuffer, Text> pbkdf2(borrow Text algorithm, borrow ByteBuffer password, borrow ByteBuffer salt, int iterations, long outputLength)
+static Result<ByteBuffer, Text> hkdf(borrow Text algorithm, borrow ByteBuffer key, borrow ByteBuffer salt, borrow ByteBuffer info, long outputLength)
+static Result<ByteBuffer, Text> aesGcmEncrypt(borrow ByteBuffer key, borrow ByteBuffer nonce, borrow ByteBuffer plaintext, borrow ByteBuffer aad)
+static Result<ByteBuffer, Text> aesGcmDecrypt(borrow ByteBuffer key, borrow ByteBuffer nonce, borrow ByteBuffer ciphertextAndTag, borrow ByteBuffer aad)
+static boolean constantTimeEquals(borrow ByteBuffer left, borrow ByteBuffer right)
+```
+
+`randomBytes` uses the system CSPRNG; zero length is valid, while negative lengths
+and outputs above `INT_MAX` return `Err`. PBKDF2 requires positive iterations and
+limits output to `INT_MAX`. HKDF follows RFC 5869's limit of 255 digest blocks.
+Digest, HMAC, PBKDF2, and HKDF use the selected supported digest exactly.
+
+AES-GCM accepts 16-, 24-, or 32-byte keys and a 12-byte nonce. Callers must never
+reuse a nonce with the same key. Encryption returns ciphertext followed by the
+16-byte authentication tag. Decryption returns `Err` for malformed keys/nonces,
+truncated tags, or authentication failure; unauthenticated plaintext is wiped and
+freed before returning, and no plaintext owner is exposed. Inputs that would
+narrow beyond OpenSSL's `int` lengths are rejected.
+
+Equal-length `constantTimeEquals` comparisons use OpenSSL's constant-time
+comparison primitive. Different lengths return `false` immediately, so lengths
+are not hidden. This API is not a complete cryptography library: it provides no
+signature, certificate, key-management, or protocol-composition facilities.
+Native programs require the OpenSSL 3 development and runtime libraries.
+
 ## `Option<T>` and `Result<T, E>`
 
 ```java

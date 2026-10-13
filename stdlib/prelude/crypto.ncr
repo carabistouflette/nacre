@@ -1,0 +1,10 @@
+class Crypto {
+    public static Result<ByteBuffer, Text> randomBytes(long length) {}
+    public static Result<ByteBuffer, Text> digest(borrow Text algorithm, borrow ByteBuffer data) {}
+    public static Result<ByteBuffer, Text> hmac(borrow Text algorithm, borrow ByteBuffer key, borrow ByteBuffer data) {}
+    public static Result<ByteBuffer, Text> pbkdf2(borrow Text algorithm, borrow ByteBuffer password, borrow ByteBuffer salt, int iterations, long outputLength) {}
+    public static Result<ByteBuffer, Text> hkdf(borrow Text algorithm, borrow ByteBuffer key, borrow ByteBuffer salt, borrow ByteBuffer info, long outputLength) {}
+    public static Result<ByteBuffer, Text> aesGcmEncrypt(borrow ByteBuffer key, borrow ByteBuffer nonce, borrow ByteBuffer plaintext, borrow ByteBuffer aad) {}
+    public static Result<ByteBuffer, Text> aesGcmDecrypt(borrow ByteBuffer key, borrow ByteBuffer nonce, borrow ByteBuffer ciphertextAndTag, borrow ByteBuffer aad) {}
+    public static boolean constantTimeEquals(borrow ByteBuffer left, borrow ByteBuffer right) {}
+}
