@@ -17,6 +17,26 @@ class List<T> {
     public void reserve(int capacity) {}
 }
 
+class Array<T> {
+    public Array(List<T> values) {}
+    public readonly int size() {}
+    public readonly T get(int index) {}
+    public readonly Option<T> tryGet(int index) {}
+    public readonly borrow T getRef(int index) {}
+    public borrow mut T getMut(int index) {}
+    public void set(int index, T value) {}
+}
+
+class Arrays {
+    public static Array<byte> zeroedBytes(int length) {}
+    public static Array<char> zeroedChars(int length) {}
+    public static Array<int> zeroedInts(int length) {}
+    public static Array<long> zeroedLongs(int length) {}
+    public static Array<double> zeroedDoubles(int length) {}
+    public static Array<boolean> zeroedBooleans(int length) {}
+    public static Array<Unit> zeroedUnits(int length) {}
+}
+
 class Map<K, V> {
     public Map() {}
     public readonly boolean containsKey(K key) {}

@@ -167,6 +167,14 @@ impl Expander {
                     class.methods.retain(|method| !matches!(method.name.as_str(), "get" | "tryGet"));
                 }
             }
+            Some(a::NativeClass::Array(element)) => {
+                *element = self.ty(element, env, class.span, 0)?;
+                if element.is_copy() {
+                    class.methods.retain(|method| !matches!(method.name.as_str(), "getRef" | "getMut"));
+                } else {
+                    class.methods.retain(|method| !matches!(method.name.as_str(), "get" | "tryGet"));
+                }
+            }
             Some(a::NativeClass::Map { key, value, key_kind }) => {
                 *key = self.ty(key, env, class.span, 0)?;
                 *value = self.ty(value, env, class.span, 0)?;

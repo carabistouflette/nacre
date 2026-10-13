@@ -3,8 +3,11 @@ use crate::ast::{NativeClass, Type};
 #[derive(Clone, Copy)]
 enum NativeBuiltin {
     List,
+    Array,
     Map,
     Text,
+    Arrays,
+    ByteBuffer,
     Console,
     Files,
     Args,
@@ -17,12 +20,15 @@ impl NativeBuiltin {
     fn into_ast(self) -> NativeClass {
         match self {
             Self::List => NativeClass::List(Type::Named("T".to_owned())),
+            Self::Array => NativeClass::Array(Type::Named("T".to_owned())),
             Self::Map => NativeClass::Map {
                 key: Type::Named("K".to_owned()),
                 value: Type::Named("V".to_owned()),
                 key_kind: None,
             },
             Self::Text => NativeClass::Text,
+            Self::Arrays => NativeClass::Arrays,
+            Self::ByteBuffer => NativeClass::ByteBuffer,
             Self::Console => NativeClass::Console,
             Self::Files => NativeClass::Files,
             Self::Args => NativeClass::Args,
@@ -62,7 +68,9 @@ pub(super) const PRELUDE_UNITS: &[PreludeUnit] = &[
         source: include_str!("../../stdlib/prelude/collections.ncr"),
         builtins: &[
             Builtin { name: "List", native: Some(NativeBuiltin::List) },
+            Builtin { name: "Array", native: Some(NativeBuiltin::Array) },
             Builtin { name: "Map", native: Some(NativeBuiltin::Map) },
+            Builtin { name: "Arrays", native: Some(NativeBuiltin::Arrays) },
         ],
     },
     PreludeUnit {
@@ -72,6 +80,7 @@ pub(super) const PRELUDE_UNITS: &[PreludeUnit] = &[
     PreludeUnit {
         source: include_str!("../../stdlib/prelude/io.ncr"),
         builtins: &[
+            Builtin { name: "ByteBuffer", native: Some(NativeBuiltin::ByteBuffer) },
             Builtin { name: "Console", native: Some(NativeBuiltin::Console) },
             Builtin { name: "Files", native: Some(NativeBuiltin::Files) },
             Builtin { name: "Args", native: Some(NativeBuiltin::Args) },

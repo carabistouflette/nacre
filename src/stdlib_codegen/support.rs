@@ -9,6 +9,20 @@ pub(super) fn marker(method: M) -> &'static str {
         M::ListRemove => "@LIST_REMOVE@", M::ListTryGet => "@LIST_TRY_GET@",
         M::ListTryPop => "@LIST_TRY_POP@", M::ListTryRemove => "@LIST_TRY_REMOVE@",
         M::ListClear => "@LIST_CLEAR@", M::ListReserve => "@LIST_RESERVE@",
+        M::ArrayNew => "@ARRAY_NEW@", M::ArraySize => "@ARRAY_SIZE@",
+        M::ArrayGet => "@ARRAY_GET@", M::ArrayGetRef => "@ARRAY_GET_REF@",
+        M::ArrayGetMut => "@ARRAY_GET_MUT@", M::ArraySet => "@ARRAY_SET@",
+        M::ArrayTryGet => "@ARRAY_TRY_GET@",
+        M::ArraysBytes => "@ARRAYS_BYTES@", M::ArraysChars => "@ARRAYS_CHARS@",
+        M::ArraysInts => "@ARRAYS_INTS@", M::ArraysLongs => "@ARRAYS_LONGS@",
+        M::ArraysDoubles => "@ARRAYS_DOUBLES@", M::ArraysBooleans => "@ARRAYS_BOOLEANS@",
+        M::ArraysUnits => "@ARRAYS_UNITS@",
+        M::ByteBufferWithCapacity => "@BYTE_BUFFER_WITH_CAPACITY@",
+        M::ByteBufferLength => "@BYTE_BUFFER_LENGTH@", M::ByteBufferCapacity => "@BYTE_BUFFER_CAPACITY@",
+        M::ByteBufferGet => "@BYTE_BUFFER_GET@", M::ByteBufferSet => "@BYTE_BUFFER_SET@",
+        M::ByteBufferAppend => "@BYTE_BUFFER_APPEND@",
+        M::ByteBufferAppendBytes => "@BYTE_BUFFER_APPEND_BYTES@",
+        M::ByteBufferClear => "@BYTE_BUFFER_CLEAR@", M::ByteBufferTruncate => "@BYTE_BUFFER_TRUNCATE@",
         M::MapNew => "@MAP_NEW@", M::MapContainsKey => "@MAP_CONTAINS_KEY@",
         M::MapSize => "@MAP_SIZE@", M::MapIsEmpty => "@MAP_IS_EMPTY@",
         M::MapPut => "@MAP_PUT@", M::MapTryRemove => "@MAP_TRY_REMOVE@",
@@ -80,20 +94,14 @@ pub(super) fn text_helpers(program: &t::Program, text: usize) -> String {
     ));
     let mut result_ids = Vec::new();
     for function in &program.functions {
-        if !matches!(function.native,
-            Some(M::ConsoleReadLine | M::FilesReadText | M::FilesWriteText | M::FilesWriteTextAtomic
-                | M::ArgsGet | M::TextParseInt | M::TextParseLong | M::TextParseDouble | M::TextSliceBytes
-                | M::MathAbsInt | M::MathAbsLong | M::RandomFromSystem | M::RandomNextInt
-                | M::TimeMonotonicNanos | M::TimeUnixMillis | M::TimeSleepMillis | M::TimeDeadlineAfterMillis)) {
-            continue;
-        }
-        let class = result_id(function);
+        if function.native.is_none() { continue; }
+        let Type::Object(class) = function.return_type else { continue; };
+        let Some(layout) = program.classes[class].result else { continue; };
+        if layout.err_type != Type::Object(text) { continue; }
         if !result_ids.contains(&class) { result_ids.push(class); }
     }
     for class in result_ids {
-        let (err, err_variant) = variant(program, class, "Err");
-        assert!(matches!(err_variant.fields.as_slice(), [Type::Object(id)] if *id == text),
-            "native Result error payload must own Text");
+        let err = program.classes[class].result.expect("trusted Result layout").err_variant;
         out.push_str(&format!(
             "static ncr_obj_{class} ncr_result_error_{class}(const char *message, size_t length, size_t line, size_t column) {{\n    ncr_obj_{text} *error = ncr_text_from_bytes_{text}((const unsigned char *)message, length, line, column);\n    return (ncr_obj_{class}){{ .tag = {err}, .data.v{err}.f0 = error }};\n}}\n"
         ));

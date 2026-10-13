@@ -1,0 +1,58 @@
+void main() {
+    match (ByteBuffer.withCapacity(-1L)) {
+        Err(error) { println("negative capacity rejected"); }
+        Ok(buffer) { drop(buffer); }
+    }
+
+    match (ByteBuffer.withCapacity(0L)) {
+        Err(error) { println("unexpected factory error"); }
+        Ok(buffer) {
+            println(buffer.length());
+            println(buffer.capacity());
+            int index = 0;
+            while (index < 40) {
+                buffer.append((byte)index);
+                index = index + 1;
+            }
+            buffer.set(1L, (byte)0);
+            println(buffer.length());
+            println(buffer.capacity());
+            println(buffer.get(0L));
+            println(buffer.get(1L));
+            println(buffer.get(39L));
+
+            match (ByteBuffer.withCapacity(0L)) {
+                Err(error) { println("unexpected source factory error"); }
+                Ok(source) {
+                    source.append((byte)255);
+                    source.append((byte)0);
+                    source.append((byte)65);
+                    match (buffer.appendBytes(source)) {
+                        Err(error) { println("append failed"); }
+                        Ok(unit) { println(unit); }
+                    }
+                    source.set(0L, (byte)1);
+                    println(buffer.get(40L));
+                    println(buffer.get(41L));
+                    println(buffer.get(42L));
+                }
+            }
+
+            match (buffer.truncate(41L)) {
+                Err(error) { println("truncate failed"); }
+                Ok(unit) {
+                    println(buffer.length());
+                    println(buffer.get(40L));
+                }
+            }
+            match (buffer.truncate(42L)) {
+                Err(error) { println("invalid truncate"); }
+                Ok(unit) { println("unexpected truncate success"); }
+            }
+            long retainedCapacity = buffer.capacity();
+            buffer.clear();
+            println(buffer.length());
+            println(buffer.capacity() == retainedCapacity);
+        }
+    }
+}

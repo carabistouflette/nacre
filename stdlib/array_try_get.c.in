@@ -1,0 +1,6 @@
+static @OPTION_TYPE@ @ARRAY_TRY_GET@(ncr_obj_@ID@ *p, @INDEX_TYPE@ index, size_t line, size_t column) {
+    (void)line; (void)column;
+    if (index < 0 || index >= p->length) { return (@OPTION_TYPE@){ .tag = @NONE_TAG@ }; }
+    @ELEMENT@ value = p->items[index];
+    return (@OPTION_TYPE@){ .tag = @SOME_TAG@, .data.v@SOME_TAG@.f0 = value };
+}

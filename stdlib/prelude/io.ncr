@@ -1,3 +1,15 @@
+class ByteBuffer {
+    public static Result<ByteBuffer, Text> withCapacity(long initialCapacity) {}
+    public readonly long length() {}
+    public readonly long capacity() {}
+    public readonly byte get(long index) {}
+    public void set(long index, byte value) {}
+    public void append(byte value) {}
+    public Result<Unit, Text> appendBytes(borrow ByteBuffer source) {}
+    public void clear() {}
+    public Result<Unit, Text> truncate(long newLength) {}
+}
+
 class Console {
     public static Result<Option<Text>, Text> readLine() {}
     public static void print(String value) {}

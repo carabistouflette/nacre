@@ -1,0 +1,12 @@
+static @ARRAY_TYPE@ @ARRAYS_FACTORY@(int32_t ncr_v_@LENGTH_ID@, size_t line, size_t column) {
+    if (ncr_v_@LENGTH_ID@ < 0) { ncr_fail("negative Array length", line, column); }
+    if ((uint64_t)ncr_v_@LENGTH_ID@ > SIZE_MAX / sizeof(@ELEMENT@)) {
+        ncr_fail("Array length is too large", line, column);
+    }
+    @ARRAY_TYPE@ array = ncr_allocate(sizeof(*array), line, column);
+    if (ncr_v_@LENGTH_ID@ > 0) {
+        array->items = ncr_allocate((size_t)ncr_v_@LENGTH_ID@ * sizeof(@ELEMENT@), line, column);
+        array->length = ncr_v_@LENGTH_ID@;
+    }
+    return array;
+}

@@ -1,0 +1,92 @@
+/* ByteBuffer owns one growable byte allocation; no backing pointer escapes. */
+static void ncr_byte_buffer_reserve_@ID@(@BUFFER_TYPE@ buffer, size_t required_size, size_t line, size_t column) {
+    const uint64_t long_limit = (uint64_t)INT64_MAX;
+    if ((uint64_t)required_size > long_limit) {
+        ncr_fail("ByteBuffer capacity exceeds long range", line, column);
+    }
+    uint64_t maximum = (uint64_t)SIZE_MAX;
+    if (maximum > long_limit) { maximum = long_limit; }
+    if ((uint64_t)required_size > maximum) {
+        ncr_fail("ByteBuffer capacity exceeds size_t range", line, column);
+    }
+    if (required_size <= buffer->capacity) { return; }
+    const size_t limit = (size_t)maximum;
+    size_t grown = buffer->capacity == 0 ? (limit < 16 ? limit : 16) : buffer->capacity;
+    while (grown < required_size) {
+        if (grown > limit / 2) { grown = limit; break; }
+        grown *= 2;
+    }
+    if (grown < required_size) {
+        ncr_fail("ByteBuffer capacity is too large", line, column);
+    }
+    unsigned char *next = ncr_allocate(grown, line, column);
+    if (buffer->length > 0) { memcpy(next, buffer->bytes, buffer->length); }
+    ncr_deallocate(buffer->bytes);
+    buffer->bytes = next;
+    buffer->capacity = grown;
+}
+
+static @FACTORY_RESULT@ @BYTE_BUFFER_WITH_CAPACITY@(int64_t ncr_v_@FACTORY_CAPACITY_ID@, size_t line, size_t column) {
+    if (ncr_v_@FACTORY_CAPACITY_ID@ < 0) {
+        return ncr_result_error_@FACTORY_ERROR_RESULT@("negative ByteBuffer capacity", sizeof("negative ByteBuffer capacity") - 1, line, column);
+    }
+    if ((uint64_t)ncr_v_@FACTORY_CAPACITY_ID@ > (uint64_t)SIZE_MAX) {
+        return ncr_result_error_@FACTORY_ERROR_RESULT@("ByteBuffer capacity exceeds size_t range", sizeof("ByteBuffer capacity exceeds size_t range") - 1, line, column);
+    }
+    @BUFFER_TYPE@ buffer = ncr_allocate(sizeof(*buffer), line, column);
+    if (ncr_v_@FACTORY_CAPACITY_ID@ > 0) {
+        ncr_byte_buffer_reserve_@ID@(buffer, (size_t)ncr_v_@FACTORY_CAPACITY_ID@, line, column);
+    }
+    return (@FACTORY_RESULT@){ .tag = @FACTORY_OK_TAG@, .data.v@FACTORY_OK_TAG@.f0 = buffer };
+}
+static @LENGTH_RESULT@ @BYTE_BUFFER_LENGTH@(@BUFFER_TYPE@ p, size_t line, size_t column) {
+    (void)line; (void)column; return (int64_t)p->length;
+}
+static @CAPACITY_RESULT@ @BYTE_BUFFER_CAPACITY@(@BUFFER_TYPE@ p, size_t line, size_t column) {
+    (void)line; (void)column; return (int64_t)p->capacity;
+}
+static uint8_t @BYTE_BUFFER_GET@(@BUFFER_TYPE@ p, int64_t ncr_v_@GET_INDEX_ID@, size_t line, size_t column) {
+    if (ncr_v_@GET_INDEX_ID@ < 0 || (uint64_t)ncr_v_@GET_INDEX_ID@ >= (uint64_t)p->length) {
+        ncr_fail("ByteBuffer index out of bounds", line, column);
+    }
+    return p->bytes[(size_t)ncr_v_@GET_INDEX_ID@];
+}
+static void @BYTE_BUFFER_SET@(@BUFFER_TYPE@ p, int64_t ncr_v_@SET_INDEX_ID@, uint8_t ncr_v_@SET_VALUE_ID@, size_t line, size_t column) {
+    if (ncr_v_@SET_INDEX_ID@ < 0 || (uint64_t)ncr_v_@SET_INDEX_ID@ >= (uint64_t)p->length) {
+        ncr_fail("ByteBuffer index out of bounds", line, column);
+    }
+    p->bytes[(size_t)ncr_v_@SET_INDEX_ID@] = ncr_v_@SET_VALUE_ID@;
+}
+static void @BYTE_BUFFER_APPEND@(@BUFFER_TYPE@ p, uint8_t ncr_v_@APPEND_VALUE_ID@, size_t line, size_t column) {
+    if (p->length == SIZE_MAX || (uint64_t)p->length >= (uint64_t)INT64_MAX) {
+        ncr_fail("ByteBuffer is full", line, column);
+    }
+    size_t required_size = p->length + 1;
+    ncr_byte_buffer_reserve_@ID@(p, required_size, line, column);
+    p->bytes[p->length] = ncr_v_@APPEND_VALUE_ID@;
+    p->length = required_size;
+}
+static @APPEND_RESULT@ @BYTE_BUFFER_APPEND_BYTES@(@BUFFER_TYPE@ p, @BUFFER_TYPE@ ncr_v_@APPEND_SOURCE_ID@, size_t line, size_t column) {
+    if ((uint64_t)ncr_v_@APPEND_SOURCE_ID@->length > (uint64_t)INT64_MAX - (uint64_t)p->length
+        || ncr_v_@APPEND_SOURCE_ID@->length > SIZE_MAX - p->length) {
+        return ncr_result_error_@APPEND_ERROR_RESULT@("ByteBuffer length exceeds long range", sizeof("ByteBuffer length exceeds long range") - 1, line, column);
+    }
+    size_t source_length = ncr_v_@APPEND_SOURCE_ID@->length;
+    size_t required_size = p->length + source_length;
+    if (source_length > 0) {
+        ncr_byte_buffer_reserve_@ID@(p, required_size, line, column);
+        memcpy(p->bytes + p->length, ncr_v_@APPEND_SOURCE_ID@->bytes, source_length);
+        p->length = required_size;
+    }
+    return (@APPEND_RESULT@){ .tag = @APPEND_OK_TAG@, .data.v@APPEND_OK_TAG@.f0 = UINT8_C(0) };
+}
+static void @BYTE_BUFFER_CLEAR@(@BUFFER_TYPE@ p, size_t line, size_t column) {
+    (void)line; (void)column; p->length = 0;
+}
+static @TRUNCATE_RESULT@ @BYTE_BUFFER_TRUNCATE@(@BUFFER_TYPE@ p, int64_t ncr_v_@TRUNCATE_LENGTH_ID@, size_t line, size_t column) {
+    if (ncr_v_@TRUNCATE_LENGTH_ID@ < 0 || (uint64_t)ncr_v_@TRUNCATE_LENGTH_ID@ > (uint64_t)p->length) {
+        return ncr_result_error_@TRUNCATE_ERROR_RESULT@("invalid ByteBuffer truncate length", sizeof("invalid ByteBuffer truncate length") - 1, line, column);
+    }
+    p->length = (size_t)ncr_v_@TRUNCATE_LENGTH_ID@;
+    return (@TRUNCATE_RESULT@){ .tag = @TRUNCATE_OK_TAG@, .data.v@TRUNCATE_OK_TAG@.f0 = UINT8_C(0) };
+}

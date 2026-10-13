@@ -46,11 +46,12 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
     if constructor {
         return match class {
             C::List(_) => M::ListNew,
+            C::Array(_) => M::ArrayNew,
             C::Map(_, _) => M::MapNew,
             C::Text => M::TextNew,
             C::Random => M::RandomNew,
-            C::Console | C::Files | C::Args | C::Math | C::Time =>
-                unreachable!("static native class has no constructor"),
+            C::Arrays | C::ByteBuffer | C::Console | C::Files | C::Args | C::Math | C::Time =>
+                unreachable!("static or factory-only native class has no constructor"),
         };
     }
     match (class, name) {
@@ -69,6 +70,28 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
         (C::List(_), "tryRemove") => M::ListTryRemove,
         (C::List(_), "clear") => M::ListClear,
         (C::List(_), "reserve") => M::ListReserve,
+        (C::Array(_), "size") => M::ArraySize,
+        (C::Array(_), "get") => M::ArrayGet,
+        (C::Array(_), "getRef") => M::ArrayGetRef,
+        (C::Array(_), "getMut") => M::ArrayGetMut,
+        (C::Array(_), "tryGet") => M::ArrayTryGet,
+        (C::Array(_), "set") => M::ArraySet,
+        (C::Arrays, "zeroedBytes") => M::ArraysBytes,
+        (C::Arrays, "zeroedChars") => M::ArraysChars,
+        (C::Arrays, "zeroedInts") => M::ArraysInts,
+        (C::Arrays, "zeroedLongs") => M::ArraysLongs,
+        (C::Arrays, "zeroedDoubles") => M::ArraysDoubles,
+        (C::Arrays, "zeroedBooleans") => M::ArraysBooleans,
+        (C::Arrays, "zeroedUnits") => M::ArraysUnits,
+        (C::ByteBuffer, "withCapacity") => M::ByteBufferWithCapacity,
+        (C::ByteBuffer, "length") => M::ByteBufferLength,
+        (C::ByteBuffer, "capacity") => M::ByteBufferCapacity,
+        (C::ByteBuffer, "get") => M::ByteBufferGet,
+        (C::ByteBuffer, "set") => M::ByteBufferSet,
+        (C::ByteBuffer, "append") => M::ByteBufferAppend,
+        (C::ByteBuffer, "appendBytes") => M::ByteBufferAppendBytes,
+        (C::ByteBuffer, "clear") => M::ByteBufferClear,
+        (C::ByteBuffer, "truncate") => M::ByteBufferTruncate,
         (C::Map(_, _), "containsKey") => M::MapContainsKey,
         (C::Map(_, _), "size") => M::MapSize,
         (C::Map(_, _), "isEmpty") => M::MapIsEmpty,

@@ -1,0 +1,77 @@
+interface CounterLike {
+    readonly int value();
+    void increment();
+}
+
+class Counter implements CounterLike {
+    private int stored;
+    public Counter(int stored) { this.stored = stored; }
+    public readonly int value() { return this.stored; }
+    public void increment() { this.stored = this.stored + 1; }
+}
+
+enum Cell { Item(Counter); Empty; }
+
+void main() {
+    List<int> source = new List<int>();
+    source.reserve(8);
+    source.add(5);
+    source.add(8);
+    Array<int> values = new Array<int>(source);
+    values.set(1, 9);
+    for (int value : values) { println(value); }
+    match (values.tryGet(-1)) {
+        None { println("none"); }
+        Some(value) { println(value); }
+    }
+
+    Array<byte> zeroBytes = Arrays.zeroedBytes(1);
+    Array<char> zeroChars = Arrays.zeroedChars(1);
+    Array<int> emptyInts = Arrays.zeroedInts(0);
+    Array<long> zeroLongs = Arrays.zeroedLongs(1);
+    Array<double> zeroDoubles = Arrays.zeroedDoubles(1);
+    Array<boolean> zeroBooleans = Arrays.zeroedBooleans(1);
+    Array<Unit> zeroUnits = Arrays.zeroedUnits(1);
+    println(zeroBytes.get(0));
+    println((int)zeroChars.get(0));
+    println(emptyInts.size());
+    println(zeroLongs.get(0));
+    println((int)zeroDoubles.get(0));
+    println(zeroBooleans.get(0));
+    println(zeroUnits.get(0));
+
+    List<Counter> owned = new List<Counter>();
+    owned.add(new Counter(3));
+    Array<Counter> counters = new Array<Counter>(owned);
+    {
+        borrow mut Counter counter = counters.getMut(0);
+        counter.increment();
+    }
+    for (borrow Counter counter : counters) { println(counter.value()); }
+    counters.set(0, new Counter(10));
+
+    List<CounterLike> erasedSource = new List<CounterLike>();
+    erasedSource.add(new Counter(20));
+    Array<CounterLike> erased = new Array<CounterLike>(erasedSource);
+    for (borrow CounterLike counter : erased) { println(counter.value()); }
+    for (borrow mut CounterLike counter : erased) { counter.increment(); }
+    for (borrow CounterLike counter : erased) { println(counter.value()); }
+
+    List<Cell> cellsSource = new List<Cell>();
+    cellsSource.add(new Cell.Item(new Counter(30)));
+    cellsSource.add(new Cell.Empty());
+    Array<Cell> cells = new Array<Cell>(cellsSource);
+    for (borrow Cell cell : cells) {
+        match (cell) {
+            Item(counter) { println(counter.value()); }
+            Empty { println(0); }
+        }
+    }
+    cells.set(0, new Cell.Empty());
+    for (borrow Cell cell : cells) {
+        match (cell) {
+            Item(counter) { println(counter.value()); }
+            Empty { println(0); }
+        }
+    }
+}
