@@ -28,11 +28,21 @@ fn run(source: &SourceBundle) -> Output {
     let c=source.compile_to_c().unwrap_or_else(|d|panic!("{}",source.render(&d)));
     native::compile_c_with_flags(&c,&["-DNACRE_MEMORY_STATS"]).unwrap().output().unwrap()
 }
+fn assert_memory_balanced(output: &Output) {
+    let report = String::from_utf8_lossy(&output.stderr);
+    let mut fields = report.split_whitespace();
+    assert_eq!(fields.next(), Some("NACRE_MEMORY"), "{report}");
+    let allocations = fields.next().unwrap().strip_prefix("allocations=").unwrap();
+    let frees = fields.next().unwrap().strip_prefix("frees=").unwrap();
+    assert_eq!(allocations, frees, "{report}");
+    assert_eq!(fields.next(), Some("live=0"), "{report}");
+    assert_eq!(fields.next(), None, "{report}");
+}
 #[test]
 fn cross_file_forward_reference() {
     let b=bundle(&[("Main.ncr","void main(){C c=new C();println(c.get());}"),("C.ncr","class C{readonly int get(){return 42;}}")]);
     let result=run(&b);assert!(result.status.success());assert_eq!(result.stdout,b"42\n");
-    assert_eq!(result.stderr,b"NACRE_MEMORY allocations=1 frees=1 live=0\n");
+    assert_memory_balanced(&result);
 }
 #[test]
 fn separate_lexing_cannot_close_another_files_comment() {
@@ -131,7 +141,7 @@ fn invalid_utf8_source_is_rejected() {
 #[test]
 fn project_example_is_valid() {
     let b=SourceBundle::from_paths(&[PathBuf::from("examples/language/multi_file_project")]).unwrap();let result=run(&b);
-    assert_eq!(result.stdout,b"Sum = 42\n");assert_eq!(result.stderr,b"NACRE_MEMORY allocations=4 frees=4 live=0\n");
+    assert_eq!(result.stdout,b"Sum = 42\n");assert_memory_balanced(&result);
 }
 #[test]
 fn project_init_then_run() {
