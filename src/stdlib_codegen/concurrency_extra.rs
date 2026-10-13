@@ -555,7 +555,7 @@ fn synchronizer_clone(program: &t::Program, function: &t::Function) -> String {
     let condition_retain = if matches!(program.classes[id].native, Some(C::Condition(_))) {
         format!(
             "    if (!ncr_condition_node_retain(ncr_self->condition)) {{\n        ncr_mutex_release_{control_type}(control);\n        {}\n    }}\n",
-            result_error_literal(program, function, "Condition node reference count overflow"));
+            result_error_literal(program, function, "Condition node reference count overflow"))
     } else {
         String::new()
     };

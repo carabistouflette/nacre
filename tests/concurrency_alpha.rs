@@ -164,6 +164,7 @@ fn observe_unbounded_sync_waits(c: &str) -> String {
 #include <pthread.h>
 #include <stdatomic.h>
 #include <stdbool.h>
+#include <stdio.h>
 static _Atomic unsigned ncr_test_sync_wait_count = 0;
 static _Thread_local bool ncr_test_sync_wait_reported = false;
 static int ncr_test_sync_wait(pthread_cond_t *condition, pthread_mutex_t *mutex) {
@@ -2687,7 +2688,7 @@ Result<Unit, Text> exercise() {
     Option<int> pending = future.await(0L)?;
     match (pending) {
         None { futureEmptyPoll = true; }
-        Some(value) { drop(value); }
+        Some(value) {}
     }
     gate.countDown()?;
     int futureValue = -1;
@@ -2725,7 +2726,7 @@ Result<Unit, Text> exercise() {
     while (iterations < 512) {
         Condition<int> condition = Condition<int>.create(mutex)?;
         drop(condition);
-        iterations += 1;
+        iterations = iterations + 1;
     }
 
     Condition<int> original = Condition<int>.create(mutex)?;
