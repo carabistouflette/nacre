@@ -460,8 +460,7 @@ impl Resolver {
                         let variant_name = variant.to_owned();
                         let moved_args = std::mem::take(args);
                         expression.kind = E::Variant { class: class_name, type_args: std::mem::take(type_args), variant: variant_name, args: moved_args };
-                        if let E::Variant { type_args, args, .. } = &mut expression.kind {
-                            for argument in type_args { self.resolve_type(context.unit, &context.type_params, argument, expression.span)?; }
+                        if let E::Variant { args, .. } = &mut expression.kind {
                             for argument in args { self.expression(argument, context)?; }
                         }
                         return Ok(());
