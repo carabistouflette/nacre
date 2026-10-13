@@ -316,10 +316,12 @@ class BinaryRecordCodec implements Codec<BinaryRecord> {
         writer.writeInt64(value.wide())?;
         writer.writeDouble(value.precise())?;
         writer.writeFloat32(value.narrow())?;
-        writer.writeInt32(value.name().byteLength())?;
-        writer.writeUtf8(value.name())?;
-        writer.writeInt32((int)value.blob().length())?;
-        writer.writeBytes(value.blob())?;
+        borrow Text name = value.name();
+        borrow ByteBuffer blob = value.blob();
+        writer.writeInt32(name.byteLength())?;
+        writer.writeUtf8(name)?;
+        writer.writeInt32((int)blob.length())?;
+        writer.writeBytes(blob)?;
         return new Result<Unit, Text>.Ok(());
     }
 
@@ -338,7 +340,7 @@ class BinaryRecordCodec implements Codec<BinaryRecord> {
 }
 
 Result<boolean, Text> roundTrip(borrow Text pathName, boolean littleEndian) {
-    Path path = Path.fromText(pathName)?;
+    Path path = Path.fromText(pathName.clone())?;
     File output = File.create(path, 384)?;
     BinaryWriter writer = BinaryWriter.toSink(new ChunkSink(output), littleEndian, 39L)?;
     ByteBuffer payload = ByteBuffer.withCapacity(0L)?;
@@ -364,18 +366,20 @@ Result<boolean, Text> roundTrip(borrow Text pathName, boolean littleEndian) {
     BinaryReader reader = BinaryReader.fromSource(new ChunkSource(input), littleEndian, 39L)?;
     boolean readerBudget = reader.remaining() == 39L;
     BinaryRecord decoded = codec.decode(reader)?;
+    borrow Text decodedName = decoded.name();
+    borrow ByteBuffer decodedBlob = decoded.blob();
     boolean valuesMatch = decoded.number() == -16909061
         && decoded.wide() == -72623859790382856L
         && decoded.precise() == -123.5 && decoded.narrow() == 1.5
-        && decoded.name().equalsString("A\0é")
-        && decoded.blob().length() == 3L
-        && decoded.blob().get(0L) == (byte)0
-        && decoded.blob().get(1L) == (byte)255
-        && decoded.blob().get(2L) == (byte)17;
+        && decodedName.equalsString("A\0é")
+        && decodedBlob.length() == 3L
+        && decodedBlob.get(0L) == (byte)0
+        && decodedBlob.get(1L) == (byte)255
+        && decodedBlob.get(2L) == (byte)17;
     boolean cursor = reader.position() == 39L && reader.remaining() == 0L;
     match (reader.readByte()) {
         Err(error) { drop(error); }
-        Ok(value) { cursor = false; }
+        Ok(unexpectedByte) { cursor = false; }
     }
     return new Result<boolean, Text>.Ok(writerState && readerBudget && valuesMatch && cursor);
 }

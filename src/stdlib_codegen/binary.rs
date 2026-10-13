@@ -56,14 +56,13 @@ fn interface_class(program: &t::Program, name: &str) -> usize {
         .id
 }
 
-fn interface_method(program: &t::Program, interface: usize, name: &str) -> &t::Function {
-    let suffix = format!(".{name}");
-    let matches = program.classes[interface].interface_methods.iter()
+fn interface_method<'a>(program: &'a t::Program, interface: usize, name: &str) -> &'a t::Function {
+    let mut matches = program.classes[interface].interface_methods.iter()
         .map(|id| &program.functions[*id])
-        .filter(|function| function.name.ends_with(&suffix))
-        .collect::<Vec<_>>();
-    assert_eq!(matches.len(), 1, "trusted stream interface declares one {name} method");
-    matches[0]
+        .filter(|function| function.name.rsplit_once('.').is_some_and(|(_, method)| method == name));
+    let method = matches.next().expect("trusted stream interface declares its method");
+    assert!(matches.next().is_none(), "trusted stream interface method is unique");
+    method
 }
 
 fn add_variant_tag(
@@ -79,7 +78,6 @@ fn add_variant_tag(
 
 fn add_interface_method(
     substitutions: &mut Vec<(&'static str, String)>,
-    program: &t::Program,
     function: &t::Function,
     slot_key: &'static str,
 ) {
@@ -169,7 +167,7 @@ pub(super) fn implementation(program: &t::Program, class_id: usize, native: C) -
             add(&mut substitutions, "@READER_FROM_SOURCE_MAX_BYTES_ID@", param(from_source, 2));
             add(&mut substitutions, "@SOURCE_ID@", source);
             add(&mut substitutions, "@SOURCE_READ_RESULT@", result_id(source_read));
-            add_interface_method(&mut substitutions, program, source_read, "@SOURCE_READ_SLOT@");
+            add_interface_method(&mut substitutions, source_read, "@SOURCE_READ_SLOT@");
             add(&mut substitutions, "@SOURCE_READ_OK_TAG@", source_read_ok);
             add(&mut substitutions, "@SOURCE_READ_ERROR_TAG@", source_read_error);
             add(&mut substitutions, "@READER_SEEK_POSITION_ID@", param(seek, 0));
@@ -228,11 +226,11 @@ pub(super) fn implementation(program: &t::Program, class_id: usize, native: C) -
             add(&mut substitutions, "@WRITER_TO_SINK_ENDIAN_ID@", param(to_sink, 1));
             add(&mut substitutions, "@WRITER_TO_SINK_MAX_BYTES_ID@", param(to_sink, 2));
             add(&mut substitutions, "@SINK_ID@", sink);
-            add_interface_method(&mut substitutions, program, sink_write, "@SINK_WRITE_SLOT@");
+            add_interface_method(&mut substitutions, sink_write, "@SINK_WRITE_SLOT@");
             add(&mut substitutions, "@SINK_WRITE_RESULT@", result_id(sink_write));
             add(&mut substitutions, "@SINK_WRITE_OK_TAG@", sink_write_ok);
             add(&mut substitutions, "@SINK_WRITE_ERROR_TAG@", sink_write_error);
-            add_interface_method(&mut substitutions, program, sink_flush, "@SINK_FLUSH_SLOT@");
+            add_interface_method(&mut substitutions, sink_flush, "@SINK_FLUSH_SLOT@");
             add(&mut substitutions, "@SINK_FLUSH_RESULT@", result_id(sink_flush));
             add(&mut substitutions, "@SINK_FLUSH_OK_TAG@", sink_flush_ok);
             add(&mut substitutions, "@SINK_FLUSH_ERROR_TAG@", sink_flush_error);

@@ -399,6 +399,7 @@ static ncr_obj_@READER_UTF8_RESULT@ @BINARY_READER_READ_UTF8@(ncr_obj_@READER_ID
     return (ncr_obj_@READER_UTF8_RESULT@){ .tag = @READER_UTF8_OK_TAG@, .data.v@READER_UTF8_OK_TAG@.f0 = text };
 }
 #undef NCR_BINARY_READER_CHECK
+/* BINARY_GROUP_END reader */
 
 /* BINARY_GROUP_BEGIN writer */
 _Static_assert(sizeof(float) == sizeof(uint32_t), "BinaryWriter requires 32-bit float");
