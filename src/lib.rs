@@ -26,7 +26,7 @@ use diagnostic::{Diagnostic, Span};
 
 fn front_end(source: &str) -> Result<ir::Program, Diagnostic> {
     if source.len() > 1024 * 1024 {
-        return Err(Diagnostic::new(Span::default(), "source trop volumineux: limite de 1 Mio"));
+        return Err(Diagnostic::new(Span::default(), "source is too large: limit is 1 MiB"));
     }
     let tokens = lexer::lex(source)?;
     check_parsed(parser::parse(tokens)?)

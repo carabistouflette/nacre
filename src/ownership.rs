@@ -272,7 +272,7 @@ fn solve(graph: &Graph, function: &t::Function) -> Result<States, Diagnostic> {
     let cells = graph.nodes.len().saturating_mul(function.locals.len());
     if graph.nodes.len() > MAX_NODES || cells > MAX_STATE_CELLS {
         return Err(Diagnostic::new(function.locals.first().map_or(Span::default(), |l| l.span),
-            "fonction trop complexe pour l'analyse: limite de 50 000 noeuds ou 16 Mio de cellules d'etat"));
+            "function is too complex for analysis: limit of 50,000 nodes or 16 MiB of state cells"));
     }
     let mut initial = vec![UNINIT; function.locals.len()];
     for (id, _) in &function.params { initial[*id] = READY; }
@@ -339,16 +339,16 @@ fn verify(graph: &Graph, function: &t::Function, states: &States) -> Result<(), 
         let local = &function.locals[id];
         let mut error = if state[id] & MOVED != 0 {
             Diagnostic::new(span, format!(
-                "[E2001] objet `{}` deplace ou potentiellement deplace; sa propriete a ete transferee (aucune copie implicite)", local.name))
+                "[E2001] object `{}` is moved or may have been moved; ownership was transferred (no implicit copies)", local.name))
         } else {
             Diagnostic::new(span, format!(
-                "[E2002] variable `{}` non initialisee sur tous les chemins d'execution", local.name))
+                "[E2002] variable `{}` is uninitialized on all execution paths", local.name))
         };
         if let Some(origin) = move_origin(graph, states, node_id, id) {
-            error = error.with_note(origin, "transfert de propriete contribuant a cet etat (eventuellement a l'iteration precedente)");
+            error = error.with_note(origin, "ownership transfer contributing to this state (possibly during a previous loop iteration)");
         }
-        error = error.with_note(local.span, format!("declaration de `{}`", local.name))
-            .with_help("initialiser ou reinitialiser la variable sur tous les chemins avant cette utilisation; un continue revient a la condition de boucle");
+        error = error.with_note(local.span, format!("declaration of `{}`", local.name))
+            .with_help("initialize or reinitialize the variable on every path before this use; `continue` returns to the loop condition");
         return Err(error);
     }
     Ok(())

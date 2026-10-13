@@ -65,19 +65,19 @@ static int32_t ncr_neg(int32_t a) { return ncr_wrap(-(int64_t)a); }
 static _Noreturn void ncr_fail(const char *message, size_t line, size_t column) {
 #ifdef NACRE_MULTI_SOURCE
     const char *file = ncr_source_file(&line);
-    fprintf(stderr, "erreur d'execution [%s:%zu:%zu]: %s\n", file, line, column, message);
+    fprintf(stderr, "runtime error [%s:%zu:%zu]: %s\n", file, line, column, message);
 #else
-    fprintf(stderr, "erreur d'execution [%zu:%zu]: %s\n", line, column, message);
+    fprintf(stderr, "runtime error [%zu:%zu]: %s\n", line, column, message);
 #endif
     exit(70);
 }
 static int32_t ncr_div(int32_t a, int32_t b, size_t line, size_t column) {
-    if (b == 0) { ncr_fail("division par zero", line, column); }
+    if (b == 0) { ncr_fail("division by zero", line, column); }
     if (a == INT32_MIN && b == -1) { return INT32_MIN; }
     return a / b;
 }
 static int32_t ncr_rem(int32_t a, int32_t b, size_t line, size_t column) {
-    if (b == 0) { ncr_fail("modulo par zero", line, column); }
+    if (b == 0) { ncr_fail("modulo by zero", line, column); }
     if (a == INT32_MIN && b == -1) { return 0; }
     return a % b;
 }
@@ -99,7 +99,7 @@ static size_t ncr_frees = 0;
 static void *ncr_allocate(size_t size, size_t line, size_t column) {
     void *p = calloc(1, size);
     if (p == NULL) {
-        fprintf(stderr, "erreur execution %zu:%zu: allocation impossible\n", line, column);
+        fprintf(stderr, "runtime error [%zu:%zu]: allocation failed\n", line, column);
         exit(70);
     }
 #ifdef NACRE_MEMORY_STATS

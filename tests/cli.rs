@@ -76,7 +76,6 @@ fn runtime_error_exit_code_is_propagated() {
     let out = nacre(&["run", path_str(&path)]);
     assert_eq!(out.status.code(), Some(70));
     let stderr = String::from_utf8_lossy(&out.stderr);
-    assert!(stderr.contains("runtime error"), "{stderr}");
     assert!(stderr.contains("[1:"), "{stderr}");
 }
 

@@ -80,7 +80,7 @@ impl<'a> Analyzer<'a> {
     fn charge(&mut self, amount: usize, span: Span) -> Result<(), Diagnostic> {
         self.work = self.work.saturating_add(amount);
         if self.work > MAX_WORK {
-            Err(Diagnostic::new(span, "[E3099] fonction trop complexe pour le borrow checker; separer les blocs ou les fonctions"))
+            Err(Diagnostic::new(span, "[E3099] borrow analysis is too complex; split the function into smaller blocks or functions"))
         } else { Ok(()) }
     }
     fn origin(&self, place: &Place) -> Origin {
@@ -125,21 +125,21 @@ impl<'a> Analyzer<'a> {
             if mode == Access::Read && !loan.mutable { continue; }
             let code = if mode == Access::Destroy { "E3002" } else { "E3001" };
             let action = match mode {
-                Access::Read => "lecture", Access::Write => "acces exclusif",
-                Access::Destroy => "deplacement, destruction ou remplacement",
+                Access::Read => "read access", Access::Write => "exclusive access",
+                Access::Destroy => "move, destroy, or replace",
             };
             return Err(Diagnostic::new(span, format!(
-                "[{code}] {action} de `{}` interdit pendant un emprunt {} actif", self.label(origin.root),
-                if loan.mutable { "exclusif" } else { "partage" }))
-                .with_note(loan.span, format!("emprunt #{} `{}` commence ici", id, loan.label))
-                .with_help("placer l'emprunt dans un bloc plus court; il reste actif jusqu'a la fin de son bloc (ou de son appel pour un argument)"));
+                "[{code}] {action} of `{}` conflicts with an active {} borrow", self.label(origin.root),
+                if loan.mutable { "exclusive" } else { "shared" }))
+                .with_note(loan.span, format!("borrow #{} `{}` begins here", id, loan.label))
+                .with_help("put the borrow in a shorter block; it remains active until that block ends (or until the call ends for an argument)"));
         }
         for guard in &self.guards {
             if guard.root != origin.root { continue; }
             if mode == Access::Destroy {
                 return Err(Diagnostic::new(span, format!(
-                    "[E3002] deplacement ou destruction de `{}` pendant l'evaluation d'un receveur", self.label(origin.root)))
-                    .with_note(guard.span, "le receveur doit rester vivant jusqu'a la fin de l'appel ou de l'affectation"));
+                    "[E3002] moving or destroying `{}` while evaluating a receiver", self.label(origin.root)))
+                    .with_note(guard.span, "the receiver must remain alive until the call or assignment completes"));
             }
             if mode == Access::Write && guard.projected {
                 return Err(Diagnostic::new(span, format!(
@@ -157,7 +157,7 @@ impl<'a> Analyzer<'a> {
     fn loan(&mut self, origin: Origin, mutable: bool, span: Span, label: String) -> Result<Origin, Diagnostic> {
         self.access(origin, if mutable { Access::Write } else { Access::Read }, span)?;
         if self.loans.len() >= MAX_LOANS {
-            return Err(Diagnostic::new(span, "[E3099] limite de 8192 emprunts par fonction"));
+            return Err(Diagnostic::new(span, "[E3099] limit of 8192 loans per function"));
         }
         let id = self.loans.len();
         self.log(span, format!("loan #{id} {} <- {} parent={:?} holder={label}",

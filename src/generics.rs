@@ -24,13 +24,13 @@ struct Expander {
 /// The strings are only for inspection. No C symbol is based on a source name.
 pub fn expand(mut program: a::Program) -> Result<(a::Program, Vec<String>), Diagnostic> {
     if program.classes.iter().filter(|c| !c.is_builtin).count() > 128 {
-        return Err(Diagnostic::new(Span::default(), "limite: 128 classes ou interfaces utilisateur par programme, modeles compris"));
+        return Err(Diagnostic::new(Span::default(), "limit: 128 user classes or interfaces per program, including templates"));
     }
     let mut expander = Expander { definitions: HashMap::new(), requested: HashSet::new(),
         pending: VecDeque::new(), names: Vec::new() };
     for class in &program.classes {
         if matches!(class.name.as_str(), "System" | "println") {
-            return Err(Diagnostic::new(class.span, "nom de classe reserve au support d'affichage"));
+            return Err(Diagnostic::new(class.span, "class name reserved for output support"));
         }
         if expander.definitions.insert(class.qualified_name.clone(), class.clone()).is_some() {
             return Err(Diagnostic::new(class.span, format!("class or interface `{}` is declared more than once", class.qualified_name)));
@@ -40,7 +40,7 @@ pub fn expand(mut program: a::Program) -> Result<(a::Program, Vec<String>), Diag
         if class.is_builtin { continue; }
         for name in &class.type_params {
             if expander.definitions.contains_key(name) || matches!(name.as_str(), "System" | "println" | "move" | "drop") {
-                return Err(Diagnostic::new(class.span, format!("[E4101] le parametre de type `{name}` masque un nom de type ou un nom reserve")));
+                return Err(Diagnostic::new(class.span, format!("[E4101] type parameter `{name}` shadows a type name or reserved name")));
             }
         }
     }
@@ -65,10 +65,10 @@ pub fn expand(mut program: a::Program) -> Result<(a::Program, Vec<String>), Diag
             constructor.qualified_name = format!("{}::{}", class.qualified_name, constructor.name);
         }
         expander.class(&mut class, &env).map_err(|d| d.with_note(request.span,
-            format!("specialisation `{}` demandee ici", request.name)))?;
+            format!("specialization `{}` requested here", request.name)))?;
         concrete.push(class);
         if concrete.iter().filter(|c| !c.is_builtin).count() > 128 {
-            return Err(Diagnostic::new(request.span, "[E4199] limite de 128 types concrets, specialisations comprises"));
+            return Err(Diagnostic::new(request.span, "[E4199] limit of 128 concrete types, including specializations"));
         }
     }
     program.classes = concrete;
@@ -88,7 +88,7 @@ fn display_type(ty: &Type) -> String {
 
 impl Expander {
     fn ty(&mut self, ty: &Type, env: &Environment, span: Span, depth: usize) -> Result<Type, Diagnostic> {
-        if depth > 32 { return Err(Diagnostic::new(span, "[E4199] type generique trop profond (limite 32)")); }
+        if depth > 32 { return Err(Diagnostic::new(span, "[E4199] generic type is too deep (limit 32)")); }
         match ty {
             Type::Int | Type::Boolean | Type::String | Type::Void => Ok(ty.clone()),
             Type::Named(name) => {
@@ -96,44 +96,44 @@ impl Expander {
                 if self.definitions.get(name).is_some_and(|c|
                     c.native.is_some() && c.type_params.is_empty()) && !self.requested.contains(name) {
                     if self.requested.len() >= MAX_SPECIALIZATIONS {
-                        return Err(Diagnostic::new(span, "[E4199] limite de 64 specialisations et types natifs demandes"));
+                        return Err(Diagnostic::new(span, "[E4199] limit of 64 requested specializations and native types"));
                     }
                     self.requested.insert(name.clone());
                     self.names.push(name.clone());
                     self.pending.push_back(Request { template: name.clone(), name: name.clone(), args: Vec::new(), span });
                 }
                 if self.definitions.get(name).is_some_and(|c| !c.type_params.is_empty()) {
-                    return Err(Diagnostic::new(span, format!("[E4102] `{name}` exige des arguments de type explicites")));
+                    return Err(Diagnostic::new(span, format!("[E4102] `{name}` requires explicit type arguments")));
                 }
                 Ok(ty.clone())
             }
             Type::Applied { name, args } => {
                 if env.contains_key(name) {
-                    return Err(Diagnostic::new(span, "[E4102] un parametre de type n'est pas lui-meme un constructeur generique"));
+                    return Err(Diagnostic::new(span, "[E4102] a type parameter is not itself a generic constructor"));
                 }
                 let arity = self.definitions.get(name).ok_or_else(|| Diagnostic::new(span,
-                    format!("[E4102] type generique `{name}` inconnu")))?.type_params.len();
+                    format!("[E4102] generic type `{name}` is unknown")))?.type_params.len();
                 if arity == 0 || arity != args.len() {
-                    return Err(Diagnostic::new(span, format!("[E4102] `{name}` attend {arity} argument(s) de type, {} recu(s)", args.len())));
+                    return Err(Diagnostic::new(span, format!("[E4102] `{name}` expects {arity} type argument(s), {} provided", args.len())));
                 }
                 let args: Vec<_> = args.iter().map(|t| self.ty(t, env, span, depth + 1)).collect::<Result<_, _>>()?;
                 for arg in &args {
                     if matches!(arg, Type::Void | Type::Borrow { .. }) {
-                        return Err(Diagnostic::new(span, "[E4103] argument generique interdit: ni void ni emprunt; ecrire borrow Box<T> au point d'utilisation"));
+                        return Err(Diagnostic::new(span, "[E4103] a generic argument cannot be `void` or a borrow; write `borrow Box<T>` at the use site"));
                     }
                     if let Type::Named(n) = arg {
                         if !self.definitions.contains_key(n) && !self.requested.contains(n) {
-                            return Err(Diagnostic::new(span, format!("[E4103] argument de type `{n}` inconnu")));
+                            return Err(Diagnostic::new(span, format!("[E4103] type argument `{n}` is unknown")));
                         }
                     }
                 }
                 let key = format!("{}<{}>", name, args.iter().map(display_type).collect::<Vec<_>>().join(","));
                 if key.len() > MAX_TYPE_NAME {
-                    return Err(Diagnostic::new(span, "[E4199] nom de specialisation trop long; expansion recursive probable"));
+                    return Err(Diagnostic::new(span, "[E4199] specialization name is too long; recursive expansion is likely"));
                 }
                 if !self.requested.contains(&key) {
                     if self.requested.len() >= MAX_SPECIALIZATIONS {
-                        return Err(Diagnostic::new(span, "[E4199] limite de 64 specialisations; expansion generique recursive possible"));
+                        return Err(Diagnostic::new(span, "[E4199] limit of 64 specializations; recursive generic expansion is possible"));
                     }
                     self.requested.insert(key.clone());
                     self.names.push(key.clone());
@@ -146,7 +146,7 @@ impl Expander {
                     else { Type::Applied { name: name.clone(), args: args.clone() } };
                 let base = self.ty(&base, env, span, depth + 1)?;
                 let Type::Named(name) = base else {
-                    return Err(Diagnostic::new(span, "[E4103] borrow exige un type objet, pas une primitive specialisee"));
+                    return Err(Diagnostic::new(span, "[E4103] borrow requires an object type, not a specialized primitive"));
                 };
                 Ok(Type::Borrow { name, args: Vec::new(), mutable: *mutable })
             }
@@ -252,7 +252,7 @@ impl Expander {
                     else { Type::Applied { name: class.clone(), args: type_args.clone() } };
                 let ty = self.ty(&ty, env, expr.span, 0)?;
                 let Type::Named(name) = ty else {
-                    return Err(Diagnostic::new(expr.span, "[E4103] construction exige un type objet concret"));
+                    return Err(Diagnostic::new(expr.span, "[E4103] construction requires a concrete object type"));
                 };
                 *class = name; type_args.clear();
                 for arg in args { self.expression(arg, env)?; }

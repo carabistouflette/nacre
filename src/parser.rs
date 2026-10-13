@@ -22,7 +22,7 @@ impl Parser {
     }
     fn expect(&mut self, kind: &K, what: &str) -> Result<Token, Diagnostic> {
         if self.at(kind) { Ok(self.bump()) }
-        else { Err(Diagnostic::new(self.current().span, format!("{what} attendu"))) }
+        else { Err(Diagnostic::new(self.current().span, format!("{what} expected"))) }
     }
     fn ident(&mut self) -> Result<(String, Span), Diagnostic> {
         let token = self.current().clone();
@@ -45,7 +45,7 @@ impl Parser {
     }
     fn nested<T>(&mut self, f: impl FnOnce(&mut Self) -> Result<T, Diagnostic>) -> Result<T, Diagnostic> {
         if self.depth >= 128 {
-            return Err(Diagnostic::new(self.current().span, "imbrication trop profonde"));
+            return Err(Diagnostic::new(self.current().span, "nesting is too deep"));
         }
         self.depth += 1;
         let result = f(self);
@@ -60,15 +60,15 @@ impl Parser {
             let token = self.current().clone();
             match token.kind {
                 K::Public | K::Private => {
-                    if visibility.is_some() { return Err(Diagnostic::new(token.span, "visibilite declaree plusieurs fois")); }
+                    if visibility.is_some() { return Err(Diagnostic::new(token.span, "visibility modifier repeated")); }
                     visibility = Some(if self.eat(&K::Public) { Visibility::Public } else { self.bump(); Visibility::Private });
                 }
                 K::Static => {
-                    if is_static { return Err(Diagnostic::new(token.span, "modificateur static duplique")); }
+                    if is_static { return Err(Diagnostic::new(token.span, "static modifier repeated")); }
                     self.bump(); is_static = true;
                 }
                 K::Readonly => {
-                    if readonly { return Err(Diagnostic::new(token.span, "modificateur readonly duplique")); }
+                    if readonly { return Err(Diagnostic::new(token.span, "readonly modifier repeated")); }
                     self.bump(); readonly = true;
                 }
                 _ => break,
@@ -277,12 +277,12 @@ impl Parser {
         if !self.eat(&K::Less) { return Ok(Vec::new()); }
         self.nested(|p| {
             if p.at(&K::Greater) {
-                return Err(Diagnostic::new(p.current().span, "[E4101] les arguments generiques sont explicites; pas de diamant <>"));
+                return Err(Diagnostic::new(p.current().span, "[E4101] generic arguments must be explicit; diamond syntax `<>` is unsupported"));
             }
             let mut args = Vec::new();
             loop {
                 args.push(p.ty(false)?);
-                if args.len() > 8 { return Err(Diagnostic::new(p.current().span, "[E4199] limite de 8 arguments de type")); }
+                if args.len() > 8 { return Err(Diagnostic::new(p.current().span, "[E4199] limit of 8 type arguments")); }
                 if !p.eat(&K::Comma) { break; }
             }
             p.expect(&K::Greater, "`>`")?;
@@ -375,7 +375,7 @@ impl Parser {
                     (None, first_ty, first_name, first_name_span)
                 };
                 let header_span = header_start.join(name_span);
-                self.expect(&K::Colon, "`:` apres le type et le nom de l'element")?;
+                self.expect(&K::Colon, "`:` after the element type and name")?;
                 let collection = self.expression()?;
                 self.expect(&K::RParen, "`)`")?;
                 let body = self.block()?;
@@ -405,7 +405,7 @@ impl Parser {
                     arms.push(MatchArm { variant, bindings, body, span: arm_start.join(arm_end) });
                     self.eat(&K::Comma);
                 }
-                self.expect(&K::RBrace, "`}` apres les arms de match")?;
+                self.expect(&K::RBrace, "`}` after the match arms")?;
                 StmtKind::Match { value, arms }
             }
             K::Return => {
@@ -425,7 +425,7 @@ impl Parser {
                 let expr = self.expression()?;
                 let result = if self.eat(&K::Equal) {
                     if !matches!(&expr.kind, ExprKind::Var(_) | ExprKind::Field { .. }) {
-                        return Err(Diagnostic::new(expr.span, "cible d'affectation invalide: variable ou champ attendu"));
+                        return Err(Diagnostic::new(expr.span, "invalid assignment target: expected a variable or field"));
                     }
                     StmtKind::Assign { target: expr, value: self.expression()? }
                 } else { StmtKind::Expr(expr) };
@@ -510,7 +510,7 @@ impl Parser {
         let token = self.bump();
         let mut span = token.span;
         let kind = match token.kind {
-            K::Number(text) => ExprKind::Int(text.parse::<i32>().map_err(|_| Diagnostic::new(span, "entier hors limites: -2147483648 a 2147483647"))?),
+            K::Number(text) => ExprKind::Int(text.parse::<i32>().map_err(|_| Diagnostic::new(span, "integer out of range: -2147483648 to 2147483647"))?),
             K::String(text) => ExprKind::String(text),
             K::True => ExprKind::Boolean(true), K::False => ExprKind::Boolean(false),
             K::This => ExprKind::This,
@@ -538,7 +538,7 @@ impl Parser {
                 expr.span = span.join(self.expect(&K::RParen, "`)`")?.span);
                 return Ok(expr);
             }
-            _ => return Err(Diagnostic::new(span, "expression attendue")),
+            _ => return Err(Diagnostic::new(span, "expected an expression")),
         };
         make_expr(kind, span)
     }
@@ -572,7 +572,7 @@ fn make_expr(kind: ExprKind, span: Span) -> Result<Expr, Diagnostic> {
         _ => 0,
     };
     if depth > 128 {
-        return Err(Diagnostic::new(span, "expression trop profonde"));
+        return Err(Diagnostic::new(span, "expression is too deep"));
     }
     Ok(Expr { kind, span, depth })
 }

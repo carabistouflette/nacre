@@ -1,13 +1,13 @@
 /* Native List<@ELEMENT@>. Only initialized [0,length) slots own elements. */
 static void ncr_list_reserve_@ID@(ncr_obj_@ID@ *p, int32_t requested, size_t line, size_t column) {
-    if (requested < 0) { ncr_fail("capacite de List negative", line, column); }
+    if (requested < 0) { ncr_fail("negative List capacity", line, column); }
     if (requested <= p->capacity) { return; }
     int64_t capacity = p->capacity == 0 ? 4 : p->capacity;
     while (capacity < requested) {
         capacity = capacity > INT32_MAX / 2 ? INT32_MAX : capacity * 2;
     }
     if ((uint64_t)capacity > SIZE_MAX / sizeof(@ELEMENT@)) {
-        ncr_fail("capacite de List trop grande", line, column);
+        ncr_fail("List capacity is too large", line, column);
     }
     @ELEMENT@ *items = ncr_allocate((size_t)capacity * sizeof(@ELEMENT@), line, column);
     if (p->length > 0) { memcpy(items, p->items, (size_t)p->length * sizeof(@ELEMENT@)); }
@@ -17,14 +17,14 @@ static void ncr_list_reserve_@ID@(ncr_obj_@ID@ *p, int32_t requested, size_t lin
     p->capacity = (int32_t)capacity;
 }
 static void ncr_list_check_@ID@(ncr_obj_@ID@ *p, int32_t index, size_t line, size_t column) {
-    if (index < 0 || index >= p->length) { ncr_fail("indice de List hors limites", line, column); }
+    if (index < 0 || index >= p->length) { ncr_fail("List index out of bounds", line, column); }
 }
 static void @LIST_NEW@(ncr_obj_@ID@ *p, size_t line, size_t column) {
     (void)line; (void)column;
     p->items = NULL; p->length = 0; p->capacity = 0;
 }
 static void @LIST_ADD@(ncr_obj_@ID@ *p, @ELEMENT@ value, size_t line, size_t column) {
-    if (p->length == INT32_MAX) { ncr_fail("List pleine", line, column); }
+    if (p->length == INT32_MAX) { ncr_fail("List is full", line, column); }
     ncr_list_reserve_@ID@(p, p->length + 1, line, column);
     p->items[p->length++] = value;
 }
@@ -46,7 +46,7 @@ static void @LIST_SET@(ncr_obj_@ID@ *p, int32_t index, @ELEMENT@ value, size_t l
     p->items[index] = value;
 }
 static @ELEMENT@ @LIST_POP@(ncr_obj_@ID@ *p, size_t line, size_t column) {
-    if (p->length == 0) { ncr_fail("pop sur une List vide", line, column); }
+    if (p->length == 0) { ncr_fail("pop from empty List", line, column); }
     @ELEMENT@ value = p->items[--p->length];
     p->items[p->length] = @ZERO@;
     return value;

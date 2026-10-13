@@ -26,10 +26,10 @@ impl TempDir {
             match builder.create(&path) {
                 Ok(()) => return Ok(Self(path)),
                 Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
-                Err(e) => return Err(format!("impossible de creer un dossier temporaire: {e}")),
+                Err(e) => return Err(format!("failed to create a temporary directory: {e}")),
             }
         }
-        Err("impossible de reserver un dossier temporaire unique".to_owned())
+        Err("failed to reserve a unique temporary directory".to_owned())
     }
 }
 impl Drop for TempDir {
@@ -40,14 +40,14 @@ pub struct NativeProgram { executable: PathBuf, _directory: TempDir }
 impl NativeProgram {
     pub fn path(&self) -> &Path { &self.executable }
     pub fn run(&self, args: &[OsString]) -> Result<ExitStatus, String> {
-        Command::new(&self.executable).args(args).status().map_err(|e| format!("execution impossible: {e}"))
+        Command::new(&self.executable).args(args).status().map_err(|e| format!("failed to run program: {e}"))
     }
     pub fn output(&self) -> Result<Output, String> {
-        Command::new(&self.executable).output().map_err(|e| format!("execution impossible: {e}"))
+        Command::new(&self.executable).output().map_err(|e| format!("failed to run program: {e}"))
     }
     pub fn save(&self, output: &Path) -> Result<(), String> {
         create_parent(output)?;
-        fs::copy(&self.executable, output).map_err(|e| format!("impossible d'ecrire {}: {e}", output.display()))?;
+        fs::copy(&self.executable, output).map_err(|e| format!("failed to write {}: {e}", output.display()))?;
         Ok(())
     }
 }
@@ -57,7 +57,7 @@ pub fn find_c_compiler() -> Result<OsString, String> {
         if let Some(cc) = env::var_os(variable) {
             let available = Command::new(&cc).arg("--version").output().is_ok_and(|o| o.status.success());
             if available { return Ok(cc); }
-            return Err(format!("{variable}={cc:?}: compilateur C introuvable. Indiquer un executable seul, sans options (par exemple CC=clang)."));
+            return Err(format!("{variable}={cc:?}: C compiler not found. Set it to a compiler executable only, without options (for example, CC=clang)."));
         }
     }
     for cc in ["cc", "clang", "gcc"] {
@@ -65,7 +65,7 @@ pub fn find_c_compiler() -> Result<OsString, String> {
             return Ok(OsString::from(cc));
         }
     }
-    Err("aucun compilateur C trouve. Installer GCC ou Clang avec les en-tetes C et l'editeur de liens, puis verifier `cc --version`. `check` et `emit-c` fonctionnent sans compilateur C.".to_owned())
+    Err("no C compiler found. Install GCC or Clang with C headers and a linker, then check `cc --version`. `check` and `emit-c` do not require a C compiler.".to_owned())
 }
 
 pub fn compile_c(source: &str) -> Result<NativeProgram, String> {
@@ -84,22 +84,22 @@ pub fn compile_c_optimized(source: &str, optimization: &str, flags: &[&str]) -> 
     let directory = TempDir::new()?;
     let c_path = directory.0.join("program.c");
     let executable = directory.0.join(if cfg!(windows) { "program.exe" } else { "program" });
-    fs::write(&c_path, source).map_err(|e| format!("impossible d'ecrire le C temporaire: {e}"))?;
+    fs::write(&c_path, source).map_err(|e| format!("failed to write temporary C source: {e}"))?;
     let output = Command::new(&compiler)
         .arg(optimization)
         .args(["-std=c11", "-Wall", "-Wextra", "-pedantic", "-Wno-unused-function", "-Wno-unused-variable", "-Wno-unused-parameter", "-Wno-unused-but-set-variable"])
         .args(flags)
         .arg(&c_path).arg("-o").arg(&executable)
-        .output().map_err(|e| format!("impossible de lancer {compiler:?}: {e}"))?;
+        .output().map_err(|e| format!("failed to start {compiler:?}: {e}"))?;
     if !output.status.success() {
-        return Err(format!("le compilateur C a echoue ({compiler:?}):\n{}\nPour inspecter le code: nacre emit-c fichier.ncr -o debug.c", String::from_utf8_lossy(&output.stderr)));
+        return Err(format!("C compiler {compiler:?} failed:\n{}\nTo inspect the generated code: nacre emit-c source.ncr -o debug.c", String::from_utf8_lossy(&output.stderr)));
     }
     Ok(NativeProgram { executable, _directory: directory })
 }
 
 pub fn create_parent(path: &Path) -> Result<(), String> {
     if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
-        fs::create_dir_all(parent).map_err(|e| format!("impossible de creer {}: {e}", parent.display()))?;
+        fs::create_dir_all(parent).map_err(|e| format!("failed to create {}: {e}", parent.display()))?;
     }
     Ok(())
 }
@@ -115,13 +115,13 @@ pub fn emit_llvm(source: &str, optimization: &str) -> Result<String, String> {
     let output = Command::new(&compiler)
         .args(["-std=c11", optimization, "-S", "-emit-llvm", "-fno-ident"])
         .arg(&c_path).args(["-o", "-"])
-        .output().map_err(|e| format!("emit-llvm exige Clang (NACRE_CLANG={compiler:?}): {e}"))?;
+        .output().map_err(|e| format!("emit-llvm requires Clang (NACRE_CLANG={compiler:?}): {e}"))?;
     if !output.status.success() {
-        return Err(format!("generation LLVM via Clang echouee:\n{}", String::from_utf8_lossy(&output.stderr)));
+        return Err(format!("Clang LLVM generation failed:\n{}", String::from_utf8_lossy(&output.stderr)));
     }
-    String::from_utf8(output.stdout).map_err(|e| format!("sortie LLVM non UTF-8: {e}"))
+    String::from_utf8(output.stdout).map_err(|e| format!("LLVM output is not valid UTF-8: {e}"))
 }
 fn check_optimization(level: &str) -> Result<(), String> {
     if matches!(level, "-O0" | "-O1" | "-O2" | "-O3" | "-Os") { Ok(()) }
-    else { Err("optimisation invalide: choisir -O0, -O1, -O2, -O3 ou -Os".to_owned()) }
+    else { Err("invalid optimization level: choose -O0, -O1, -O2, -O3, or -Os".to_owned()) }
 }

@@ -150,7 +150,7 @@ fn execute(args: Vec<OsString>) -> Result<i32, String> {
     });
     for source in bundle.paths() { protect_source(source, &path)?; }
     program.save(&path)?;
-    eprintln!("Executable natif: {}", path.display());
+    eprintln!("Native executable: {}", path.display());
     Ok(0)
 }
 

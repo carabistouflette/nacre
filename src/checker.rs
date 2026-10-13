@@ -30,17 +30,17 @@ impl Tables {
             a::Type::Int => Type::Int, a::Type::Boolean => Type::Boolean,
             a::Type::String => Type::String, a::Type::Void => Type::Void,
             a::Type::Named(name) => {
-                let id = *self.names.get(name).ok_or_else(|| Diagnostic::new(span, format!("classe `{name}` inconnue")))?;
+                let id = *self.names.get(name).ok_or_else(|| Diagnostic::new(span, format!("class `{name}` is unknown")))?;
                 if self.is_static_native(id) {
-                    return Err(Diagnostic::new(span, format!("`{name}` est une classe native statique et ne peut pas etre utilisee comme valeur")));
+                    return Err(Diagnostic::new(span, format!("`{name}` is a static native class and cannot be used as a value")));
                 }
                 Type::Object(id)
             }
-            a::Type::Applied { .. } => return Err(Diagnostic::new(span, "[E4102] type generique non specialise")),
+            a::Type::Applied { .. } => return Err(Diagnostic::new(span, "[E4102] unspecialized generic type")),
             a::Type::Borrow { name, mutable, .. } => {
-                let class = *self.names.get(name).ok_or_else(|| Diagnostic::new(span, format!("classe `{name}` inconnue")))?;
+                let class = *self.names.get(name).ok_or_else(|| Diagnostic::new(span, format!("class `{name}` is unknown")))?;
                 if self.is_static_native(class) {
-                    return Err(Diagnostic::new(span, format!("`{name}` est une classe native statique; ses valeurs ne peuvent pas etre empruntees")));
+                    return Err(Diagnostic::new(span, format!("`{name}` is a static native class; its values cannot be borrowed")));
                 }
                 Type::Borrow { class, mutable: *mutable }
             }
@@ -75,7 +75,7 @@ impl Tables {
         }
     }
     fn add_signature(&mut self, f: &a::Function, owner: Option<usize>, kind: Kind) -> Result<usize, Diagnostic> {
-        if matches!(f.name.as_str(), "println" | "move" | "drop") { return Err(Diagnostic::new(f.span, format!("`{}` est une fonction integree reservee", f.name))); }
+        if matches!(f.name.as_str(), "println" | "move" | "drop") { return Err(Diagnostic::new(f.span, format!("`{}` is a reserved built-in function", f.name))); }
         let params: Vec<Type> = f.params.iter().map(|p| self.resolve_type(&p.ty, p.span)).collect::<Result<_, _>>()?;
         let return_type = self.resolve_type(&f.return_type, f.span)?;
         if return_type.is_borrow() && !matches!(kind, Kind::Instance | Kind::Interface) {
@@ -85,7 +85,7 @@ impl Tables {
             return Err(Diagnostic::new(f.span, "[E3003] a readonly receiver cannot return an exclusive borrow"));
         }
         if self.is_view(return_type) || params.iter().any(|ty| self.is_view(*ty)) {
-            return Err(Diagnostic::new(f.span, "[E3007] une classe a champs empruntes est une vue locale; ni parametre ni retour de vue"));
+            return Err(Diagnostic::new(f.span, "[E3007] a class with borrowed fields is a local view; local views cannot be parameters or return values"));
         }
         let id = self.signatures.len();
         let virtual_slot = if kind == Kind::Interface { Some(self.classes[owner.unwrap()].interface_methods.len()) } else { None };
@@ -96,12 +96,12 @@ impl Tables {
 
 pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
     if program.classes.iter().filter(|c| !c.is_builtin).count() > 128 {
-        return Err(Diagnostic::new(Span::default(), "limite: 128 classes utilisateur par programme"));
+        return Err(Diagnostic::new(Span::default(), "limit: 128 user classes per program"));
     }
     let mut tables = Tables { names: HashMap::new(), classes: Vec::new(), globals: HashMap::new(), signatures: Vec::new() };
     for (id, class) in program.classes.iter().enumerate() {
         if class.name == "System" || class.name == "println" {
-            return Err(Diagnostic::new(class.span, "nom de classe reserve au support d'affichage"));
+            return Err(Diagnostic::new(class.span, "class name reserved for output support"));
         }
         if tables.names.insert(class.qualified_name.clone(), id).is_some() {
             return Err(Diagnostic::new(class.span, format!("type `{}` is declared more than once", class.qualified_name)));
@@ -149,17 +149,17 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
         let mut names = HashSet::new();
         for field in &class.fields {
             if field.name == "System" {
-                return Err(Diagnostic::new(field.span, "`System` est un nom reserve"));
+                return Err(Diagnostic::new(field.span, "`System` is a reserved name"));
             }
             if !names.insert(&field.name) {
-                return Err(Diagnostic::new(field.span, format!("champ `{}` deja declare", field.name)));
+                return Err(Diagnostic::new(field.span, format!("field `{}` is already declared", field.name)));
             }
             let ty = tables.resolve_type(&field.ty, field.span)?;
             if matches!(ty, Type::Borrow { mutable: true, .. }) {
-                return Err(Diagnostic::new(field.span, "[E3007] les champs empruntes sont en lecture seule; borrow mut est reserve aux variables et parametres"));
+                return Err(Diagnostic::new(field.span, "[E3007] borrowed fields are read-only; `borrow mut` is reserved for variables and parameters"));
             }
             if ty.is_borrow() && field.initializer.is_some() {
-                return Err(Diagnostic::new(field.span, "[E3007] initialiser un champ emprunte dans le constructeur depuis un parametre borrow"));
+                return Err(Diagnostic::new(field.span, "[E3007] initialize a borrowed field in the constructor directly from a borrow parameter"));
             }
             tables.classes[id].fields.push(FieldInfo { name: field.name.clone(), ty, visibility: field.visibility });
         }
@@ -185,7 +185,7 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
         match tables.classes[id].native {
             Some(t::NativeClass::List(element)) => {
                 if tables.is_view(element) || matches!(element, Type::Void | Type::Borrow { .. }) {
-                    return Err(Diagnostic::new(class.span, "[E5003] List<T> exige une valeur copiable ou un objet possede; les vues locales et les emprunts sont interdits"));
+                    return Err(Diagnostic::new(class.span, "[E5003] List<T> requires a copied value or owned object; local views and borrows are not allowed"));
                 }
             }
             Some(t::NativeClass::Map(_, value)) if tables.is_view(value) || matches!(value, Type::Void | Type::Borrow { .. }) => {
@@ -197,7 +197,7 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
     for class in &program.classes {
         for field in &class.fields {
             if tables.is_view(tables.resolve_type(&field.ty, field.span)?) {
-                return Err(Diagnostic::new(field.span, "[E3007] une vue locale ne peut pas etre stockee ou empruntee dans un autre objet"));
+                return Err(Diagnostic::new(field.span, "[E3007] a local view cannot be stored in or borrowed by another object"));
             }
         }
         if let Some(variants) = &class.variants {
@@ -206,7 +206,7 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
                     let ty = tables.resolve_type(field, variant.span)?;
                     if ty.is_borrow() || tables.is_view(ty) {
                         return Err(Diagnostic::new(variant.span,
-                            "[E6003] un payload d'enum ne peut pas etre un emprunt ni contenir une vue"));
+                            "[E6003] an enum payload cannot be a borrow or contain a local view"));
                     }
                 }
             }
@@ -233,7 +233,7 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
     let mut inline_states = vec![0; program.classes.len()];
     for (id, class) in program.classes.iter().enumerate() {
         if class.variants.is_some() && !inline_visit(id, &tables, &mut inline_states) {
-            return Err(Diagnostic::new(class.span, "cycle de representation enum inline: taille C infinie"));
+            return Err(Diagnostic::new(class.span, "inline enum representation cycle: infinite C size"));
         }
     }
 
@@ -252,7 +252,7 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
             let kind = if class.is_interface { Kind::Interface } else if method.is_static { Kind::Static } else { Kind::Instance };
             let id = tables.add_signature(method, Some(class_id), kind)?;
             if tables.classes[class_id].methods.insert(method.name.clone(), id).is_some() {
-                return Err(Diagnostic::new(method.span, format!("methode `{}` deja declaree; pas de surcharge", method.name)));
+                return Err(Diagnostic::new(method.span, format!("method `{}` is already declared; overloading is not supported", method.name)));
             }
             if class.is_interface { tables.classes[class_id].interface_methods.push(id); }
             declarations.push(method.clone());
@@ -273,28 +273,28 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
         let mut implemented = HashSet::new();
         for interface in &class.implements {
             let Type::Object(interface_id) = tables.resolve_type(interface, class.span)? else {
-                return Err(Diagnostic::new(class.span, "[E4001] implements exige une interface"));
+                return Err(Diagnostic::new(class.span, "[E4001] `implements` requires an interface"));
             };
             if !tables.classes[interface_id].is_interface {
-                return Err(Diagnostic::new(class.span, format!("[E4001] `{}` n'est pas une interface", tables.classes[interface_id].name)));
+                return Err(Diagnostic::new(class.span, format!("[E4001] `{}` is not an interface", tables.classes[interface_id].name)));
             }
             if !implemented.insert(interface_id) {
-                return Err(Diagnostic::new(class.span, "[E4001] interface implementee plusieurs fois"));
+                return Err(Diagnostic::new(class.span, "[E4001] interface is implemented more than once"));
             }
             if tables.is_view(Type::Object(class_id)) {
-                return Err(Diagnostic::new(class.span, "[E4005] une vue locale ne peut pas etre effacee derriere une interface"));
+                return Err(Diagnostic::new(class.span, "[E4005] a local view cannot be erased behind an interface"));
             }
             let mut methods = Vec::new();
             for id in &tables.classes[interface_id].interface_methods {
                 let expected = &tables.signatures[*id];
                 let implementation = *tables.classes[class_id].methods.get(&expected.name)
-                    .ok_or_else(|| Diagnostic::new(class.span, format!("[E4002] implementation manquante de `{}.{}`", tables.classes[interface_id].name, expected.name)))?;
+                    .ok_or_else(|| Diagnostic::new(class.span, format!("[E4002] missing implementation of `{}.{}`", tables.classes[interface_id].name, expected.name)))?;
                 let actual = &tables.signatures[implementation];
                 if actual.kind != Kind::Instance || actual.visibility != Visibility::Public
                     || actual.params != expected.params || actual.return_type != expected.return_type
                     || actual.readonly != expected.readonly {
-                    return Err(Diagnostic::new(declarations[implementation].span, format!("[E4003] signature incompatible pour `{}.{}`: verifier public, readonly, retour et modes des parametres", tables.classes[interface_id].name, expected.name))
-                        .with_note(declarations[*id].span, "contrat de l'interface declare ici"));
+                    return Err(Diagnostic::new(declarations[implementation].span, format!("[E4003] incompatible signature for `{}.{}`: check public visibility, readonly, return type, and parameter modes", tables.classes[interface_id].name, expected.name))
+                        .with_note(declarations[*id].span, "interface contract declared here"));
                 }
                 methods.push(implementation);
             }
@@ -329,16 +329,16 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
     for (id, class) in program.classes.iter().enumerate() {
         if !productive[id] && !class.is_interface {
             return Err(Diagnostic::new(class.span,
-                "cycle de champs objets sans variant vide: aucun chemin de construction fini"));
+                "cycle of object fields without an empty variant: no finite construction path"));
         }
     }
     let entries: Vec<_> = tables.signatures.iter().filter(|s| s.name == "main" && matches!(s.kind, Kind::Free | Kind::Static)).collect();
     if entries.len() > 1 {
-        return Err(Diagnostic::new(Span::default(), "entree ambigue: plusieurs fonctions ou methodes static nommees main"));
+        return Err(Diagnostic::new(Span::default(), "ambiguous entry point: multiple free functions or static methods named `main`"));
     }
-    let main = entries.first().ok_or_else(|| Diagnostic::new(Span::default(), "fonction d'entree `void main()` manquante; seules les methodes `static` peuvent servir d'entree"))?;
+    let main = entries.first().ok_or_else(|| Diagnostic::new(Span::default(), "missing `void main()` entry point; only static methods can be entry points"))?;
     if main.return_type != Type::Void || !main.params.is_empty() {
-        return Err(Diagnostic::new(declarations[main.id].span, "l'entree doit avoir la signature `void main()` sans parametres"));
+        return Err(Diagnostic::new(declarations[main.id].span, "`main` must have the signature `void main()` with no parameters"));
     }
     let main_id = main.id;
     let mut functions = Vec::new();
@@ -398,7 +398,7 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
         body.extend(checked_body);
         if checker.constructor { checker.require_initialized(function.span)?; }
         if sig.return_type != Type::Void && !stops {
-            return Err(Diagnostic::new(function.span, format!("`{}` doit retourner un {} sur tous les chemins; une boucle n'est pas une preuve de retour", function.name, tables.type_name(sig.return_type))));
+            return Err(Diagnostic::new(function.span, format!("`{}` must return {} on every path; a loop does not prove a return", function.name, tables.type_name(sig.return_type))));
         }
         let name = sig.owner.map_or_else(|| function.name.clone(),
             |c| format!("{}.{}", tables.classes[c].name, function.name));
@@ -441,9 +441,9 @@ impl Checker<'_> {
         self.scopes.iter().rev().find_map(|s| s.get(name).copied())
     }
     fn declare(&mut self, name: &str, ty: Type, span: Span) -> Result<usize, Diagnostic> {
-        if name == "System" { return Err(Diagnostic::new(span, "`System` est un nom reserve")); }
+        if name == "System" { return Err(Diagnostic::new(span, "`System` is a reserved name")); }
         if self.lookup(name).is_some() {
-            return Err(Diagnostic::new(span, format!("variable `{name}` deja declaree dans une portee active")));
+            return Err(Diagnostic::new(span, format!("variable `{name}` is already declared in an active scope")));
         }
         let id = self.variables.len();
         self.variables.push(t::Local { ty, name: name.to_owned(), span });
@@ -452,7 +452,7 @@ impl Checker<'_> {
     }
     fn require(&self, expected: Type, actual: Type, span: Span) -> Result<(), Diagnostic> {
         if expected == actual { Ok(()) } else {
-            Err(Diagnostic::new(span, format!("type incompatible: attendu {}, trouve {}", self.tables.type_name(expected), self.tables.type_name(actual))))
+            Err(Diagnostic::new(span, format!("type mismatch: expected {}, found {}", self.tables.type_name(expected), self.tables.type_name(actual))))
         }
     }
     fn require_initialized(&self, span: Span) -> Result<(), Diagnostic> {
@@ -460,12 +460,12 @@ impl Checker<'_> {
         let class = &self.tables.classes[self.owner.unwrap()];
         let missing: Vec<_> = class.fields.iter().zip(&self.initialized).filter(|(_, ready)| !**ready).map(|(f, _)| f.name.as_str()).collect();
         if missing.is_empty() { Ok(()) } else {
-            Err(Diagnostic::new(span, format!("champs non initialises: {}; initialiser tous les champs avant un appel sur this ou une sortie du constructeur", missing.join(", "))))
+            Err(Diagnostic::new(span, format!("uninitialized fields: {}; initialize every field before a call on `this` or leaving the constructor", missing.join(", "))))
         }
     }
     fn accessible(&self, visibility: Visibility, owner: usize, span: Span, what: &str) -> Result<(), Diagnostic> {
         if visibility == Visibility::Private && self.owner != Some(owner) {
-            Err(Diagnostic::new(span, format!("{what} private: acces interdit depuis cette classe ou fonction")))
+            Err(Diagnostic::new(span, format!("{what} is private: access is not allowed outside its class or function")))
         } else { Ok(()) }
     }
     fn block(&mut self, block: &a::Block) -> Result<(t::Block, bool), Diagnostic> {
@@ -476,7 +476,7 @@ impl Checker<'_> {
         let result = (|| {
             let mut out = Vec::new(); let mut stops = false;
             for stmt in prefix.iter().chain(block.iter()) {
-                if stops { return Err(Diagnostic::new(stmt.span, "instruction inaccessible apres return, break ou continue")); }
+                if stops { return Err(Diagnostic::new(stmt.span, "unreachable statement after return, break, or continue")); }
                 let (stmt, terminal) = self.statement(stmt)?;
                 out.push(stmt); stops = terminal;
             }
@@ -490,14 +490,14 @@ impl Checker<'_> {
             S::Let { ty, name, value } => {
                 let ty = self.tables.resolve_type(ty, stmt.span)?;
                 if ty.is_borrow() && value.is_none() {
-                    return Err(Diagnostic::new(stmt.span, "[E3005] un emprunt local exige un initialiseur et ne peut pas etre reaffecte"));
+                    return Err(Diagnostic::new(stmt.span, "[E3005] a local borrow requires an initializer and cannot be reassigned"));
                 }
                 if ty.is_borrow() && self.tables.is_view(ty) {
-                    return Err(Diagnostic::new(stmt.span, "[E3007] emprunter une vue locale n'est pas pris en charge"));
+                    return Err(Diagnostic::new(stmt.span, "[E3007] borrowing a local view is unsupported"));
                 }
                 if ty.is_object() && self.tables.is_view(ty)
                     && !value.as_ref().is_some_and(|v| matches!(v.kind, a::ExprKind::New { .. })) {
-                    return Err(Diagnostic::new(stmt.span, "[E3007] une vue locale exige une initialisation directe par new"));
+                    return Err(Diagnostic::new(stmt.span, "[E3007] a local view must be initialized directly with `new`"));
                 }
                 let value = value.as_ref().map(|v| self.expected_expression(ty, v)).transpose()?;
                 let id = self.declare(name, ty, stmt.span)?;
@@ -511,23 +511,23 @@ impl Checker<'_> {
                 };
                 let is_initialization = init_field.is_some_and(|f| !self.initialized[f]);
                 if is_initialization && (self.block_depth != 1 || self.loop_depth != 0) {
-                    return Err(Diagnostic::new(stmt.span, "initialisation de champ exigee directement dans le constructeur, hors branche, boucle ou bloc imbrique"));
+                    return Err(Diagnostic::new(stmt.span, "field initialization must occur directly in the constructor, outside branches, loops, and nested blocks"));
                 }
                 if !is_initialization {
                     if target.ty.is_borrow() {
-                        return Err(Diagnostic::new(stmt.span, "[E3005] reaffectation d'un emprunt interdite; creer un nouvel emprunt dans un bloc"));
+                        return Err(Diagnostic::new(stmt.span, "[E3005] reassigning a borrow is not allowed; create a new borrow in a block"));
                     }
                     if target.ty.is_object() && self.tables.is_view(target.ty) {
-                        return Err(Diagnostic::new(stmt.span, "[E3007] remplacement d'une vue locale interdit"));
+                        return Err(Diagnostic::new(stmt.span, "[E3007] replacing a local view is not allowed"));
                     }
                     if let PlaceKind::Field { base, .. } = &target.kind { self.require_mutable(base, stmt.span)?; }
                 }
                 if target.ty.is_borrow() && is_initialization {
                     let a::ExprKind::Var(name) = &value.kind else {
-                        return Err(Diagnostic::new(stmt.span, "[E3007] un champ emprunte doit provenir directement d'un parametre borrow du constructeur"));
+                        return Err(Diagnostic::new(stmt.span, "[E3007] a borrowed field must come directly from a constructor borrow parameter"));
                     };
                     let source = self.lookup(name).and_then(|id| self.parameter_ids.iter().position(|p| *p == id))
-                        .ok_or_else(|| Diagnostic::new(stmt.span, "[E3007] un champ emprunte exige un parametre borrow, pas un proprietaire local"))?;
+                        .ok_or_else(|| Diagnostic::new(stmt.span, "[E3007] a borrowed field requires a borrow parameter, not a local owner"))?;
                     let source_type = self.variables[self.parameter_ids[source]].ty;
                     self.require(target.ty, source_type, stmt.span)?;
                     self.field_sources[init_field.unwrap()] = Some(source);
@@ -541,9 +541,9 @@ impl Checker<'_> {
                 self.require(target.ty, value.ty, value.span)?;
                 match &target.kind {
                     PlaceKind::Var(id) => {
-                        if self.locks.contains(id) { return Err(Diagnostic::new(stmt.span, "objet emprunte par un appel en cours: remplacement interdit")); }
+                        if self.locks.contains(id) { return Err(Diagnostic::new(stmt.span, "object is borrowed by an in-progress call: replacement is not allowed")); }
                     }
-                    PlaceKind::This => return Err(Diagnostic::new(stmt.span, "affectation de this interdite")),
+                    PlaceKind::This => return Err(Diagnostic::new(stmt.span, "cannot assign to `this`")),
                     PlaceKind::Field { .. } => {}
                 }
                 if let Some(field) = init_field { self.initialized[field] = true; }
@@ -552,11 +552,11 @@ impl Checker<'_> {
             S::Expr(expr) => {
                 if !matches!(&expr.kind, a::ExprKind::Call { .. } | a::ExprKind::MethodCall { .. }
                     | a::ExprKind::New { .. } | a::ExprKind::Variant { .. }) {
-                    return Err(Diagnostic::new(expr.span, "seul un appel ou une construction peut etre utilise comme instruction d'expression"));
+                    return Err(Diagnostic::new(expr.span, "only a call or construction can be used as an expression statement"));
                 }
                 let value = self.expression(expr)?;
                 if value.ty.is_object() && self.tables.is_view(value.ty) {
-                    return Err(Diagnostic::new(expr.span, "[E3007] conserver une vue locale dans une variable initialisee par new"));
+                    return Err(Diagnostic::new(expr.span, "[E3007] a local view cannot be kept in a variable initialized with `new`"));
                 }
                 (t::Stmt::Expr(value), false)
             }
@@ -590,20 +590,20 @@ impl Checker<'_> {
                     _ => None,
                 };
                 let variants = self.tables.classes[class].variants.clone()
-                    .ok_or_else(|| Diagnostic::new(stmt.span, format!("match exige une enum, pas `{}`", self.tables.classes[class].name)))?;
+                    .ok_or_else(|| Diagnostic::new(stmt.span, format!("match requires an enum, not `{}`", self.tables.classes[class].name)))?;
                 let mut seen = vec![false; variants.len()];
                 let mut checked_arms = Vec::with_capacity(arms.len());
                 let mut all_stop = true;
                 for arm in arms {
                     let variant = variants.iter().position(|v| v.name == arm.variant)
-                        .ok_or_else(|| Diagnostic::new(arm.span, format!("variant `{}` inconnue dans `{}`", arm.variant, self.tables.classes[class].name)))?;
+                        .ok_or_else(|| Diagnostic::new(arm.span, format!("unknown variant `{}` in `{}`", arm.variant, self.tables.classes[class].name)))?;
                     if seen[variant] {
-                        return Err(Diagnostic::new(arm.span, format!("variant `{}` repetee dans match", arm.variant)));
+                        return Err(Diagnostic::new(arm.span, format!("variant `{}` is repeated in the match", arm.variant)));
                     }
                     seen[variant] = true;
                     let payload = &variants[variant].fields;
                     if arm.bindings.len() != payload.len() {
-                        return Err(Diagnostic::new(arm.span, format!("arm `{}` attend {} binding(s) de payload, {} fourni(s)",
+                        return Err(Diagnostic::new(arm.span, format!("match arm `{}` expects {} payload binding(s), {} provided",
                             arm.variant, payload.len(), arm.bindings.len())));
                     }
                     self.scopes.push(HashMap::new());
@@ -624,13 +624,13 @@ impl Checker<'_> {
                 let missing: Vec<_> = variants.iter().enumerate().filter(|(id, _)| !seen[*id])
                     .map(|(_, variant)| variant.name.as_str()).collect();
                 if !missing.is_empty() {
-                    return Err(Diagnostic::new(stmt.span, format!("match non exhaustif; variants manquantes: {}", missing.join(", "))));
+                    return Err(Diagnostic::new(stmt.span, format!("match is not exhaustive; missing variants: {}", missing.join(", "))));
                 }
                 (t::Stmt::Match { value, arms: checked_arms }, all_stop)
             }
             S::Return(value) => {
                 if self.return_type == Type::Void && value.is_some() {
-                    return Err(Diagnostic::new(stmt.span, "une fonction void utilise `return;`, sans valeur"));
+                    return Err(Diagnostic::new(stmt.span, "a void function must use `return;` without a value"));
                 }
                 let value = match value { Some(v) => Some(self.expected_expression(self.return_type, v)?), None => None };
                 self.require(self.return_type, value.as_ref().map_or(Type::Void, |v| v.ty), stmt.span)?;
@@ -639,7 +639,7 @@ impl Checker<'_> {
             }
             S::Break | S::Continue => {
                 if self.loop_depth == 0 {
-                    return Err(Diagnostic::new(stmt.span, "break et continue sont autorises uniquement dans une boucle"));
+                    return Err(Diagnostic::new(stmt.span, "`break` and `continue` are only allowed inside a loop"));
                 }
                 (if matches!(stmt.kind, S::Break) { t::Stmt::Break } else { t::Stmt::Continue }, true)
             }
@@ -666,7 +666,7 @@ impl Checker<'_> {
             }
             Some(t::NativeClass::List(_)) => {
                 if key.is_some() {
-                    return Err(Diagnostic::new(header_span, "List<T> conserve son unique binding d'element"));
+                    return Err(Diagnostic::new(header_span, "List<T> allows only one element binding"));
                 }
             }
             _ => return Err(Diagnostic::new(collection.span, "for-each collection must be a List<T> or Map<K, V>")),
@@ -739,21 +739,21 @@ impl Checker<'_> {
         match value_type {
             Type::Int | Type::Boolean | Type::String if header_type == value_type => Ok((value_type, false)),
             Type::Int | Type::Boolean | Type::String => Err(Diagnostic::new(span, format!(
-                "type d'element incompatible: attendu {}", self.tables.type_name(value_type)))),
+                "incompatible element type: expected {}", self.tables.type_name(value_type)))),
             Type::Object(class) => {
                 let Type::Borrow { class: header_class, mutable } = header_type else {
                     return Err(Diagnostic::new(span,
-                        "[E5004] un element affine doit etre lie par `borrow T` ou `borrow mut T`"));
+                        "[E5004] an affine element must be bound as `borrow T` or `borrow mut T`"));
                 };
                 if header_class != class {
                     return Err(Diagnostic::new(span, format!(
-                        "type d'emprunt incompatible: attendu {}, trouve {}",
+                        "incompatible borrow type: expected {}, found {}",
                         self.tables.type_name(Type::Borrow { class, mutable }),
                         self.tables.type_name(header_type))));
                 }
                 Ok((header_type, mutable))
             }
-            _ => Err(Diagnostic::new(span, "type d'element non pris en charge pour le parcours")),
+            _ => Err(Diagnostic::new(span, "unsupported element type for traversal")),
         }
     }
 
@@ -762,7 +762,7 @@ impl Checker<'_> {
                           borrow_type: Type, span: Span) -> Result<t::Expr, Diagnostic> {
         let Type::Borrow { mutable, .. } = borrow_type else { unreachable!("traversal receiver type"); };
         if mutable && matches!(source_type, Type::Borrow { mutable: false, .. }) {
-            return Err(Diagnostic::new(span, "[E3003] un parcours mutable exige un emprunt exclusif de la collection"));
+            return Err(Diagnostic::new(span, "[E3003] mutable traversal requires an exclusive borrow of the collection"));
         }
         if let Some(place) = place {
             if matches!(place.kind, PlaceKind::This) { self.require_initialized(span)?; }
@@ -772,7 +772,7 @@ impl Checker<'_> {
             let mut value = value.expect("non-place traversal expression was checked");
             if !value.ty.is_borrow() {
                 return Err(Diagnostic::new(span,
-                    "une collection possedee temporaire ne peut pas etre parcourue; utiliser un emplacement stable ou un emprunt existant"));
+                    "a temporary owned collection cannot be traversed; use a stable place or an existing borrow"));
             }
             value.ty = borrow_type;
             Ok(value)
@@ -874,18 +874,18 @@ impl Checker<'_> {
 
 
     fn this_place(&self, span: Span) -> Result<Place, Diagnostic> {
-        let id = self.receiver.ok_or_else(|| Diagnostic::new(span, "this ou membre d'instance inaccessible depuis une fonction ou methode static"))?;
+        let id = self.receiver.ok_or_else(|| Diagnostic::new(span, "`this` or an instance member is unavailable in a free or static function"))?;
         Ok(Place { kind: PlaceKind::This, ty: Type::Object(id) })
     }
     fn field_place(&self, base: Place, name: &str, span: Span, write: bool) -> Result<Place, Diagnostic> {
-        let Some(class_id) = base.ty.object_class() else { return Err(Diagnostic::new(span, "acces a un champ sur une valeur qui n'est pas un objet")); };
+        let Some(class_id) = base.ty.object_class() else { return Err(Diagnostic::new(span, "cannot access a field on a value that is not an object")); };
         let class = &self.tables.classes[class_id];
         let field = class.fields.iter().position(|f| f.name == name)
-            .ok_or_else(|| Diagnostic::new(span, format!("champ `{name}` inconnu dans `{}`", class.name)))?;
+            .ok_or_else(|| Diagnostic::new(span, format!("field `{name}` is unknown in `{}`", class.name)))?;
         let info = &class.fields[field];
-        self.accessible(info.visibility, class_id, span, "champ")?;
+        self.accessible(info.visibility, class_id, span, "field")?;
         if matches!(base.kind, PlaceKind::This) && self.constructor && !write && !self.initialized[field] {
-            return Err(Diagnostic::new(span, format!("champ `{name}` non initialise")));
+            return Err(Diagnostic::new(span, format!("field `{name}` is not initialized")));
         }
         Ok(Place { kind: PlaceKind::Field { base: Box::new(base), field }, ty: info.ty })
     }
@@ -897,14 +897,14 @@ impl Checker<'_> {
                 } else if self.owner.is_some_and(|c| self.tables.classes[c].fields.iter().any(|f| f.name == *name)) {
                     let base = self.this_place(expr.span)?;
                     self.field_place(base, name, expr.span, write)
-                } else { Err(Diagnostic::new(expr.span, format!("variable `{name}` non declaree"))) }
+                } else { Err(Diagnostic::new(expr.span, format!("variable `{name}` is not declared"))) }
             }
             a::ExprKind::This => self.this_place(expr.span),
             a::ExprKind::Field { base, name } => {
                 let base = self.place(base, false)?;
                 self.field_place(base, name, expr.span, write)
             }
-            _ => Err(Diagnostic::new(expr.span, "recepteur temporaire non pris en charge; stocker l'objet dans une variable locale")),
+            _ => Err(Diagnostic::new(expr.span, "temporary receivers are unsupported; store the object in a local variable")),
         }
     }
     /// Borrowing changes the call contract, not ownership. No allocation or copy.
@@ -919,7 +919,7 @@ impl Checker<'_> {
                     return Err(Diagnostic::new(expr.span, "[E3003] shared access cannot become an exclusive borrow"));
                 }
                 if !self.tables.can_upcast(actual, class) {
-                    return Err(Diagnostic::new(expr.span, format!("type incompatible: attendu {}, trouve {}", self.tables.type_name(expected), self.tables.type_name(value.ty))));
+                    return Err(Diagnostic::new(expr.span, format!("type mismatch: expected {}, found {}", self.tables.type_name(expected), self.tables.type_name(value.ty))));
                 }
                 // Downgrade the returned capability before retaining its caller loan.
                 value.ty = Type::Borrow { class: actual, mutable };
@@ -929,12 +929,12 @@ impl Checker<'_> {
                 }
                 return Ok(value);
             }
-            let place = self.place(expr, false).map_err(|d| d.with_help("un emprunt exige un objet nomme ou un champ; stocker d'abord un objet temporaire dans une variable"))?;
+            let place = self.place(expr, false).map_err(|d| d.with_help("a borrow requires a named object or field; first store a temporary object in a variable"))?;
             if !place.ty.object_class().is_some_and(|actual| self.tables.can_upcast(actual, class)) {
-                return Err(Diagnostic::new(expr.span, format!("type incompatible: attendu {}, trouve {}", self.tables.type_name(expected), self.tables.type_name(place.ty))));
+                return Err(Diagnostic::new(expr.span, format!("type mismatch: expected {}, found {}", self.tables.type_name(expected), self.tables.type_name(place.ty))));
             }
             if self.tables.is_view(expected) {
-                return Err(Diagnostic::new(expr.span, "[E3007] emprunter une vue locale n'est pas pris en charge"));
+                return Err(Diagnostic::new(expr.span, "[E3007] borrowing a local view is unsupported"));
             }
             if matches!(place.kind, PlaceKind::This) { self.require_initialized(expr.span)?; }
             if mutable { self.require_mutable(&place, expr.span)?; }
@@ -962,26 +962,26 @@ impl Checker<'_> {
     }
     fn require_mutable(&self, place: &Place, span: Span) -> Result<(), Diagnostic> {
         if self.writable(place) { Ok(()) } else {
-            Err(Diagnostic::new(span, "[E3003] modification interdite a travers un emprunt en lecture seule ou un receveur readonly")
-                .with_help("declarer un parametre borrow mut pour modifier; appeler uniquement les methodes readonly sur un emprunt partage"))
+            Err(Diagnostic::new(span, "[E3003] modification is not allowed through a shared borrow or readonly receiver")
+                .with_help("declare a `borrow mut` parameter to modify; call only readonly methods through a shared borrow"))
         }
     }
     fn take_place(&mut self, place: Place, span: Span) -> Result<t::ExprKind, Diagnostic> {
         if !place.ty.is_object() { return Ok(t::ExprKind::Read(place)); }
         if self.tables.is_view(place.ty) {
-            return Err(Diagnostic::new(span, "[E3007] deplacement d'une vue locale interdit; sa duree de vie est son bloc de declaration"));
+            return Err(Diagnostic::new(span, "[E3007] moving a local view is not allowed; its lifetime is the block where it is declared"));
         }
         let PlaceKind::Var(id) = place.kind else {
-            return Err(Diagnostic::new(span, "deplacement de this ou d'un champ objet interdit; seuls les objets locaux et parametres sont transferables"));
+            return Err(Diagnostic::new(span, "moving `this` or an object field is not allowed; only local objects and parameters can be transferred"));
         };
         if self.locks.contains(&id) {
-            return Err(Diagnostic::new(span, "objet emprunte comme recepteur d'un appel en cours; deplacement interdit"));
+            return Err(Diagnostic::new(span, "object is borrowed as the receiver of an in-progress call; moving it is not allowed"));
         }
         Ok(t::ExprKind::Move(id))
     }
     fn check_args(&mut self, sig: &Signature, args: &[a::Expr], span: Span) -> Result<Vec<t::Expr>, Diagnostic> {
         if sig.params.len() != args.len() {
-            return Err(Diagnostic::new(span, format!("`{}` attend {} argument(s), {} recu(s)", sig.name, sig.params.len(), args.len())));
+            return Err(Diagnostic::new(span, format!("`{}` expects {} argument(s), {} received", sig.name, sig.params.len(), args.len())));
         }
         let mut out = Vec::new();
         for (arg, expected) in args.iter().zip(&sig.params) {
@@ -992,7 +992,7 @@ impl Checker<'_> {
     }
     fn call(&mut self, id: usize, receiver: Option<Place>, args: &[a::Expr], span: Span) -> Result<(t::ExprKind, Type), Diagnostic> {
         let sig = self.tables.signatures[id].clone();
-        if let Some(owner) = sig.owner { self.accessible(sig.visibility, owner, span, "methode ou constructeur")?; }
+        if let Some(owner) = sig.owner { self.accessible(sig.visibility, owner, span, "method or constructor")?; }
         if let Some(place) = &receiver {
             if matches!(place.kind, PlaceKind::This) { self.require_initialized(span)?; }
             if !sig.readonly { self.require_mutable(place, span)?; }
@@ -1004,14 +1004,14 @@ impl Checker<'_> {
         Ok((t::ExprKind::Call { target: CallTarget::Function(id), receiver, args: args? }, sig.return_type))
     }
     fn builtin(&mut self, args: &[a::Expr], span: Span) -> Result<(t::ExprKind, Type), Diagnostic> {
-        if args.len() != 1 { return Err(Diagnostic::new(span, "println attend exactement un argument")); }
+        if args.len() != 1 { return Err(Diagnostic::new(span, "println expects exactly one argument")); }
         let value = self.expression(&args[0])?;
-        if value.ty == Type::Void { return Err(Diagnostic::new(span, "println ne peut pas afficher une expression void")); }
-        if value.ty.object_class().is_some() { return Err(Diagnostic::new(span, "println ne peut pas afficher un objet; afficher un champ ou le resultat d'une methode")); }
+        if value.ty == Type::Void { return Err(Diagnostic::new(span, "println cannot print a void expression")); }
+        if value.ty.object_class().is_some() { return Err(Diagnostic::new(span, "println cannot print an object; print a field or the result of a method")); }
         Ok((t::ExprKind::Call { target: CallTarget::Println, receiver: None, args: vec![value] }, Type::Void))
     }
     fn expression(&mut self, expr: &a::Expr) -> Result<t::Expr, Diagnostic> {
-        if self.expr_depth >= 128 { return Err(Diagnostic::new(expr.span, "expression trop profonde")); }
+        if self.expr_depth >= 128 { return Err(Diagnostic::new(expr.span, "expression too deep")); }
         self.expr_depth += 1;
         let result = self.expression_inner(expr);
         self.expr_depth -= 1; result
@@ -1035,32 +1035,32 @@ impl Checker<'_> {
                 (self.take_place(place, expr.span)?, ty)
             }
             E::New { class, args, .. } => {
-                let class = *self.tables.names.get(class).ok_or_else(|| Diagnostic::new(expr.span, format!("classe `{class}` inconnue")))?;
+                let class = *self.tables.names.get(class).ok_or_else(|| Diagnostic::new(expr.span, format!("class `{class}` is unknown")))?;
                 if self.tables.is_static_native(class) {
-                    return Err(Diagnostic::new(expr.span, format!("`{}` est statique et ne peut pas etre construite", self.tables.classes[class].name)));
+                    return Err(Diagnostic::new(expr.span, format!("`{}` is static and cannot be constructed", self.tables.classes[class].name)));
                 }
                 if self.tables.classes[class].is_interface {
-                    return Err(Diagnostic::new(expr.span, "[E4004] une interface ne peut pas etre instanciee avec new"));
+                    return Err(Diagnostic::new(expr.span, "[E4004] an interface cannot be instantiated with `new`"));
                 }
                 if self.tables.classes[class].variants.is_some() {
-                    return Err(Diagnostic::new(expr.span, "une enum se construit avec `new Enum.Variant(...)`, pas avec `new Enum(...)`"));
+                    return Err(Diagnostic::new(expr.span, "construct an enum with `new Enum.Variant(...)`, not `new Enum(...)`"));
                 }
                 let constructor = self.tables.classes[class].constructor
-                    .ok_or_else(|| Diagnostic::new(expr.span, "cette classe n'a pas de constructeur"))?;
+                    .ok_or_else(|| Diagnostic::new(expr.span, "this class has no constructor"))?;
                 let sig = self.tables.signatures[constructor].clone();
-                self.accessible(sig.visibility, class, expr.span, "constructeur")?;
+                self.accessible(sig.visibility, class, expr.span, "constructor")?;
                 let args = self.check_args(&sig, args, expr.span)?;
                 (t::ExprKind::New { class, constructor, args }, Type::Object(class))
             }
             E::Variant { class, variant, args, .. } => {
-                let class = *self.tables.names.get(class).ok_or_else(|| Diagnostic::new(expr.span, format!("enum `{class}` inconnue")))?;
+                let class = *self.tables.names.get(class).ok_or_else(|| Diagnostic::new(expr.span, format!("enum `{class}` is unknown")))?;
                 let variants = self.tables.classes[class].variants.as_ref()
-                    .ok_or_else(|| Diagnostic::new(expr.span, format!("`{}` n'est pas une enum; variant constructor interdit", self.tables.classes[class].name)))?;
+                    .ok_or_else(|| Diagnostic::new(expr.span, format!("`{}` is not an enum; variant construction is not allowed", self.tables.classes[class].name)))?;
                 let variant_id = variants.iter().position(|v| v.name == *variant)
-                    .ok_or_else(|| Diagnostic::new(expr.span, format!("variant `{variant}` inconnue dans `{}`", self.tables.classes[class].name)))?;
+                    .ok_or_else(|| Diagnostic::new(expr.span, format!("variant `{variant}` is unknown in `{}`", self.tables.classes[class].name)))?;
                 let fields = variants[variant_id].fields.clone();
                 if args.len() != fields.len() {
-                    return Err(Diagnostic::new(expr.span, format!("variant `{variant}` attend {} payload(s), {} fourni(s)", fields.len(), args.len())));
+                    return Err(Diagnostic::new(expr.span, format!("variant `{variant}` expects {} payload(s), {} provided", fields.len(), args.len())));
                 }
                 let values = args.iter().zip(fields).map(|(arg, expected)| self.expected_expression(expected, arg))
                     .collect::<Result<Vec<_>, _>>()?;
@@ -1069,9 +1069,9 @@ impl Checker<'_> {
             E::Call { name, args } => {
                 if name == "println" { self.builtin(args, expr.span)? }
                 else if name == "move" || name == "drop" {
-                    if args.len() != 1 { return Err(Diagnostic::new(expr.span, format!("{name} attend exactement un argument"))); }
+                    if args.len() != 1 { return Err(Diagnostic::new(expr.span, format!("{name} expects exactly one argument"))); }
                     let value = self.expression(&args[0])?;
-                    if !value.ty.is_object() { return Err(Diagnostic::new(expr.span, format!("{name} exige un objet possede, pas une primitive ou void"))); }
+                    if !value.ty.is_object() { return Err(Diagnostic::new(expr.span, format!("{name} requires an owned object, not a primitive or void"))); }
                     if name == "move" { (value.kind, value.ty) }
                     else { (t::ExprKind::Drop(Box::new(value)), Type::Void) }
                 }
@@ -1079,7 +1079,7 @@ impl Checker<'_> {
                     let receiver = if self.tables.signatures[id].kind == Kind::Instance { Some(self.this_place(expr.span)?) } else { None };
                     self.call(id, receiver, args, expr.span)?
                 } else {
-                    let id = *self.tables.globals.get(name).ok_or_else(|| Diagnostic::new(expr.span, format!("fonction `{name}` inconnue")))?;
+                    let id = *self.tables.globals.get(name).ok_or_else(|| Diagnostic::new(expr.span, format!("function `{name}` is unknown")))?;
                     self.call(id, None, args, expr.span)?
                 }
             }
@@ -1094,22 +1094,22 @@ impl Checker<'_> {
                     };
                     if let Some(class) = static_class {
                         if name == "get" && matches!(self.tables.classes[class].native, Some(t::NativeClass::List(Type::Object(_)))) {
-                            return Err(Diagnostic::new(expr.span, "[E5002] get ne copie pas les objets possedes d'une List; utiliser pop ou remove pour en transferer la propriete"));
+                            return Err(Diagnostic::new(expr.span, "[E5002] get does not copy owned objects from a List; use pop or remove to transfer ownership"));
                         }
-                        let id = *self.tables.classes[class].methods.get(name).ok_or_else(|| Diagnostic::new(expr.span, format!("methode `{name}` inconnue")))?;
+                        let id = *self.tables.classes[class].methods.get(name).ok_or_else(|| Diagnostic::new(expr.span, format!("method `{name}` is unknown")))?;
                         if self.tables.signatures[id].kind != Kind::Static {
-                            return Err(Diagnostic::new(expr.span, "une methode d'instance exige un objet, pas un nom de classe"));
+                            return Err(Diagnostic::new(expr.span, "an instance method requires an object, not a class name"));
                         }
                         self.call(id, None, args, expr.span)?
                     } else {
                         let receiver = self.place(receiver, false)?;
-                        let Some(class) = receiver.ty.object_class() else { return Err(Diagnostic::new(expr.span, "appel de methode sur une valeur qui n'est pas un objet")); };
+                        let Some(class) = receiver.ty.object_class() else { return Err(Diagnostic::new(expr.span, "cannot call a method on a value that is not an object")); };
                         if name == "get" && matches!(self.tables.classes[class].native, Some(t::NativeClass::List(Type::Object(_)))) {
-                            return Err(Diagnostic::new(expr.span, "[E5002] get ne copie pas les objets possedes d'une List; utiliser pop ou remove pour en transferer la propriete"));
+                            return Err(Diagnostic::new(expr.span, "[E5002] get does not copy owned objects from a List; use pop or remove to transfer ownership"));
                         }
-                        let id = *self.tables.classes[class].methods.get(name).ok_or_else(|| Diagnostic::new(expr.span, format!("methode `{name}` inconnue")))?;
+                        let id = *self.tables.classes[class].methods.get(name).ok_or_else(|| Diagnostic::new(expr.span, format!("method `{name}` is unknown")))?;
                         if self.tables.signatures[id].kind == Kind::Static {
-                            return Err(Diagnostic::new(expr.span, "appeler une methode static avec le nom de classe, pas un objet"));
+                            return Err(Diagnostic::new(expr.span, "call a static method with the class name, not an object"));
                         }
                         self.call(id, Some(receiver), args, expr.span)?
                     }
@@ -1139,7 +1139,7 @@ impl Checker<'_> {
                     }
                     B::Eq | B::Ne => {
                         if !matches!(left.ty, Type::Int | Type::Boolean) {
-                            return Err(Diagnostic::new(expr.span, "== et != sont limites a int et boolean"));
+                            return Err(Diagnostic::new(expr.span, "== and != are limited to int and boolean"));
                         }
                         self.require(left.ty, right.ty, right.span)?; Type::Boolean
                     }

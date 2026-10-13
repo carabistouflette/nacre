@@ -46,14 +46,14 @@ pub fn lex(source: &str) -> Result<Vec<Token>, Diagnostic> {
                 "extends" | "null" |
                 "super" | "package" | "final" | "throw" |
                 "try" | "catch" | "switch" | "long" | "double" | "float" | "char" => {
-                    return Err(Diagnostic::new(Span::new(start, lexer.pos), format!("`{word}` n'est pas encore pris en charge")));
+                    return Err(Diagnostic::new(Span::new(start, lexer.pos), format!("`{word}` is not yet supported")));
                 }
                 _ => TokenKind::Ident(word.to_owned()),
             }
         } else if c.is_ascii_digit() {
             while lexer.peek().is_some_and(|c| c.is_ascii_digit()) { lexer.bump(); }
             if lexer.peek().is_some_and(|c| c.is_ascii_alphabetic() || c == '_') {
-                return Err(Diagnostic::new(Span::new(start, lexer.pos), "entier decimal invalide (ni suffixe ni hexadecimal)"));
+                return Err(Diagnostic::new(Span::new(start, lexer.pos), "invalid decimal integer (no suffixes or hexadecimal)"));
             }
             TokenKind::Number(source[start..lexer.pos].to_owned())
         } else {
@@ -64,7 +64,7 @@ pub fn lex(source: &str) -> Result<Vec<Token>, Diagnostic> {
                 ',' => TokenKind::Comma, ':' => TokenKind::Colon, ';' => TokenKind::Semicolon, '.' => TokenKind::Dot,
                 '+' | '-' if lexer.peek() == Some(c) => {
                     lexer.bump();
-                    return Err(Diagnostic::new(Span::new(start, lexer.pos), format!("`{c}{c}` n'est pas pris en charge: utiliser une affectation comme `i = i + 1`")));
+                    return Err(Diagnostic::new(Span::new(start, lexer.pos), format!("`{c}{c}` is unsupported; use an assignment such as `i = i + 1`")));
                 }
                 '+' => TokenKind::Plus, '-' => TokenKind::Minus, '*' => TokenKind::Star,
                 '/' => TokenKind::Slash, '%' => TokenKind::Percent,
@@ -74,7 +74,7 @@ pub fn lex(source: &str) -> Result<Vec<Token>, Diagnostic> {
                 '>' => if lexer.take('=') { TokenKind::GreaterEqual } else { TokenKind::Greater },
                 '&' if lexer.take('&') => TokenKind::AndAnd,
                 '|' if lexer.take('|') => TokenKind::OrOr,
-                _ => return Err(Diagnostic::new(Span::new(start, lexer.pos), format!("caractere inattendu: {c:?}"))),
+                _ => return Err(Diagnostic::new(Span::new(start, lexer.pos), format!("unexpected character: {c:?}"))),
             }
         };
         tokens.push(Token { kind, span: Span::new(start, lexer.pos) });
@@ -105,7 +105,7 @@ impl Lexer<'_> {
                 self.pos += 2;
                 while self.pos < self.source.len() && !self.source[self.pos..].starts_with("*/") { self.bump(); }
                 if self.pos == self.source.len() {
-                    return Err(Diagnostic::new(Span::new(start, self.pos), "commentaire `/*` non termine"));
+                    return Err(Diagnostic::new(Span::new(start, self.pos), "unterminated `/*` comment"));
                 }
                 self.pos += 2;
             } else { return Ok(()); }
@@ -116,12 +116,12 @@ impl Lexer<'_> {
         while let Some(c) = self.bump() {
             match c {
                 '"' => return Ok(result),
-                '\n' | '\r' => return Err(Diagnostic::new(Span::new(start, self.pos), "chaine non terminee avant la fin de ligne")),
+                '\n' | '\r' => return Err(Diagnostic::new(Span::new(start, self.pos), "string literal is not terminated before end of line")),
                 '\\' => {
                     let escaped = match self.bump() {
                         Some('n') => '\n', Some('r') => '\r', Some('t') => '\t',
                         Some('0') => '\0', Some('"') => '"', Some('\\') => '\\',
-                        Some(other) => return Err(Diagnostic::new(Span::new(self.pos - other.len_utf8() - 1, self.pos), format!("echappement non pris en charge: \\{other}"))),
+                        Some(other) => return Err(Diagnostic::new(Span::new(self.pos - other.len_utf8() - 1, self.pos), format!("unsupported escape: \\{other}"))),
                         None => break,
                     };
                     result.push(escaped);
@@ -129,6 +129,6 @@ impl Lexer<'_> {
                 _ => result.push(c),
             }
         }
-        Err(Diagnostic::new(Span::new(start, self.pos), "chaine de caracteres non terminee"))
+        Err(Diagnostic::new(Span::new(start, self.pos), "unterminated string literal"))
     }
 }
