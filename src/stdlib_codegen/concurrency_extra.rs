@@ -223,9 +223,8 @@ static bool ncr_cancel_requested_internal(struct ncr_mutex_control_{unit} *contr
 }
 
 fn state_helpers(program: &t::Program) -> String {
-    let needs_unit = program.classes.iter().any(|class| matches!(class.native,
-        Some(C::AtomicInt | C::AtomicLong | C::AtomicBoolean | C::Semaphore |
-            C::CountDownLatch | C::Barrier | C::CancellationToken | C::Future(_) | C::ThreadPool(_))));
+    let needs_unit = program.classes.iter().any(|class|
+        class.native.is_some() && crate::stdlib::uses_unit_mutex(&class.name));
     if !needs_unit { return String::new(); }
     let mut out = String::new();
     let unit = unit_mutex(program);

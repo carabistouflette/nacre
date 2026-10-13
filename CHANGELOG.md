@@ -7,6 +7,9 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   declarations. Static utilities follow their actual methods, while factory-
   returned native values with instance queries remain values; declared concrete
   constructors retain their direct code-generation mappings.
+- Shared `Mutex<Unit>` control dependencies are defined once in the native
+  catalog and consumed by generic specialization and state-helper emission;
+  control ownership and runtime allocation behavior remain unchanged.
 
 - Adds reusable affine `Codec<T>` and `Serialization<T>` APIs with a canonical
   big-endian `NCRS`/version-1 frame, primitive, length-prefixed UTF-8 and byte

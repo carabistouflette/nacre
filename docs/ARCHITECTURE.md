@@ -179,19 +179,23 @@ Independent handwritten/template C fixtures are supplementary, not substitutes
 for that proof.
 
 
-## Classes natives et mémoire des collections
+## Native classes and collection memory
 
 `ast::Class.native` is never produced by source parsing. Trusted prelude
 injection marks built-in collection templates, scalar/text types, and system
 APIs for I/O, filesystem, regex, math/random/time, processes, synchronization, and
-networking. Generic specialization classifies `Map<K,V>` and `Set<K>` keys as
-`int` or owned `Text` before ordinary type checking. The checker resolves native
-declarations and typed methods without granting native privileges to a
-user-defined spelling.
+networking. Generic specialization records native key handling for `Map<K,V>`
+and `Set<K>`: built-in `int`/owned `Text` handling or an explicit owned
+`Hasher<K>` policy for custom keys. The checker resolves native declarations and
+typed methods without granting native privileges to a user-defined spelling.
 
 Unused native classes are not materialized. Copying accessors are pruned for
 affine elements; borrowed accessors are pruned for copyable elements. Their ABI
 is derived from typed IR.
+The native catalog records which resolved control families require
+`Mutex<Unit>` once. Generic specialization requests that prerequisite and
+native state-helper emission uses the same fact, rather than maintaining two
+independent family lists.
 Native functions have ordinary typed signatures, but their empty IR bodies are
 exempt from analysis. `ownership.rs` and `borrowing.rs` do not prove native
 method safety; user calls are checked against the same contracts as ordinary

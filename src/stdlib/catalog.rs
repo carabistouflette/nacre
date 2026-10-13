@@ -34,6 +34,15 @@ pub(crate) fn pool_submission_policy(method: NativeMethod) -> Option<PoolSubmiss
         .map(|submission| submission.policy)
 }
 
+/// Native families whose state is stored in the shared `Mutex<Unit>` control.
+/// Specialization names retain the declared family before their type arguments.
+pub(crate) fn uses_unit_mutex(class_name: &str) -> bool {
+    let family = class_name.split_once('<').map_or(class_name, |(family, _)| family);
+    matches!(family, "AtomicInt" | "AtomicLong" | "AtomicBoolean" |
+        "Semaphore" | "CountDownLatch" | "Barrier" | "CancellationToken" |
+        "Future" | "ThreadPool")
+}
+
 #[derive(Clone, Copy)]
 pub(super) struct Builtin {
     pub(super) name: &'static str,

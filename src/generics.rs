@@ -154,11 +154,8 @@ fn display_type(ty: &Type) -> String {
 
 impl Expander {
     fn request_unit_mutex_if_needed(&mut self, env: &Environment, span: Span) -> Result<(), Diagnostic> {
-        let required = self.requested.iter().any(|name| {
-            matches!(name.as_str(), "AtomicInt" | "AtomicLong" | "AtomicBoolean" |
-                "Semaphore" | "CountDownLatch" | "Barrier" | "CancellationToken")
-                || ["Future<", "ThreadPool<"].iter().any(|prefix| name.starts_with(prefix))
-        });
+        let required = self.requested.iter()
+            .any(|name| crate::stdlib::uses_unit_mutex(name));
         if required && !self.requested.contains("Mutex<Unit>") {
             self.ty(&Type::Applied {
                 name: "Mutex".to_owned(),

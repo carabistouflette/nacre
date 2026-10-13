@@ -3,6 +3,7 @@ mod catalog;
 
 use self::catalog::{builtin, PRELUDE_UNITS};
 pub(crate) use self::catalog::{pool_submission_by_name, pool_submission_policy, PoolSubmissionPolicy};
+pub(crate) use self::catalog::uses_unit_mutex;
 use crate::ast as a;
 use crate::diagnostic::{Diagnostic, Span};
 use crate::ir::{NativeClass as C, NativeMethod as M};
