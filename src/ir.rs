@@ -126,17 +126,22 @@ pub enum CallTarget { Function(usize), Println }
 
 /// Trusted standard-library storage, never exposed as source fields.
 #[derive(Debug, Clone, Copy)]
-pub enum NativeClass { List(Type), Array(Type), Map(MapKeyKind, Type), Text, Regex, RegexMatch, Arrays, ByteBuffer, Console, Files, Args, Math, Random, Time }
+pub enum NativeClass { List(Type), Array(Type), Deque(Type), Map(MapKeyKind, Type), Set(MapKeyKind), Text, Regex, RegexMatch, Arrays, ByteBuffer, Console, Files, Args, Math, Random, Time }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NativeMethod {
     ListNew, ListAdd, ListSize, ListCapacity, ListIsEmpty, ListGet, ListGetRef, ListGetMut,
     ListSet, ListPop, ListRemove, ListTryGet, ListTryPop, ListTryRemove, ListClear, ListReserve,
+    ListSort, ListSortBy, ListBinarySearch, ListBinarySearchBy,
+    DequeNew, DequePushFront, DequePushBack, DequePopFront, DequePopBack,
+    DequeTryPopFront, DequeTryPopBack, DequeSize, DequeCapacity, DequeIsEmpty,
+    DequeGet, DequeGetRef, DequeGetMut, DequeSet, DequeTryGet, DequeClear, DequeReserve,
     ArrayNew, ArraySize, ArrayGet, ArrayGetRef, ArrayGetMut, ArraySet, ArrayTryGet,
     ArraysBytes, ArraysChars, ArraysInts, ArraysLongs, ArraysDoubles, ArraysBooleans, ArraysUnits,
     ByteBufferWithCapacity, ByteBufferLength, ByteBufferCapacity, ByteBufferGet, ByteBufferSet,
     ByteBufferAppend, ByteBufferAppendBytes, ByteBufferClear, ByteBufferTruncate,
     MapNew, MapContainsKey, MapSize, MapIsEmpty, MapPut, MapTryRemove, MapTryGet,
     MapGetRef, MapGetMut, MapClear,
+    SetNew, SetAdd, SetContains, SetSize, SetIsEmpty, SetRemove, SetClear,
     TextNew, TextAppend, TextAppendInt, TextAppendByte, TextAppendChar, TextAppendLong, TextAppendDouble,
     TextAppendBoolean, TextAppendText,
     TextByteLength, TextByteAt, TextIsEmpty, TextClear, TextPrint,

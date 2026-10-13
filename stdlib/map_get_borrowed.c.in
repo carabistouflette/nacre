@@ -1,5 +1,5 @@
 static @RETURN_TYPE@ @MAP_METHOD@(ncr_obj_@ID@ *p, @QUERY_TYPE@ key, size_t line, size_t column) {
-    int32_t index = ncr_map_query_@ID@(p, key);
+    int32_t index = ncr_map_query_@ID@(&p->table, key);
     if (index < 0) { ncr_fail("Map key is absent", line, column); }
     return @BORROWED_VALUE@;
 }

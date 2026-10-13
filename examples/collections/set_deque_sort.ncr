@@ -1,0 +1,36 @@
+void main() {
+    Set<Text> labels = new Set<Text>();
+    labels.add(new Text("ready"));
+    labels.add(new Text("review"));
+    Text query = new Text("ready");
+    println(labels.contains(query));
+    int labelBytes = 0;
+    for (borrow Text label : labels) {
+        labelBytes = labelBytes + label.byteLength();
+    }
+    println(labelBytes);
+
+    Deque<String> tasks = new Deque<String>();
+    tasks.pushBack("review");
+    tasks.pushBack("merge");
+    tasks.pushFront("test");
+    match (tasks.tryPopFront()) {
+        None { println("empty"); }
+        Some(task) { println(task); }
+    }
+    println(tasks.popBack());
+    println(tasks.popBack());
+
+    List<int> priorities = new List<int>();
+    priorities.add(8);
+    priorities.add(3);
+    priorities.add(5);
+    priorities.sort();
+    for (int priority : priorities) {
+        println(priority);
+    }
+    match (priorities.binarySearch(5)) {
+        None { println("not found"); }
+        Some(index) { println(index); }
+    }
+}

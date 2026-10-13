@@ -22,6 +22,9 @@
 - Text supports scalar operations, slicing, search, replacement and splitting.
   POSIX ERE Regex uses thread-local UTF-8 locale state and owned match captures.
   Byte-slice endpoint checks remain constant-time under validated Text invariants.
+- Set reuses Map table storage without a wrapper allocation; Deque moves affine
+  ring elements through wrap and growth. List heapsort and lower-bound searches
+  support total primitive ordering or borrowed Comparators, without enum operand copies.
 
 - Postfix `?` unwraps trusted built-in `Result` values or returns the exact
   error payload after cleaning live locals and pending owned C temporaries.

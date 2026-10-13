@@ -2,6 +2,14 @@
   "examples": [
     {
       "category": "collections",
+      "source": "examples/collections/set_deque_sort.ncr",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["true", "11", "test", "merge", "review", "3", "5", "8", "1"]
+    },
+    {
+      "category": "collections",
       "source": "examples/collections/arrays.ncr",
       "stdin": "",
       "args": [],

@@ -37,7 +37,12 @@ pub struct SourceUnit { pub module: String, pub imports: Vec<Import> }
 #[derive(Debug, Clone)]
 pub struct Import { pub path: String, pub wildcard: bool, pub span: Span }
 #[derive(Debug, Clone)]
-pub enum NativeClass { List(Type), Array(Type), Map { key: Type, value: Type, key_kind: Option<MapKeyKind> }, Text, Regex, RegexMatch, Arrays, ByteBuffer, Console, Files, Args, Math, Random, Time }
+pub enum NativeClass {
+    List(Type), Array(Type), Deque(Type),
+    Map { key: Type, value: Type, key_kind: Option<MapKeyKind> },
+    Set { key: Type, key_kind: Option<MapKeyKind> }, Comparator(Type),
+    Text, Regex, RegexMatch, Arrays, ByteBuffer, Console, Files, Args, Math, Random, Time,
+}
 #[derive(Debug, Clone)]
 pub struct Variant { pub name: String, pub fields: Vec<Type>, pub span: Span }
 #[derive(Debug, Clone)]

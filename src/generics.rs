@@ -11,6 +11,57 @@ use crate::diagnostic::{Diagnostic, Span};
 const MAX_SPECIALIZATIONS: usize = 64;
 const MAX_TYPE_NAME: usize = 4096;
 type Environment = HashMap<String, Type>;
+fn supports_default_ordering(ty: &Type) -> bool {
+    matches!(ty, Type::Byte | Type::Char | Type::Int | Type::Long | Type::Double | Type::Boolean | Type::String)
+}
+
+fn rewrite_borrowed_t_parameter_to_value(methods: &mut [a::Function], method_name: &str, index: usize) {
+    if let Some(param) = methods.iter_mut().find(|method| method.name == method_name)
+        .and_then(|method| method.params.get_mut(index))
+    {
+        if matches!(&param.ty, Type::Borrow { name, args, .. } if name == "T" && args.is_empty()) {
+            param.ty = Type::Named("T".to_owned());
+        }
+    }
+}
+
+fn prune_indexed_collection_methods(class: &mut a::Class, element: &Type) {
+    if element.is_copy() {
+        class.methods.retain(|method| !matches!(method.name.as_str(), "getRef" | "getMut"));
+    } else {
+        class.methods.retain(|method| !matches!(method.name.as_str(), "get" | "tryGet"));
+    }
+}
+
+fn prune_list_methods(class: &mut a::Class, element: &Type) {
+    prune_indexed_collection_methods(class, element);
+    if !supports_default_ordering(element) {
+        class.methods.retain(|method| !matches!(method.name.as_str(), "sort" | "binarySearch"));
+    }
+    if element.is_copy() {
+        rewrite_borrowed_t_parameter_to_value(&mut class.methods, "binarySearchBy", 1);
+    }
+}
+
+fn prune_map_value_methods(class: &mut a::Class, value: &Type) {
+    if value.is_copy() {
+        class.methods.retain(|method| !matches!(method.name.as_str(), "getRef" | "getMut"));
+    } else {
+        class.methods.retain(|method| method.name != "tryGet");
+    }
+}
+
+fn set_text_query_parameters(class: &mut a::Class, key_kind: a::MapKeyKind, names: &[&str]) {
+    if let Some(query_type) = key_kind.query_type() {
+        for method in &mut class.methods {
+            if names.contains(&method.name.as_str()) {
+                let parameter = method.params.first_mut()
+                    .expect("compiler-owned collection query has a key parameter");
+                parameter.ty = query_type.clone();
+            }
+        }
+    }
+}
 
 #[derive(Clone)]
 struct Request { template: String, name: String, args: Vec<Type>, span: Span }
@@ -157,15 +208,16 @@ impl Expander {
         }
     }
     fn class(&mut self, class: &mut a::Class, env: &Environment) -> Result<(), Diagnostic> {
-        match &mut class.native {
+        let mut erase_comparator_marker = false;
+        let mut native = class.native.take();
+        match &mut native {
             Some(a::NativeClass::List(element)) => {
                 *element = self.ty(element, env, class.span, 0)?;
-                // Primitive elements copy; nominal elements require receiver-bound loans.
-                if element.is_copy() {
-                    class.methods.retain(|method| !matches!(method.name.as_str(), "getRef" | "getMut"));
-                } else {
-                    class.methods.retain(|method| !matches!(method.name.as_str(), "get" | "tryGet"));
-                }
+                prune_list_methods(class, element);
+            }
+            Some(a::NativeClass::Deque(element)) => {
+                *element = self.ty(element, env, class.span, 0)?;
+                prune_indexed_collection_methods(class, element);
             }
             Some(a::NativeClass::Array(element)) => {
                 *element = self.ty(element, env, class.span, 0)?;
@@ -181,24 +233,34 @@ impl Expander {
                 let kind = a::MapKeyKind::classify(key)
                     .ok_or_else(|| Diagnostic::new(class.span, "[E5004] Map<K, V> requires int or owned Text keys"))?;
                 *key_kind = Some(kind);
-                if let Some(query_type) = kind.query_type() {
-                    for method in &mut class.methods {
-                        if matches!(method.name.as_str(), "containsKey" | "tryRemove" | "tryGet" | "getRef" | "getMut") {
-                            let key_param = method.params.first_mut()
-                                .expect("compiler-owned Map query takes its key as first parameter");
-                            key_param.ty = query_type.clone();
-                        }
-                    }
+                set_text_query_parameters(class, kind,
+                    &["containsKey", "tryRemove", "tryGet", "getRef", "getMut"]);
+                prune_map_value_methods(class, value);
+            }
+            Some(a::NativeClass::Set { key, key_kind }) => {
+                *key = self.ty(key, env, class.span, 0)?;
+                let kind = a::MapKeyKind::classify(key)
+                    .ok_or_else(|| Diagnostic::new(class.span, "[E5004] Set<T> requires int or owned Text keys"))?;
+                *key_kind = Some(kind);
+                set_text_query_parameters(class, kind, &["contains", "remove"]);
+                let map = Type::Applied {
+                    name: "Map".to_owned(),
+                    args: vec![key.clone(), Type::Unit],
+                };
+                self.ty(&map, env, class.span, 0)?;
+            }
+            Some(a::NativeClass::Comparator(element)) => {
+                *element = self.ty(element, env, class.span, 0)?;
+                if element.is_copy() {
+                    rewrite_borrowed_t_parameter_to_value(&mut class.methods, "compare", 0);
+                    rewrite_borrowed_t_parameter_to_value(&mut class.methods, "compare", 1);
                 }
-                // Primitive values copy; nominal values are only exposed through
-                // receiver-bound loans, never through a copied Option payload.
-                if value.is_copy() {
-                    class.methods.retain(|method| !matches!(method.name.as_str(), "getRef" | "getMut"));
-                } else {
-                    class.methods.retain(|method| method.name != "tryGet");
-                }
+                erase_comparator_marker = true;
             }
             _ => {}
+        }
+        if !erase_comparator_marker {
+            class.native = native;
         }
         for interface in &mut class.implements { *interface = self.ty(interface, env, class.span, 0)?; }
         if let Some(variants) = &mut class.variants {

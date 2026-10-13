@@ -15,6 +15,44 @@ class List<T> {
     public T remove(int index) {}
     public void clear() {}
     public void reserve(int capacity) {}
+    public void sort() {}
+    public void sortBy(Comparator<T> comparator) {}
+    public readonly Option<int> binarySearch(T value) {}
+    public readonly Option<int> binarySearchBy(Comparator<T> comparator, borrow T value) {}
+}
+
+class Deque<T> {
+    public Deque() {}
+    public void pushFront(T value) {}
+    public void pushBack(T value) {}
+    public T popFront() {}
+    public T popBack() {}
+    public Option<T> tryPopFront() {}
+    public Option<T> tryPopBack() {}
+    public readonly int size() {}
+    public readonly int capacity() {}
+    public readonly boolean isEmpty() {}
+    public readonly T get(int index) {}
+    public readonly Option<T> tryGet(int index) {}
+    public readonly borrow T getRef(int index) {}
+    public borrow mut T getMut(int index) {}
+    public void set(int index, T value) {}
+    public void clear() {}
+    public void reserve(int capacity) {}
+}
+
+class Set<T> {
+    public Set() {}
+    public void add(T key) {}
+    public readonly boolean contains(T key) {}
+    public boolean remove(T key) {}
+    public readonly int size() {}
+    public readonly boolean isEmpty() {}
+    public void clear() {}
+}
+
+interface Comparator<T> {
+    readonly int compare(borrow T left, borrow T right);
 }
 
 class Array<T> {

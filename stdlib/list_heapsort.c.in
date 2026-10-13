@@ -1,0 +1,29 @@
+static int32_t ncr_list_order_compare_@KIND@_@ID@(@COMPARE_ELEMENT@ left, @COMPARE_ELEMENT@ right@CONTEXT_PARAM@) {
+    return @COMPARE_EXPRESSION@;
+}
+static void ncr_list_swap_@KIND@_@ID@(@ELEMENT@ *left, @ELEMENT@ *right) {
+    @SWAP_BODY@
+}
+static void ncr_list_sift_@KIND@_@ID@(ncr_obj_@ID@ *p, int32_t root, int32_t end@CONTEXT_PARAM@) {
+    if (end < 1) { return; }
+    while (root <= (end - 1) / 2) {
+        int32_t child = root * 2 + 1;
+        if (child < end && ncr_list_order_compare_@KIND@_@ID@(@COMPARE_REFERENCE@p->items[child], @COMPARE_REFERENCE@p->items[child + 1]@CONTEXT_PASS@) < 0) {
+            ++child;
+        }
+        if (ncr_list_order_compare_@KIND@_@ID@(@COMPARE_REFERENCE@p->items[root], @COMPARE_REFERENCE@p->items[child]@CONTEXT_PASS@) >= 0) { return; }
+        ncr_list_swap_@KIND@_@ID@(&p->items[root], &p->items[child]);
+        root = child;
+    }
+}
+static void ncr_list_sort_@KIND@_@ID@(ncr_obj_@ID@ *p@CONTEXT_PARAM@) {
+    for (int32_t start = p->length / 2; start > 0;) {
+        --start;
+        ncr_list_sift_@KIND@_@ID@(p, start, p->length - 1@CONTEXT_PASS@);
+    }
+    for (int32_t end = p->length; end > 1;) {
+        --end;
+        ncr_list_swap_@KIND@_@ID@(&p->items[0], &p->items[end]);
+        ncr_list_sift_@KIND@_@ID@(p, 0, end - 1@CONTEXT_PASS@);
+    }
+}

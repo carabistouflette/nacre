@@ -1,0 +1,4 @@
+static @OPTION_TYPE@ @METHOD@(ncr_obj_@ID@ *p, size_t line, size_t column) {
+    if (p->length == 0) { return (@OPTION_TYPE@){ .tag = @NONE_TAG@ }; }
+    return (@OPTION_TYPE@){ .tag = @SOME_TAG@, .data.v@SOME_TAG@.f0 = @STRICT_CALL@(p, line, column) };
+}

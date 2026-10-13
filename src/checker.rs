@@ -137,12 +137,18 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
             Some(a::NativeClass::RegexMatch) => Some(t::NativeClass::RegexMatch),
             Some(a::NativeClass::List(_)) => Some(t::NativeClass::List(Type::Void)),
             Some(a::NativeClass::Array(_)) => Some(t::NativeClass::Array(Type::Void)),
+            Some(a::NativeClass::Deque(_)) => Some(t::NativeClass::Deque(Type::Void)),
             Some(a::NativeClass::Map { key_kind: Some(key_kind), .. }) =>
                 Some(t::NativeClass::Map(*key_kind, Type::Void)),
             Some(a::NativeClass::Map { .. }) =>
                 return Err(Diagnostic::new(class.span, "[E5004] Map<K, V> key classification is missing")),
             Some(a::NativeClass::Arrays) => Some(t::NativeClass::Arrays),
             Some(a::NativeClass::ByteBuffer) => Some(t::NativeClass::ByteBuffer),
+            Some(a::NativeClass::Set { key_kind: Some(key_kind), .. }) =>
+                Some(t::NativeClass::Set(*key_kind)),
+            Some(a::NativeClass::Set { .. }) =>
+                return Err(Diagnostic::new(class.span, "[E5004] Set<T> key classification is missing")),
+            Some(a::NativeClass::Comparator(_)) => None,
             Some(a::NativeClass::Console) => Some(t::NativeClass::Console),
             Some(a::NativeClass::Files) => Some(t::NativeClass::Files),
             Some(a::NativeClass::Args) => Some(t::NativeClass::Args),
@@ -159,6 +165,9 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
             }
             Some(a::NativeClass::Array(element)) => {
                 tables.classes[id].native = Some(t::NativeClass::Array(tables.resolve_type(element, class.span)?));
+            }
+            Some(a::NativeClass::Deque(element)) => {
+                tables.classes[id].native = Some(t::NativeClass::Deque(tables.resolve_type(element, class.span)?));
             }
             Some(a::NativeClass::Map { value, .. }) => {
                 let Some(t::NativeClass::Map(key_kind, _)) = tables.classes[id].native
@@ -227,9 +236,9 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
     for (info, value) in tables.classes.iter_mut().zip(has_borrow) { info.has_borrow = value; }
     for (id, class) in program.classes.iter().enumerate() {
         match tables.classes[id].native {
-            Some(t::NativeClass::List(element)) => {
+            Some(t::NativeClass::List(element)) | Some(t::NativeClass::Deque(element)) => {
                 if tables.is_view(element) || matches!(element, Type::Void | Type::Borrow { .. }) {
-                    return Err(Diagnostic::new(class.span, "[E5003] List<T> requires a copied value or owned object; local views and borrows are not allowed"));
+                    return Err(Diagnostic::new(class.span, "[E5003] List<T> and Deque<T> require copied values or owned objects; local views and borrows are not allowed"));
                 }
             }
             Some(t::NativeClass::Map(_, value)) if tables.is_view(value) || matches!(value, Type::Void | Type::Borrow { .. }) => {
@@ -704,7 +713,7 @@ impl Checker<'_> {
         let value = if place.is_none() { Some(self.expression(collection)?) } else { None };
         let source_type = if let Some(place) = &place { place.ty } else { value.as_ref().unwrap().ty };
         let source_class = source_type.object_class()
-            .ok_or_else(|| Diagnostic::new(collection.span, "collection must be a named or borrowed List<T>, Array<T>, or Map<K, V>"))?;
+            .ok_or_else(|| Diagnostic::new(collection.span, "collection must be a named or borrowed List, Array, Deque, Map, or Set"))?;
         match self.tables.classes[source_class].native {
             Some(t::NativeClass::Map(_, _)) => {
                 if key.is_none() {
@@ -712,17 +721,23 @@ impl Checker<'_> {
                 }
                 return self.for_each_map(stmt, place, value, source_type, source_class);
             }
-            Some(t::NativeClass::List(_) | t::NativeClass::Array(_)) => {
+            Some(t::NativeClass::Set(key_kind)) => {
                 if key.is_some() {
-                    return Err(Diagnostic::new(header_span, "List<T> and Array<T> allow only one element binding"));
+                    return Err(Diagnostic::new(header_span, "Set<T> allows only one readonly key binding"));
+                }
+                return self.for_each_set(stmt, place, value, source_type, source_class, key_kind);
+            }
+            Some(t::NativeClass::List(_) | t::NativeClass::Array(_) | t::NativeClass::Deque(_)) => {
+                if key.is_some() {
+                    return Err(Diagnostic::new(header_span, "indexed collections allow only one element binding"));
                 }
             }
-            _ => return Err(Diagnostic::new(collection.span, "for-each collection must be a List<T>, Array<T>, or Map<K, V>")),
+            _ => return Err(Diagnostic::new(collection.span, "for-each collection must be a List, Array, Deque, Map, or Set")),
         }
         let collection_class = source_class;
         let element_type = match self.tables.classes[collection_class].native {
-            Some(t::NativeClass::List(element) | t::NativeClass::Array(element)) => element,
-            _ => unreachable!("checked List or Array traversal type"),
+            Some(t::NativeClass::List(element) | t::NativeClass::Array(element) | t::NativeClass::Deque(element)) => element,
+            _ => unreachable!("checked indexed collection traversal type"),
         };
         let (binding_type, exclusive) = self.traversal_binding(header, element_type, header_span)?;
         let getter = if binding_type.is_borrow() {
@@ -926,6 +941,91 @@ impl Checker<'_> {
     }
 
 
+    fn for_each_set(&mut self, stmt: &a::Stmt, place: Option<Place>, value: Option<t::Expr>,
+                    source_type: Type, set_class: usize, key_kind: a::MapKeyKind) -> Result<t::Stmt, Diagnostic> {
+        let a::StmtKind::ForEach { ty: header, name, key: None, collection, body, header_span } = &stmt.kind
+            else { unreachable!("checked single-binding Set traversal"); };
+        let header_span = *header_span;
+        let span = stmt.span;
+        let key_binding_type = self.tables.map_key_binding_type(key_kind);
+        let header_type = self.tables.resolve_type(header, header_span)?;
+        if matches!(header_type, Type::Borrow { mutable: true, .. }) {
+            return Err(Diagnostic::new(header_span, "[E3003] Set keys are available only through readonly traversal"));
+        }
+        if header_type != key_binding_type {
+            return Err(Diagnostic::new(header_span, format!(
+                "incompatible Set key binding type: expected {}", self.tables.type_name(key_binding_type))));
+        }
+        let set_type = Type::Borrow { class: set_class, mutable: false };
+        let frozen_value = self.traversal_receiver(place, value, source_type, set_type, collection.span)?;
+
+        self.scopes.push(HashMap::new());
+        self.block_depth += 1;
+        let result = (|| {
+            let unique = self.variables.len();
+            let set_name = format!("$nacre_for_set_{unique}");
+            let cursor_name = format!("$nacre_for_bucket_{unique}");
+            let set_id = self.declare(&set_name, set_type, span)?;
+            let cursor_id = self.declare(&cursor_name, Type::Int, span)?;
+            let capacity_id = self.declare(&format!("$nacre_for_capacity_{unique}"), Type::Int, span)?;
+            let key_id = self.declare(name, key_binding_type, header_span)?;
+
+            let set_place = Place { kind: PlaceKind::Var(set_id), ty: set_type };
+            let cursor_place = Place { kind: PlaceKind::Var(cursor_id), ty: Type::Int };
+            let typed_expr = |kind, ty, expr_span| t::Expr { kind, ty, span: expr_span };
+            let cursor_read = || typed_expr(t::ExprKind::Read(cursor_place.clone()), Type::Int, span);
+            let slot = |kind, ty| typed_expr(t::ExprKind::MapSlot {
+                map: set_place.clone(),
+                index: Box::new(cursor_read()),
+                kind,
+                pair: None,
+            }, ty, collection.span);
+            let advance = || t::Stmt::Assign {
+                target: cursor_place.clone(),
+                value: typed_expr(t::ExprKind::Binary {
+                    op: B::Add,
+                    left: Box::new(cursor_read()),
+                    right: Box::new(typed_expr(t::ExprKind::Int(1), Type::Int, span)),
+                }, Type::Int, span),
+            };
+            let condition = typed_expr(t::ExprKind::Binary {
+                op: B::Lt,
+                left: Box::new(cursor_read()),
+                right: Box::new(typed_expr(t::ExprKind::Read(Place {
+                    kind: PlaceKind::Var(capacity_id), ty: Type::Int,
+                }), Type::Int, collection.span)),
+            }, Type::Boolean, span);
+            let occupied = slot(t::MapSlotKind::Occupied, Type::Boolean);
+            let key_value = slot(t::MapSlotKind::Key, key_binding_type);
+            let mut occupied_body = vec![
+                t::Stmt::Let { id: key_id, ty: key_binding_type, value: Some(key_value) },
+                advance(),
+            ];
+            let (user_body, _) = {
+                self.loop_depth += 1;
+                let result = self.block(body);
+                self.loop_depth -= 1;
+                result?
+            };
+            occupied_body.extend(user_body);
+            let loop_body = vec![t::Stmt::If {
+                condition: occupied,
+                then_block: occupied_body,
+                else_block: Some(vec![advance()]),
+            }];
+            Ok(t::Stmt::Block(vec![
+                t::Stmt::Let { id: set_id, ty: set_type, value: Some(frozen_value) },
+                t::Stmt::Let { id: capacity_id, ty: Type::Int,
+                    value: Some(typed_expr(t::ExprKind::MapCapacity(set_place), Type::Int, collection.span)) },
+                t::Stmt::Let { id: cursor_id, ty: Type::Int,
+                    value: Some(typed_expr(t::ExprKind::Int(0), Type::Int, span)) },
+                t::Stmt::While { condition, body: loop_body },
+            ]))
+        })();
+        self.block_depth -= 1;
+        self.scopes.pop();
+        result
+    }
     fn this_place(&self, span: Span) -> Result<Place, Diagnostic> {
         let id = self.receiver.ok_or_else(|| Diagnostic::new(span, "`this` or an instance member is unavailable in a free or static function"))?;
         Ok(Place { kind: PlaceKind::This, ty: Type::Object(id) })
@@ -1171,8 +1271,8 @@ impl Checker<'_> {
                     };
                     if let Some(class) = static_class {
                         if name == "get" && matches!(self.tables.classes[class].native,
-                            Some(t::NativeClass::List(Type::Object(_)) | t::NativeClass::Array(Type::Object(_)))) {
-                            return Err(Diagnostic::new(expr.span, "[E5002] get does not copy affine objects from a List or Array; use a borrow accessor"));
+                            Some(t::NativeClass::List(Type::Object(_)) | t::NativeClass::Array(Type::Object(_)) | t::NativeClass::Deque(Type::Object(_)))) {
+                            return Err(Diagnostic::new(expr.span, "[E5002] get does not copy affine collection elements; use a borrow accessor"));
                         }
                         let id = *self.tables.classes[class].methods.get(name).ok_or_else(|| Diagnostic::new(expr.span, format!("method `{name}` is unknown")))?;
                         if self.tables.signatures[id].kind != Kind::Static {
@@ -1183,8 +1283,8 @@ impl Checker<'_> {
                         let receiver = self.place(receiver, false)?;
                         let Some(class) = receiver.ty.object_class() else { return Err(Diagnostic::new(expr.span, "cannot call a method on a value that is not an object")); };
                         if name == "get" && matches!(self.tables.classes[class].native,
-                            Some(t::NativeClass::List(Type::Object(_)) | t::NativeClass::Array(Type::Object(_)))) {
-                            return Err(Diagnostic::new(expr.span, "[E5002] get does not copy affine objects from a List or Array; use a borrow accessor"));
+                            Some(t::NativeClass::List(Type::Object(_)) | t::NativeClass::Array(Type::Object(_)) | t::NativeClass::Deque(Type::Object(_)))) {
+                            return Err(Diagnostic::new(expr.span, "[E5002] get does not copy affine collection elements; use a borrow accessor"));
                         }
                         let id = *self.tables.classes[class].methods.get(name).ok_or_else(|| Diagnostic::new(expr.span, format!("method `{name}` is unknown")))?;
                         if self.tables.signatures[id].kind == Kind::Static {

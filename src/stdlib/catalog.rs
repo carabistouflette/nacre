@@ -4,7 +4,10 @@ use crate::ast::{NativeClass, Type};
 enum NativeBuiltin {
     List,
     Array,
+    Deque,
     Map,
+    Set,
+    Comparator,
     Text,
     Arrays,
     ByteBuffer,
@@ -23,11 +26,17 @@ impl NativeBuiltin {
         match self {
             Self::List => NativeClass::List(Type::Named("T".to_owned())),
             Self::Array => NativeClass::Array(Type::Named("T".to_owned())),
+            Self::Deque => NativeClass::Deque(Type::Named("T".to_owned())),
             Self::Map => NativeClass::Map {
                 key: Type::Named("K".to_owned()),
                 value: Type::Named("V".to_owned()),
                 key_kind: None,
             },
+            Self::Set => NativeClass::Set {
+                key: Type::Named("T".to_owned()),
+                key_kind: None,
+            },
+            Self::Comparator => NativeClass::Comparator(Type::Named("T".to_owned())),
             Self::Text => NativeClass::Text,
             Self::Arrays => NativeClass::Arrays,
             Self::ByteBuffer => NativeClass::ByteBuffer,
@@ -73,8 +82,11 @@ pub(super) const PRELUDE_UNITS: &[PreludeUnit] = &[
         builtins: &[
             Builtin { name: "List", native: Some(NativeBuiltin::List) },
             Builtin { name: "Array", native: Some(NativeBuiltin::Array) },
-            Builtin { name: "Map", native: Some(NativeBuiltin::Map) },
             Builtin { name: "Arrays", native: Some(NativeBuiltin::Arrays) },
+            Builtin { name: "Deque", native: Some(NativeBuiltin::Deque) },
+            Builtin { name: "Map", native: Some(NativeBuiltin::Map) },
+            Builtin { name: "Set", native: Some(NativeBuiltin::Set) },
+            Builtin { name: "Comparator", native: Some(NativeBuiltin::Comparator) },
         ],
     },
     PreludeUnit {

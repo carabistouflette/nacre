@@ -1,0 +1,4 @@
+static @RETURN_TYPE@ @METHOD@(ncr_obj_@ID@ *p, int32_t logical, size_t line, size_t column) {
+    ncr_deque_check_@ID@(p, logical, line, column);
+    return p->items[ncr_deque_physical_@ID@(p, logical)];
+}

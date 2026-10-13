@@ -1,0 +1,5 @@
+static @RETURN_TYPE@ @METHOD@(ncr_obj_@ID@ *p, @INDEX_TYPE@ logical, size_t line, size_t column) {
+    ncr_deque_check_@ID@(p, logical, line, column);
+    int32_t physical = ncr_deque_physical_@ID@(p, logical);
+    return @BORROWED_ELEMENT@;
+}

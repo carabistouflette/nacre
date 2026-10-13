@@ -7,7 +7,12 @@ pub(super) fn list_fields(program: &t::Program, element: Type) -> String {
 }
 
 pub(super) fn map_fields(class_id: usize) -> String {
-    format!("    struct ncr_map_entry_{class_id} *entries;\n    int32_t length;\n    int32_t capacity;\n")
+    format!("    struct ncr_hash_table_{class_id} table;\n")
+}
+pub(super) fn hash_table_definition(class_id: usize) -> String {
+    format!(
+        "struct ncr_hash_table_{class_id} {{\n    struct ncr_map_entry_{class_id} *entries;\n    int32_t length;\n    int32_t capacity;\n}};\n",
+    )
 }
 const MAP_HASH_FINALIZER: &str = concat!(
     "    value ^= value >> 16;\n",
@@ -48,12 +53,12 @@ fn map_borrowed_value(program: &t::Program, borrow_type: Type, stored: &str) -> 
     else { stored.to_owned() }
 }
 pub(super) fn map_capacity_expression(map: &str) -> String {
-    format!("{map}->capacity")
+    format!("{map}->table.capacity")
 }
 pub(super) fn map_slot_expression(
     program: &t::Program, map: &str, index: &str, kind: t::MapSlotKind, value_type: Type,
 ) -> String {
-    let entry = format!("{map}->entries[{index}]");
+    let entry = format!("{map}->table.entries[{index}]");
     match kind {
         t::MapSlotKind::Occupied => format!("{entry}.occupied"),
         t::MapSlotKind::Key => format!("{entry}.key"),
@@ -62,7 +67,7 @@ pub(super) fn map_slot_expression(
         t::MapSlotKind::Value => format!("{entry}.value"),
     }
 }
-fn drop_element(ty: Type, expression: &str) -> String {
+pub(super) fn drop_element(ty: Type, expression: &str) -> String {
     match ty {
         Type::Object(id) => format!("ncr_drop_{id}({expression});"),
         _ => "/* Copy value: no destructor. */".to_owned(),
@@ -74,13 +79,18 @@ pub(super) fn drop_list_fields(element: Type) -> String {
         drop_element(element, "p->items[p->length]"))
 }
 
-pub(super) fn drop_map_fields(program: &t::Program, key: MapKeyKind, value: Type) -> String {
+pub(super) fn drop_hash_table_fields(program: &t::Program, key: MapKeyKind, value: Type, table: &str) -> String {
+    let entries = format!("{table}.entries");
     format!(
-        "    for (int32_t index = 0; index < p->capacity; ++index) {{\n        if (p->entries[index].occupied) {{\n            {}\n            {}\n        }}\n    }}\n    ncr_deallocate(p->entries);\n",
-        drop_map_key(program, key, "p->entries[index].key"),
-        drop_element(value, "p->entries[index].value"))
+        "    for (int32_t index = 0; index < {table}.capacity; ++index) {{\n        if ({entries}[index].occupied) {{\n            {}\n            {}\n        }}\n    }}\n    ncr_deallocate({entries});\n",
+        drop_map_key(program, key, &format!("{entries}[index].key")),
+        drop_element(value, &format!("{entries}[index].value")))
 }
-fn zero(program: &t::Program, ty: Type) -> String {
+
+pub(super) fn drop_map_fields(program: &t::Program, key: MapKeyKind, value: Type) -> String {
+    drop_hash_table_fields(program, key, value, "p->table")
+}
+pub(super) fn zero(program: &t::Program, ty: Type) -> String {
     match ty {
         Type::Byte | Type::Unit => "UINT8_C(0)".to_owned(),
         Type::Char => "UINT32_C(0)".to_owned(),
@@ -198,7 +208,7 @@ fn borrowed_map_method(program: &t::Program, function: &t::Function, value_class
         unreachable!("native Map borrowed accessor must return a typed borrow")
     };
     assert_eq!(class, value_class, "Map borrow result must match its value type");
-    let borrowed_value = map_borrowed_value(program, function.return_type, "p->entries[index].value");
+    let borrowed_value = map_borrowed_value(program, function.return_type, "p->table.entries[index].value");
     include_str!("../../stdlib/map_get_borrowed.c.in")
         .replace("@RETURN_TYPE@", &ctype(program, function.return_type))
         .replace("@MAP_METHOD@", marker(function.native.expect("native Map accessor")))
@@ -221,8 +231,7 @@ fn borrowed_map_methods(program: &t::Program, map_class: usize, value: Type) -> 
 fn try_get_map_method(program: &t::Program, map_class: usize, value: Type) -> String {
     let Some(function) = map_native_function(program, map_class, |method| matches!(method, M::MapTryGet))
     else { return String::new(); };
-    assert!(value.is_copy(),
-        "Map tryGet must be pruned for non-copy values");
+    assert!(value.is_copy(), "Map tryGet must be pruned for non-copy values");
     let (none_tag, some_tag) = option_tags(program, function, value);
     include_str!("../../stdlib/map_try_get.c.in")
         .replace("@OPTION_TYPE@", &ctype(program, function.return_type))
@@ -274,7 +283,7 @@ pub(super) fn map_implementation(program: &t::Program, map_class: usize, key: Ma
             ),
             "old->hash",
             "entry->hash",
-            "p->entries[target].hash = hash;",
+            "table->entries[target].hash = hash;",
         ),
     };
     include_str!("../../stdlib/map.c.in")
@@ -288,9 +297,9 @@ pub(super) fn map_implementation(program: &t::Program, map_class: usize, key: Ma
         .replace("@SCAN_HASH@", scan_hash)
         .replace("@STORE_HASH@", store_hash)
         .replace("@DROP_DUPLICATE_KEY@", &drop_map_key(program, key, "key"))
-        .replace("@DROP_KEY_AT_INDEX@", &drop_map_key(program, key, "p->entries[index].key"))
+        .replace("@DROP_KEY_AT_INDEX@", &drop_map_key(program, key, "table->entries[index].key"))
         .replace("@ELEMENT@", &ctype(program, value))
-        .replace("@DROP_VALUE@", &drop_element(value, "p->entries[index].value"))
+        .replace("@DROP_VALUE@", &drop_element(value, "table->entries[index].value"))
         .replace("@OPTION_TYPE@", &ctype(program, put.return_type))
         .replace("@NONE_TAG@", &none_tag.to_string())
         .replace("@SOME_TAG@", &some_tag.to_string())
