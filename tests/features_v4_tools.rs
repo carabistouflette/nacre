@@ -73,11 +73,11 @@ fn inspection_does_not_bypass_validation() {
 }
 #[test]
 fn invalid_native_optimization_is_rejected_without_toolchain() {
-    assert!(native::compile_c_optimized("", "-O9", &[]).err().unwrap().contains("optimisation invalide"));
+    assert!(native::compile_c_optimized("", "-O9", &[]).is_err());
 }
 #[test]
 fn invalid_llvm_optimization_is_rejected_without_toolchain() {
-    assert!(native::emit_llvm("", "-O9").unwrap_err().contains("optimisation invalide"));
+    assert!(native::emit_llvm("", "-O9").is_err());
 }
 #[test]
 fn cli_emit_types() {

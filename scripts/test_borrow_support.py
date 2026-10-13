@@ -42,10 +42,10 @@ def main():
     args = parser.parse_args()
     compilers = args.cc or [c for c in ('gcc', 'clang') if shutil.which(c)]
     if not compilers:
-        raise SystemExit('GCC/Clang manquant')
+        raise SystemExit('GCC/Clang is required')
     for cc in compilers:
         if not shutil.which(cc):
-            raise SystemExit(f'Compilateur introuvable: {cc}')
+            raise SystemExit(f'C compiler not found: {cc}')
     results = [check(cc, sanitizers) for cc in compilers for sanitizers in (False, True)]
     print(json.dumps({'scope': 'C runtime and handwritten borrowed-pointer fixture only',
                       'rust_tests_executed': False, 'results': results}, indent=2))

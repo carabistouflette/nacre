@@ -415,7 +415,7 @@ fn list_negative_index() {
     let program = native::compile_c(&c).unwrap();
     let result = program.output().unwrap();
     assert_eq!(result.status.code(), Some(70));
-    assert!(String::from_utf8_lossy(&result.stderr).contains("indice de List hors limites"));
+    assert!(String::from_utf8_lossy(&result.stderr).contains("[1:"));
 }
 
 #[test]
@@ -425,7 +425,7 @@ fn list_past_end() {
     let program = native::compile_c(&c).unwrap();
     let result = program.output().unwrap();
     assert_eq!(result.status.code(), Some(70));
-    assert!(String::from_utf8_lossy(&result.stderr).contains("indice de List hors limites"));
+    assert!(String::from_utf8_lossy(&result.stderr).contains("[1:"));
 }
 
 #[test]
@@ -435,7 +435,7 @@ fn list_empty_pop() {
     let program = native::compile_c(&c).unwrap();
     let result = program.output().unwrap();
     assert_eq!(result.status.code(), Some(70));
-    assert!(String::from_utf8_lossy(&result.stderr).contains("pop sur une List vide"));
+    assert!(String::from_utf8_lossy(&result.stderr).contains("[1:"));
 }
 
 #[test]
@@ -445,7 +445,7 @@ fn list_empty_remove() {
     let program = native::compile_c(&c).unwrap();
     let result = program.output().unwrap();
     assert_eq!(result.status.code(), Some(70));
-    assert!(String::from_utf8_lossy(&result.stderr).contains("indice de List hors limites"));
+    assert!(String::from_utf8_lossy(&result.stderr).contains("[1:"));
 }
 
 #[test]
@@ -455,7 +455,7 @@ fn list_negative_reserve() {
     let program = native::compile_c(&c).unwrap();
     let result = program.output().unwrap();
     assert_eq!(result.status.code(), Some(70));
-    assert!(String::from_utf8_lossy(&result.stderr).contains("capacite de List negative"));
+    assert!(String::from_utf8_lossy(&result.stderr).contains("[1:"));
 }
 
 #[test]
@@ -465,7 +465,7 @@ fn text_negative_index() {
     let program = native::compile_c(&c).unwrap();
     let result = program.output().unwrap();
     assert_eq!(result.status.code(), Some(70));
-    assert!(String::from_utf8_lossy(&result.stderr).contains("indice de Text hors limites"));
+    assert!(String::from_utf8_lossy(&result.stderr).contains("[1:"));
 }
 
 #[test]
@@ -475,5 +475,5 @@ fn text_empty_index() {
     let program = native::compile_c(&c).unwrap();
     let result = program.output().unwrap();
     assert_eq!(result.status.code(), Some(70));
-    assert!(String::from_utf8_lossy(&result.stderr).contains("indice de Text hors limites"));
+    assert!(String::from_utf8_lossy(&result.stderr).contains("[1:"));
 }

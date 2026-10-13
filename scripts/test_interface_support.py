@@ -50,11 +50,11 @@ def main():
     args = parser.parse_args()
     compilers = args.cc or [c for c in ('gcc', 'clang') if shutil.which(c)]
     if not compilers:
-        raise SystemExit('GCC/Clang manquant')
+        raise SystemExit('GCC/Clang is required')
     results = []
     for cc in compilers:
         if not shutil.which(cc):
-            raise SystemExit(f'Compilateur introuvable: {cc}')
+            raise SystemExit(f'C compiler not found: {cc}')
         for sanitize in (False, True):
             results.append(check(cc, sanitize))
         if 'clang' in Path(cc).name:

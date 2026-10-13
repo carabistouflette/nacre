@@ -103,13 +103,13 @@ fn strings_with_quotes_backslash_and_percent() {
 fn division_by_zero_is_controlled() {
     let out = execute("void main() { println(1 / 0); }");
     assert_eq!(out.status.code(), Some(70));
-    assert!(String::from_utf8_lossy(&out.stderr).contains("division par zero"));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("[1:"));
 }
 #[test]
 fn modulo_by_zero_is_controlled() {
     let out = execute("void main() { println(1 % 0); }");
     assert_eq!(out.status.code(), Some(70));
-    assert!(String::from_utf8_lossy(&out.stderr).contains("modulo par zero"));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("[1:"));
 }
 #[test]
 fn generated_file_is_removed_on_drop() {

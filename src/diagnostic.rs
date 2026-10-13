@@ -42,7 +42,7 @@ impl Diagnostic {
             let (line, column) = line_column(source, span.start);
             result.push_str(&format!("  = note: {note} ({filename}:{line}:{column})\n"));
         }
-        if let Some(help) = &self.help { result.push_str(&format!("  = aide: {help}\n")); }
+        if let Some(help) = &self.help { result.push_str(&format!("  = help: {help}\n")); }
         result
     }
     fn render_primary(&self, filename: &str, source: &str) -> String {
@@ -54,7 +54,7 @@ impl Diagnostic {
         let indent = source[line_start..start].chars().map(|c| if c == '\t' { 4 } else { 1 }).sum::<usize>();
         let end = char_boundary(source, self.span.end.min(line_end)).max(start);
         let width = source[start..end].chars().count().clamp(1, 60);
-        format!("{filename}:{line}:{column}: erreur: {}\n  |\n{line:>3} | {}\n  | {}{}\n",
+        format!("{filename}:{line}:{column}: error: {}\n  |\n{line:>3} | {}\n  | {}{}\n",
             self.message, text.replace('\t', "    "), " ".repeat(indent), "^".repeat(width))
     }
 }

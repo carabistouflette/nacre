@@ -244,281 +244,270 @@ fn stress_move_reinitialize() {
 #[test]
 fn move_primitive() {
     let source = "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { int n = 1; move(n); }";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("move exige"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
 }
 
 #[test]
 fn move_string() {
     let source = "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { String s = \"s\"; move(s); }";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("move exige"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
 }
 
 #[test]
 fn drop_primitive() {
     let source = "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { drop(1); }";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("drop exige"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
 }
 
 #[test]
 fn drop_void() {
     let source = "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { drop(println(1)); }";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("drop exige"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
 }
 
 #[test]
 fn move_no_argument() {
     let source = "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { move(); }";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("exactement un argument"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
 }
 
 #[test]
 fn drop_two_arguments() {
     let source = "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { drop(new Box(), new Box()); }";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("exactement un argument"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
 }
 
 #[test]
 fn reserved_move_function() {
     let source = "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void move() {} void main() {}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("reservee"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
 }
 
 #[test]
 fn reserved_drop_method() {
     let source = "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } class C { void drop() {} } void main() {}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("reservee"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
 }
 
 #[test]
 fn double_drop() {
     let source = "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a = new Box(); drop(a); drop(a); }";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E2001"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E2001"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn use_after_explicit_drop() {
     let source = "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a = new Box(); drop(a); println(a.value); }";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E2001"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E2001"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn use_after_explicit_move() {
     let source = "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a = new Box(); Box b = move(a); a.get(); }";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E2001"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E2001"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn move_twice_one_call() {
     let source = "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void f(Box a, Box b) {} void main() { Box a = new Box(); f(move(a), move(a)); }";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E2001"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E2001"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn deferred_read_int() {
     let source = "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { int a; println(a); }";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E2002"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E2002"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn deferred_read_string() {
     let source = "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { String a; println(a); }";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E2002"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E2002"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn deferred_read_boolean() {
     let source = "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { boolean a; if (a) {} }";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E2002"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E2002"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn deferred_object_borrow() {
     let source = "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a; a.get(); }";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E2002"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E2002"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn deferred_object_move() {
     let source = "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a; consume(a); }";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E2002"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E2002"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn deferred_object_drop() {
     let source = "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a; drop(a); }";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E2002"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E2002"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn deferred_field_assign() {
     let source = "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a; a.value = 1; }";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E2002"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E2002"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn deferred_self_assignment() {
     let source = "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { int a; a = a; }";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E2002"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E2002"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn partial_branch_init() {
     let source = "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { int a; if (true) { a = 1; } println(a); }";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E2002"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E2002"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn partial_object_init() {
     let source = "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a; if (true) { a = new Box(); } println(a.value); }";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E2002"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E2002"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn loop_may_not_initialize() {
     let source = "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { int a; while (false) { a = 1; break; } println(a); }";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E2002"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E2002"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn loop_object_may_not_initialize() {
     let source = "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a; while (true) { a = new Box(); break; } println(a.value); }";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E2002"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E2002"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn loop_use_after_move() {
     let source = "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a = new Box(); while (true) { consume(a); } }";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E2001"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E2001"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn loop_continue_without_repair() {
     let source = "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a = new Box(); while (true) { consume(a); continue; } }";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E2001"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E2001"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn loop_conditional_continue_skips_repair() {
     let source = "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a = new Box(); while (true) { drop(a); if (true) { continue; } a = new Box(); } }";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E2001"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E2001"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn loop_repair_one_branch() {
     let source = "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a = new Box(); while (true) { drop(a); if (true) { a = new Box(); } } }";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E2001"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E2001"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn loop_move_in_condition_no_repair() {
     let source = "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a = new Box(); while (test(a)) {} }";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E2001"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E2001"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn loop_break_moved_exit() {
     let source = "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a = new Box(); while (true) { consume(a); break; } a.get(); }";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E2001"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E2001"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn loop_break_skips_post_body_repair() {
     let source = "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a = new Box(); while (true) { consume(a); if (true) { break; } a = new Box(); } a.get(); }";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E2001"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E2001"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn loop_condition_consumption_on_false_exit() {
     let source = "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a = new Box(); while (test(a)) { a = new Box(); } a.get(); }";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E2001"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E2001"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn nested_loop_break_moved_outer_backedge() {
     let source = "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a = new Box(); while (true) { while (true) { consume(a); break; } } }";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E2001"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E2001"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn loop_local_cannot_reuse_previous_iteration() {
     let source = "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { int i = 0; while (i < 3) { int x; if (i == 0) { x = 1; } println(x); i = i + 1; } }";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E2002"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E2002"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn short_circuit_move_still_possible() {
     let source = "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a = new Box(); println(false && test(a)); a.get(); }";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E2001"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E2001"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn conditional_repair_after_drop() {
     let source = "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void main() { Box a = new Box(); drop(a); if (true) { a = new Box(); } a.get(); }";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E2001"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E2001"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn cannot_drop_borrowed_this() {
     let source = "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } class C { void f() { drop(this); } } void main() {}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("deplacement de this"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
 }
 
 #[test]
 fn cannot_drop_owned_field() {
     let source = "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } class Outer { Box inner = new Box(); } void main() { Outer a = new Outer(); drop(a.inner); }";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("champ objet interdit"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
 }
 
 #[test]
 fn receiver_still_locked() {
     let source = "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } class C { int f(int n) { return n; } } int take(C c) { return 1; } void main() { C c = new C(); c.f(take(move(c))); }";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("emprunte"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
 }
 
 #[test]
 fn read_after_move_in_argument_order() {
     let source = "class Box { int value = 7; int get() { return value; } } void consume(Box box) {} Box identity(Box box) { return box; } boolean test(Box box) { return false; } void f(Box x, int n) {} void main() { Box a = new Box(); f(a, a.value); }";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E2001"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E2001"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]

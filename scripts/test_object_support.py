@@ -33,7 +33,7 @@ def main():
     args = p.parse_args()
     compilers = args.cc or [c for c in ("gcc", "clang") if shutil.which(c)]
     if not compilers:
-        raise SystemExit("GCC/Clang manquant")
+        raise SystemExit("GCC/Clang is required")
     print(json.dumps({"scope": "C support only, not compiler validation", "results": [check(c) for c in compilers]}, indent=2))
 
 if __name__ == "__main__":

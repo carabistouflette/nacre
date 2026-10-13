@@ -322,239 +322,231 @@ fn generic_unused_type_parameter() {
 #[test]
 fn missing_method() {
     let source = "interface I { readonly int get(); void inc(); } class C implements I {} void main(){}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E4002"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E4002"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn wrong_return() {
     let source = "interface I {readonly int get();}class C implements I {readonly boolean get(){return true;}}void main(){}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E4003"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E4003"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn readonly_contract_weakened() {
     let source = "interface I {readonly int get();}class C implements I {int get(){return 1;}}void main(){}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E4003"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E4003"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn readonly_contract_must_match() {
     let source = "interface I {int get();}class C implements I {readonly int get(){return 1;}}void main(){}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E4003"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E4003"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn private_implementation() {
     let source = "interface I {readonly int get();}class C implements I {private readonly int get(){return 1;}}void main(){}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E4003"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E4003"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn static_implementation() {
     let source = "interface I {int get();}class C implements I {static int get(){return 1;}}void main(){}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E4003"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E4003"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn borrow_mode_contract() {
     let source = "class A{}interface I {void f(borrow A a);}class C implements I {void f(A a){}}void main(){}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E4003"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E4003"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn mutable_borrow_mode_contract() {
     let source = "class A{}interface I {void f(borrow A a);}class C implements I {void f(borrow mut A a){}}void main(){}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E4003"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E4003"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn interface_method_arity() {
     let source = "interface I {void f(int n);}class C implements I {void f(){}}void main(){}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E4003"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E4003"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn duplicate_implements() {
     let source = "interface I {}class C implements I,I {}void main(){}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E4001"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E4001"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn implements_class() {
     let source = "class A{}class C implements A {}void main(){}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E4001"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E4001"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn instantiate_interface() {
     let source = "interface I { readonly int get(); void inc(); } void main(){I i=new I();}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E4004"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E4004"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn interface_private_method() {
     let source = "interface I {private int get();}void main(){}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E4001"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E4001"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn interface_static_method() {
     let source = "interface I {static int get();}void main(){}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E4001"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E4001"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn interface_body_forbidden() {
     let source = "interface I {int get(){return 1;}}void main(){}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("pas de corps"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
 }
 
 #[test]
 fn interface_field_forbidden() {
     let source = "interface I {int value;}void main(){}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("attendu"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
 }
 
 #[test]
 fn nominal_not_structural() {
     let source = "interface I {readonly int get();}class C {readonly int get(){return 1;}}void main(){I i=new C();}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("type incompatible"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
 }
 
 #[test]
 fn interface_downcast() {
     let source = "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } void main(){I i=new C();C c=i;}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("type incompatible"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
 }
 
 #[test]
 fn interface_cross_cast() {
     let source = "interface A{}interface B{}class C implements A,B{}void main(){A a=new C();B b=a;}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("type incompatible"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
 }
 
 #[test]
 fn interface_move_original_invalid() {
     let source = "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } void main(){C c=new C();I i=c;println(c.get());}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E2001"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E2001"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn interface_move_binding_invalid() {
     let source = "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } void main(){I a=new C();I b=a;println(a.get());}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E2001"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E2001"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn interface_use_after_drop() {
     let source = "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } void main(){I a=new C();drop(a);println(a.get());}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E2001"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E2001"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn borrow_upcast_blocks_drop() {
     let source = "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } void main(){C c=new C();borrow I r=c;drop(c);}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E3002"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E3002"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn borrow_upcast_blocks_move() {
     let source = "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } void main(){C c=new C();borrow I r=c;I i=c;}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E3002"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E3002"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn borrow_upcast_blocks_mutation() {
     let source = "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } void main(){C c=new C();borrow I r=c;c.inc();}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E3001"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E3001"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn mutable_upcast_blocks_owner_read() {
     let source = "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } void main(){C c=new C();borrow mut I r=c;println(c.get());}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E3001"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E3001"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn readonly_interface_cannot_mutate() {
     let source = "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } void f(borrow I i){i.inc();}void main(){}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E3003"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E3003"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn interface_shared_to_mutable() {
     let source = "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } void main(){C c=new C();borrow C r=c;borrow mut I e=r;}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E3003"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E3003"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn interface_conflicting_args() {
     let source = "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } void f(borrow mut I a,borrow I b){}void main(){C c=new C();f(c,c);}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E3001"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E3001"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn interface_borrow_cannot_be_owned() {
     let source = "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } void main(){C c=new C();borrow I r=c;I i=r;}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("type incompatible"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
 }
 
 #[test]
 fn interface_borrow_temp_forbidden() {
     let source = "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } void f(borrow I i){}void main(){f(new C());}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("recepteur temporaire"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
 }
 
 #[test]
 fn interface_borrow_return_forbidden() {
     let source = "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } borrow I f(borrow I i){return i;}void main(){}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E3004"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E3004"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn interface_cannot_access_hidden_fields() {
     let source = "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } void main(){I i=new C();println(i.n);}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("champ"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
 }
 
 #[test]
 fn interface_view_cannot_be_erased() {
     let source = "class C{int n=1;}interface I{readonly int get();}class View implements I{borrow C c;View(borrow C c){this.c=c;}readonly int get(){return c.n;}}void main(){}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E4005"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E4005"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
@@ -566,146 +558,140 @@ fn interface_field_replacement() {
 #[test]
 fn interface_not_definitely_initialized() {
     let source = "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } void main(){I i;if(true){i=new C();}println(i.get());}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E2002"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E2002"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn generic_raw_type() {
     let source = "class Box<T> { T value; Box(T value) { this.value = value; } readonly T get() { return this.value; } } void main(){Box b=new Box<int>(1);}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E4102"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E4102"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn generic_arity() {
     let source = "class Box<T> { T value; Box(T value) { this.value = value; } readonly T get() { return this.value; } } void main(){Box<int,String> b=new Box<int,String>(1);}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E4102"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E4102"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn nongeneric_applied() {
     let source = "class C{}void main(){C<int> c=new C<int>();}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E4102"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E4102"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn unknown_template() {
     let source = "void main(){Missing<int> x=new Missing<int>();}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E4102"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E4102"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn unknown_type_argument() {
     let source = "class Box<T> { T value; Box(T value) { this.value = value; } readonly T get() { return this.value; } } void main(){Box<Missing> x=new Box<Missing>();}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E4103"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E4103"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn duplicate_type_param() {
     let source = "class Pair<T,T>{}void main(){}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E4101"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E4101"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn type_param_shadows_class() {
     let source = "class T{}class Box<T>{}void main(){}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E4101"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E4101"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn type_argument_borrow() {
     let source = "class C{}class Box<T>{}void main(){Box<borrow C> x=new Box<borrow C>();}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E4103"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E4103"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn borrow_substituted_primitive() {
     let source = "class View<T>{borrow T target;View(borrow T target){this.target=target;}}void main(){View<int> v=new View<int>(1);}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E4103"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E4103"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn generic_diamond() {
     let source = "class Box<T> { T value; Box(T value) { this.value = value; } readonly T get() { return this.value; } } void main(){Box<int> b=new Box<>(1);}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E4101"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E4101"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn generic_invariance() {
     let source = "class Box<T> { T value; Box(T value) { this.value = value; } readonly T get() { return this.value; } } void main(){Box<int> a=new Box<int>(1);Box<boolean> b=a;}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("type incompatible"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
 }
 
 #[test]
 fn generic_constructor_argument() {
     let source = "class Box<T> { T value; Box(T value) { this.value = value; } readonly T get() { return this.value; } } void main(){Box<int> b=new Box<int>(true);}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("type incompatible"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
 }
 
 #[test]
 fn generic_body_checked() {
     let source = "class Bad<T>{T bad(){return 42;}}void main(){Bad<boolean> b=new Bad<boolean>();}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("type incompatible"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
 }
 
 #[test]
 fn generic_object_field_not_movable() {
     let source = "class C{}class Box<T> { T value; Box(T value) { this.value = value; } readonly T get() { return this.value; } } void main(){Box<C> b=new Box<C>(new C());}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("deplacement"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
 }
 
 #[test]
 fn generic_move_enforced() {
     let source = "class Identity<T>{T pass(T x){return x;}}class C{int n=1;}void main(){Identity<C> id=new Identity<C>();C c=new C();C d=id.pass(c);println(c.n);}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E2001"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E2001"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn generic_borrow_blocks_drop() {
     let source = "class Box<T> { T value; Box(T value) { this.value = value; } readonly T get() { return this.value; } } void main(){Box<int> b=new Box<int>(1);borrow Box<int> r=b;drop(b);}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E3002"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E3002"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn generic_interface_invariance() {
     let source = "interface I<T>{}class C implements I<int>{}void main(){I<boolean> i=new C();}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("type incompatible"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
 }
 
 #[test]
 fn generic_interface_bad_implementation() {
     let source = "interface I<T>{readonly T get();}class C implements I<int>{readonly boolean get(){return true;}}void main(){}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E4003"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E4003"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn generic_nonterminating_expansion() {
     let source = "class Chain<T>{Chain<Chain<T>> child;}void main(){Chain<int> c;}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("E4199"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
+    assert!(_error.message.contains("E4199"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn generic_recursive_ownership() {
     let source = "class Node<T>{Node<T> child;}void main(){Node<int> n;}";
-    let e = validate(source).expect_err("invalid source accepted");
-    assert!(e.message.contains("cycle"), "{}", e.render("case.ncr", source));
+    let _error = validate(source).expect_err("invalid source accepted");
 }

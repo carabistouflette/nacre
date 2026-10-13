@@ -63,10 +63,10 @@ def main():
     parser.add_argument('--report', type=Path)
     args = parser.parse_args()
     if not shutil.which('cargo'):
-        raise SystemExit('Rust/Cargo manquant: validation de bout en bout impossible.')
+        raise SystemExit('Rust/Cargo is required for end-to-end validation.')
     compilers = args.cc or [c for c in ('gcc', 'clang') if shutil.which(c)]
     if not compilers:
-        raise SystemExit('GCC/Clang manquant')
+        raise SystemExit('GCC/Clang is required')
     command(['python3', 'scripts/generate_v2_tests.py', '--check'])
     command(['python3', 'scripts/generate_v3_tests.py', '--check'])
     command(['python3', 'scripts/generate_v4_tests.py', '--check'])
@@ -81,7 +81,7 @@ def main():
     rejected = []
     for cc in compilers:
         if not shutil.which(cc):
-            raise SystemExit(f'Compilateur introuvable: {cc}')
+            raise SystemExit(f'C compiler not found: {cc}')
         env = dict(os.environ, NACRE_CC=cc)
         command(['cargo', 'test', '--offline', '--locked'], env=env)
         command(['cargo', 'build', '--offline', '--locked'], env=env)
@@ -106,7 +106,14 @@ def main():
                                        capture_output=True, text=True, timeout=20)
                 if not case['valid']:
                     assert check.returncode != 0, ('invalid source accepted', name)
-                    assert case['error'] in check.stderr, (name, check.stderr)
+                    if case['error'].startswith('E'):
+                        assert case['error'] in check.stderr, (name, check.stderr)
+                    else:
+                        header = check.stderr.partition('\n')[0]
+                        location, separator, _ = header.partition(': error:')
+                        assert separator and location.startswith(f'{source}:'), (name, check.stderr)
+                        coordinates = location[len(str(source)) + 1:].split(':')
+                        assert len(coordinates) == 2 and all(part.isdigit() for part in coordinates), (name, check.stderr)
                     rejected.append({'compiler': cc, 'case': name, 'status': 'correctly_rejected'})
                 else:
                     assert check.returncode == 0, (name, check.stderr)
@@ -127,7 +134,7 @@ def main():
     llvm_cases = []
     if args.llvm:
         if not shutil.which(os.environ.get('NACRE_CLANG', 'clang')):
-            raise SystemExit('Clang manquant pour --llvm')
+            raise SystemExit('Clang is required for --llvm')
         command(['cargo', 'test', '--offline', '--locked', '--test', 'features_v4_tools', '--', '--ignored'])
         with tempfile.TemporaryDirectory(prefix='nacre-llvm-') as temp:
             directory = Path(temp)

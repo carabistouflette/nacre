@@ -9,41 +9,41 @@ use nacre::project::{self, SourceBundle};
 
 const HELP: &str = "Nacre — experimental native compiler written in Rust
 
-Utilisation:
-  nacre check  source.ncr ... | dossier
-  nacre run    fichier.ncr [--memory-stats] [-O0|-O1|-O2|-O3|-Os] [-- arguments...]
-  nacre build  fichier.ncr [-o executable] [--memory-stats] [-O0|-O1|-O2|-O3|-Os]
-  nacre emit-c fichier.ncr [-o fichier.c] [--memory-stats]
-  nacre emit-flow fichier.ncr [-o fichier.flow]
-  nacre emit-borrows fichier.ncr [-o fichier.borrows]
-  nacre emit-types fichier.ncr [-o fichier.types]
-  nacre emit-llvm fichier.ncr [-o fichier.ll] [--memory-stats] [-O0|-O1|-O2|-O3|-Os]
-  nacre init nouveau-dossier
+Usage:
+  nacre check  source.ncr ... | directory
+  nacre run    source.ncr [--memory-stats] [-O0|-O1|-O2|-O3|-Os] [-- arguments...]
+  nacre build  source.ncr [-o executable] [--memory-stats] [-O0|-O1|-O2|-O3|-Os]
+  nacre emit-c source.ncr [-o output.c] [--memory-stats]
+  nacre emit-flow source.ncr [-o output.flow]
+  nacre emit-borrows source.ncr [-o output.borrows]
+  nacre emit-types source.ncr [-o output.types]
+  nacre emit-llvm source.ncr [-o output.ll] [--memory-stats] [-O0|-O1|-O2|-O3|-Os]
+  nacre init new-project-directory
   nacre doctor
   nacre lsp
   nacre --help
   nacre --version
 
-Exemples avec Cargo:
+Examples with Cargo:
   cargo run -- check examples/hello.ncr
   cargo run -- run examples/counter.ncr
   cargo run -- build examples/counter.ncr -o out/counter
   cargo run -- emit-c examples/counter.ncr -o out/counter.c
 
-Plusieurs fichiers ou un dossier .ncr sont acceptes par toutes les commandes.
+Multiple files or a .ncr directory are accepted by all commands.
 Source files may declare modules and import public names; all requested inputs are compiled together.
 --sanitize (run/build): AddressSanitizer + UndefinedBehaviorSanitizer.
-init: cree un projet neuf; refuse un chemin existant.
-doctor: compile et execute un test de bout en bout avec List et Text.
-build: sortie par defaut dans out/<nom-du-fichier>.
-emit-c / emit-flow / emit-borrows / emit-types / emit-llvm: sortie standard si -o est absent.
-emit-llvm: LLVM textuel via le frontend C de Clang (NACRE_CLANG), pas un backend direct.
-Optimisation native et LLVM: -O2 par defaut.
-emit-flow: graphe d'ownership, sans compilateur C.
---memory-stats: compteurs allocation/liberation sur stderr du programme cible.
-CC ou NACRE_CC: chemin d'un executable C11 (cc, clang, gcc), sans options.
-Les fichiers de sortie existants sont remplaces, sauf le fichier source.
-Cibles initiales: Linux et WSL. macOS non teste.
+init: create a new project; refuse an existing path.
+doctor: compile and run an end-to-end test with List and Text.
+build: default output is out/<source-name>.
+emit-c / emit-flow / emit-borrows / emit-types / emit-llvm: write to stdout when -o is omitted.
+emit-llvm: textual LLVM via Clang's C frontend (NACRE_CLANG), not a direct backend.
+Native and LLVM optimization: -O2 by default.
+emit-flow: ownership graph without a C compiler.
+--memory-stats: allocation/deallocation counters on the target program's stderr.
+CC or NACRE_CC: path to a standalone C11 executable (cc, clang, gcc), without options.
+Existing output files are replaced, except for the source file.
+Initial targets: Linux and WSL. macOS has not been tested.
 ";
 
 fn main() {
@@ -58,25 +58,25 @@ fn execute(args: Vec<OsString>) -> Result<i32, String> {
     let Some(command) = args.first() else { print!("{HELP}"); return Ok(0); };
     if command == "--help" || command == "-h" { print!("{HELP}"); return Ok(0); }
     if command == "--version" { println!("nacre {}", env!("CARGO_PKG_VERSION")); return Ok(0); }
-    let command = command.to_str().ok_or("commande non UTF-8")?;
+    let command = command.to_str().ok_or("command is not valid UTF-8")?;
     if command == "lsp" {
-        if args.len() != 1 { return Err("utilisation: nacre lsp".to_owned()); }
+        if args.len() != 1 { return Err("usage: nacre lsp".to_owned()); }
         nacre::lsp::run()?;
         return Ok(0);
     }
     if command == "init" {
-        if args.len() != 2 { return Err("utilisation: nacre init nouveau-dossier".to_owned()); }
+        if args.len() != 2 { return Err("usage: nacre init new-project-directory".to_owned()); }
         let path = PathBuf::from(&args[1]);
         project::init(&path)?;
-        println!("Projet cree: {}", path.display());
+        println!("Project created: {}", path.display());
         return Ok(0);
     }
     if command == "doctor" {
-        if args.len() != 1 { return Err("utilisation: nacre doctor".to_owned()); }
+        if args.len() != 1 { return Err("usage: nacre doctor".to_owned()); }
         return doctor();
     }
     if !matches!(command, "check" | "run" | "build" | "emit-c" | "emit-flow" | "emit-borrows" | "emit-types" | "emit-llvm") {
-        return Err(format!("commande inconnue: {command}\n\n{HELP}"));
+        return Err(format!("unknown command: {command}\n\n{HELP}"));
     }
     let mut sources = Vec::new();
     let mut output = None;
@@ -90,7 +90,7 @@ fn execute(args: Vec<OsString>) -> Result<i32, String> {
             program_args = &args[i + 1..];
             break;
         } else if args[i] == "-o" && matches!(command, "build" | "emit-c" | "emit-flow" | "emit-borrows" | "emit-types" | "emit-llvm") && output.is_none() {
-            let path = args.get(i + 1).ok_or("chemin manquant apres -o")?;
+            let path = args.get(i + 1).ok_or("missing path after -o")?;
             output = Some(PathBuf::from(path));
             i += 2;
         } else if args[i] == "--memory-stats" && matches!(command, "run" | "build" | "emit-c" | "emit-llvm") && !memory_stats {
@@ -104,13 +104,13 @@ fn execute(args: Vec<OsString>) -> Result<i32, String> {
             sanitize = true; i += 1;
         } else if !args[i].to_string_lossy().starts_with('-') {
             sources.push(PathBuf::from(&args[i])); i += 1;
-        } else { return Err(format!("arguments invalides pour {command}\n\n{HELP}")); }
+        } else { return Err(format!("invalid arguments for {command}\n\n{HELP}")); }
     }
-    let source_path = sources.first().ok_or_else(|| format!("fichier source manquant\n\n{HELP}"))?;
+    let source_path = sources.first().ok_or_else(|| format!("missing source file\n\n{HELP}"))?;
     let bundle = SourceBundle::from_paths(&sources)?;
     if command == "check" {
         bundle.validate().map_err(|d| bundle.render(&d))?;
-        println!("OK: {} ({} fichier(s))", source_path.display(), bundle.source_count());
+        println!("OK: {} ({} source file(s))", source_path.display(), bundle.source_count());
         return Ok(0);
     }
     if matches!(command, "emit-flow" | "emit-borrows" | "emit-types") {
@@ -119,8 +119,8 @@ fn execute(args: Vec<OsString>) -> Result<i32, String> {
         if let Some(path) = output {
             for source in bundle.paths() { protect_source(source, &path)?; }
             native::create_parent(&path)?;
-            fs::write(&path, flow).map_err(|e| format!("impossible d'ecrire {}: {e}", path.display()))?;
-            eprintln!("Analyse {}: {}", if command == "emit-types" { "des types" } else { "memoire" }, path.display());
+            fs::write(&path, flow).map_err(|e| format!("failed to write {}: {e}", path.display()))?;
+            eprintln!("Analysis {}: {}", if command == "emit-types" { "types" } else { "ownership" }, path.display());
         } else { io::stdout().write_all(flow.as_bytes()).map_err(|e| e.to_string())?; }
         return Ok(0);
     }
@@ -131,8 +131,8 @@ fn execute(args: Vec<OsString>) -> Result<i32, String> {
         if let Some(path) = output {
             for source in bundle.paths() { protect_source(source, &path)?; }
             native::create_parent(&path)?;
-            fs::write(&path, c_source).map_err(|e| format!("impossible d'ecrire {}: {e}", path.display()))?;
-            eprintln!("{} genere: {}", if command == "emit-llvm" { "LLVM" } else { "C" }, path.display());
+            fs::write(&path, c_source).map_err(|e| format!("failed to write {}: {e}", path.display()))?;
+            eprintln!("{} generated: {}", if command == "emit-llvm" { "LLVM" } else { "C" }, path.display());
         } else { io::stdout().write_all(c_source.as_bytes()).map_err(|e| e.to_string())?; }
         return Ok(0);
     }
@@ -165,7 +165,7 @@ fn protect_source(source: &Path, output: &Path) -> Result<(), String> {
             let b = fs::metadata(output).map_err(|e| e.to_string())?;
             same |= a.dev() == b.dev() && a.ino() == b.ino();
         }
-        if same { return Err("refus d'ecraser le fichier source avec la sortie du compilateur".to_owned()); }
+        if same { return Err("refusing to overwrite the source file with compiler output".to_owned()); }
     }
     Ok(())
 }
@@ -173,15 +173,15 @@ fn protect_source(source: &Path, output: &Path) -> Result<(), String> {
 fn doctor() -> Result<i32, String> {
     let source = "void main() { List<int> xs = new List<int>(); xs.add(42); Text text = new Text(\"test=\"); text.appendInt(xs.pop()); text.print(); }";
     let mut generated = compile_to_c(source).map_err(|d| d.render("<doctor>", source))?;
-    println!("OK: frontend, types, ownership et emprunts");
+    println!("OK: frontend, types, ownership, and borrowing");
     generated.insert_str(0, "#define NACRE_MEMORY_STATS 1\n");
     let program = native::compile_c(&generated)?;
     let result = program.output()?;
     if !result.status.success() || result.stdout != b"test=42\n" || result.stderr != b"NACRE_MEMORY allocations=4 frees=4 live=0\n" {
-        return Err(format!("echec du test natif: {:?}\n{}\n{}", result.status,
+        return Err(format!("native test failed: {:?}\n{}\n{}", result.status,
             String::from_utf8_lossy(&result.stdout), String::from_utf8_lossy(&result.stderr)));
     }
-    println!("OK: compilation C11 et execution native");
-    println!("OK: List/Text, 4 allocations, 4 liberations, live=0");
+    println!("OK: compilation and native execution");
+    println!("OK: List/Text, 4 allocations, 4 frees, live=0");
     Ok(0)
 }

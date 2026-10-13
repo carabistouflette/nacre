@@ -22,15 +22,15 @@ pub struct SourceLocation<'a> {
 impl SourceBundle {
     /// Source paths are diagnostic identities; `module` headers define namespaces.
     pub fn from_sources(sources: Vec<(String, String)>) -> Result<Self, String> {
-        if sources.is_empty() { return Err("aucun fichier source".to_owned()); }
-        if sources.len() > MAX_FILES { return Err("limite de 64 fichiers source".to_owned()); }
+        if sources.is_empty() { return Err("no source files".to_owned()); }
+        if sources.len() > MAX_FILES { return Err("source file limit is 64".to_owned()); }
         let mut bundle = Self { text: String::new(), units: Vec::new() };
         let mut names = HashSet::new();
         let mut first_line = 1;
         for (name, source) in sources {
-            if !names.insert(name.clone()) { return Err(format!("source dupliquee: {name}")); }
+            if !names.insert(name.clone()) { return Err(format!("duplicate source: {name}")); }
             if source.len().saturating_add(bundle.text.len()).saturating_add(1) > MAX_SOURCE_BYTES {
-                return Err("sources trop volumineuses: limite totale de 1 Mio".to_owned());
+                return Err("combined source exceeds the 1 MiB limit".to_owned());
             }
             let start = bundle.text.len();
             bundle.text.push_str(&source);
@@ -52,14 +52,14 @@ impl SourceBundle {
         let original_paths = files.clone();
         for path in files {
             let canonical = path.canonicalize().map_err(|e| format!("{}: {e}", path.display()))?;
-            if !seen.insert(canonical) { return Err(format!("source dupliquee: {}", path.display())); }
+            if !seen.insert(canonical) { return Err(format!("duplicate source: {}", path.display())); }
             let mut data = Vec::new();
             fs::File::open(&path).map_err(|e| format!("{}: {e}", path.display()))?
                 .take(remaining as u64 + 1).read_to_end(&mut data)
                 .map_err(|e| format!("{}: {e}", path.display()))?;
-            if data.len() >= remaining { return Err("sources trop volumineuses: limite totale de 1 Mio".to_owned()); }
+            if data.len() >= remaining { return Err("combined source exceeds the 1 MiB limit".to_owned()); }
             remaining -= data.len() + 1;
-            let text = String::from_utf8(data).map_err(|e| format!("{}: UTF-8 requis ({e})", path.display()))?;
+            let text = String::from_utf8(data).map_err(|e| format!("{}: expected UTF-8 ({e})", path.display()))?;
             sources.push((path.to_string_lossy().into_owned(), text));
         }
         let mut bundle = Self::from_sources(sources)?;
@@ -126,7 +126,7 @@ impl SourceBundle {
             let (line, column) = line_column(&self.text[unit.start..unit.end], span.start.saturating_sub(unit.start));
             result.push_str(&format!("  = note: {note} ({}:{line}:{column})\n", unit.path.display()));
         }
-        if let Some(help) = &diagnostic.help { result.push_str(&format!("  = aide: {help}\n")); }
+        if let Some(help) = &diagnostic.help { result.push_str(&format!("  = help: {help}\n")); }
         result
     }
     /// Map a bundle-wide span back to its original file and file-local offsets.
@@ -154,12 +154,12 @@ impl SourceBundle {
     }
 }
 fn collect(path: &Path, depth: usize, output: &mut Vec<PathBuf>) -> Result<(), String> {
-    if depth > 32 { return Err("arborescence source trop profonde (limite 32)".to_owned()); }
+    if depth > 32 { return Err("source directory nesting limit is 32".to_owned()); }
     let meta = fs::symlink_metadata(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    if meta.file_type().is_symlink() { return Err(format!("lien symbolique source interdit: {}", path.display())); }
+    if meta.file_type().is_symlink() { return Err(format!("symbolic-link source is not allowed: {}", path.display())); }
     if meta.is_file() {
         output.push(path.to_owned());
-        if output.len() > MAX_FILES { return Err("limite de 64 fichiers source".to_owned()); }
+        if output.len() > MAX_FILES { return Err("source file limit is 64".to_owned()); }
     } else if meta.is_dir() {
         let mut entries: Vec<_> = fs::read_dir(path).map_err(|e| format!("{}: {e}", path.display()))?
             .map(|r| r.map(|e| e.path())).collect::<Result<_, _>>()
@@ -173,7 +173,7 @@ fn collect(path: &Path, depth: usize, output: &mut Vec<PathBuf>) -> Result<(), S
                 collect(&entry, depth + 1, output)?;
             }
         }
-    } else { return Err(format!("source non reguliere: {}", path.display())); }
+    } else { return Err(format!("not a regular source file: {}", path.display())); }
     Ok(())
 }
 fn c_string(text: &str) -> String {
@@ -190,7 +190,7 @@ fn c_string(text: &str) -> String {
 
 /// Create a fresh project, never overwrite an existing path.
 pub fn init(path: &Path) -> Result<(), String> {
-    fs::create_dir(path).map_err(|e| format!("impossible de creer {} (le chemin doit etre nouveau): {e}", path.display()))?;
+    fs::create_dir(path).map_err(|e| format!("unable to create {} (the path must be new): {e}", path.display()))?;
     let write = || -> std::io::Result<()> {
         fs::create_dir(path.join("src"))?;
         fs::write(path.join("src/Main.ncr"), include_str!("../examples/language/modules/Main.ncr"))?;
@@ -201,7 +201,7 @@ pub fn init(path: &Path) -> Result<(), String> {
         fs::write(path.join("README.md"), "# Nacre project\n\n```sh\nnacre check src\nnacre run src\nnacre build src -o out/app\n```\n\nSource units declare modules and import public types or functions. All configured source files are compiled together.\n")?;
         Ok(())
     };
-    write().map_err(|e| format!("creation partielle de {}: {e}", path.display()))
+    write().map_err(|e| format!("partial project creation at {}: {e}", path.display()))
 }
 
 #[cfg(test)]

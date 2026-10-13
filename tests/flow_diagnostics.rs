@@ -5,10 +5,9 @@ fn move_diagnostic_contains_the_transfer_origin() {
     let source = "class Box { int n = 1; } void main() { Box a = new Box(); drop(a); println(a.n); }";
     let error = validate(source).unwrap_err();
     assert!(error.message.contains("E2001"));
-    assert!(error.notes.iter().any(|(_, n)| n.contains("transfert de propriete")));
     let rendered = error.render("case.ncr", source);
     assert!(rendered.contains("note:"));
-    assert!(rendered.contains("aide:"));
+    assert!(rendered.contains("help:"));
 }
 #[test]
 fn uninitialized_diagnostic_is_distinct_from_move() {

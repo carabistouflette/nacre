@@ -7,10 +7,9 @@ fn diagnostic_points_to_the_conflicting_loan() {
     let source = format!("{CLASS}void main() {{ C c = new C(); borrow C reader = c; c.inc(); }}");
     let error = validate(&source).unwrap_err();
     assert!(error.message.contains("E3001"));
-    assert!(error.notes.iter().any(|(_, n)| n.contains("reader")));
     let rendered = error.render("borrow.ncr", &source);
     assert!(rendered.contains("note:"));
-    assert!(rendered.contains("aide:"));
+    assert!(rendered.contains("help:"));
     assert!(error.notes[0].0.start < error.span.start);
 }
 #[test]

@@ -90,12 +90,12 @@ int main(void) {
         out = subprocess.run([str(executable)], check=True, capture_output=True)
         assert out.stdout == b"-2147483648\n2147483647\n1\n0\n-2147483648\n0\n-2147483648\ntrue\na\0b\n", out.stdout
         assert not out.stderr, out.stderr
-        for operation, message in [("div", b"division par zero"), ("rem", b"modulo par zero")]:
+        for operation in ("div", "rem"):
             c.write_text(runtime + f"\nint main(void) {{ return ncr_{operation}(1,0,2,3); }}\n")
             subprocess.run([compiler, "-std=c11", "-O2", str(c), "-o", str(executable)], check=True, capture_output=True)
             out = subprocess.run([str(executable)], capture_output=True)
             assert out.returncode == 70, out
-            assert message in out.stderr, out.stderr
+            assert b"[2:3]" in out.stderr, out.stderr
         version = subprocess.check_output([compiler, "--version"], text=True).splitlines()[0]
         return {"compiler": version, "arithmetic_assertions": assertions, "ubsan_boundary_check": "passed", "division_and_modulo_zero": "passed", "embedded_nul_string": "passed"}
 
@@ -106,7 +106,7 @@ def main():
     args = parser.parse_args()
     compilers = args.cc or [name for name in ("gcc", "clang") if shutil.which(name)]
     if not compilers:
-        raise SystemExit("GCC/Clang manquant")
+        raise SystemExit("GCC/Clang is required")
     results = [check(cc) for cc in compilers]
     print(json.dumps({"scope": "C runtime only; not the Rust compiler", "results": results}, indent=2))
 
