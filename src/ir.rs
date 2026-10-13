@@ -170,6 +170,7 @@ pub enum NativeMethod {
     MathCbrt, MathLog10, MathLog1p, MathExpm1, MathAsin, MathAcos, MathAtan, MathAtan2,
     MathSinh, MathCosh, MathTanh, MathToRadians, MathToDegrees, MathSignum, MathCopySign,
     MathNextUp, MathNextDown, MathUlp, MathGetExponent, MathScalb, MathIeeeRemainder,
+    MathFma, MathNextAfter, MathPi, MathE,
     MathAddExactInt, MathAddExactLong, MathSubtractExactInt, MathSubtractExactLong,
     MathMultiplyExactInt, MathMultiplyExactLong, MathNegateExactInt, MathNegateExactLong,
     MathIncrementExactInt, MathIncrementExactLong, MathDecrementExactInt, MathDecrementExactLong,

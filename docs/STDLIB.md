@@ -573,6 +573,10 @@ static double ulp(double value)
 static int getExponent(double value)
 static double scalb(double value, int scaleFactor)
 static double ieeeRemainder(double dividend, double divisor)
+static double fma(double multiplicand, double multiplier, double addend)
+static double nextAfter(double start, double direction)
+static double pi()
+static double e()
 static Result<int, Text> addExactInt(int left, int right)
 static Result<long, Text> addExactLong(long left, long right)
 static Result<int, Text> subtractExactInt(int left, int right)
@@ -615,6 +619,10 @@ returns the normal binary exponent, `-1023` for zero or subnormals, and `1024`
 for infinities or NaN. `scalb` scales by a power of two with libm overflow and
 underflow behavior. `ieeeRemainder` uses the nearest-integer quotient with ties
 to even. `toRadians` and `toDegrees` use fixed approximate conversion factors.
+`fma` computes the product and addition with one final rounding, without an
+intermediate overflow or loss of cancellation precision. `nextAfter` steps
+toward its second operand, including signed-zero directions. `pi` and `e`
+return the nearest binary64 representations of the mathematical constants.
 
 ### `Random`
 

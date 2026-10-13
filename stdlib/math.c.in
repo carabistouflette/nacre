@@ -176,6 +176,18 @@ double @MATH_SCALB@(double ncr_v_0, int32_t ncr_v_1, size_t ncr_line, size_t ncr
 double @MATH_IEEE_REMAINDER@(double ncr_v_0, double ncr_v_1, size_t ncr_line, size_t ncr_column) {
     (void)ncr_line; (void)ncr_column; return remainder(ncr_v_0, ncr_v_1);
 }
+double @MATH_FMA@(double ncr_v_0, double ncr_v_1, double ncr_v_2, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column; return fma(ncr_v_0, ncr_v_1, ncr_v_2);
+}
+double @MATH_NEXT_AFTER@(double ncr_v_0, double ncr_v_1, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column; return nextafter(ncr_v_0, ncr_v_1);
+}
+double @MATH_PI@(size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column; return 3.141592653589793238462643383279502884;
+}
+double @MATH_E@(size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column; return 2.718281828459045235360287471352662498;
+}
 
 ncr_obj_@MATH_INT_RESULT@ @MATH_ADD_EXACT_INT@(int32_t ncr_v_0, int32_t ncr_v_1, size_t ncr_line, size_t ncr_column) {
     if ((ncr_v_1 > 0 && ncr_v_0 > INT32_MAX - ncr_v_1) || (ncr_v_1 < 0 && ncr_v_0 < INT32_MIN - ncr_v_1)) {

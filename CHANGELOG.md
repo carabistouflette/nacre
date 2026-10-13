@@ -3,6 +3,8 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Math adds fused multiply-add, directed adjacent-value stepping, and binary64
+  pi/e constants alongside checked arithmetic and IEEE floating utilities.
 - Native `Encoding` converts affine byte buffers to lowercase hex, canonical
   padded RFC 4648 Base64, canonical unpadded Base64URL, and strict UTF-8 `Text`.
   Decoders reject malformed alphabets, padding, discarded bits, and invalid

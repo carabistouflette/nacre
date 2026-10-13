@@ -42,6 +42,10 @@ class Math {
     public static int getExponent(double value) {}
     public static double scalb(double value, int scaleFactor) {}
     public static double ieeeRemainder(double dividend, double divisor) {}
+    public static double fma(double multiplicand, double multiplier, double addend) {}
+    public static double nextAfter(double start, double direction) {}
+    public static double pi() {}
+    public static double e() {}
     public static Result<int, Text> addExactInt(int left, int right) {}
     public static Result<long, Text> addExactLong(long left, long right) {}
     public static Result<int, Text> subtractExactInt(int left, int right) {}

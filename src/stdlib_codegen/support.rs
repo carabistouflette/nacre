@@ -111,6 +111,8 @@ pub(super) fn marker(method: M) -> &'static str {
         M::MathNextDown => "@MATH_NEXT_DOWN@", M::MathUlp => "@MATH_ULP@",
         M::MathGetExponent => "@MATH_GET_EXPONENT@", M::MathScalb => "@MATH_SCALB@",
         M::MathIeeeRemainder => "@MATH_IEEE_REMAINDER@",
+        M::MathFma => "@MATH_FMA@", M::MathNextAfter => "@MATH_NEXT_AFTER@",
+        M::MathPi => "@MATH_PI@", M::MathE => "@MATH_E@",
         M::MathAddExactInt => "@MATH_ADD_EXACT_INT@", M::MathAddExactLong => "@MATH_ADD_EXACT_LONG@",
         M::MathSubtractExactInt => "@MATH_SUBTRACT_EXACT_INT@", M::MathSubtractExactLong => "@MATH_SUBTRACT_EXACT_LONG@",
         M::MathMultiplyExactInt => "@MATH_MULTIPLY_EXACT_INT@", M::MathMultiplyExactLong => "@MATH_MULTIPLY_EXACT_LONG@",

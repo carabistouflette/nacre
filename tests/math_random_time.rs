@@ -264,6 +264,15 @@ void main() {
         Math.scalb(1.0, 1024) == positiveInfinity &&
         Math.scalb(-1.0, -1075) == 0.0 && 1.0 / Math.scalb(-1.0, -1075) < 0.0 &&
         Math.scalb(-0.0, 12) == 0.0 && 1.0 / Math.scalb(-0.0, 12) < 0.0 &&
+        Math.fma(1.0000000000000002, 0.9999999999999998, -1.0) == -Math.scalb(1.0, -104) &&
+        Math.fma(Math.nextDown(positiveInfinity), 2.0, -Math.nextDown(positiveInfinity)) == Math.nextDown(positiveInfinity) &&
+        Math.isNaN(Math.fma(0.0, positiveInfinity, 1.0)) &&
+        1.0 / Math.fma(-0.0, 1.0, -0.0) < 0.0 &&
+        Math.nextAfter(0.0, 1.0) == Math.nextUp(0.0) &&
+        Math.nextAfter(0.0, -1.0) == Math.nextDown(0.0) &&
+        1.0 / Math.nextAfter(0.0, -0.0) < 0.0 &&
+        Math.nextAfter(positiveInfinity, 0.0) == Math.nextDown(positiveInfinity) &&
+        Math.isNaN(Math.nextAfter(nan, 0.0)) &&
         Math.ieeeRemainder(5.0, 2.0) == 1.0 &&
         Math.ieeeRemainder(7.0, 2.0) == -1.0 &&
         Math.ieeeRemainder(-7.0, 2.0) == 1.0 &&
