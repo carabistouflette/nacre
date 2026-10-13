@@ -8,6 +8,9 @@ enum NativeBuiltin {
     Console,
     Files,
     Args,
+    Math,
+    Random,
+    Time,
 }
 
 impl NativeBuiltin {
@@ -23,6 +26,9 @@ impl NativeBuiltin {
             Self::Console => NativeClass::Console,
             Self::Files => NativeClass::Files,
             Self::Args => NativeClass::Args,
+            Self::Math => NativeClass::Math,
+            Self::Random => NativeClass::Random,
+            Self::Time => NativeClass::Time,
         }
     }
 }
@@ -70,6 +76,18 @@ pub(super) const PRELUDE_UNITS: &[PreludeUnit] = &[
             Builtin { name: "Files", native: Some(NativeBuiltin::Files) },
             Builtin { name: "Args", native: Some(NativeBuiltin::Args) },
         ],
+    },
+    PreludeUnit {
+        source: include_str!("../../stdlib/prelude/math.ncr"),
+        builtins: &[Builtin { name: "Math", native: Some(NativeBuiltin::Math) }],
+    },
+    PreludeUnit {
+        source: include_str!("../../stdlib/prelude/random.ncr"),
+        builtins: &[Builtin { name: "Random", native: Some(NativeBuiltin::Random) }],
+    },
+    PreludeUnit {
+        source: include_str!("../../stdlib/prelude/time.ncr"),
+        builtins: &[Builtin { name: "Time", native: Some(NativeBuiltin::Time) }],
     },
 ];
 

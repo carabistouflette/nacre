@@ -29,6 +29,20 @@ pub(super) fn marker(method: M) -> &'static str {
         M::ConsolePrintText => "@CONSOLE_PRINT_TEXT@", M::FilesReadText => "@FILES_READ_TEXT@",
         M::FilesWriteText => "@FILES_WRITE_TEXT@", M::FilesWriteTextAtomic => "@FILES_WRITE_TEXT_ATOMIC@",
         M::ArgsCount => "@ARGS_COUNT@", M::ArgsGet => "@ARGS_GET@",
+        M::MathAbsInt => "@MATH_ABS_INT@", M::MathAbsLong => "@MATH_ABS_LONG@",
+        M::MathAbsDouble => "@MATH_ABS_DOUBLE@", M::MathMinInt => "@MATH_MIN_INT@",
+        M::MathMinLong => "@MATH_MIN_LONG@", M::MathMinDouble => "@MATH_MIN_DOUBLE@",
+        M::MathMaxInt => "@MATH_MAX_INT@", M::MathMaxLong => "@MATH_MAX_LONG@",
+        M::MathMaxDouble => "@MATH_MAX_DOUBLE@", M::MathSqrt => "@MATH_SQRT@",
+        M::MathPow => "@MATH_POW@", M::MathLog => "@MATH_LOG@", M::MathExp => "@MATH_EXP@",
+        M::MathSin => "@MATH_SIN@", M::MathCos => "@MATH_COS@", M::MathTan => "@MATH_TAN@",
+        M::MathFloor => "@MATH_FLOOR@", M::MathCeil => "@MATH_CEIL@", M::MathRound => "@MATH_ROUND@",
+        M::MathHypot => "@MATH_HYPOT@", M::MathIsNaN => "@MATH_IS_NAN@", M::MathIsFinite => "@MATH_IS_FINITE@",
+        M::RandomNew => "@RANDOM_NEW@", M::RandomFromSystem => "@RANDOM_FROM_SYSTEM@",
+        M::RandomReseed => "@RANDOM_RESEED@", M::RandomNextLong => "@RANDOM_NEXT_LONG@",
+        M::RandomNextInt => "@RANDOM_NEXT_INT@", M::RandomNextDouble => "@RANDOM_NEXT_DOUBLE@",
+        M::TimeMonotonicNanos => "@TIME_MONOTONIC_NANOS@", M::TimeUnixMillis => "@TIME_UNIX_MILLIS@",
+        M::TimeSleepMillis => "@TIME_SLEEP_MILLIS@", M::TimeDeadlineAfterMillis => "@TIME_DEADLINE_AFTER_MILLIS@",
     }
 }
 pub(super) fn native_function_if(program: &t::Program, is: impl Fn(M) -> bool) -> Option<&t::Function> {
@@ -59,16 +73,18 @@ pub(super) fn text_class(program: &t::Program) -> Option<usize> {
 pub(super) fn text_helpers(program: &t::Program, text: usize) -> String {
     let text_new = native_function(program, |method| matches!(method, M::TextNew)).id;
     let mut out = format!(
-        "static ncr_obj_{text} *ncr_io_text_from_bytes_{text}(const unsigned char *bytes, size_t length, size_t line, size_t column) {{\n    ncr_obj_{text} *text = ncr_allocate(sizeof(ncr_obj_{text}), line, column);\n    ncr_fn_{text_new}(text, (ncr_string){{bytes, length}}, line, column);\n    return text;\n}}\n"
+        "static ncr_obj_{text} *ncr_text_from_bytes_{text}(const unsigned char *bytes, size_t length, size_t line, size_t column) {{\n    ncr_obj_{text} *text = ncr_allocate(sizeof(ncr_obj_{text}), line, column);\n    ncr_fn_{text_new}(text, (ncr_string){{bytes, length}}, line, column);\n    return text;\n}}\n"
     );
     out.push_str(&format!(
-        "static ncr_obj_{text} *ncr_io_text_take_{text}(unsigned char *bytes, size_t length, size_t capacity, size_t line, size_t column) {{\n    ncr_obj_{text} *text = ncr_allocate(sizeof(ncr_obj_{text}), line, column);\n    text->bytes = bytes;\n    text->length = (int32_t)length;\n    text->capacity = (int32_t)capacity;\n    return text;\n}}\n"
+        "static ncr_obj_{text} *ncr_text_take_bytes_{text}(unsigned char *bytes, size_t length, size_t capacity, size_t line, size_t column) {{\n    ncr_obj_{text} *text = ncr_allocate(sizeof(ncr_obj_{text}), line, column);\n    text->bytes = bytes;\n    text->length = (int32_t)length;\n    text->capacity = (int32_t)capacity;\n    return text;\n}}\n"
     ));
     let mut result_ids = Vec::new();
     for function in &program.functions {
         if !matches!(function.native,
             Some(M::ConsoleReadLine | M::FilesReadText | M::FilesWriteText | M::FilesWriteTextAtomic
-                | M::ArgsGet | M::TextParseInt | M::TextParseLong | M::TextParseDouble | M::TextSliceBytes)) {
+                | M::ArgsGet | M::TextParseInt | M::TextParseLong | M::TextParseDouble | M::TextSliceBytes
+                | M::MathAbsInt | M::MathAbsLong | M::RandomFromSystem | M::RandomNextInt
+                | M::TimeUnixMillis | M::TimeSleepMillis | M::TimeDeadlineAfterMillis)) {
             continue;
         }
         let class = result_id(function);
@@ -79,7 +95,7 @@ pub(super) fn text_helpers(program: &t::Program, text: usize) -> String {
         assert!(matches!(err_variant.fields.as_slice(), [Type::Object(id)] if *id == text),
             "native Result error payload must own Text");
         out.push_str(&format!(
-            "static ncr_obj_{class} ncr_io_error_{class}(const char *message, size_t length, size_t line, size_t column) {{\n    ncr_obj_{text} *error = ncr_io_text_from_bytes_{text}((const unsigned char *)message, length, line, column);\n    return (ncr_obj_{class}){{ .tag = {err}, .data.v{err}.f0 = error }};\n}}\n"
+            "static ncr_obj_{class} ncr_result_error_{class}(const char *message, size_t length, size_t line, size_t column) {{\n    ncr_obj_{text} *error = ncr_text_from_bytes_{text}((const unsigned char *)message, length, line, column);\n    return (ncr_obj_{class}){{ .tag = {err}, .data.v{err}.f0 = error }};\n}}\n"
         ));
     }
     out

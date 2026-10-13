@@ -1,0 +1,103 @@
+#include <fcntl.h>
+
+/* SplitMix64 increments state by 0x9e3779b97f4a7c15, then mixes
+   z=(z^(z>>30))*0xbf58476d1ce4e5b9; z=(z^(z>>27))*0x94d049bb133111eb;
+   z^=z>>31, with all operations modulo 2^64. nextLong maps these bits to
+   signed two's-complement value; nextDouble uses the top 53 bits times 2^-53. */
+static uint64_t ncr_random_next_bits(ncr_obj_@RANDOM_CLASS@ *random) {
+    random->state += UINT64_C(0x9e3779b97f4a7c15);
+    uint64_t value = random->state;
+    value = (value ^ (value >> 30)) * UINT64_C(0xbf58476d1ce4e5b9);
+    value = (value ^ (value >> 27)) * UINT64_C(0x94d049bb133111eb);
+    return value ^ (value >> 31);
+}
+
+static int64_t ncr_random_signed_long(uint64_t bits) {
+    if (bits <= (uint64_t)INT64_MAX) { return (int64_t)bits; }
+    return -INT64_C(1) - (int64_t)(UINT64_MAX - bits);
+}
+
+static double ncr_random_unit_double(uint64_t bits) {
+    return (double)(bits >> 11) * 0x1.0p-53;
+}
+
+static bool ncr_random_system_seed(uint64_t *seed, int *failure) {
+    int descriptor = open("/dev/urandom", O_RDONLY | O_CLOEXEC);
+    if (descriptor < 0) { *failure = errno; return false; }
+
+    size_t received = 0;
+    while (received < sizeof(*seed)) {
+        ssize_t count = read(descriptor, (unsigned char *)seed + received, sizeof(*seed) - received);
+        if (count > 0) {
+            received += (size_t)count;
+            continue;
+        }
+        if (count < 0 && errno == EINTR) { continue; }
+        *failure = count == 0 ? EIO : errno;
+        memset(seed, 0, sizeof(*seed));
+        (void)close(descriptor);
+        return false;
+    }
+
+    if (close(descriptor) != 0) {
+        *failure = errno;
+        memset(seed, 0, sizeof(*seed));
+        return false;
+    }
+    return true;
+}
+
+void @RANDOM_NEW@(ncr_obj_@RANDOM_CLASS@ *ncr_self, int64_t ncr_v_0, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column;
+    /* Constructor and reseed map signed seeds modulo 2^64, including negatives. */
+    ncr_self->state = (uint64_t)ncr_v_0;
+}
+
+ncr_obj_@RANDOM_SYSTEM_RESULT@ @RANDOM_FROM_SYSTEM@(size_t ncr_line, size_t ncr_column) {
+    uint64_t seed = 0;
+    int failure = 0;
+    if (!ncr_random_system_seed(&seed, &failure)) {
+        char message[128];
+        int length = snprintf(message, sizeof(message), "Random.fromSystem: /dev/urandom failed (errno=%d)", failure);
+        size_t message_length = length < 0 ? 0 : ((size_t)length < sizeof(message) ? (size_t)length : sizeof(message) - 1);
+        return ncr_result_error_@RANDOM_SYSTEM_RESULT@(message, message_length, ncr_line, ncr_column);
+    }
+
+    ncr_obj_@RANDOM_CLASS@ *random = ncr_allocate(sizeof(ncr_obj_@RANDOM_CLASS@), ncr_line, ncr_column);
+    random->state = seed;
+    memset(&seed, 0, sizeof(seed));
+    return (ncr_obj_@RANDOM_SYSTEM_RESULT@){.tag = @RANDOM_SYSTEM_OK_TAG@, .data.v@RANDOM_SYSTEM_OK_TAG@.f0 = random};
+}
+
+void @RANDOM_RESEED@(ncr_obj_@RANDOM_CLASS@ *ncr_self, int64_t ncr_v_0, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column;
+    ncr_self->state = (uint64_t)ncr_v_0;
+}
+
+int64_t @RANDOM_NEXT_LONG@(ncr_obj_@RANDOM_CLASS@ *ncr_self, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column;
+    return ncr_random_signed_long(ncr_random_next_bits(ncr_self));
+}
+
+ncr_obj_@RANDOM_INT_RESULT@ @RANDOM_NEXT_INT@(ncr_obj_@RANDOM_CLASS@ *ncr_self, int32_t ncr_v_0, size_t ncr_line, size_t ncr_column) {
+    if (ncr_v_0 <= 0) {
+        return ncr_result_error_@RANDOM_INT_RESULT@("Random.nextInt: bound must be positive", sizeof("Random.nextInt: bound must be positive") - 1, ncr_line, ncr_column);
+    }
+
+    uint32_t bound = (uint32_t)ncr_v_0;
+    /* Reject the short prefix: unsigned -bound modulo bound is 2^32 % bound.
+       The accepted sample count is then divisible by bound before reduction. */
+    uint32_t threshold = (uint32_t)(-bound) % bound;
+    uint32_t sample;
+    do {
+        sample = (uint32_t)(ncr_random_next_bits(ncr_self) >> 32);
+    } while (sample < threshold);
+
+    int32_t value = (int32_t)(sample % bound);
+    return (ncr_obj_@RANDOM_INT_RESULT@){.tag = @RANDOM_INT_OK_TAG@, .data.v@RANDOM_INT_OK_TAG@.f0 = value};
+}
+
+double @RANDOM_NEXT_DOUBLE@(ncr_obj_@RANDOM_CLASS@ *ncr_self, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column;
+    return ncr_random_unit_double(ncr_random_next_bits(ncr_self));
+}

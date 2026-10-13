@@ -1,0 +1,146 @@
+#include <time.h>
+
+/* CLOCK_MONOTONIC values are nanoseconds since an unspecified steady-clock
+   origin, representable only in [0, INT64_MAX]. Wall time is Unix epoch ms. */
+static bool ncr_time_monotonic_value(int64_t *value, int *failure) {
+    struct timespec timestamp;
+    if (clock_gettime(CLOCK_MONOTONIC, &timestamp) != 0) {
+        *failure = errno;
+        return false;
+    }
+    if (timestamp.tv_sec < 0 || timestamp.tv_nsec < 0 || timestamp.tv_nsec >= 1000000000L) {
+        *failure = EOVERFLOW;
+        return false;
+    }
+    uintmax_t seconds = (uintmax_t)timestamp.tv_sec;
+    if (seconds > (uintmax_t)INT64_MAX / UINT64_C(1000000000)) {
+        *failure = EOVERFLOW;
+        return false;
+    }
+    uint64_t nanoseconds = (uint64_t)seconds * UINT64_C(1000000000) + (uint64_t)timestamp.tv_nsec;
+    if (nanoseconds > (uint64_t)INT64_MAX) {
+        *failure = EOVERFLOW;
+        return false;
+    }
+    *value = (int64_t)nanoseconds;
+    return true;
+}
+
+static bool ncr_time_unix_millis(int64_t *value, int *failure) {
+    struct timespec timestamp;
+    if (clock_gettime(CLOCK_REALTIME, &timestamp) != 0) {
+        *failure = errno;
+        return false;
+    }
+    if (timestamp.tv_nsec < 0 || timestamp.tv_nsec >= 1000000000L) {
+        *failure = EOVERFLOW;
+        return false;
+    }
+
+    /* Linux time_t is signed; the cast is range-checked before millisecond math. */
+    intmax_t seconds = (intmax_t)timestamp.tv_sec;
+    if ((time_t)seconds != timestamp.tv_sec
+        || seconds > INT64_MAX / INT64_C(1000)
+        || seconds < INT64_MIN / INT64_C(1000)) {
+        *failure = EOVERFLOW;
+        return false;
+    }
+    int64_t base = (int64_t)seconds * INT64_C(1000);
+    int64_t fraction = (int64_t)(timestamp.tv_nsec / 1000000L);
+    if (base > INT64_MAX - fraction) {
+        *failure = EOVERFLOW;
+        return false;
+    }
+    *value = base + fraction;
+    return true;
+}
+
+static bool ncr_time_deadline_after_millis(int64_t monotonic_now, int64_t timeout_millis, int64_t *deadline) {
+    if (monotonic_now < 0 || timeout_millis < 0
+        || timeout_millis > INT64_MAX / INT64_C(1000000)) {
+        return false;
+    }
+    int64_t delta = timeout_millis * INT64_C(1000000);
+    if (delta > INT64_MAX - monotonic_now) { return false; }
+    *deadline = monotonic_now + delta;
+    return true;
+}
+
+static size_t ncr_time_error_message(char *buffer, size_t capacity, const char *operation, int failure) {
+    int length = snprintf(buffer, capacity, "%s failed (errno=%d)", operation, failure);
+    if (length < 0) {
+        if (capacity > 0) { buffer[0] = '\0'; }
+        return 0;
+    }
+    return (size_t)length < capacity ? (size_t)length : capacity - 1;
+}
+
+int64_t @TIME_MONOTONIC_NANOS@(size_t ncr_line, size_t ncr_column) {
+    int64_t value = 0;
+    int failure = 0;
+    if (!ncr_time_monotonic_value(&value, &failure)) {
+        char message[128];
+        ncr_time_error_message(message, sizeof(message), "Time.monotonicNanos", failure);
+        ncr_fail(message, ncr_line, ncr_column);
+    }
+    return value;
+}
+
+ncr_obj_@TIME_UNIX_RESULT@ @TIME_UNIX_MILLIS@(size_t ncr_line, size_t ncr_column) {
+    int64_t value = 0;
+    int failure = 0;
+    if (!ncr_time_unix_millis(&value, &failure)) {
+        char message[128];
+        size_t length = ncr_time_error_message(message, sizeof(message), "Time.unixMillis/CLOCK_REALTIME", failure);
+        return ncr_result_error_@TIME_UNIX_RESULT@(message, length, ncr_line, ncr_column);
+    }
+    return (ncr_obj_@TIME_UNIX_RESULT@){.tag = @TIME_UNIX_OK_TAG@, .data.v@TIME_UNIX_OK_TAG@.f0 = value};
+}
+
+ncr_obj_@TIME_SLEEP_RESULT@ @TIME_SLEEP_MILLIS@(int64_t ncr_v_0, size_t ncr_line, size_t ncr_column) {
+    if (ncr_v_0 < 0) {
+        return ncr_result_error_@TIME_SLEEP_RESULT@("Time.sleepMillis: milliseconds must be non-negative", sizeof("Time.sleepMillis: milliseconds must be non-negative") - 1, ncr_line, ncr_column);
+    }
+
+    int64_t seconds = ncr_v_0 / INT64_C(1000);
+    time_t os_seconds = (time_t)seconds;
+    if (os_seconds < 0 || (intmax_t)os_seconds != (intmax_t)seconds) {
+        return ncr_result_error_@TIME_SLEEP_RESULT@("Time.sleepMillis: duration does not fit time_t", sizeof("Time.sleepMillis: duration does not fit time_t") - 1, ncr_line, ncr_column);
+    }
+
+    struct timespec request = {
+        .tv_sec = os_seconds,
+        .tv_nsec = (long)(ncr_v_0 % INT64_C(1000)) * 1000000L,
+    };
+    struct timespec remaining;
+    while (nanosleep(&request, &remaining) != 0) {
+        int failure = errno;
+        if (failure == EINTR) {
+            request = remaining;
+            continue;
+        }
+        char message[128];
+        size_t length = ncr_time_error_message(message, sizeof(message), "Time.sleepMillis/nanosleep", failure);
+        return ncr_result_error_@TIME_SLEEP_RESULT@(message, length, ncr_line, ncr_column);
+    }
+    return (ncr_obj_@TIME_SLEEP_RESULT@){.tag = @TIME_SLEEP_OK_TAG@, .data.v@TIME_SLEEP_OK_TAG@.f0 = UINT8_C(0)};
+}
+
+ncr_obj_@TIME_DEADLINE_RESULT@ @TIME_DEADLINE_AFTER_MILLIS@(int64_t ncr_v_0, size_t ncr_line, size_t ncr_column) {
+    if (ncr_v_0 < 0) {
+        return ncr_result_error_@TIME_DEADLINE_RESULT@("Time.deadlineAfterMillis: timeout must be non-negative", sizeof("Time.deadlineAfterMillis: timeout must be non-negative") - 1, ncr_line, ncr_column);
+    }
+
+    int64_t now = 0;
+    int failure = 0;
+    if (!ncr_time_monotonic_value(&now, &failure)) {
+        char message[128];
+        size_t length = ncr_time_error_message(message, sizeof(message), "Time.deadlineAfterMillis/CLOCK_MONOTONIC", failure);
+        return ncr_result_error_@TIME_DEADLINE_RESULT@(message, length, ncr_line, ncr_column);
+    }
+    int64_t deadline = 0;
+    if (!ncr_time_deadline_after_millis(now, ncr_v_0, &deadline)) {
+        return ncr_result_error_@TIME_DEADLINE_RESULT@("Time.deadlineAfterMillis: timeout or deadline exceeds the signed monotonic nanosecond range", sizeof("Time.deadlineAfterMillis: timeout or deadline exceeds the signed monotonic nanosecond range") - 1, ncr_line, ncr_column);
+    }
+    return (ncr_obj_@TIME_DEADLINE_RESULT@){.tag = @TIME_DEADLINE_OK_TAG@, .data.v@TIME_DEADLINE_OK_TAG@.f0 = deadline};
+}

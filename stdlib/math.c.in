@@ -1,0 +1,87 @@
+/* ISO C libm domain/range cases remain IEEE values: e.g. sqrt(-x) and trig
+   of infinity produce NaN, log(0) is -infinity, and exp overflow is +infinity.
+   fmin/fmax ignore one NaN, return NaN for two NaNs, and choose -0/+0 for
+   min/max ties; round uses ties away from zero. fabs(-0) is +0. */
+ncr_obj_@ABS_INT_RESULT@ @MATH_ABS_INT@(int32_t @ABS_INT_VALUE@, size_t ncr_line, size_t ncr_column) {
+    if (@ABS_INT_VALUE@ == INT32_MIN) {
+        return ncr_result_error_@ABS_INT_RESULT@("Math.absInt: INT32_MIN has no positive int value", sizeof("Math.absInt: INT32_MIN has no positive int value") - 1, ncr_line, ncr_column);
+    }
+    int32_t absolute = @ABS_INT_VALUE@ < 0 ? -@ABS_INT_VALUE@ : @ABS_INT_VALUE@;
+    return (ncr_obj_@ABS_INT_RESULT@){.tag = @ABS_INT_OK_TAG@, .data.v@ABS_INT_OK_TAG@.f0 = absolute};
+}
+
+ncr_obj_@ABS_LONG_RESULT@ @MATH_ABS_LONG@(int64_t @ABS_LONG_VALUE@, size_t ncr_line, size_t ncr_column) {
+    if (@ABS_LONG_VALUE@ == INT64_MIN) {
+        return ncr_result_error_@ABS_LONG_RESULT@("Math.absLong: INT64_MIN has no positive long value", sizeof("Math.absLong: INT64_MIN has no positive long value") - 1, ncr_line, ncr_column);
+    }
+    int64_t absolute = @ABS_LONG_VALUE@ < 0 ? -@ABS_LONG_VALUE@ : @ABS_LONG_VALUE@;
+    return (ncr_obj_@ABS_LONG_RESULT@){.tag = @ABS_LONG_OK_TAG@, .data.v@ABS_LONG_OK_TAG@.f0 = absolute};
+}
+
+double @MATH_ABS_DOUBLE@(double ncr_v_0, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column;
+    return fabs(ncr_v_0);
+}
+int32_t @MATH_MIN_INT@(int32_t ncr_v_0, int32_t ncr_v_1, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column;
+    return ncr_v_0 < ncr_v_1 ? ncr_v_0 : ncr_v_1;
+}
+int64_t @MATH_MIN_LONG@(int64_t ncr_v_0, int64_t ncr_v_1, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column;
+    return ncr_v_0 < ncr_v_1 ? ncr_v_0 : ncr_v_1;
+}
+double @MATH_MIN_DOUBLE@(double ncr_v_0, double ncr_v_1, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column;
+    return fmin(ncr_v_0, ncr_v_1);
+}
+int32_t @MATH_MAX_INT@(int32_t ncr_v_0, int32_t ncr_v_1, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column;
+    return ncr_v_0 > ncr_v_1 ? ncr_v_0 : ncr_v_1;
+}
+int64_t @MATH_MAX_LONG@(int64_t ncr_v_0, int64_t ncr_v_1, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column;
+    return ncr_v_0 > ncr_v_1 ? ncr_v_0 : ncr_v_1;
+}
+double @MATH_MAX_DOUBLE@(double ncr_v_0, double ncr_v_1, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column;
+    return fmax(ncr_v_0, ncr_v_1);
+}
+double @MATH_SQRT@(double ncr_v_0, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column; return sqrt(ncr_v_0);
+}
+double @MATH_POW@(double ncr_v_0, double ncr_v_1, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column; return pow(ncr_v_0, ncr_v_1);
+}
+double @MATH_LOG@(double ncr_v_0, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column; return log(ncr_v_0);
+}
+double @MATH_EXP@(double ncr_v_0, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column; return exp(ncr_v_0);
+}
+double @MATH_SIN@(double ncr_v_0, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column; return sin(ncr_v_0);
+}
+double @MATH_COS@(double ncr_v_0, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column; return cos(ncr_v_0);
+}
+double @MATH_TAN@(double ncr_v_0, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column; return tan(ncr_v_0);
+}
+double @MATH_FLOOR@(double ncr_v_0, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column; return floor(ncr_v_0);
+}
+double @MATH_CEIL@(double ncr_v_0, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column; return ceil(ncr_v_0);
+}
+double @MATH_ROUND@(double ncr_v_0, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column; return round(ncr_v_0);
+}
+double @MATH_HYPOT@(double ncr_v_0, double ncr_v_1, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column; return hypot(ncr_v_0, ncr_v_1);
+}
+bool @MATH_IS_NAN@(double ncr_v_0, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column; return isnan(ncr_v_0);
+}
+bool @MATH_IS_FINITE@(double ncr_v_0, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column; return isfinite(ncr_v_0);
+}

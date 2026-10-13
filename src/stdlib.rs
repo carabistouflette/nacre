@@ -44,8 +44,14 @@ pub fn inject(program: &mut a::Program) -> Result<(), Diagnostic> {
 
 pub fn method(class: C, name: &str, constructor: bool) -> M {
     if constructor {
-        return match class { C::List(_) => M::ListNew, C::Map(_, _) => M::MapNew, C::Text => M::TextNew,
-            C::Console | C::Files | C::Args => unreachable!("static native class has no constructor") };
+        return match class {
+            C::List(_) => M::ListNew,
+            C::Map(_, _) => M::MapNew,
+            C::Text => M::TextNew,
+            C::Random => M::RandomNew,
+            C::Console | C::Files | C::Args | C::Math | C::Time =>
+                unreachable!("static native class has no constructor"),
+        };
     }
     match (class, name) {
         (C::List(_), "add") => M::ListAdd,
@@ -92,6 +98,37 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
         (C::Text, "parseLong") => M::TextParseLong,
         (C::Text, "parseDouble") => M::TextParseDouble,
         (C::Text, "sliceBytes") => M::TextSliceBytes,
+        (C::Math, "absInt") => M::MathAbsInt,
+        (C::Math, "absLong") => M::MathAbsLong,
+        (C::Math, "absDouble") => M::MathAbsDouble,
+        (C::Math, "minInt") => M::MathMinInt,
+        (C::Math, "minLong") => M::MathMinLong,
+        (C::Math, "minDouble") => M::MathMinDouble,
+        (C::Math, "maxInt") => M::MathMaxInt,
+        (C::Math, "maxLong") => M::MathMaxLong,
+        (C::Math, "maxDouble") => M::MathMaxDouble,
+        (C::Math, "sqrt") => M::MathSqrt,
+        (C::Math, "pow") => M::MathPow,
+        (C::Math, "log") => M::MathLog,
+        (C::Math, "exp") => M::MathExp,
+        (C::Math, "sin") => M::MathSin,
+        (C::Math, "cos") => M::MathCos,
+        (C::Math, "tan") => M::MathTan,
+        (C::Math, "floor") => M::MathFloor,
+        (C::Math, "ceil") => M::MathCeil,
+        (C::Math, "round") => M::MathRound,
+        (C::Math, "hypot") => M::MathHypot,
+        (C::Math, "isNaN") => M::MathIsNaN,
+        (C::Math, "isFinite") => M::MathIsFinite,
+        (C::Random, "fromSystem") => M::RandomFromSystem,
+        (C::Random, "reseed") => M::RandomReseed,
+        (C::Random, "nextLong") => M::RandomNextLong,
+        (C::Random, "nextInt") => M::RandomNextInt,
+        (C::Random, "nextDouble") => M::RandomNextDouble,
+        (C::Time, "monotonicNanos") => M::TimeMonotonicNanos,
+        (C::Time, "unixMillis") => M::TimeUnixMillis,
+        (C::Time, "sleepMillis") => M::TimeSleepMillis,
+        (C::Time, "deadlineAfterMillis") => M::TimeDeadlineAfterMillis,
         (C::Console, "readLine") => M::ConsoleReadLine,
         (C::Console, "print") => M::ConsolePrint,
         (C::Console, "printText") => M::ConsolePrintText,

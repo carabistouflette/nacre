@@ -1,0 +1,74 @@
+void printIntResult(Result<int, Text> result) {
+    match (result) {
+        Ok(value) { println(value); }
+        Err(error) { println("ERR"); }
+    }
+}
+
+void printLongResult(Result<long, Text> result) {
+    match (result) {
+        Ok(value) { println(value); }
+        Err(error) { println("ERR"); }
+    }
+}
+
+void main() {
+    printIntResult(Math.absInt(-17));
+    printIntResult(Math.absInt(-2147483648));
+    printLongResult(Math.absLong(-9223372036854775808L));
+    println(Math.absDouble(-0.0) == 0.0);
+    println(Math.minInt(9, -4));
+    println(Math.maxLong(-8L, 12L));
+    println(Math.minDouble(2.5, -3.5));
+    println(Math.maxDouble(2.5, -3.5));
+    println(Math.sqrt(81.0));
+    println(Math.pow(2.0, 10.0));
+    println(Math.log(1.0));
+    println(Math.exp(1.0));
+    println(Math.sin(0.0));
+    println(Math.cos(0.0));
+    println(Math.tan(0.0));
+    println(Math.floor(2.9));
+    println(Math.ceil(2.1));
+    println(Math.round(-2.5));
+    println(Math.hypot(3.0, 4.0));
+
+    double nan = Math.sqrt(-1.0);
+    double infinity = Math.exp(10000.0);
+    println(Math.isNaN(nan));
+    println(Math.isNaN(Math.minDouble(nan, 1.0)));
+    println(Math.isFinite(nan));
+    println(Math.isFinite(infinity));
+
+    Random generator = new Random(42L);
+    long first = generator.nextLong();
+    generator.reseed(42L);
+    println(first == generator.nextLong());
+    printIntResult(generator.nextInt(6));
+    printIntResult(generator.nextInt(0));
+    double unit = generator.nextDouble();
+    println(unit >= 0.0 && unit < 1.0);
+
+    match (Random.fromSystem()) {
+        Ok(systemRandom) {
+            double systemValue = systemRandom.nextDouble();
+            println(systemValue >= 0.0 && systemValue < 1.0);
+        }
+        Err(error) { println("entropy unavailable"); }
+    }
+
+    long before = Time.monotonicNanos();
+    match (Time.sleepMillis(1L)) {
+        Ok(value) { println(value); }
+        Err(error) { println("sleep error"); }
+    }
+    long after = Time.monotonicNanos();
+    println(after >= before);
+    printLongResult(Time.unixMillis());
+    printLongResult(Time.deadlineAfterMillis(10L));
+    printLongResult(Time.deadlineAfterMillis(-1L));
+    match (Time.sleepMillis(-1L)) {
+        Ok(value) { println("unexpected sleep success"); }
+        Err(error) { println("negative sleep rejected"); }
+    }
+}

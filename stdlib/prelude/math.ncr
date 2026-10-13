@@ -1,0 +1,24 @@
+class Math {
+    public static Result<int, Text> absInt(int value) {}
+    public static Result<long, Text> absLong(long value) {}
+    public static double absDouble(double value) {}
+    public static int minInt(int left, int right) {}
+    public static long minLong(long left, long right) {}
+    public static double minDouble(double left, double right) {}
+    public static int maxInt(int left, int right) {}
+    public static long maxLong(long left, long right) {}
+    public static double maxDouble(double left, double right) {}
+    public static double sqrt(double value) {}
+    public static double pow(double base, double exponent) {}
+    public static double log(double value) {}
+    public static double exp(double value) {}
+    public static double sin(double value) {}
+    public static double cos(double value) {}
+    public static double tan(double value) {}
+    public static double floor(double value) {}
+    public static double ceil(double value) {}
+    public static double round(double value) {}
+    public static double hypot(double x, double y) {}
+    public static boolean isNaN(double value) {}
+    public static boolean isFinite(double value) {}
+}

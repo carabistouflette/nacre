@@ -54,7 +54,7 @@ impl Tables {
             self.classes[from].implementations.iter().any(|(interface, _)| *interface == to))
     }
     fn is_static_native(&self, id: usize) -> bool {
-        matches!(self.classes[id].native, Some(t::NativeClass::Console | t::NativeClass::Files | t::NativeClass::Args))
+        matches!(self.classes[id].native, Some(t::NativeClass::Console | t::NativeClass::Files | t::NativeClass::Args | t::NativeClass::Math | t::NativeClass::Time))
     }
     fn type_name(&self, ty: Type) -> String {
         match ty {
@@ -139,6 +139,9 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
             Some(a::NativeClass::Console) => Some(t::NativeClass::Console),
             Some(a::NativeClass::Files) => Some(t::NativeClass::Files),
             Some(a::NativeClass::Args) => Some(t::NativeClass::Args),
+            Some(a::NativeClass::Math) => Some(t::NativeClass::Math),
+            Some(a::NativeClass::Random) => Some(t::NativeClass::Random),
+            Some(a::NativeClass::Time) => Some(t::NativeClass::Time),
             None => None,
         };
     }

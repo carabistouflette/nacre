@@ -2,8 +2,11 @@
 //! All source calls still pass normal type, ownership and borrowing checks.
 mod collections;
 mod io;
+mod math;
+mod random;
 mod support;
 mod text;
+mod time;
 
 use crate::ast::MapKeyKind;
 use crate::ir::{self as t, NativeClass as C, Type};
@@ -13,7 +16,8 @@ pub fn fields(program: &t::Program, class: C, class_id: usize) -> String {
         C::List(element) => collections::list_fields(program, element),
         C::Map(_, _) => collections::map_fields(class_id),
         C::Text => text::fields(),
-        C::Console | C::Files | C::Args => io::fields(),
+        C::Math | C::Time | C::Console | C::Files | C::Args => io::fields(),
+        C::Random => random::fields(),
     }
 }
 
@@ -22,7 +26,8 @@ pub fn drop_fields(program: &t::Program, class: C) -> String {
         C::List(element) => collections::drop_list_fields(element),
         C::Map(key, value) => collections::drop_map_fields(program, key, value),
         C::Text => text::drop_fields(),
-        C::Console | C::Files | C::Args => io::drop_fields(),
+        C::Math | C::Time | C::Console | C::Files | C::Args => io::drop_fields(),
+        C::Random => random::drop_fields(),
     }
 }
 
@@ -51,6 +56,9 @@ pub fn implementations(program: &t::Program) -> String {
             C::List(element) => collections::list_implementation(program, class.id, element),
             C::Map(key, value) => collections::map_implementation(program, class.id, key, value),
             C::Text => text::implementation(program, class.id),
+            C::Math => math::implementation(program),
+            C::Random => random::implementation(program),
+            C::Time => time::implementation(program),
             C::Console | C::Files | C::Args => continue,
         };
         body = body.replace("@ID@", &class.id.to_string());

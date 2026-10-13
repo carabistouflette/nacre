@@ -13,17 +13,17 @@ fn text_method_placeholders(body: String, program: &t::Program, text: usize) -> 
     replace_placeholders(body, &[
         ("@PARSE_RESULT@", parse_id.to_string()),
         ("@PARSE_OK_TAG@", variant_id(program, parse_id, "Ok").to_string()),
-        ("@ERROR_PARSE_RESULT@", format!("ncr_io_error_{parse_id}")),
+        ("@ERROR_PARSE_RESULT@", format!("ncr_result_error_{parse_id}")),
         ("@PARSE_LONG_RESULT@", parse_long_id.to_string()),
         ("@PARSE_LONG_OK_TAG@", variant_id(program, parse_long_id, "Ok").to_string()),
-        ("@ERROR_PARSE_LONG_RESULT@", format!("ncr_io_error_{parse_long_id}")),
+        ("@ERROR_PARSE_LONG_RESULT@", format!("ncr_result_error_{parse_long_id}")),
         ("@PARSE_DOUBLE_RESULT@", parse_double_id.to_string()),
         ("@PARSE_DOUBLE_OK_TAG@", variant_id(program, parse_double_id, "Ok").to_string()),
-        ("@ERROR_PARSE_DOUBLE_RESULT@", format!("ncr_io_error_{parse_double_id}")),
+        ("@ERROR_PARSE_DOUBLE_RESULT@", format!("ncr_result_error_{parse_double_id}")),
         ("@SLICE_RESULT@", slice_id.to_string()),
         ("@SLICE_OK_TAG@", variant_id(program, slice_id, "Ok").to_string()),
-        ("@ERROR_SLICE_RESULT@", format!("ncr_io_error_{slice_id}")),
-        ("@TEXT_MAKE@", format!("ncr_io_text_from_bytes_{text}")),
+        ("@ERROR_SLICE_RESULT@", format!("ncr_result_error_{slice_id}")),
+        ("@TEXT_MAKE@", format!("ncr_text_from_bytes_{text}")),
     ])
 }
 

@@ -126,7 +126,7 @@ pub enum CallTarget { Function(usize), Println }
 
 /// Trusted standard-library storage, never exposed as source fields.
 #[derive(Debug, Clone, Copy)]
-pub enum NativeClass { List(Type), Map(MapKeyKind, Type), Text, Console, Files, Args }
+pub enum NativeClass { List(Type), Map(MapKeyKind, Type), Text, Console, Files, Args, Math, Random, Time }
 #[derive(Debug, Clone, Copy)]
 pub enum NativeMethod {
     ListNew, ListAdd, ListSize, ListCapacity, ListIsEmpty, ListGet, ListGetRef, ListGetMut,
@@ -139,4 +139,8 @@ pub enum NativeMethod {
     TextClone, TextEquals, TextEqualsString, TextParseInt, TextParseLong, TextParseDouble, TextSliceBytes,
     ConsoleReadLine, ConsolePrint, ConsolePrintText,
     FilesReadText, FilesWriteText, FilesWriteTextAtomic, ArgsCount, ArgsGet,
+    MathAbsInt, MathAbsLong, MathAbsDouble, MathMinInt, MathMinLong, MathMinDouble, MathMaxInt, MathMaxLong, MathMaxDouble,
+    MathSqrt, MathPow, MathLog, MathExp, MathSin, MathCos, MathTan, MathFloor, MathCeil, MathRound, MathHypot, MathIsNaN, MathIsFinite,
+    RandomNew, RandomFromSystem, RandomReseed, RandomNextLong, RandomNextInt, RandomNextDouble,
+    TimeMonotonicNanos, TimeUnixMillis, TimeSleepMillis, TimeDeadlineAfterMillis,
 }

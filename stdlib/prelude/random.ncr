@@ -1,0 +1,8 @@
+class Random {
+    public Random(long seed) {}
+    public static Result<Random, Text> fromSystem() {}
+    public void reseed(long seed) {}
+    public long nextLong() {}
+    public Result<int, Text> nextInt(int bound) {}
+    public double nextDouble() {}
+}

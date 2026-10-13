@@ -46,11 +46,11 @@ pub(super) fn implementations(program: &t::Program) -> Option<String> {
         let template = include_str!("../../stdlib/console.c.in");
         let body = replace_placeholders(template.to_owned(), &[
             ("@TEXT_ID@", text.to_string()),
-            ("@TEXT_TAKE@", format!("ncr_io_text_take_{text}")),
+            ("@TEXT_TAKE@", format!("ncr_text_take_bytes_{text}")),
             ("@IO_RESERVE@", "ncr_io_reserve".to_owned()),
             ("@RESULT_READLINE@", result.to_string()),
             ("@READLINE_OK_TAG@", ok.to_string()),
-            ("@ERROR_READLINE@", format!("ncr_io_error_{result}")),
+            ("@ERROR_READLINE@", format!("ncr_result_error_{result}")),
             ("@OPTION_TEXT@", option.to_string()),
             ("@OPTION_NONE_TAG@", variant_id(program, option, "None").to_string()),
             ("@OPTION_SOME_TAG@", variant_id(program, option, "Some").to_string()),
@@ -67,14 +67,14 @@ pub(super) fn implementations(program: &t::Program) -> Option<String> {
         let template = include_str!("../../stdlib/files.c.in");
         let body = replace_placeholders(template.to_owned(), &[
             ("@TEXT_ID@", text.to_string()),
-            ("@TEXT_TAKE@", format!("ncr_io_text_take_{text}")),
+            ("@TEXT_TAKE@", format!("ncr_text_take_bytes_{text}")),
             ("@IO_RESERVE@", "ncr_io_reserve".to_owned()),
             ("@RESULT_TEXT@", text_result.to_string()),
             ("@TEXT_RESULT_OK_TAG@", variant_id(program, text_result, "Ok").to_string()),
-            ("@ERROR_TEXT_RESULT@", format!("ncr_io_error_{text_result}")),
+            ("@ERROR_TEXT_RESULT@", format!("ncr_result_error_{text_result}")),
             ("@RESULT_BOOL@", bool_result.to_string()),
             ("@BOOL_RESULT_OK_TAG@", variant_id(program, bool_result, "Ok").to_string()),
-            ("@ERROR_BOOL_RESULT@", format!("ncr_io_error_{bool_result}")),
+            ("@ERROR_BOOL_RESULT@", format!("ncr_result_error_{bool_result}")),
             ("@FILE_READ_PATH@", parameter(files_read, 0)),
             ("@FILE_WRITE_PATH@", parameter(files_write, 0)),
             ("@FILE_WRITE_CONTENT@", parameter(files_write, 1)),
@@ -90,7 +90,7 @@ pub(super) fn implementations(program: &t::Program) -> Option<String> {
                 ("@TEXT_ID@", text.to_string()),
                 ("@RESULT_BOOL_ATOMIC@", result.to_string()),
                 ("@BOOL_ATOMIC_OK_TAG@", variant_id(program, result, "Ok").to_string()),
-                ("@ERROR_BOOL_ATOMIC@", format!("ncr_io_error_{result}")),
+                ("@ERROR_BOOL_ATOMIC@", format!("ncr_result_error_{result}")),
             ]);
             let body = replace_method_ids(body, program, None);
             debug_assert!(!body.contains('@'), "unexpanded atomic Files placeholder");
@@ -104,10 +104,10 @@ pub(super) fn implementations(program: &t::Program) -> Option<String> {
         let template = include_str!("../../stdlib/args.c.in");
         let body = replace_placeholders(template.to_owned(), &[
             ("@TEXT_ID@", text.to_string()),
-            ("@TEXT_MAKE@", format!("ncr_io_text_from_bytes_{text}")),
+            ("@TEXT_MAKE@", format!("ncr_text_from_bytes_{text}")),
             ("@RESULT_TEXT@", text_result.to_string()),
             ("@TEXT_RESULT_OK_TAG@", variant_id(program, text_result, "Ok").to_string()),
-            ("@ERROR_TEXT_RESULT@", format!("ncr_io_error_{text_result}")),
+            ("@ERROR_TEXT_RESULT@", format!("ncr_result_error_{text_result}")),
             ("@ARGS_GET_INDEX@", parameter(args_get, 0)),
         ]);
         let body = replace_method_ids(body, program, None);
