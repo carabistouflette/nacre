@@ -1,4 +1,5 @@
 static ncr_obj_@FILE_OPEN_READ_WRITE_RESULT@ @FILE_OPEN_READ_WRITE@(ncr_obj_@PATH_ID@ *@FILE_OPEN_READ_WRITE_PATH@, int32_t @FILE_OPEN_READ_WRITE_MODE@, bool @FILE_OPEN_READ_WRITE_CREATE@, size_t ncr_line, size_t ncr_column) {
+    if (!ncr_fs_mode_valid(@FILE_OPEN_READ_WRITE_MODE@)) { NCR_FS_RETURN_ERROR(@FILE_OPEN_READ_WRITE_RESULT@, "File.openReadWrite mode", EINVAL, ncr_line, ncr_column); }
     int flags = O_RDWR;
     if (@FILE_OPEN_READ_WRITE_CREATE@) { flags |= O_CREAT; }
     int descriptor = ncr_fs_open_@TEXT_ID@(@FILE_OPEN_READ_WRITE_PATH@->text, flags, (mode_t)@FILE_OPEN_READ_WRITE_MODE@, ncr_line, ncr_column);

@@ -3,6 +3,9 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Filesystem permission modes reject negative values and bits outside `07777`
+  before opening, truncating, creating directories, or changing permissions.
+  Zero and POSIX special permission bits remain valid.
 - Native prelude identities and constructor availability derive from trusted AST
   declarations. Static utilities follow their actual methods, while factory-
   returned native values with instance queries remain values; declared concrete

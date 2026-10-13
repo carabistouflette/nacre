@@ -56,6 +56,7 @@ static ncr_obj_@FILES_COPY_RESULT@ @FILES_COPY@(ncr_obj_@PATH_ID@ *@FILES_COPY_S
 }
 
 static ncr_obj_@FILES_CREATE_DIRECTORIES_RESULT@ @FILES_CREATE_DIRECTORIES@(ncr_obj_@PATH_ID@ *@FILES_CREATE_DIRECTORIES_PATH@, int32_t @FILES_CREATE_DIRECTORIES_MODE@, size_t ncr_line, size_t ncr_column) {
+    if (!ncr_fs_mode_valid(@FILES_CREATE_DIRECTORIES_MODE@)) { NCR_FS_RETURN_ERROR(@FILES_CREATE_DIRECTORIES_RESULT@, "Files.createDirectories mode", EINVAL, ncr_line, ncr_column); }
     char *path = ncr_fs_path_cstring_@TEXT_ID@(@FILES_CREATE_DIRECTORIES_PATH@->text, ncr_line, ncr_column);
     if (path == NULL) { NCR_FS_RETURN_ERROR(@FILES_CREATE_DIRECTORIES_RESULT@, "Files.createDirectories", errno, ncr_line, ncr_column); }
     size_t length = strlen(path);
@@ -145,6 +146,7 @@ static ncr_obj_@FILES_SYMLINK_RESULT@ @FILES_SYMLINK@(ncr_obj_@PATH_ID@ *@FILES_
 }
 
 static ncr_obj_@FILES_CHMOD_RESULT@ @FILES_CHMOD@(ncr_obj_@PATH_ID@ *@FILES_CHMOD_PATH@, int32_t @FILES_CHMOD_MODE@, size_t ncr_line, size_t ncr_column) {
+    if (!ncr_fs_mode_valid(@FILES_CHMOD_MODE@)) { NCR_FS_RETURN_ERROR(@FILES_CHMOD_RESULT@, "Files.chmod mode", EINVAL, ncr_line, ncr_column); }
     char *path = ncr_fs_path_cstring_@TEXT_ID@(@FILES_CHMOD_PATH@->text, ncr_line, ncr_column);
     if (path == NULL) { NCR_FS_RETURN_ERROR(@FILES_CHMOD_RESULT@, "Files.chmod", errno, ncr_line, ncr_column); }
     int status = chmod(path, (mode_t)@FILES_CHMOD_MODE@);

@@ -1540,3 +1540,53 @@ void main() {
     assert!(stdout.contains("WATCH_DONE\n"), "{stdout}");
 }
 
+#[test]
+fn invalid_permission_modes_reject_before_filesystem_side_effects() {
+    use std::os::unix::fs::PermissionsExt;
+    let scratch = Scratch::new();
+    let existing = scratch.0.join("existing");
+    let missing = scratch.0.join("missing");
+    let directory = scratch.0.join("parent/child");
+    fs::write(&existing, b"preserve this content").unwrap();
+    fs::set_permissions(&existing, fs::Permissions::from_mode(0o600)).unwrap();
+    let source = format!(r#"
+Result<Unit,Text> exercise(int mode) {{
+    Path existing = Path.fromText(new Text({existing:?}))?;
+    Path missing = Path.fromText(new Text({missing:?}))?;
+    Path directory = Path.fromText(new Text({directory:?}))?;
+    match (Files.chmod(existing, mode)) {{ Err(error) {{ println(true); }} Ok(unit) {{ println(false); }} }}
+    match (File.create(existing, mode)) {{ Err(error) {{ println(true); }} Ok(file) {{ println(false); }} }}
+    match (File.create(missing, mode)) {{ Err(error) {{ println(true); }} Ok(file) {{ println(false); }} }}
+    match (File.openAppend(missing, mode)) {{ Err(error) {{ println(true); }} Ok(file) {{ println(false); }} }}
+    match (File.openReadWrite(missing, mode, true)) {{ Err(error) {{ println(true); }} Ok(file) {{ println(false); }} }}
+    match (File.openReadWrite(existing, mode, false)) {{ Err(error) {{ println(true); }} Ok(file) {{ println(false); }} }}
+    match (Files.createDirectory(directory, mode)) {{ Err(error) {{ println(true); }} Ok(unit) {{ println(false); }} }}
+    match (Files.createDirectories(directory, mode)) {{ Err(error) {{ println(true); }} Ok(unit) {{ println(false); }} }}
+    return new Result<Unit,Text>.Ok(());
+}}
+Result<Unit,Text> boundaries() {{
+    Path existing = Path.fromText(new Text({existing:?}))?;
+    Files.chmod(existing, 0)?;
+    FileInfo zero = Files.metadata(existing)?;
+    println(zero.mode() % 4096);
+    Files.chmod(existing, 4095)?;
+    FileInfo special = Files.metadata(existing)?;
+    println(special.mode() % 4096);
+    Files.chmod(existing, 384)?;
+    return new Result<Unit,Text>.Ok(());
+}}
+void main() {{
+    match (exercise(-1)) {{ Err(error) {{ println("unexpected error"); }} Ok(unit) {{ }} }}
+    match (exercise(4096)) {{ Err(error) {{ println("unexpected error"); }} Ok(unit) {{ }} }}
+    match (exercise(2147483647)) {{ Err(error) {{ println("unexpected error"); }} Ok(unit) {{ }} }}
+    match (boundaries()) {{ Err(error) {{ println("unexpected boundary error"); }} Ok(unit) {{ }} }}
+}}
+"#, existing = existing.to_str().unwrap(), missing = missing.to_str().unwrap(),
+        directory = directory.to_str().unwrap());
+    let output = run_source(&source, &[]);
+    assert_eq!(String::from_utf8(output.stdout).unwrap(), format!("{}0\n4095\n", "true\n".repeat(24)));
+    assert_eq!(fs::read(&existing).unwrap(), b"preserve this content");
+    assert_eq!(fs::metadata(&existing).unwrap().permissions().mode() & 0o7777, 0o600);
+    assert!(!missing.exists());
+    assert!(!scratch.0.join("parent").exists());
+}

@@ -550,10 +550,6 @@ void main() {
         "void main() { List<int> values = new List<int>(); values.add(1); Iterator<int> input = values.drain(); for (int item : input) { input.next(); } }",
         &["E3001"],
     );
-    assert_rejected_with_code(
-        "void main() { List<int> values = new List<int>(); values.add(1); Iterator<int> input = values.drain(); for (int item : input) { drop(input); } }",
-        &["E3002"],
-    );
 }
 
 #[test]

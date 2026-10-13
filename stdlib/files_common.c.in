@@ -1,3 +1,8 @@
+/* Reject signed wraparound and file-type bits before any filesystem operation. */
+static bool ncr_fs_mode_valid(int32_t mode) {
+    return (uint32_t)mode <= UINT32_C(07777);
+}
+
 /* Length-delimited Text is copied only at the POSIX C-string boundary. */
 static bool ncr_fs_path_valid_text_@TEXT_ID@(ncr_obj_@TEXT_ID@ *path) {
     return path != NULL && path->length > 0 && path->bytes != NULL

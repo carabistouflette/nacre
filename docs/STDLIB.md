@@ -1211,9 +1211,12 @@ absolute child and joins components without resolving symlinks, canonicalizing,
 or normalizing `.`/`..`. `asText` is a shared borrow. Paths are UTF-8 boundary
 strings; embedded NUL is rejected.
 
-`File.create`, `openAppend`, and `openReadWrite` (when creating) use POSIX
-permission modes subject to the process umask. `openReadWrite` opens without
-truncation; `create` controls whether a missing file is created.
+`File.create`, `openAppend`, and `openReadWrite` require a permission mode in
+`0..07777` (decimal `0..4095`), including the POSIX special bits. Invalid modes
+return `Err` before opening, creating, or truncating a file, even when
+`openReadWrite` does not create. Creation is subject to the process umask.
+`openReadWrite` opens without truncation; `create` controls whether a missing
+file is created.
 `readSome` appends at most `maxBytes`, returns the count,
 `0` at EOF, or `Err`; a zero maximum performs no read. `writeSome` writes at most
 the selected `[offset, offset + maxBytes)` source range and returns one partial
@@ -1292,8 +1295,11 @@ resolves an existing path to its canonical absolute path and returns `Err` with
 `EILSEQ` if the resolved path bytes are not valid UTF-8.
 
 Filesystem paths are passed through the operating-system boundary and reject
-embedded NUL. Creation `mode` arguments are POSIX permission bits, subject to
-umask. Filesystem commands report success as `Result<Unit, Text>`, not a boolean.
+embedded NUL. All creation modes and `chmod` require permission bits in
+`0..07777` (decimal `0..4095`); negative values and file-type bits return `Err`
+before any filesystem operation. Creation is subject to umask; `chmod` is not.
+Invalid modes cannot create even an initial component of `createDirectories`.
+Filesystem commands report success as `Result<Unit, Text>`, not a boolean.
 
 ### `Watcher` and `WatchEvent`
 

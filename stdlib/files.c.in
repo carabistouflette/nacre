@@ -41,6 +41,7 @@ static ncr_obj_@FILES_METADATA_RESULT@ @FILES_METADATA@(ncr_obj_@PATH_ID@ *@FILE
 
 
 static ncr_obj_@FILES_CREATE_DIRECTORY_RESULT@ @FILES_CREATE_DIRECTORY@(ncr_obj_@PATH_ID@ *@FILES_CREATE_DIRECTORY_PATH@, int32_t @FILES_CREATE_DIRECTORY_MODE@, size_t ncr_line, size_t ncr_column) {
+    if (!ncr_fs_mode_valid(@FILES_CREATE_DIRECTORY_MODE@)) { NCR_FS_RETURN_ERROR(@FILES_CREATE_DIRECTORY_RESULT@, "Files.createDirectory mode", EINVAL, ncr_line, ncr_column); }
     char *path = ncr_fs_path_cstring_@TEXT_ID@(@FILES_CREATE_DIRECTORY_PATH@->text, ncr_line, ncr_column);
     if (path == NULL) { NCR_FS_RETURN_ERROR(@FILES_CREATE_DIRECTORY_RESULT@, "Files.createDirectory", errno, ncr_line, ncr_column); }
     int result = mkdir(path, (mode_t)@FILES_CREATE_DIRECTORY_MODE@);

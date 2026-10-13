@@ -7,6 +7,7 @@ static ncr_obj_@FILE_OPEN_READ_RESULT@ @FILE_OPEN_READ@(ncr_obj_@PATH_ID@ *@FILE
 }
 
 static ncr_obj_@FILE_CREATE_RESULT@ @FILE_CREATE@(ncr_obj_@PATH_ID@ *@FILE_CREATE_PATH@, int32_t @FILE_CREATE_MODE@, size_t ncr_line, size_t ncr_column) {
+    if (!ncr_fs_mode_valid(@FILE_CREATE_MODE@)) { NCR_FS_RETURN_ERROR(@FILE_CREATE_RESULT@, "File.create mode", EINVAL, ncr_line, ncr_column); }
     int descriptor = ncr_fs_open_@TEXT_ID@(@FILE_CREATE_PATH@->text, O_WRONLY | O_CREAT | O_TRUNC, (mode_t)@FILE_CREATE_MODE@, ncr_line, ncr_column);
     if (descriptor < 0) { NCR_FS_RETURN_ERROR(@FILE_CREATE_RESULT@, "File.create", errno, ncr_line, ncr_column); }
     ncr_obj_@FILE_ID@ *file = ncr_allocate(sizeof(*file), ncr_line, ncr_column);
@@ -15,6 +16,7 @@ static ncr_obj_@FILE_CREATE_RESULT@ @FILE_CREATE@(ncr_obj_@PATH_ID@ *@FILE_CREAT
 }
 
 static ncr_obj_@FILE_OPEN_APPEND_RESULT@ @FILE_OPEN_APPEND@(ncr_obj_@PATH_ID@ *@FILE_OPEN_APPEND_PATH@, int32_t @FILE_OPEN_APPEND_MODE@, size_t ncr_line, size_t ncr_column) {
+    if (!ncr_fs_mode_valid(@FILE_OPEN_APPEND_MODE@)) { NCR_FS_RETURN_ERROR(@FILE_OPEN_APPEND_RESULT@, "File.openAppend mode", EINVAL, ncr_line, ncr_column); }
     int descriptor = ncr_fs_open_@TEXT_ID@(@FILE_OPEN_APPEND_PATH@->text, O_WRONLY | O_CREAT | O_APPEND, (mode_t)@FILE_OPEN_APPEND_MODE@, ncr_line, ncr_column);
     if (descriptor < 0) { NCR_FS_RETURN_ERROR(@FILE_OPEN_APPEND_RESULT@, "File.openAppend", errno, ncr_line, ncr_column); }
     ncr_obj_@FILE_ID@ *file = ncr_allocate(sizeof(*file), ncr_line, ncr_column);
