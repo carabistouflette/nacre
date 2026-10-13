@@ -57,7 +57,7 @@ impl Tables {
         matches!(self.classes[id].native,
             Some(t::NativeClass::Arrays | t::NativeClass::Encoding | t::NativeClass::Console | t::NativeClass::Files |
                 t::NativeClass::Args | t::NativeClass::Math | t::NativeClass::Time |
-                t::NativeClass::Env | t::NativeClass::Crypto))
+                t::NativeClass::Env | t::NativeClass::Crypto | t::NativeClass::Compression | t::NativeClass::Checksums))
     }
     fn type_name(&self, ty: Type) -> String {
         match ty {
@@ -120,6 +120,7 @@ impl Tables {
                         t::NativeClass::Console | t::NativeClass::Files |
                         t::NativeClass::Args | t::NativeClass::Math |
                         t::NativeClass::Random | t::NativeClass::Time |
+                        t::NativeClass::Compression | t::NativeClass::Checksums |
                         t::NativeClass::SocketAddress | t::NativeClass::TcpListener |
                         t::NativeClass::TcpStream | t::NativeClass::Datagram |
                         t::NativeClass::UdpSocket | t::NativeClass::Env |
@@ -237,6 +238,8 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
             Some(a::NativeClass::Math) => Some(t::NativeClass::Math),
             Some(a::NativeClass::Random) => Some(t::NativeClass::Random),
             Some(a::NativeClass::Crypto) => Some(t::NativeClass::Crypto),
+            Some(a::NativeClass::Compression) => Some(t::NativeClass::Compression),
+            Some(a::NativeClass::Checksums) => Some(t::NativeClass::Checksums),
             Some(a::NativeClass::Time) => Some(t::NativeClass::Time),
             Some(a::NativeClass::SocketAddress) => Some(t::NativeClass::SocketAddress),
             Some(a::NativeClass::TcpListener) => Some(t::NativeClass::TcpListener),

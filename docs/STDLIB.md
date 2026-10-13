@@ -209,6 +209,27 @@ are not hidden. This API is not a complete cryptography library: it provides no
 signature, certificate, key-management, or protocol-composition facilities.
 Native programs require the OpenSSL 3 development and runtime libraries.
 
+## Compression and checksums
+
+```java
+static Result<ByteBuffer, Text> Compression.deflate(borrow ByteBuffer input, int level)
+static Result<ByteBuffer, Text> Compression.inflate(borrow ByteBuffer input, long maxOutputBytes)
+static Result<ByteBuffer, Text> Compression.gzip(borrow ByteBuffer input, int level)
+static Result<ByteBuffer, Text> Compression.gunzip(borrow ByteBuffer input, long maxOutputBytes)
+static long Checksums.crc32(borrow ByteBuffer input)
+static long Checksums.adler32(borrow ByteBuffer input)
+```
+
+`deflate` and `inflate` use the zlib-wrapped DEFLATE format; `gzip` and `gunzip`
+use RFC 1952 gzip members. Compression levels are `0` through `9`, or `-1` for
+the zlib default. Decompression requires a complete stream: truncation, corrupt
+data, and trailing bytes after a zlib stream return `Err`. `gunzip` accepts
+concatenated gzip members. `maxOutputBytes` must be nonnegative and bounds output
+ByteBuffer capacity and growth; zero accepts only an empty decompressed payload. All
+operations preserve arbitrary binary bytes, including NUL. Checksums return the
+unsigned 32-bit zlib value as a nonnegative `long`. ZIP archive and entry
+operations remain unsupported; gzip is not a ZIP substitute.
+
 ## `Option<T>` and `Result<T, E>`
 
 ```java

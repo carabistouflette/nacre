@@ -12,6 +12,10 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   CSPRNG bytes, and constant-time equality with borrowed inputs and affine outputs.
   Authentication failures wipe unexposed plaintext; unsupported digests and invalid
   lengths return generic `Err` diagnostics.
+- Adds native zlib-wrapped DEFLATE, RFC 1952 gzip, bounded strict decompression,
+  concatenated gzip-member handling, and unsigned CRC-32/Adler-32 checksums over
+  borrowed binary ByteBuffers. ZIP archive and entry operations remain a gap;
+  gzip is not presented as ZIP compatibility.
 - Floating min/max normalize signed-zero ties explicitly rather than relying on
   host libm's unspecified tie sign; both operand orders and same-sign zeros are
   covered by generated-program sanitizer regressions.

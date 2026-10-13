@@ -24,6 +24,8 @@ enum NativeBuiltin {
     Math,
     Random,
     Time,
+    Compression,
+    Checksums,
     SocketAddress,
     TcpListener,
     TcpStream,
@@ -74,6 +76,8 @@ impl NativeBuiltin {
             Self::Math => NativeClass::Math,
             Self::Random => NativeClass::Random,
             Self::Time => NativeClass::Time,
+            Self::Compression => NativeClass::Compression,
+            Self::Checksums => NativeClass::Checksums,
             Self::SocketAddress => NativeClass::SocketAddress,
             Self::TcpListener => NativeClass::TcpListener,
             Self::TcpStream => NativeClass::TcpStream,
@@ -178,6 +182,13 @@ pub(super) const PRELUDE_UNITS: &[PreludeUnit] = &[
     PreludeUnit {
         source: include_str!("../../stdlib/prelude/time.ncr"),
         builtins: &[Builtin { name: "Time", native: Some(NativeBuiltin::Time) }],
+    },
+    PreludeUnit {
+        source: include_str!("../../stdlib/prelude/compression.ncr"),
+        builtins: &[
+            Builtin { name: "Compression", native: Some(NativeBuiltin::Compression) },
+            Builtin { name: "Checksums", native: Some(NativeBuiltin::Checksums) },
+        ],
     },
     PreludeUnit {
         source: include_str!("../../stdlib/prelude/network.ncr"),

@@ -144,7 +144,7 @@ void main() { }
 
 #[test]
 fn static_native_classes_have_no_constructible_values() {
-    for class in ["Console", "Files", "Args"] {
+    for class in ["Console", "Files", "Args", "Compression", "Checksums"] {
         let construction = format!("void main() {{ {class} value = new {class}(); }}");
         assert!(validate(&construction).is_err());
         let typed_as_value = format!("void consume({class} value) {{}} void main() {{}}");

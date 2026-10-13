@@ -2,6 +2,7 @@
 //! All source calls still pass normal type, ownership and borrowing checks.
 mod arrays;
 mod encoding;
+mod compression;
 mod buffer;
 mod collections;
 mod filesystem;
@@ -37,6 +38,7 @@ pub fn fields(program: &t::Program, class: C, class_id: usize) -> String {
         C::Arrays => arrays::utility_fields(),
         C::Encoding => io::fields(),
         C::ByteBuffer => buffer::fields(),
+        C::Compression | C::Checksums => io::fields(),
         C::Path | C::File | C::Directory | C::FileInfo | C::Files => filesystem::fields(program, class),
         C::Env => io::fields(),
         C::Command | C::Process | C::ProcessOutput => process::fields(program, class),
@@ -62,6 +64,7 @@ pub fn drop_fields(program: &t::Program, class: C, class_id: usize) -> String {
         C::Arrays => arrays::drop_utility_fields(),
         C::ByteBuffer => buffer::drop_fields(),
         C::Encoding => io::drop_fields(),
+        C::Compression | C::Checksums => io::drop_fields(),
         C::Path | C::File | C::Directory | C::FileInfo | C::Files => filesystem::drop_fields(program, class),
         C::Env => io::drop_fields(),
         C::Command | C::Process | C::ProcessOutput => process::drop_fields(program, class),
@@ -121,7 +124,7 @@ fn append_body(program: &t::Program, out: &mut String, class: &t::Class, native:
         C::Path | C::File | C::Directory | C::FileInfo => return,
         C::Thread(_) | C::Mutex(_) | C::Guard(_) | C::Channel(_) |
         C::Sender(_) | C::Receiver(_) => return,
-        C::Regex | C::RegexMatch | C::Console | C::Files | C::Args |
+        C::Compression | C::Checksums | C::Regex | C::RegexMatch | C::Console | C::Files | C::Args |
         C::Env | C::Command | C::Process | C::ProcessOutput => return,
     };
     body = body.replace("@ID@", &class.id.to_string());
@@ -153,6 +156,7 @@ pub fn implementations(program: &t::Program) -> String {
             }
         }
     }
+    out.push_str(&compression::implementation(program));
     out.push_str(&regex::implementation(program));
     out.push_str(&concurrency::implementations(program));
     if let Some(console) = console::implementation(program) {

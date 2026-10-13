@@ -129,7 +129,7 @@ pub enum CallTarget { Function(usize), Println }
 pub enum NativeClass {
     List(Type), Array(Type), Deque(Type), Map(MapKeyKind, Type), Set(MapKeyKind),
     Text, Regex, RegexMatch, Arrays, ByteBuffer, Encoding, Crypto, Path, File, Directory, FileInfo,
-    Console, Files, Args, Math, Random, Time, SocketAddress, TcpListener, TcpStream,
+    Console, Files, Args, Math, Random, Time, Compression, Checksums, SocketAddress, TcpListener, TcpStream,
     Datagram, UdpSocket, Thread(Type), Mutex(Type), Guard(Type), Channel(Type),
     Sender(Type), Receiver(Type), Env, Command, Process, ProcessOutput
 }
@@ -177,6 +177,8 @@ pub enum NativeMethod {
     RandomNew, RandomFromSystem, RandomReseed, RandomNextLong, RandomNextInt, RandomNextDouble,
     CryptoRandomBytes, CryptoDigest, CryptoHmac, CryptoPbkdf2, CryptoHkdf,
     CryptoAesGcmEncrypt, CryptoAesGcmDecrypt, CryptoConstantTimeEquals,
+    CompressionDeflate, CompressionInflate, CompressionGzip, CompressionGunzip,
+    ChecksumsCrc32, ChecksumsAdler32,
     TimeMonotonicNanos, TimeUnixMillis, TimeSleepMillis, TimeDeadlineAfterMillis,
     SocketAddressResolve, SocketAddressToText,
     TcpListenerBind, TcpListenerAccept, TcpListenerLocalAddress, TcpListenerClose,

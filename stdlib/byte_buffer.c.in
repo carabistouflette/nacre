@@ -1,4 +1,25 @@
 /* ByteBuffer owns one growable byte allocation; no backing pointer escapes. */
+static bool ncr_byte_buffer_reserve_limited_@ID@(@BUFFER_TYPE@ buffer, size_t required_size, size_t maximum_size, size_t line, size_t column) {
+    if ((uint64_t)maximum_size > (uint64_t)INT64_MAX
+        || (uint64_t)required_size > (uint64_t)maximum_size
+        || buffer->capacity > maximum_size || buffer->length > buffer->capacity) {
+        return false;
+    }
+    if (required_size <= buffer->capacity) { return true; }
+    size_t grown = buffer->capacity == 0 ? (maximum_size < 16 ? maximum_size : 16) : buffer->capacity;
+    while (grown < required_size) {
+        if (grown > maximum_size / 2) { grown = maximum_size; break; }
+        grown *= 2;
+    }
+    if (grown < required_size) { return false; }
+    unsigned char *next = ncr_allocate(grown, line, column);
+    if (buffer->length > 0) { memcpy(next, buffer->bytes, buffer->length); }
+    ncr_deallocate(buffer->bytes);
+    buffer->bytes = next;
+    buffer->capacity = grown;
+    return true;
+}
+
 static void ncr_byte_buffer_reserve_@ID@(@BUFFER_TYPE@ buffer, size_t required_size, size_t line, size_t column) {
     const uint64_t long_limit = (uint64_t)INT64_MAX;
     if ((uint64_t)required_size > long_limit) {
@@ -9,21 +30,9 @@ static void ncr_byte_buffer_reserve_@ID@(@BUFFER_TYPE@ buffer, size_t required_s
     if ((uint64_t)required_size > maximum) {
         ncr_fail("ByteBuffer capacity exceeds size_t range", line, column);
     }
-    if (required_size <= buffer->capacity) { return; }
-    const size_t limit = (size_t)maximum;
-    size_t grown = buffer->capacity == 0 ? (limit < 16 ? limit : 16) : buffer->capacity;
-    while (grown < required_size) {
-        if (grown > limit / 2) { grown = limit; break; }
-        grown *= 2;
-    }
-    if (grown < required_size) {
+    if (!ncr_byte_buffer_reserve_limited_@ID@(buffer, required_size, (size_t)maximum, line, column)) {
         ncr_fail("ByteBuffer capacity is too large", line, column);
     }
-    unsigned char *next = ncr_allocate(grown, line, column);
-    if (buffer->length > 0) { memcpy(next, buffer->bytes, buffer->length); }
-    ncr_deallocate(buffer->bytes);
-    buffer->bytes = next;
-    buffer->capacity = grown;
 }
 
 static @FACTORY_RESULT@ @BYTE_BUFFER_WITH_CAPACITY@(int64_t ncr_v_@FACTORY_CAPACITY_ID@, size_t line, size_t column) {

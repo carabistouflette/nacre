@@ -1,0 +1,11 @@
+class Compression {
+    public static Result<ByteBuffer, Text> deflate(borrow ByteBuffer input, int level) {}
+    public static Result<ByteBuffer, Text> inflate(borrow ByteBuffer input, long maxOutputBytes) {}
+    public static Result<ByteBuffer, Text> gzip(borrow ByteBuffer input, int level) {}
+    public static Result<ByteBuffer, Text> gunzip(borrow ByteBuffer input, long maxOutputBytes) {}
+}
+
+class Checksums {
+    public static long crc32(borrow ByteBuffer input) {}
+    public static long adler32(borrow ByteBuffer input) {}
+}

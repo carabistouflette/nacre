@@ -1,0 +1,263 @@
+/* nacre-link: z */
+#include <zlib.h>
+
+static @RESULT_TYPE@ ncr_compression_deflate_run_@BUFFER_CLASS_ID@(
+    @BUFFER_TYPE@ input, int32_t level, int window_bits, size_t line, size_t column
+) {
+    const char *message = NULL;
+    @BUFFER_TYPE@ output = NULL;
+    z_stream stream = {0};
+    bool initialized = false;
+    if (level < -1 || level > 9) {
+        message = "Compression: level must be -1 or between 0 and 9";
+        goto failed;
+    }
+    output = ncr_allocate(sizeof(*output), line, column);
+    const size_t output_limit = (uint64_t)SIZE_MAX < (uint64_t)INT64_MAX
+        ? SIZE_MAX : (size_t)INT64_MAX;
+    int status = deflateInit2(&stream, level, Z_DEFLATED, window_bits, 8, Z_DEFAULT_STRATEGY);
+    if (status != Z_OK) {
+        message = "Compression: zlib initialization failed";
+        goto failed;
+    }
+    initialized = true;
+    size_t input_offset = 0;
+    for (;;) {
+        if (stream.avail_in == 0 && input_offset < input->length) {
+            size_t remaining = input->length - input_offset;
+            uInt chunk = remaining > (size_t)UINT_MAX ? UINT_MAX : (uInt)remaining;
+            stream.next_in = (Bytef *)(input->bytes + input_offset);
+            stream.avail_in = chunk;
+            input_offset += (size_t)chunk;
+        }
+        if (output->capacity == output->length) {
+            if (output->length >= output_limit) {
+                message = "Compression: output exceeds supported ByteBuffer size";
+                goto failed;
+            }
+            size_t remaining = output_limit - output->length;
+            size_t growth = remaining < 16384 ? remaining : 16384;
+            if (!ncr_byte_buffer_reserve_limited_@BUFFER_CLASS_ID@(
+                output, output->length + growth, output_limit, line, column
+            )) {
+                message = "Compression: output exceeds supported ByteBuffer size";
+                goto failed;
+            }
+        }
+        size_t available = output->capacity - output->length;
+        stream.next_out = (Bytef *)(output->bytes + output->length);
+        stream.avail_out = available > (size_t)UINT_MAX ? UINT_MAX : (uInt)available;
+        uInt before_in = stream.avail_in;
+        uInt before_out = stream.avail_out;
+        int flush = input_offset == input->length ? Z_FINISH : Z_NO_FLUSH;
+        status = deflate(&stream, flush);
+        output->length += (size_t)(before_out - stream.avail_out);
+        if (status == Z_STREAM_END) { break; }
+        if (status != Z_OK) {
+            message = "Compression: zlib compression failed";
+            goto failed;
+        }
+        if (before_in == stream.avail_in && before_out == stream.avail_out) {
+            message = "Compression: zlib compression made no progress";
+            goto failed;
+        }
+    }
+    if (deflateEnd(&stream) != Z_OK) {
+        initialized = false;
+        message = "Compression: zlib finalization failed";
+        goto failed;
+    }
+    initialized = false;
+    return (@RESULT_TYPE@){ .tag = @RESULT_OK_TAG@, .data.v@RESULT_OK_TAG@.f0 = output };
+
+failed:
+    if (initialized) { (void)deflateEnd(&stream); }
+    if (output != NULL) {
+        ncr_deallocate(output->bytes);
+        ncr_deallocate(output);
+    }
+    return ncr_result_error_@RESULT_CLASS@(message, strlen(message), line, column);
+}
+
+static @RESULT_TYPE@ ncr_compression_inflate_run_@BUFFER_CLASS_ID@(
+    @BUFFER_TYPE@ input, int64_t max_output_bytes, int window_bits, bool concatenated_gzip,
+    size_t line, size_t column
+) {
+    const char *message = NULL;
+    @BUFFER_TYPE@ output = NULL;
+    z_stream stream = {0};
+    bool initialized = false;
+    if (max_output_bytes < 0) {
+        message = "Compression: maxOutputBytes must not be negative";
+        goto failed;
+    }
+    if ((uint64_t)max_output_bytes > (uint64_t)SIZE_MAX) {
+        message = "Compression: output bound exceeds size_t range";
+        goto failed;
+    }
+    const size_t output_limit = (size_t)max_output_bytes;
+    output = ncr_allocate(sizeof(*output), line, column);
+    int status = inflateInit2(&stream, window_bits);
+    if (status != Z_OK) {
+        message = "Compression: zlib initialization failed";
+        goto failed;
+    }
+    initialized = true;
+    size_t input_offset = 0;
+    for (;;) {
+        if (stream.avail_in == 0 && input_offset < input->length) {
+            size_t remaining = input->length - input_offset;
+            uInt chunk = remaining > (size_t)UINT_MAX ? UINT_MAX : (uInt)remaining;
+            stream.next_in = (Bytef *)(input->bytes + input_offset);
+            stream.avail_in = chunk;
+            input_offset += (size_t)chunk;
+        }
+
+        unsigned char overflow_probe = 0;
+        bool probing_limit = output->length == output_limit;
+        if (probing_limit) {
+            stream.next_out = &overflow_probe;
+            stream.avail_out = 1;
+        } else {
+            size_t remaining = output_limit - output->length;
+            size_t growth = remaining < 16384 ? remaining : 16384;
+            size_t requested = output->length + growth;
+            if (!ncr_byte_buffer_reserve_limited_@BUFFER_CLASS_ID@(
+                output, requested, output_limit, line, column
+            )) {
+                message = "Compression: output exceeds maximum bound";
+                goto failed;
+            }
+            size_t available = output->capacity - output->length;
+            stream.next_out = (Bytef *)(output->bytes + output->length);
+            stream.avail_out = available > (size_t)UINT_MAX ? UINT_MAX : (uInt)available;
+        }
+
+        uInt before_in = stream.avail_in;
+        uInt before_out = stream.avail_out;
+        status = inflate(&stream, Z_NO_FLUSH);
+        size_t produced = (size_t)(before_out - stream.avail_out);
+        if (probing_limit) {
+            if (produced != 0) {
+                message = "Compression: maximum output size exceeded";
+                goto failed;
+            }
+        } else {
+            output->length += produced;
+        }
+
+        if (status == Z_STREAM_END) {
+            bool input_remains = stream.avail_in != 0 || input_offset < input->length;
+            if (concatenated_gzip && input_remains) {
+                Bytef *next_input = stream.next_in;
+                uInt available_input = stream.avail_in;
+                if (inflateReset2(&stream, window_bits) != Z_OK) {
+                    message = "Compression: gzip member reset failed";
+                    goto failed;
+                }
+                stream.next_in = next_input;
+                stream.avail_in = available_input;
+                continue;
+            }
+            if (input_remains) {
+                message = "Compression: trailing input after zlib stream";
+                goto failed;
+            }
+            break;
+        }
+        if (status != Z_OK) {
+            if (status == Z_BUF_ERROR && stream.avail_in == 0 && input_offset == input->length) {
+                message = "Compression: truncated input";
+            } else {
+                message = "Compression: invalid or corrupt input";
+            }
+            goto failed;
+        }
+        if (before_in == stream.avail_in && before_out == stream.avail_out) {
+            if (stream.avail_in == 0 && input_offset == input->length) {
+                message = "Compression: truncated input";
+            } else {
+                message = "Compression: decompressor made no progress";
+            }
+            goto failed;
+        }
+    }
+
+    if (inflateEnd(&stream) != Z_OK) {
+        initialized = false;
+        message = "Compression: zlib finalization failed";
+        goto failed;
+    }
+    initialized = false;
+    return (@RESULT_TYPE@){ .tag = @RESULT_OK_TAG@, .data.v@RESULT_OK_TAG@.f0 = output };
+
+failed:
+    if (initialized) { (void)inflateEnd(&stream); }
+    if (output != NULL) {
+        ncr_deallocate(output->bytes);
+        ncr_deallocate(output);
+    }
+    return ncr_result_error_@RESULT_CLASS@(message, strlen(message), line, column);
+}
+
+static @RESULT_TYPE@ @COMPRESSION_DEFLATE@(
+    @BUFFER_TYPE@ ncr_v_@DEFLATE_INPUT_ID@, int32_t ncr_v_@DEFLATE_LEVEL_ID@,
+    size_t line, size_t column
+) {
+    return ncr_compression_deflate_run_@BUFFER_CLASS_ID@(
+        ncr_v_@DEFLATE_INPUT_ID@, ncr_v_@DEFLATE_LEVEL_ID@, MAX_WBITS, line, column
+    );
+}
+
+static @RESULT_TYPE@ @COMPRESSION_INFLATE@(
+    @BUFFER_TYPE@ ncr_v_@INFLATE_INPUT_ID@, int64_t ncr_v_@INFLATE_MAX_ID@,
+    size_t line, size_t column
+) {
+    return ncr_compression_inflate_run_@BUFFER_CLASS_ID@(
+        ncr_v_@INFLATE_INPUT_ID@, ncr_v_@INFLATE_MAX_ID@, MAX_WBITS, false, line, column
+    );
+}
+
+static @RESULT_TYPE@ @COMPRESSION_GZIP@(
+    @BUFFER_TYPE@ ncr_v_@GZIP_INPUT_ID@, int32_t ncr_v_@GZIP_LEVEL_ID@,
+    size_t line, size_t column
+) {
+    return ncr_compression_deflate_run_@BUFFER_CLASS_ID@(
+        ncr_v_@GZIP_INPUT_ID@, ncr_v_@GZIP_LEVEL_ID@, MAX_WBITS + 16, line, column
+    );
+}
+
+static @RESULT_TYPE@ @COMPRESSION_GUNZIP@(
+    @BUFFER_TYPE@ ncr_v_@GUNZIP_INPUT_ID@, int64_t ncr_v_@GUNZIP_MAX_ID@,
+    size_t line, size_t column
+) {
+    return ncr_compression_inflate_run_@BUFFER_CLASS_ID@(
+        ncr_v_@GUNZIP_INPUT_ID@, ncr_v_@GUNZIP_MAX_ID@, MAX_WBITS + 16, true, line, column
+    );
+}
+
+static int64_t @CHECKSUMS_CRC32@(@BUFFER_TYPE@ ncr_v_@CRC32_INPUT_ID@, size_t line, size_t column) {
+    (void)line; (void)column;
+    uLong checksum = crc32(0L, Z_NULL, 0);
+    size_t offset = 0;
+    while (offset < ncr_v_@CRC32_INPUT_ID@->length) {
+        size_t remaining = ncr_v_@CRC32_INPUT_ID@->length - offset;
+        uInt chunk = remaining > (size_t)UINT_MAX ? UINT_MAX : (uInt)remaining;
+        checksum = crc32(checksum, ncr_v_@CRC32_INPUT_ID@->bytes + offset, chunk);
+        offset += (size_t)chunk;
+    }
+    return (int64_t)(uint32_t)checksum;
+}
+
+static int64_t @CHECKSUMS_ADLER32@(@BUFFER_TYPE@ ncr_v_@ADLER32_INPUT_ID@, size_t line, size_t column) {
+    (void)line; (void)column;
+    uLong checksum = adler32(0L, Z_NULL, 0);
+    size_t offset = 0;
+    while (offset < ncr_v_@ADLER32_INPUT_ID@->length) {
+        size_t remaining = ncr_v_@ADLER32_INPUT_ID@->length - offset;
+        uInt chunk = remaining > (size_t)UINT_MAX ? UINT_MAX : (uInt)remaining;
+        checksum = adler32(checksum, ncr_v_@ADLER32_INPUT_ID@->bytes + offset, chunk);
+        offset += (size_t)chunk;
+    }
+    return (int64_t)(uint32_t)checksum;
+}

@@ -55,6 +55,7 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
             C::Regex | C::RegexMatch | C::Arrays | C::ByteBuffer | C::Encoding | C::Crypto |
             C::Path | C::File | C::Directory | C::FileInfo |
             C::Console | C::Files | C::Args | C::Math | C::Time |
+            C::Compression | C::Checksums |
             C::Thread(_) | C::Mutex(_) | C::Guard(_) | C::Channel(_) |
             C::Sender(_) | C::Receiver(_) | C::Env | C::Command | C::Process | C::ProcessOutput =>
                 unreachable!("static or factory-only native class has no constructor"),
@@ -273,6 +274,12 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
         (C::Crypto, "aesGcmEncrypt") => M::CryptoAesGcmEncrypt,
         (C::Crypto, "aesGcmDecrypt") => M::CryptoAesGcmDecrypt,
         (C::Crypto, "constantTimeEquals") => M::CryptoConstantTimeEquals,
+        (C::Compression, "deflate") => M::CompressionDeflate,
+        (C::Compression, "inflate") => M::CompressionInflate,
+        (C::Compression, "gzip") => M::CompressionGzip,
+        (C::Compression, "gunzip") => M::CompressionGunzip,
+        (C::Checksums, "crc32") => M::ChecksumsCrc32,
+        (C::Checksums, "adler32") => M::ChecksumsAdler32,
         (C::Random, "fromSystem") => M::RandomFromSystem,
         (C::Random, "reseed") => M::RandomReseed,
         (C::Random, "nextLong") => M::RandomNextLong,
