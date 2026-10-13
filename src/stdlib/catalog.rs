@@ -86,6 +86,7 @@ enum NativeBuiltin {
     XmlEvent,
     XmlWriter,
     XsltStylesheet,
+    Temporal,
     SocketAddress,
     TcpListener,
     TcpStream,
@@ -198,6 +199,7 @@ impl NativeBuiltin {
             Self::Compression => NativeClass::Compression,
             Self::Checksums => NativeClass::Checksums,
             Self::DateTime => NativeClass::DateTime,
+            Self::Temporal => NativeClass::Temporal,
             Self::SocketAddress => NativeClass::SocketAddress,
             Self::TcpListener => NativeClass::TcpListener,
             Self::TcpStream => NativeClass::TcpStream,
@@ -414,7 +416,9 @@ pub(super) const PRELUDE_UNITS: &[PreludeUnit] = &[
         source: include_str!("../../stdlib/prelude/date_time.ncr"),
         builtins: &[
             Builtin { name: "DateFields", native: None },
+            Builtin { name: "CalendarFields", native: None },
             Builtin { name: "DateTime", native: Some(NativeBuiltin::DateTime) },
+            Builtin { name: "Temporal", native: Some(NativeBuiltin::Temporal) },
         ],
     },
     PreludeUnit {

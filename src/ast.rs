@@ -27,7 +27,7 @@ pub enum NativeClass {
     ListIterator(Type), MapIterator(Type, Type), FilterIterator(Type),
     TakeIterator(Type), SkipIterator(Type), Iterators(Type),
     Text, BigInt, BigDecimal, Regex, RegexMatch, Arrays, ByteBuffer, Encoding, Crypto, Uuid, Path, File, Directory, FileInfo,
-    Console, Files, Args, Math, Random, Time, DateTime, Compression, Checksums,
+    Console, Files, Args, Math, Random, Time, DateTime, Temporal, Compression, Checksums,
     Unicode, Character, Charset, Locale,
     SocketAddress, TcpListener, TcpStream, Datagram, UdpSocket, HttpRequest, HttpResponse,
     CryptoKey, CryptoDigest, CryptoMac, Certificate,

@@ -1640,8 +1640,133 @@ uses a fixed 1940 through 2039 year window anchored at local midnight in the
 requested zone. Week-year and localized weekday fields retain the requested
 locale's first-week rules. Unsupported unquoted pattern letters and unmatched
 quotes return `Err`, and formatting errors never return a successful prefix.
-Referencing `DateTime` links ICU; the dependency-free `Time` clock and sleep
-APIs remain unchanged.
+Referencing `DateTime` or `Temporal` links ICU4C; the dependency-free `Time` clock
+and sleep APIs remain unchanged.
+
+### `Temporal`
+
+```java
+static Result<Temporal, Text> instant(long epochSecond, int nanosecond)
+static Result<Temporal, Text> duration(long seconds, long nanoAdjustment)
+static Result<Temporal, Text> period(int years, int months, int days)
+static Result<Temporal, Text> localDate(int era, int year, int month, int day, borrow Text calendar)
+static Result<Temporal, Text> localTime(int hour, int minute, int second, int nanosecond)
+static Result<Temporal, Text> localDateTime(int era, int year, int month, int day, int hour, int minute, int second, int nanosecond, borrow Text calendar)
+static Result<Temporal, Text> offsetDateTime(int era, int year, int month, int day, int hour, int minute, int second, int nanosecond, int offsetSeconds, borrow Text calendar)
+static Result<Temporal, Text> zonedDateTime(int era, int year, int month, int day, int hour, int minute, int second, int nanosecond, borrow Text zone, borrow Text calendar, boolean preferLaterOffset)
+static Result<Temporal, Text> parseIso(borrow Text value)
+static List<Text> availableCalendars()
+
+readonly Text kind()
+readonly Text calendar()
+readonly Text zoneId()
+readonly int nanosecond()
+readonly Result<long, Text> durationSeconds()
+readonly Result<int, Text> periodYears()
+readonly Result<int, Text> periodMonths()
+readonly Result<int, Text> periodDays()
+readonly Result<int, Text> hour()
+readonly Result<int, Text> minute()
+readonly Result<int, Text> second()
+readonly Result<long, Text> epochSecond()
+readonly Result<int, Text> offsetSeconds()
+readonly Result<CalendarFields, Text> fields()
+readonly Result<Text, Text> formatIso()
+readonly Result<int, Text> compareTo(borrow Temporal other)
+readonly Result<Temporal, Text> plusDuration(borrow Temporal duration)
+readonly Result<Temporal, Text> plusPeriod(borrow Temporal period, boolean preferLaterOffset)
+readonly Result<Temporal, Text> atZone(borrow Text zone, boolean preferLaterOffset)
+readonly Result<Temporal, Text> withZone(borrow Text zone)
+readonly Result<Temporal, Text> withOffset(int offsetSeconds)
+readonly Result<Temporal, Text> withCalendar(borrow Text calendar)
+readonly Result<Temporal, Text> withTime(borrow Temporal localTime)
+
+readonly int CalendarFields.era()
+readonly int CalendarFields.year()
+readonly int CalendarFields.extendedYear()
+readonly int CalendarFields.month()
+readonly int CalendarFields.day()
+readonly int CalendarFields.dayOfYear()
+readonly int CalendarFields.hour()
+readonly int CalendarFields.minute()
+readonly int CalendarFields.second()
+readonly int CalendarFields.nanosecond()
+readonly int CalendarFields.offsetSeconds()
+```
+
+`Temporal` is one private-state affine value type; `kind()` identifies an
+`instant`, `duration`, `period`, `localDate`, `localTime`, `localDateTime`,
+`offsetDateTime`, or `zonedDateTime`. It is a purpose-built general temporal
+model, not a claim of exact Java API parity. Each value owns its state; conversion
+and arithmetic methods return independent values and do not mutate their input.
+`calendar()` and `zoneId()` return empty text when the kind has no calendar or
+zone. `durationSeconds()` and the `period*()` accessors apply only to their
+matching kind; `hour()`, `minute()`, and `second()` apply to time-bearing kinds.
+`epochSecond()` is available for instants and offset/zoned date-times.
+
+`instant` stores an exact signed 64-bit epoch-second and a nanosecond in
+0..999,999,999. `duration(seconds, nanoAdjustment)` normalizes the adjustment
+using floor-based seconds plus a nonnegative nanosecond remainder; overflow is
+`Err`. Arithmetic, comparison, and identity use the integer pair directly, never
+a floating-point or millisecond representation. `period` instead stores
+independent calendar years, months, and days. Months supplied to civil
+constructors are 1 through 12; `era` and `year` are the selected ICU calendar's
+era and year-of-era. `CalendarFields.extendedYear()` provides ICU's extended-year
+field. For example, Japanese-era boundaries and year values are validated
+strictly by ICU.
+
+`availableCalendars()` returns the supported selectable IDs: `gregorian`,
+`japanese`, `buddhist`, `roc` (Minguo), `islamic`, `islamic-civil`, and
+`islamic-umalqura`. These are ICU calendar systems, not hand-maintained locale
+approximations. `fields()` returns the selected calendar's era/year/month/day,
+time, nanosecond, and offset; it returns `Err` for kinds without civil date
+fields. `withCalendar()` converts an existing civil view, or re-expresses an
+offset/zoned instant in the selected calendar without changing its instant.
+`withTime()` combines a `LocalDate` with a `LocalTime` using the date's calendar.
+
+`plusDuration()` adds elapsed seconds and nanoseconds to an `Instant`,
+`OffsetDateTime`, `ZonedDateTime`, or `LocalDateTime`; it adds to a `Duration`
+as well. For `LocalTime` it wraps modulo 24 hours, since no date is present.
+`plusPeriod()` uses ICU calendar arithmetic in year, month, then day order and
+accepts date-bearing local, offset, or zoned values.
+Every nonzero component must leave an exactly representable ICU millisecond value;
+an out-of-range intermediate is `Err` even if a later component would return
+inside the range. Successful arithmetic preserves the submillisecond remainder.
+A DST gap is `Err`; `preferLaterOffset` selects the later instant in an overlap, while
+`false` selects the earlier one. `atZone()` interprets a `LocalDate` at midnight
+or a `LocalDateTime` in the requested known ICU system zone, rejecting gaps and
+using the same explicit overlap policy. `withZone()` and `withOffset()` convert
+an instant to a zoned or fixed-offset representation without changing it.
+`offsetDateTime()` accepts fixed offsets from -64,800 through +64,800 seconds.
+
+`parseIso()` strictly consumes ISO date, time, local date-time, offset
+date-time, or zoned date-time text. Offset date-times use an explicit `Z` or
+numeric offset; a bracketed zone additionally requires an offset that agrees
+with that zone at the parsed local time. Local date/time forms have no suffix.
+Fractional seconds preserve one through nine input digits exactly. Expanded
+years use a sign and six digits outside the four-digit range. `formatIso()`
+formats the exact fraction with insignificant trailing zeros omitted. Date-bearing
+forms use the proleptic Gregorian ISO chronology even when the stored civil
+calendar is alternate. `compareTo()` returns -1, 0, or 1 only for compatible
+domains: two timeline values, two durations, matching local-date kinds with the
+same calendar, or two local times.
+
+ICU represents calendar instants as a double millisecond value. ICU-backed
+civil conversion is limited to exact integer milliseconds in the inclusive
+range -9,007,199,254,740,991 through 9,007,199,254,740,991.
+Both the UTC instant and its offset-adjusted local milliseconds must be inside
+that range before ICU civil fields or ISO formatting are accepted.
+Temporal values retain exact nanoseconds outside that range, but calendar lookup, zone conversion,
+`fields()`, or `formatIso()` can return `Err` when ICU cannot represent the
+requested civil instant exactly. Instant/duration arithmetic itself remains
+checked integer arithmetic across the signed 64-bit seconds range.
+Nanosecond carry is applied before the final seconds-range check, so a normalized
+result at either signed boundary is accepted when representable.
+`parseIso` uses Gregorian ISO fields and does not infer the host locale or time zone.
+Unknown calendars/zones, invalid eras or civil fields, gaps, incompatible
+comparisons, and arithmetic overflow return `Err`; there is no silent rounding,
+fallback calendar, or default-zone lookup. `DateTime` retains its existing
+millisecond contract and behavior.
 
 
 ## Threads, mutexes, guards, and channels

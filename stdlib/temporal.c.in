@@ -1,0 +1,1745 @@
+#define NCR_TV_NANOS_PER_SECOND INT64_C(1000000000)
+#define NCR_TV_SECONDS_PER_DAY INT64_C(86400)
+#define NCR_TV_RESULT_ERROR(result_id, message, line, column) \
+    ncr_result_error_##result_id((message), sizeof(message) - 1, (line), (column))
+
+enum {
+    NCR_TV_INSTANT = 1,
+    NCR_TV_DURATION,
+    NCR_TV_PERIOD,
+    NCR_TV_LOCAL_DATE,
+    NCR_TV_LOCAL_TIME,
+    NCR_TV_LOCAL_DATE_TIME,
+    NCR_TV_OFFSET_DATE_TIME,
+    NCR_TV_ZONED_DATE_TIME
+};
+
+#define NCR_TV_GREGORIAN 0
+
+struct ncr_tv_calendar_spec {
+    const char *name;
+    const char *keyword;
+};
+
+/* This table is the sole registry for supported ICU calendar identifiers. */
+static const struct ncr_tv_calendar_spec ncr_tv_calendar_specs[] = {
+    { "gregorian", "gregorian" },
+    { "japanese", "japanese" },
+    { "buddhist", "buddhist" },
+    { "roc", "roc" },
+    { "islamic", "islamic" },
+    { "islamic-civil", "islamic-civil" },
+    { "islamic-umalqura", "islamic-umalqura" }
+};
+#define NCR_TV_CALENDAR_COUNT \
+    ((int32_t)(sizeof(ncr_tv_calendar_specs) / sizeof(ncr_tv_calendar_specs[0])))
+
+struct ncr_tv_fields {
+    int32_t era;
+    int32_t year;
+    int32_t extended_year;
+    int32_t month;
+    int32_t day;
+    int32_t day_of_year;
+    int32_t hour;
+    int32_t minute;
+    int32_t second;
+    int32_t millisecond;
+};
+
+static ncr_obj_@TEMPORAL_ID@ *ncr_tv_new(int32_t kind, size_t line, size_t column) {
+    ncr_obj_@TEMPORAL_ID@ *value = ncr_allocate(sizeof(*value), line, column);
+    memset(value, 0, sizeof(*value));
+    value->kind = kind;
+    value->calendar = NCR_TV_GREGORIAN;
+    return value;
+}
+
+static bool ncr_tv_add_i64(int64_t left, int64_t right, int64_t *result) {
+    if ((right > 0 && left > INT64_MAX - right)
+        || (right < 0 && left < INT64_MIN - right)) {
+        return false;
+    }
+    *result = left + right;
+    return true;
+}
+
+static bool ncr_tv_normalize_duration(int64_t seconds, int64_t adjustment,
+                                      int64_t *out_seconds, int32_t *out_nanos) {
+    int64_t carry = adjustment / NCR_TV_NANOS_PER_SECOND;
+    int64_t remainder = adjustment % NCR_TV_NANOS_PER_SECOND;
+    if (remainder < 0) {
+        remainder += NCR_TV_NANOS_PER_SECOND;
+        --carry;
+    }
+    if (!ncr_tv_add_i64(seconds, carry, out_seconds)) { return false; }
+    *out_nanos = (int32_t)remainder;
+    return true;
+}
+
+static bool ncr_tv_add_parts(int64_t left_seconds, int32_t left_nanos,
+                             int64_t right_seconds, int32_t right_nanos,
+                             int64_t *seconds, int32_t *nanos) {
+    int64_t total_nanos = (int64_t)left_nanos + right_nanos;
+    int64_t carry = total_nanos >= NCR_TV_NANOS_PER_SECOND ? 1 : 0;
+    if (carry != 0) { total_nanos -= NCR_TV_NANOS_PER_SECOND; }
+    if (carry != 0) {
+        if (left_seconds < 0) { ++left_seconds; }
+        else if (!ncr_tv_add_i64(right_seconds, carry, &right_seconds)) { return false; }
+    }
+    if (!ncr_tv_add_i64(left_seconds, right_seconds, seconds)) { return false; }
+    *nanos = (int32_t)total_nanos;
+    return true;
+}
+
+static int32_t ncr_tv_compare_parts(int64_t left_seconds, int32_t left_nanos,
+                                    int64_t right_seconds, int32_t right_nanos) {
+    if (left_seconds < right_seconds) { return -1; }
+    if (left_seconds > right_seconds) { return 1; }
+    return left_nanos < right_nanos ? -1 : left_nanos > right_nanos ? 1 : 0;
+}
+
+static const char *ncr_tv_calendar_name(int32_t calendar) {
+    return calendar >= 0 && calendar < NCR_TV_CALENDAR_COUNT
+        ? ncr_tv_calendar_specs[calendar].name : "";
+}
+
+static bool ncr_tv_calendar_from_text(
+    const ncr_obj_@TEMPORAL_TEXT_ID@ *text, int32_t *calendar
+) {
+    if (text->length <= 0 || memchr(text->bytes, 0, (size_t)text->length) != NULL) {
+        return false;
+    }
+    for (int32_t index = 0; index < NCR_TV_CALENDAR_COUNT; ++index) {
+        const char *name = ncr_tv_calendar_specs[index].name;
+        size_t length = strlen(name);
+        if ((size_t)text->length == length && memcmp(text->bytes, name, length) == 0) {
+            *calendar = index;
+            return true;
+        }
+    }
+    return false;
+}
+
+static UCalendar *ncr_tv_open_calendar(
+    const UChar *zone, int32_t zone_length, int32_t calendar,
+    size_t line, size_t column
+) {
+    if (calendar < 0 || calendar >= NCR_TV_CALENDAR_COUNT) { return NULL; }
+    char locale[80] = "en_US_POSIX";
+    UErrorCode status = U_ZERO_ERROR;
+    int32_t written = uloc_setKeywordValue("calendar",
+        ncr_tv_calendar_specs[calendar].keyword, locale, (int32_t)sizeof(locale), &status);
+    if (U_FAILURE(status) || written >= (int32_t)sizeof(locale)) { return NULL; }
+    status = U_ZERO_ERROR;
+    UCalendar *result = ucal_open(zone, zone_length, locale,
+        calendar == NCR_TV_GREGORIAN ? UCAL_GREGORIAN : UCAL_TRADITIONAL, &status);
+    const char *actual_type = result == NULL ? NULL : ucal_getType(result, &status);
+    if (U_FAILURE(status) || actual_type == NULL
+        || strcmp(actual_type, ncr_tv_calendar_specs[calendar].keyword) != 0) {
+        if (result != NULL) { ucal_close(result); }
+        return NULL;
+    }
+    if (calendar == NCR_TV_GREGORIAN) {
+        ucal_setGregorianChange(result, -9007199254740992.0, &status);
+        if (U_FAILURE(status)) {
+            ucal_close(result);
+            return NULL;
+        }
+    }
+    ucal_setAttribute(result, UCAL_LENIENT, false);
+    (void)line;
+    (void)column;
+    return result;
+}
+
+static const UChar ncr_tv_utc_zone[] = { 0x0055, 0x0054, 0x0043 };
+
+static UCalendar *ncr_tv_open_utc(int32_t calendar, size_t line, size_t column) {
+    return ncr_tv_open_calendar(ncr_tv_utc_zone, 3, calendar, line, column);
+}
+
+static bool ncr_tv_fixed_zone(int32_t offset_seconds, UChar *zone, int32_t *length) {
+    if (offset_seconds < -64800 || offset_seconds > 64800) { return false; }
+    char buffer[20];
+    int64_t magnitude = offset_seconds < 0 ? -(int64_t)offset_seconds : offset_seconds;
+    int32_t hours = (int32_t)(magnitude / 3600);
+    int32_t minutes = (int32_t)((magnitude % 3600) / 60);
+    int32_t seconds = (int32_t)(magnitude % 60);
+    int32_t used = snprintf(buffer, sizeof(buffer), "GMT%c%02d:%02d:%02d",
+        offset_seconds < 0 ? '-' : '+', hours, minutes, seconds);
+    if (used <= 0 || used >= (int32_t)sizeof(buffer)) { return false; }
+    for (int32_t index = 0; index < used; ++index) { zone[index] = (UChar)buffer[index]; }
+    *length = used;
+    return true;
+}
+
+static bool ncr_tv_zone_copy(const UChar *zone, int32_t zone_length,
+                             char **bytes, int32_t *byte_length,
+                             size_t line, size_t column) {
+    UErrorCode status = U_ZERO_ERROR;
+    int32_t required = 0;
+    (void)u_strToUTF8(NULL, 0, &required, zone, zone_length, &status);
+    if ((status != U_BUFFER_OVERFLOW_ERROR && U_FAILURE(status)) || required <= 0
+        || required == INT32_MAX) {
+        return false;
+    }
+    char *output = ncr_allocate((size_t)required + 1, line, column);
+    status = U_ZERO_ERROR;
+    int32_t written = 0;
+    (void)u_strToUTF8(output, required + 1, &written, zone, zone_length, &status);
+    if (U_FAILURE(status) || written != required) {
+        ncr_deallocate(output);
+        return false;
+    }
+    output[written] = '\0';
+    *bytes = output;
+    *byte_length = written;
+    return true;
+}
+
+static bool ncr_tv_zone_from_text(
+    const ncr_obj_@TEMPORAL_TEXT_ID@ *text,
+    char **bytes,
+    int32_t *byte_length,
+    UChar **zone,
+    int32_t *zone_length,
+    size_t line,
+    size_t column
+) {
+    const char *failure = ncr_dt_zone_id(text, zone, zone_length, line, column);
+    if (failure != NULL) { return false; }
+    if (!ncr_tv_zone_copy(*zone, *zone_length, bytes, byte_length, line, column)) {
+        ncr_deallocate(*zone);
+        *zone = NULL;
+        return false;
+    }
+    return true;
+}
+
+static bool ncr_tv_zone_to_uchar(
+    const char *bytes, int32_t byte_length,
+    UChar **zone, int32_t *zone_length,
+    size_t line, size_t column
+) {
+    if (bytes == NULL || byte_length <= 0) { return false; }
+    UErrorCode status = U_ZERO_ERROR;
+    int32_t required = 0;
+    (void)u_strFromUTF8(NULL, 0, &required, bytes, byte_length, &status);
+    if ((status != U_BUFFER_OVERFLOW_ERROR && U_FAILURE(status)) || required <= 0
+        || required == INT32_MAX) { return false; }
+    UChar *converted = ncr_allocate(((size_t)required + 1) * sizeof(UChar), line, column);
+    status = U_ZERO_ERROR;
+    int32_t written = 0;
+    (void)u_strFromUTF8(converted, required + 1, &written, bytes, byte_length, &status);
+    if (U_FAILURE(status) || written != required) {
+        ncr_deallocate(converted);
+        return false;
+    }
+    *zone = converted;
+    *zone_length = written;
+    return true;
+}
+
+static bool ncr_tv_zone_from_bytes(
+    const unsigned char *bytes, size_t byte_length,
+    char **canonical_bytes, int32_t *canonical_length,
+    UChar **canonical_zone, int32_t *canonical_zone_length,
+    size_t line, size_t column
+) {
+    if (byte_length == 0 || byte_length > (size_t)INT32_MAX
+        || memchr(bytes, 0, byte_length) != NULL) { return false; }
+    UErrorCode status = U_ZERO_ERROR;
+    int32_t required = 0;
+    (void)u_strFromUTF8(NULL, 0, &required, (const char *)bytes,
+        (int32_t)byte_length, &status);
+    if ((status != U_BUFFER_OVERFLOW_ERROR && U_FAILURE(status)) || required <= 0
+        || required == INT32_MAX) { return false; }
+    UChar *input = ncr_allocate(((size_t)required + 1) * sizeof(UChar), line, column);
+    status = U_ZERO_ERROR;
+    int32_t written = 0;
+    (void)u_strFromUTF8(input, required + 1, &written, (const char *)bytes,
+        (int32_t)byte_length, &status);
+    if (U_FAILURE(status) || written != required) {
+        ncr_deallocate(input);
+        return false;
+    }
+    int32_t capacity = 64;
+    UChar *canonical = ncr_allocate((size_t)capacity * sizeof(UChar), line, column);
+    UBool is_system_id = false;
+    status = U_ZERO_ERROR;
+    int32_t written_canonical_length = ucal_getCanonicalTimeZoneID(input, written,
+        canonical, capacity, &is_system_id, &status);
+    if ((status == U_BUFFER_OVERFLOW_ERROR || status == U_STRING_NOT_TERMINATED_WARNING)
+        && written_canonical_length > 0 && written_canonical_length < INT32_MAX) {
+        ncr_deallocate(canonical);
+        capacity = written_canonical_length + 1;
+        canonical = ncr_allocate((size_t)capacity * sizeof(UChar), line, column);
+        status = U_ZERO_ERROR;
+        written_canonical_length = ucal_getCanonicalTimeZoneID(input, written,
+            canonical, capacity, &is_system_id, &status);
+    }
+    ncr_deallocate(input);
+    if (U_FAILURE(status) || !is_system_id || written_canonical_length <= 0
+        || written_canonical_length >= capacity) {
+        ncr_deallocate(canonical);
+        return false;
+    }
+    if (!ncr_tv_zone_copy(canonical, written_canonical_length,
+        canonical_bytes, canonical_length, line, column)) {
+        ncr_deallocate(canonical);
+        return false;
+    }
+    *canonical_zone = canonical;
+    *canonical_zone_length = written_canonical_length;
+    return true;
+}
+
+static bool ncr_tv_read_fields(UCalendar *calendar, struct ncr_tv_fields *fields) {
+    UErrorCode status = U_ZERO_ERROR;
+    fields->era = ucal_get(calendar, UCAL_ERA, &status);
+    fields->year = ucal_get(calendar, UCAL_YEAR, &status);
+    fields->extended_year = ucal_get(calendar, UCAL_EXTENDED_YEAR, &status);
+    fields->month = ucal_get(calendar, UCAL_MONTH, &status) + 1;
+    fields->day = ucal_get(calendar, UCAL_DATE, &status);
+    fields->day_of_year = ucal_get(calendar, UCAL_DAY_OF_YEAR, &status);
+    fields->hour = ucal_get(calendar, UCAL_HOUR_OF_DAY, &status);
+    fields->minute = ucal_get(calendar, UCAL_MINUTE, &status);
+    fields->second = ucal_get(calendar, UCAL_SECOND, &status);
+    fields->millisecond = ucal_get(calendar, UCAL_MILLISECOND, &status);
+    return U_SUCCESS(status);
+}
+
+static void ncr_tv_set_wall(
+    UCalendar *calendar, int32_t era, int32_t year, int32_t month, int32_t day,
+    int32_t hour, int32_t minute, int32_t second, int32_t millisecond,
+    UCalendarWallTimeOption repeated, UCalendarWallTimeOption skipped
+) {
+    ucal_clear(calendar);
+    ucal_setAttribute(calendar, UCAL_LENIENT, false);
+    ucal_setAttribute(calendar, UCAL_REPEATED_WALL_TIME, repeated);
+    ucal_setAttribute(calendar, UCAL_SKIPPED_WALL_TIME, skipped);
+    ucal_set(calendar, UCAL_ERA, era);
+    ucal_set(calendar, UCAL_YEAR, year);
+    ucal_set(calendar, UCAL_MONTH, month - 1);
+    ucal_set(calendar, UCAL_DATE, day);
+    ucal_set(calendar, UCAL_HOUR_OF_DAY, hour);
+    ucal_set(calendar, UCAL_MINUTE, minute);
+    ucal_set(calendar, UCAL_SECOND, second);
+    ucal_set(calendar, UCAL_MILLISECOND, millisecond);
+}
+
+static bool ncr_tv_fields_match(
+    UCalendar *calendar, int32_t era, int32_t year, int32_t month, int32_t day,
+    int32_t hour, int32_t minute, int32_t second, int32_t millisecond,
+    struct ncr_tv_fields *fields
+) {
+    return ncr_tv_read_fields(calendar, fields)
+        && fields->era == era && fields->year == year && fields->month == month
+        && fields->day == day && fields->hour == hour && fields->minute == minute
+        && fields->second == second && fields->millisecond == millisecond;
+}
+
+static bool ncr_tv_resolve_wall(
+    UCalendar *calendar, int32_t era, int32_t year, int32_t month, int32_t day,
+    int32_t hour, int32_t minute, int32_t second, int32_t millisecond,
+    bool prefer_later, int64_t *epoch_millis, struct ncr_tv_fields *fields
+) {
+    if (era < 0 || year < 1 || month < 1 || month > 12 || day < 1
+        || hour < 0 || hour > 23 || minute < 0 || minute > 59
+        || second < 0 || second > 59 || millisecond < 0 || millisecond > 999) {
+        return false;
+    }
+    ncr_tv_set_wall(calendar, era, year, month, day, hour, minute, second,
+        millisecond, prefer_later ? UCAL_WALLTIME_LAST : UCAL_WALLTIME_FIRST,
+        UCAL_WALLTIME_FIRST);
+    UErrorCode status = U_ZERO_ERROR;
+    UDate instant = ucal_getMillis(calendar, &status);
+    if (U_FAILURE(status) || !ncr_tv_fields_match(calendar, era, year, month, day,
+        hour, minute, second, millisecond, fields)
+        || !ncr_dt_udate_to_epoch(instant, epoch_millis)) {
+        return false;
+    }
+    return true;
+}
+
+static bool ncr_tv_epoch_millis(int64_t seconds, int32_t nanosecond, int64_t *millis) {
+    if (nanosecond < 0 || nanosecond >= 1000000000
+        || seconds < INT64_MIN / 1000 || seconds > INT64_MAX / 1000) { return false; }
+    int64_t base = seconds * INT64_C(1000);
+    int64_t result;
+    if (!ncr_tv_add_i64(base, nanosecond / 1000000, &result)
+        || !ncr_dt_epoch_in_range(result)) { return false; }
+    *millis = result;
+    return true;
+}
+
+static void ncr_tv_parts_from_millis(int64_t millis, int32_t submillisecond,
+                                    int64_t *seconds, int32_t *nanosecond) {
+    int64_t quotient = millis / 1000;
+    int64_t remainder = millis % 1000;
+    if (remainder < 0) { remainder += 1000; --quotient; }
+    *seconds = quotient;
+    *nanosecond = (int32_t)(remainder * 1000000 + submillisecond);
+}
+
+static bool ncr_tv_offset_seconds(UCalendar *calendar, int32_t *offset_seconds) {
+    UErrorCode status = U_ZERO_ERROR;
+    int64_t offset = (int64_t)ucal_get(calendar, UCAL_ZONE_OFFSET, &status)
+        + (int64_t)ucal_get(calendar, UCAL_DST_OFFSET, &status);
+    if (U_FAILURE(status) || offset % 1000 != 0
+        || offset / 1000 < INT32_MIN || offset / 1000 > INT32_MAX) { return false; }
+    *offset_seconds = (int32_t)(offset / 1000);
+    return true;
+}
+
+static bool ncr_tv_read_instant_fields(
+    UCalendar *calendar, int64_t millis, struct ncr_tv_fields *fields, int32_t *offset
+) {
+    int64_t local_millis;
+    return ncr_tv_offset_seconds(calendar, offset)
+        && ncr_tv_add_i64(millis, (int64_t)*offset * 1000, &local_millis)
+        && ncr_dt_epoch_in_range(local_millis)
+        && ncr_tv_read_fields(calendar, fields);
+}
+
+static void ncr_tv_store_fields(ncr_obj_@TEMPORAL_ID@ *value,
+                                const struct ncr_tv_fields *fields, int32_t nanos) {
+    value->era = fields->era;
+    value->year = fields->year;
+    value->extended_year = fields->extended_year;
+    value->month = fields->month;
+    value->day = fields->day;
+    value->day_of_year = fields->day_of_year;
+    value->hour = fields->hour;
+    value->minute = fields->minute;
+    value->second = fields->second;
+    value->nanosecond = nanos;
+}
+
+static ncr_obj_@TEMPORAL_ID@ *ncr_tv_copy_without_zone(
+    const ncr_obj_@TEMPORAL_ID@ *source, size_t line, size_t column
+) {
+    ncr_obj_@TEMPORAL_ID@ *result = ncr_allocate(sizeof(*result), line, column);
+    *result = *source;
+    result->zone = NULL;
+    result->zone_length = 0;
+    return result;
+}
+
+static ncr_obj_@TEMPORAL_ID@ *ncr_tv_clone(
+    const ncr_obj_@TEMPORAL_ID@ *source, size_t line, size_t column
+) {
+    ncr_obj_@TEMPORAL_ID@ *result = ncr_tv_copy_without_zone(source, line, column);
+    if (source->zone != NULL) {
+        result->zone = ncr_allocate((size_t)source->zone_length + 1, line, column);
+        memcpy(result->zone, source->zone, (size_t)source->zone_length + 1);
+        result->zone_length = source->zone_length;
+    }
+    return result;
+}
+
+static bool ncr_tv_local_fields(
+    int32_t calendar_id, int32_t era, int32_t year, int32_t month, int32_t day,
+    int32_t hour, int32_t minute, int32_t second, int32_t nanosecond,
+    int64_t *local_second, struct ncr_tv_fields *fields, size_t line, size_t column
+) {
+    if (nanosecond < 0 || nanosecond >= 1000000000) { return false; }
+    UCalendar *calendar = ncr_tv_open_utc(calendar_id, line, column);
+    if (calendar == NULL) { return false; }
+    int64_t millis = 0;
+    bool valid = ncr_tv_resolve_wall(calendar, era, year, month, day, hour, minute,
+        second, nanosecond / 1000000, false, &millis, fields);
+    ucal_close(calendar);
+    if (!valid) { return false; }
+    int32_t remainder = nanosecond % 1000000;
+    int32_t normalized_nanos = 0;
+    ncr_tv_parts_from_millis(millis, remainder, local_second, &normalized_nanos);
+    fields->millisecond = normalized_nanos / 1000000;
+    return true;
+}
+
+static bool ncr_tv_update_from_zone(
+    ncr_obj_@TEMPORAL_ID@ *value, const UChar *zone, int32_t zone_length,
+    size_t line, size_t column
+) {
+    int64_t millis = 0;
+    if (!ncr_tv_epoch_millis(value->epoch_second, value->nanosecond, &millis)) {
+        return false;
+    }
+    UCalendar *calendar = ncr_tv_open_calendar(zone, zone_length, value->calendar, line, column);
+    if (calendar == NULL) { return false; }
+    UErrorCode status = U_ZERO_ERROR;
+    ucal_setMillis(calendar, (UDate)millis, &status);
+    struct ncr_tv_fields fields;
+    int32_t offset = 0;
+    bool valid = U_SUCCESS(status)
+        && ncr_tv_read_instant_fields(calendar, millis, &fields, &offset);
+    ucal_close(calendar);
+    if (!valid) { return false; }
+    ncr_tv_store_fields(value, &fields, value->nanosecond);
+    value->offset_seconds = value->kind == NCR_TV_OFFSET_DATE_TIME
+        ? value->offset_seconds : offset;
+    return ncr_tv_add_i64(value->epoch_second, value->offset_seconds,
+        &value->local_second);
+}
+
+static bool ncr_tv_update_from_instant(
+    ncr_obj_@TEMPORAL_ID@ *value, size_t line, size_t column
+) {
+    UChar fixed[20];
+    UChar *owned_zone = NULL;
+    const UChar *zone;
+    int32_t zone_length = 0;
+    if (value->kind == NCR_TV_ZONED_DATE_TIME) {
+        if (!ncr_tv_zone_to_uchar(value->zone, value->zone_length,
+            &owned_zone, &zone_length, line, column)) { return false; }
+        zone = owned_zone;
+    } else if (value->kind == NCR_TV_OFFSET_DATE_TIME) {
+        if (!ncr_tv_fixed_zone(value->offset_seconds, fixed, &zone_length)) { return false; }
+        zone = fixed;
+    } else {
+        return false;
+    }
+    bool valid = ncr_tv_update_from_zone(value, zone, zone_length, line, column);
+    if (owned_zone != NULL) { ncr_deallocate(owned_zone); }
+    return valid;
+}
+
+static bool ncr_tv_update_local_from_second(
+    ncr_obj_@TEMPORAL_ID@ *value, size_t line, size_t column
+) {
+    int64_t millis = 0;
+    if (!ncr_tv_epoch_millis(value->local_second, value->nanosecond, &millis)) { return false; }
+    UCalendar *calendar = ncr_tv_open_utc(value->calendar, line, column);
+    if (calendar == NULL) { return false; }
+    UErrorCode status = U_ZERO_ERROR;
+    ucal_setMillis(calendar, (UDate)millis, &status);
+    struct ncr_tv_fields fields;
+    bool valid = U_SUCCESS(status) && ncr_tv_read_fields(calendar, &fields);
+    ucal_close(calendar);
+    if (!valid) { return false; }
+    ncr_tv_store_fields(value, &fields, value->nanosecond);
+    return true;
+}
+
+static ncr_obj_@TEMPORAL_TEXT_ID@ *ncr_tv_text_ascii(
+    const char *bytes, size_t length, size_t line, size_t column
+) {
+    if (length > (size_t)INT32_MAX) { return NULL; }
+    if (length <= @TEMPORAL_TEXT_INLINE_CAPACITY@) {
+        ncr_obj_@TEMPORAL_TEXT_ID@ *text = ncr_allocate(sizeof(*text), line, column);
+        @TEMPORAL_TEXT_INIT@(text);
+        if (length > 0) { memcpy(text->inline_storage, bytes, length); }
+        text->length = (int32_t)length;
+        return text;
+    }
+    unsigned char *copy = ncr_allocate(length, line, column);
+    memcpy(copy, bytes, length);
+    return @TEMPORAL_TEXT_TAKE@(copy, length, length, line, column);
+}
+
+static int32_t ncr_tv_offset_at(UCalendar *calendar, int64_t millis, int32_t *offset) {
+    UErrorCode status = U_ZERO_ERROR;
+    ucal_setMillis(calendar, (UDate)millis, &status);
+    if (U_FAILURE(status) || !ncr_tv_offset_seconds(calendar, offset)) { return 0; }
+    return 1;
+}
+
+static bool ncr_tv_parse_digits(const unsigned char *bytes, size_t length,
+                                size_t *position, int32_t count, int32_t *result) {
+    if (count < 1 || (size_t)count > length - *position) { return false; }
+    int32_t value = 0;
+    for (int32_t index = 0; index < count; ++index) {
+        unsigned char byte = bytes[(*position)++];
+        if (byte < '0' || byte > '9') { return false; }
+        value = value * 10 + (byte - '0');
+    }
+    *result = value;
+    return true;
+}
+
+static bool ncr_tv_next(const unsigned char *bytes, size_t length,
+                        size_t *position, unsigned char expected) {
+    if (*position >= length || bytes[*position] != expected) { return false; }
+    ++*position;
+    return true;
+}
+
+static bool ncr_tv_offset_text(const unsigned char *bytes, size_t length,
+                               size_t *position, int32_t *offset) {
+    if (*position < length && bytes[*position] == 'Z') {
+        ++*position;
+        *offset = 0;
+        return true;
+    }
+    if (*position >= length || (bytes[*position] != '+' && bytes[*position] != '-')) { return false; }
+    int32_t sign = bytes[(*position)++] == '-' ? -1 : 1;
+    int32_t hours = 0, minutes = 0, seconds = 0;
+    if (!ncr_tv_parse_digits(bytes, length, position, 2, &hours)
+        || !ncr_tv_next(bytes, length, position, ':')
+        || !ncr_tv_parse_digits(bytes, length, position, 2, &minutes)) { return false; }
+    if (*position < length && bytes[*position] == ':') {
+        ++*position;
+        if (!ncr_tv_parse_digits(bytes, length, position, 2, &seconds)) { return false; }
+    }
+    if (hours > 18 || minutes > 59 || seconds > 59
+        || (hours == 18 && (minutes != 0 || seconds != 0))) { return false; }
+    *offset = sign * (hours * 3600 + minutes * 60 + seconds);
+    return true;
+}
+
+static ncr_obj_@TEMPORAL_RESULT@ ncr_tv_failed(size_t line, size_t column) {
+    return NCR_TV_RESULT_ERROR(@TEMPORAL_RESULT@,
+        "Temporal: invalid value, unsupported conversion, or ICU range exceeded", line, column);
+}
+
+ncr_obj_@TEMPORAL_RESULT@ @TEMPORAL_INSTANT@(
+    int64_t ncr_v_0, int32_t ncr_v_1, size_t ncr_line, size_t ncr_column
+) {
+    if (ncr_v_1 < 0 || ncr_v_1 >= 1000000000) {
+        return NCR_TV_RESULT_ERROR(@TEMPORAL_RESULT@,
+            "Temporal.instant: nanosecond must be in 0 through 999999999", ncr_line, ncr_column);
+    }
+    ncr_obj_@TEMPORAL_ID@ *value = ncr_tv_new(NCR_TV_INSTANT, ncr_line, ncr_column);
+    value->epoch_second = ncr_v_0;
+    value->nanosecond = ncr_v_1;
+    return (ncr_obj_@TEMPORAL_RESULT@){ .tag = @TEMPORAL_OK_TAG@,
+        .data.v@TEMPORAL_OK_TAG@.f0 = value };
+}
+
+ncr_obj_@TEMPORAL_RESULT@ @TEMPORAL_DURATION@(
+    int64_t ncr_v_0, int64_t ncr_v_1, size_t ncr_line, size_t ncr_column
+) {
+    int64_t seconds = 0;
+    int32_t nanos = 0;
+    if (!ncr_tv_normalize_duration(ncr_v_0, ncr_v_1, &seconds, &nanos)) {
+        return NCR_TV_RESULT_ERROR(@TEMPORAL_RESULT@,
+            "Temporal.duration: normalized seconds exceed signed 64-bit range", ncr_line, ncr_column);
+    }
+    ncr_obj_@TEMPORAL_ID@ *value = ncr_tv_new(NCR_TV_DURATION, ncr_line, ncr_column);
+    value->epoch_second = seconds;
+    value->nanosecond = nanos;
+    return (ncr_obj_@TEMPORAL_RESULT@){ .tag = @TEMPORAL_OK_TAG@,
+        .data.v@TEMPORAL_OK_TAG@.f0 = value };
+}
+
+ncr_obj_@TEMPORAL_RESULT@ @TEMPORAL_PERIOD@(
+    int32_t ncr_v_0, int32_t ncr_v_1, int32_t ncr_v_2,
+    size_t ncr_line, size_t ncr_column
+) {
+    ncr_obj_@TEMPORAL_ID@ *value = ncr_tv_new(NCR_TV_PERIOD, ncr_line, ncr_column);
+    value->period_years = ncr_v_0;
+    value->period_months = ncr_v_1;
+    value->period_days = ncr_v_2;
+    return (ncr_obj_@TEMPORAL_RESULT@){ .tag = @TEMPORAL_OK_TAG@,
+        .data.v@TEMPORAL_OK_TAG@.f0 = value };
+}
+
+ncr_obj_@TEMPORAL_RESULT@ @TEMPORAL_LOCAL_DATE@(
+    int32_t ncr_v_0, int32_t ncr_v_1, int32_t ncr_v_2, int32_t ncr_v_3,
+    ncr_obj_@TEMPORAL_TEXT_ID@ *ncr_v_4, size_t ncr_line, size_t ncr_column
+) {
+    int32_t calendar = 0;
+    int64_t local_second = 0;
+    struct ncr_tv_fields fields;
+    if (!ncr_tv_calendar_from_text(ncr_v_4, &calendar)
+        || !ncr_tv_local_fields(calendar, ncr_v_0, ncr_v_1, ncr_v_2, ncr_v_3,
+            0, 0, 0, 0, &local_second, &fields, ncr_line, ncr_column)) {
+        return NCR_TV_RESULT_ERROR(@TEMPORAL_RESULT@,
+            "Temporal.localDate: invalid era, year, month, day, or calendar", ncr_line, ncr_column);
+    }
+    ncr_obj_@TEMPORAL_ID@ *value = ncr_tv_new(NCR_TV_LOCAL_DATE, ncr_line, ncr_column);
+    value->calendar = calendar;
+    value->local_second = local_second;
+    ncr_tv_store_fields(value, &fields, 0);
+    return (ncr_obj_@TEMPORAL_RESULT@){ .tag = @TEMPORAL_OK_TAG@,
+        .data.v@TEMPORAL_OK_TAG@.f0 = value };
+}
+
+ncr_obj_@TEMPORAL_RESULT@ @TEMPORAL_LOCAL_TIME@(
+    int32_t ncr_v_0, int32_t ncr_v_1, int32_t ncr_v_2, int32_t ncr_v_3,
+    size_t ncr_line, size_t ncr_column
+) {
+    if (ncr_v_0 < 0 || ncr_v_0 > 23 || ncr_v_1 < 0 || ncr_v_1 > 59
+        || ncr_v_2 < 0 || ncr_v_2 > 59 || ncr_v_3 < 0 || ncr_v_3 >= 1000000000) {
+        return NCR_TV_RESULT_ERROR(@TEMPORAL_RESULT@,
+            "Temporal.localTime: invalid time or nanosecond", ncr_line, ncr_column);
+    }
+    ncr_obj_@TEMPORAL_ID@ *value = ncr_tv_new(NCR_TV_LOCAL_TIME, ncr_line, ncr_column);
+    value->hour = ncr_v_0;
+    value->minute = ncr_v_1;
+    value->second = ncr_v_2;
+    value->nanosecond = ncr_v_3;
+    value->local_second = (int64_t)ncr_v_0 * 3600 + ncr_v_1 * 60 + ncr_v_2;
+    return (ncr_obj_@TEMPORAL_RESULT@){ .tag = @TEMPORAL_OK_TAG@,
+        .data.v@TEMPORAL_OK_TAG@.f0 = value };
+}
+
+ncr_obj_@TEMPORAL_RESULT@ @TEMPORAL_LOCAL_DATE_TIME@(
+    int32_t ncr_v_0, int32_t ncr_v_1, int32_t ncr_v_2, int32_t ncr_v_3,
+    int32_t ncr_v_4, int32_t ncr_v_5, int32_t ncr_v_6, int32_t ncr_v_7,
+    ncr_obj_@TEMPORAL_TEXT_ID@ *ncr_v_8, size_t ncr_line, size_t ncr_column
+) {
+    int32_t calendar = 0;
+    int64_t local_second = 0;
+    struct ncr_tv_fields fields;
+    if (!ncr_tv_calendar_from_text(ncr_v_8, &calendar)
+        || !ncr_tv_local_fields(calendar, ncr_v_0, ncr_v_1, ncr_v_2, ncr_v_3,
+            ncr_v_4, ncr_v_5, ncr_v_6, ncr_v_7, &local_second, &fields,
+            ncr_line, ncr_column)) {
+        return NCR_TV_RESULT_ERROR(@TEMPORAL_RESULT@,
+            "Temporal.localDateTime: invalid civil fields or calendar", ncr_line, ncr_column);
+    }
+    ncr_obj_@TEMPORAL_ID@ *value = ncr_tv_new(NCR_TV_LOCAL_DATE_TIME, ncr_line, ncr_column);
+    value->calendar = calendar;
+    value->local_second = local_second;
+    value->epoch_second = local_second;
+    value->nanosecond = ncr_v_7;
+    ncr_tv_store_fields(value, &fields, ncr_v_7);
+    return (ncr_obj_@TEMPORAL_RESULT@){ .tag = @TEMPORAL_OK_TAG@,
+        .data.v@TEMPORAL_OK_TAG@.f0 = value };
+}
+
+ncr_obj_@TEMPORAL_RESULT@ @TEMPORAL_OFFSET_DATE_TIME@(
+    int32_t ncr_v_0, int32_t ncr_v_1, int32_t ncr_v_2, int32_t ncr_v_3,
+    int32_t ncr_v_4, int32_t ncr_v_5, int32_t ncr_v_6, int32_t ncr_v_7,
+    int32_t ncr_v_8, ncr_obj_@TEMPORAL_TEXT_ID@ *ncr_v_9,
+    size_t ncr_line, size_t ncr_column
+) {
+    int32_t calendar = 0;
+    int64_t local_second = 0;
+    int64_t epoch_second = 0;
+    struct ncr_tv_fields fields;
+    if (ncr_v_8 < -64800 || ncr_v_8 > 64800
+        || !ncr_tv_calendar_from_text(ncr_v_9, &calendar)
+        || !ncr_tv_local_fields(calendar, ncr_v_0, ncr_v_1, ncr_v_2, ncr_v_3,
+            ncr_v_4, ncr_v_5, ncr_v_6, ncr_v_7, &local_second, &fields,
+            ncr_line, ncr_column)
+        || !ncr_tv_add_i64(local_second, -(int64_t)ncr_v_8, &epoch_second)) {
+        return NCR_TV_RESULT_ERROR(@TEMPORAL_RESULT@,
+            "Temporal.offsetDateTime: invalid civil fields, offset, or calendar", ncr_line, ncr_column);
+    }
+    ncr_obj_@TEMPORAL_ID@ *value = ncr_tv_new(NCR_TV_OFFSET_DATE_TIME, ncr_line, ncr_column);
+    value->calendar = calendar;
+    value->local_second = local_second;
+    value->epoch_second = epoch_second;
+    value->offset_seconds = ncr_v_8;
+    value->nanosecond = ncr_v_7;
+    ncr_tv_store_fields(value, &fields, ncr_v_7);
+    return (ncr_obj_@TEMPORAL_RESULT@){ .tag = @TEMPORAL_OK_TAG@,
+        .data.v@TEMPORAL_OK_TAG@.f0 = value };
+}
+
+ncr_obj_@TEMPORAL_RESULT@ @TEMPORAL_ZONED_DATE_TIME@(
+    int32_t ncr_v_0, int32_t ncr_v_1, int32_t ncr_v_2, int32_t ncr_v_3,
+    int32_t ncr_v_4, int32_t ncr_v_5, int32_t ncr_v_6, int32_t ncr_v_7,
+    ncr_obj_@TEMPORAL_TEXT_ID@ *ncr_v_8,
+    ncr_obj_@TEMPORAL_TEXT_ID@ *ncr_v_9, bool ncr_v_10,
+    size_t ncr_line, size_t ncr_column
+) {
+    int32_t calendar_id = 0;
+    char *zone_bytes = NULL;
+    int32_t zone_bytes_length = 0;
+    UChar *zone = NULL;
+    int32_t zone_length = 0;
+    if (ncr_v_7 < 0 || ncr_v_7 >= 1000000000
+        || !ncr_tv_calendar_from_text(ncr_v_9, &calendar_id)
+        || !ncr_tv_zone_from_text(ncr_v_8, &zone_bytes, &zone_bytes_length,
+            &zone, &zone_length, ncr_line, ncr_column)) {
+        if (zone != NULL) { ncr_deallocate(zone); }
+        if (zone_bytes != NULL) { ncr_deallocate(zone_bytes); }
+        return NCR_TV_RESULT_ERROR(@TEMPORAL_RESULT@,
+            "Temporal.zonedDateTime: invalid zone, calendar, or nanosecond", ncr_line, ncr_column);
+    }
+    UCalendar *calendar = ncr_tv_open_calendar(zone, zone_length, calendar_id,
+        ncr_line, ncr_column);
+    ncr_deallocate(zone);
+    if (calendar == NULL) {
+        ncr_deallocate(zone_bytes);
+        return NCR_TV_RESULT_ERROR(@TEMPORAL_RESULT@,
+            "Temporal.zonedDateTime: ICU calendar initialization failed", ncr_line, ncr_column);
+    }
+    int64_t millis = 0;
+    struct ncr_tv_fields fields;
+    bool valid = ncr_tv_resolve_wall(calendar, ncr_v_0, ncr_v_1, ncr_v_2, ncr_v_3,
+        ncr_v_4, ncr_v_5, ncr_v_6, ncr_v_7 / 1000000,
+        ncr_v_10, &millis, &fields);
+    int32_t offset = 0;
+    if (valid) { valid = ncr_tv_offset_seconds(calendar, &offset); }
+    ucal_close(calendar);
+    int64_t epoch_second = 0;
+    int32_t nanos = 0;
+    if (valid) {
+        ncr_tv_parts_from_millis(millis, ncr_v_7 % 1000000, &epoch_second, &nanos);
+        valid = ncr_tv_add_i64(epoch_second, offset, &millis);
+    }
+    if (!valid) {
+        ncr_deallocate(zone_bytes);
+        return NCR_TV_RESULT_ERROR(@TEMPORAL_RESULT@,
+            "Temporal.zonedDateTime: invalid date, DST gap, or ICU range", ncr_line, ncr_column);
+    }
+    ncr_obj_@TEMPORAL_ID@ *value = ncr_tv_new(NCR_TV_ZONED_DATE_TIME, ncr_line, ncr_column);
+    value->calendar = calendar_id;
+    value->zone = zone_bytes;
+    value->zone_length = zone_bytes_length;
+    value->epoch_second = epoch_second;
+    value->local_second = millis;
+    value->offset_seconds = offset;
+    value->nanosecond = nanos;
+    ncr_tv_store_fields(value, &fields, nanos);
+    return (ncr_obj_@TEMPORAL_RESULT@){ .tag = @TEMPORAL_OK_TAG@,
+        .data.v@TEMPORAL_OK_TAG@.f0 = value };
+}
+
+ncr_obj_@TEMPORAL_LIST_ID@ * @TEMPORAL_AVAILABLE_CALENDARS@(
+    size_t ncr_line, size_t ncr_column
+) {
+    ncr_obj_@TEMPORAL_LIST_ID@ *calendars = ncr_allocate(sizeof(*calendars), ncr_line, ncr_column);
+    @TEMPORAL_LIST_NEW@(calendars, ncr_line, ncr_column);
+    for (int32_t index = 0; index < NCR_TV_CALENDAR_COUNT; ++index) {
+        const char *name = ncr_tv_calendar_specs[index].name;
+        ncr_obj_@TEMPORAL_TEXT_ID@ *text = ncr_tv_text_ascii(name, strlen(name), ncr_line, ncr_column);
+        if (text == NULL) {
+            ncr_drop_@TEMPORAL_LIST_ID@(calendars);
+            ncr_fail("Temporal.availableCalendars: calendar name allocation failed", ncr_line, ncr_column);
+        }
+        @TEMPORAL_LIST_ADD@(calendars, text, ncr_line, ncr_column);
+    }
+    return calendars;
+}
+
+ncr_obj_@TEMPORAL_TEXT_ID@ * @TEMPORAL_KIND@(ncr_obj_@TEMPORAL_ID@ *ncr_v_0,
+    size_t ncr_line, size_t ncr_column
+) {
+    static const char *const kinds[] = {
+        "", "instant", "duration", "period", "localDate", "localTime",
+        "localDateTime", "offsetDateTime", "zonedDateTime"
+    };
+    const char *name = ncr_v_0->kind >= 0
+        && (size_t)ncr_v_0->kind < sizeof(kinds) / sizeof(kinds[0])
+        ? kinds[ncr_v_0->kind] : "";
+    return ncr_tv_text_ascii(name, strlen(name), ncr_line, ncr_column);
+}
+
+ncr_obj_@TEMPORAL_TEXT_ID@ * @TEMPORAL_CALENDAR@(ncr_obj_@TEMPORAL_ID@ *ncr_v_0,
+    size_t ncr_line, size_t ncr_column
+) {
+    bool has_calendar = ncr_v_0->kind == NCR_TV_LOCAL_DATE
+        || ncr_v_0->kind == NCR_TV_LOCAL_DATE_TIME
+        || ncr_v_0->kind == NCR_TV_OFFSET_DATE_TIME
+        || ncr_v_0->kind == NCR_TV_ZONED_DATE_TIME;
+    const char *name = has_calendar ? ncr_tv_calendar_name(ncr_v_0->calendar) : "";
+    return ncr_tv_text_ascii(name, strlen(name), ncr_line, ncr_column);
+}
+
+ncr_obj_@TEMPORAL_TEXT_ID@ * @TEMPORAL_ZONE_ID@(ncr_obj_@TEMPORAL_ID@ *ncr_v_0,
+    size_t ncr_line, size_t ncr_column
+) {
+    const char *name = ncr_v_0->zone == NULL ? "" : ncr_v_0->zone;
+    size_t length = ncr_v_0->zone == NULL ? 0 : (size_t)ncr_v_0->zone_length;
+    return ncr_tv_text_ascii(name, length, ncr_line, ncr_column);
+}
+
+int32_t @TEMPORAL_NANOSECOND@(ncr_obj_@TEMPORAL_ID@ *ncr_v_0,
+    size_t ncr_line, size_t ncr_column
+) {
+    (void)ncr_line;
+    (void)ncr_column;
+    return ncr_v_0->nanosecond;
+}
+
+ncr_obj_@TEMPORAL_LONG_RESULT@ @TEMPORAL_EPOCH_SECOND@(
+    ncr_obj_@TEMPORAL_ID@ *ncr_v_0, size_t ncr_line, size_t ncr_column
+) {
+    if (ncr_v_0->kind != NCR_TV_INSTANT && ncr_v_0->kind != NCR_TV_OFFSET_DATE_TIME
+        && ncr_v_0->kind != NCR_TV_ZONED_DATE_TIME) {
+        return NCR_TV_RESULT_ERROR(@TEMPORAL_LONG_RESULT@,
+            "Temporal.epochSecond: this value has no timeline instant", ncr_line, ncr_column);
+    }
+    return (ncr_obj_@TEMPORAL_LONG_RESULT@){ .tag = @TEMPORAL_LONG_OK_TAG@,
+        .data.v@TEMPORAL_LONG_OK_TAG@.f0 = ncr_v_0->epoch_second };
+}
+
+ncr_obj_@TEMPORAL_INT_RESULT@ @TEMPORAL_OFFSET_SECONDS@(
+    ncr_obj_@TEMPORAL_ID@ *ncr_v_0, size_t ncr_line, size_t ncr_column
+) {
+    if (ncr_v_0->kind != NCR_TV_OFFSET_DATE_TIME && ncr_v_0->kind != NCR_TV_ZONED_DATE_TIME) {
+        return NCR_TV_RESULT_ERROR(@TEMPORAL_INT_RESULT@,
+            "Temporal.offsetSeconds: this value has no UTC offset", ncr_line, ncr_column);
+    }
+    return (ncr_obj_@TEMPORAL_INT_RESULT@){ .tag = @TEMPORAL_INT_OK_TAG@,
+        .data.v@TEMPORAL_INT_OK_TAG@.f0 = ncr_v_0->offset_seconds };
+}
+
+ncr_obj_@TEMPORAL_LONG_RESULT@ @TEMPORAL_DURATION_SECONDS@(
+    ncr_obj_@TEMPORAL_ID@ *ncr_v_0, size_t ncr_line, size_t ncr_column
+) {
+    if (ncr_v_0->kind != NCR_TV_DURATION) {
+        return NCR_TV_RESULT_ERROR(@TEMPORAL_LONG_RESULT@,
+            "Temporal.durationSeconds: receiver is not a Duration", ncr_line, ncr_column);
+    }
+    return (ncr_obj_@TEMPORAL_LONG_RESULT@){ .tag = @TEMPORAL_LONG_OK_TAG@,
+        .data.v@TEMPORAL_LONG_OK_TAG@.f0 = ncr_v_0->epoch_second };
+}
+
+static ncr_obj_@TEMPORAL_INT_RESULT@ ncr_tv_integer_component(
+    ncr_obj_@TEMPORAL_ID@ *value, int32_t component, size_t line, size_t column
+) {
+    int32_t result = 0;
+    if (component < 3) {
+        if (value->kind != NCR_TV_PERIOD) {
+            return NCR_TV_RESULT_ERROR(@TEMPORAL_INT_RESULT@,
+                "Temporal period component requires a Period", line, column);
+        }
+        result = component == 0 ? value->period_years
+            : component == 1 ? value->period_months : value->period_days;
+    } else {
+        if (value->kind != NCR_TV_LOCAL_TIME && value->kind != NCR_TV_LOCAL_DATE_TIME
+            && value->kind != NCR_TV_OFFSET_DATE_TIME && value->kind != NCR_TV_ZONED_DATE_TIME) {
+            return NCR_TV_RESULT_ERROR(@TEMPORAL_INT_RESULT@,
+                "Temporal clock component requires a time-bearing value", line, column);
+        }
+        result = component == 3 ? value->hour : component == 4 ? value->minute : value->second;
+    }
+    return (ncr_obj_@TEMPORAL_INT_RESULT@){ .tag = @TEMPORAL_INT_OK_TAG@,
+        .data.v@TEMPORAL_INT_OK_TAG@.f0 = result };
+}
+
+ncr_obj_@TEMPORAL_INT_RESULT@ @TEMPORAL_PERIOD_YEARS@(
+    ncr_obj_@TEMPORAL_ID@ *ncr_v_0, size_t ncr_line, size_t ncr_column
+) { return ncr_tv_integer_component(ncr_v_0, 0, ncr_line, ncr_column); }
+ncr_obj_@TEMPORAL_INT_RESULT@ @TEMPORAL_PERIOD_MONTHS@(
+    ncr_obj_@TEMPORAL_ID@ *ncr_v_0, size_t ncr_line, size_t ncr_column
+) { return ncr_tv_integer_component(ncr_v_0, 1, ncr_line, ncr_column); }
+ncr_obj_@TEMPORAL_INT_RESULT@ @TEMPORAL_PERIOD_DAYS@(
+    ncr_obj_@TEMPORAL_ID@ *ncr_v_0, size_t ncr_line, size_t ncr_column
+) { return ncr_tv_integer_component(ncr_v_0, 2, ncr_line, ncr_column); }
+ncr_obj_@TEMPORAL_INT_RESULT@ @TEMPORAL_HOUR@(
+    ncr_obj_@TEMPORAL_ID@ *ncr_v_0, size_t ncr_line, size_t ncr_column
+) { return ncr_tv_integer_component(ncr_v_0, 3, ncr_line, ncr_column); }
+ncr_obj_@TEMPORAL_INT_RESULT@ @TEMPORAL_MINUTE@(
+    ncr_obj_@TEMPORAL_ID@ *ncr_v_0, size_t ncr_line, size_t ncr_column
+) { return ncr_tv_integer_component(ncr_v_0, 4, ncr_line, ncr_column); }
+ncr_obj_@TEMPORAL_INT_RESULT@ @TEMPORAL_SECOND@(
+    ncr_obj_@TEMPORAL_ID@ *ncr_v_0, size_t ncr_line, size_t ncr_column
+) { return ncr_tv_integer_component(ncr_v_0, 5, ncr_line, ncr_column); }
+
+ncr_obj_@TEMPORAL_FIELDS_RESULT@ @TEMPORAL_FIELDS@(
+    ncr_obj_@TEMPORAL_ID@ *ncr_v_0, size_t ncr_line, size_t ncr_column
+) {
+    if (ncr_v_0->kind != NCR_TV_LOCAL_DATE && ncr_v_0->kind != NCR_TV_LOCAL_DATE_TIME
+        && ncr_v_0->kind != NCR_TV_OFFSET_DATE_TIME && ncr_v_0->kind != NCR_TV_ZONED_DATE_TIME) {
+        return NCR_TV_RESULT_ERROR(@TEMPORAL_FIELDS_RESULT@,
+            "Temporal.fields: this value has no civil date fields", ncr_line, ncr_column);
+    }
+    ncr_obj_@TEMPORAL_FIELDS_ID@ *fields = ncr_allocate(sizeof(*fields), ncr_line, ncr_column);
+    fields->ncr_f_0 = ncr_v_0->era;
+    fields->ncr_f_1 = ncr_v_0->year;
+    fields->ncr_f_2 = ncr_v_0->extended_year;
+    fields->ncr_f_3 = ncr_v_0->month;
+    fields->ncr_f_4 = ncr_v_0->day;
+    fields->ncr_f_5 = ncr_v_0->day_of_year;
+    fields->ncr_f_6 = ncr_v_0->hour;
+    fields->ncr_f_7 = ncr_v_0->minute;
+    fields->ncr_f_8 = ncr_v_0->second;
+    fields->ncr_f_9 = ncr_v_0->nanosecond;
+    fields->ncr_f_10 = ncr_v_0->offset_seconds;
+    return (ncr_obj_@TEMPORAL_FIELDS_RESULT@){ .tag = @TEMPORAL_FIELDS_OK_TAG@,
+        .data.v@TEMPORAL_FIELDS_OK_TAG@.f0 = fields };
+}
+
+ncr_obj_@TEMPORAL_INT_RESULT@ @TEMPORAL_COMPARE_TO@(
+    ncr_obj_@TEMPORAL_ID@ *ncr_v_0, ncr_obj_@TEMPORAL_ID@ *ncr_v_1,
+    size_t ncr_line, size_t ncr_column
+) {
+    int32_t left_timeline = ncr_v_0->kind == NCR_TV_INSTANT
+        || ncr_v_0->kind == NCR_TV_OFFSET_DATE_TIME || ncr_v_0->kind == NCR_TV_ZONED_DATE_TIME;
+    int32_t right_timeline = ncr_v_1->kind == NCR_TV_INSTANT
+        || ncr_v_1->kind == NCR_TV_OFFSET_DATE_TIME || ncr_v_1->kind == NCR_TV_ZONED_DATE_TIME;
+    int32_t comparison = 0;
+    if (left_timeline && right_timeline) {
+        comparison = ncr_tv_compare_parts(ncr_v_0->epoch_second, ncr_v_0->nanosecond,
+            ncr_v_1->epoch_second, ncr_v_1->nanosecond);
+    } else if (ncr_v_0->kind == NCR_TV_DURATION && ncr_v_1->kind == NCR_TV_DURATION) {
+        comparison = ncr_tv_compare_parts(ncr_v_0->epoch_second, ncr_v_0->nanosecond,
+            ncr_v_1->epoch_second, ncr_v_1->nanosecond);
+    } else if ((ncr_v_0->kind == NCR_TV_LOCAL_DATE
+            || ncr_v_0->kind == NCR_TV_LOCAL_DATE_TIME)
+        && ncr_v_0->kind == ncr_v_1->kind && ncr_v_0->calendar == ncr_v_1->calendar) {
+        comparison = ncr_tv_compare_parts(ncr_v_0->local_second, ncr_v_0->nanosecond,
+            ncr_v_1->local_second, ncr_v_1->nanosecond);
+    } else if (ncr_v_0->kind == NCR_TV_LOCAL_TIME && ncr_v_1->kind == NCR_TV_LOCAL_TIME) {
+        comparison = ncr_tv_compare_parts(ncr_v_0->local_second, ncr_v_0->nanosecond,
+            ncr_v_1->local_second, ncr_v_1->nanosecond);
+    } else {
+        return NCR_TV_RESULT_ERROR(@TEMPORAL_INT_RESULT@,
+            "Temporal.compareTo: values are from incomparable temporal domains or calendars",
+            ncr_line, ncr_column);
+    }
+    return (ncr_obj_@TEMPORAL_INT_RESULT@){ .tag = @TEMPORAL_INT_OK_TAG@,
+        .data.v@TEMPORAL_INT_OK_TAG@.f0 = comparison };
+}
+
+static bool ncr_tv_resolve_stored_wall(
+    ncr_obj_@TEMPORAL_ID@ *value, bool prefer_later, size_t line, size_t column
+) {
+    UChar *zone = NULL;
+    int32_t zone_length = 0;
+    if (!ncr_tv_zone_to_uchar(value->zone, value->zone_length,
+        &zone, &zone_length, line, column)) { return false; }
+    UCalendar *calendar = ncr_tv_open_calendar(zone, zone_length, value->calendar,
+        line, column);
+    ncr_deallocate(zone);
+    if (calendar == NULL) { return false; }
+    int64_t millis = 0;
+    struct ncr_tv_fields fields;
+    bool valid = ncr_tv_resolve_wall(calendar, value->era, value->year, value->month,
+        value->day, value->hour, value->minute, value->second,
+        value->nanosecond / 1000000, prefer_later, &millis, &fields);
+    int32_t offset = 0;
+    if (valid) { valid = ncr_tv_offset_seconds(calendar, &offset); }
+    ucal_close(calendar);
+    if (!valid) { return false; }
+    ncr_tv_parts_from_millis(millis, value->nanosecond % 1000000,
+        &value->epoch_second, &value->nanosecond);
+    value->offset_seconds = offset;
+    ncr_tv_store_fields(value, &fields, value->nanosecond);
+    return ncr_tv_add_i64(value->epoch_second, offset, &value->local_second);
+}
+
+static void ncr_tv_add_calendar_component(
+    UCalendar *calendar, UCalendarDateFields field, int32_t amount, UErrorCode *status
+) {
+    if (U_FAILURE(*status) || amount == 0) { return; }
+    ucal_add(calendar, field, amount, status);
+    if (U_FAILURE(*status)) { return; }
+    int64_t millis;
+    UDate adjusted = ucal_getMillis(calendar, status);
+    if (U_SUCCESS(*status) && !ncr_dt_udate_to_epoch(adjusted, &millis)) {
+        *status = U_ILLEGAL_ARGUMENT_ERROR;
+    }
+}
+
+static bool ncr_tv_apply_calendar_period(
+    ncr_obj_@TEMPORAL_ID@ *value,
+    const ncr_obj_@TEMPORAL_ID@ *period,
+    bool prefer_later,
+    size_t line,
+    size_t column
+) {
+    int64_t local_millis = 0;
+    if (!ncr_tv_epoch_millis(value->local_second, value->nanosecond, &local_millis)) {
+        return false;
+    }
+    UCalendar *calendar = ncr_tv_open_utc(value->calendar, line, column);
+    if (calendar == NULL) { return false; }
+    UErrorCode status = U_ZERO_ERROR;
+    ucal_setMillis(calendar, (UDate)local_millis, &status);
+    ncr_tv_add_calendar_component(calendar, UCAL_YEAR, period->period_years, &status);
+    ncr_tv_add_calendar_component(calendar, UCAL_MONTH, period->period_months, &status);
+    ncr_tv_add_calendar_component(calendar, UCAL_DATE, period->period_days, &status);
+    UDate adjusted = U_FAILURE(status) ? 0.0 : ucal_getMillis(calendar, &status);
+    int64_t adjusted_millis = 0;
+    struct ncr_tv_fields fields;
+    bool valid = U_SUCCESS(status) && ncr_dt_udate_to_epoch(adjusted, &adjusted_millis)
+        && ncr_tv_read_fields(calendar, &fields);
+    ucal_close(calendar);
+    if (!valid) { return false; }
+    int64_t local_second = 0;
+    int32_t nanos = 0;
+    ncr_tv_parts_from_millis(adjusted_millis, value->nanosecond % 1000000,
+        &local_second, &nanos);
+    value->local_second = local_second;
+    value->nanosecond = nanos;
+    ncr_tv_store_fields(value, &fields, nanos);
+    if (value->kind == NCR_TV_OFFSET_DATE_TIME) {
+        return ncr_tv_add_i64(local_second, -(int64_t)value->offset_seconds,
+            &value->epoch_second);
+    }
+    if (value->kind == NCR_TV_ZONED_DATE_TIME) {
+        return ncr_tv_resolve_stored_wall(value, prefer_later, line, column);
+    }
+    value->epoch_second = local_second;
+    return true;
+}
+
+ncr_obj_@TEMPORAL_RESULT@ @TEMPORAL_PLUS_DURATION@(
+    ncr_obj_@TEMPORAL_ID@ *ncr_v_0, ncr_obj_@TEMPORAL_ID@ *ncr_v_1,
+    size_t ncr_line, size_t ncr_column
+) {
+    if (ncr_v_1->kind != NCR_TV_DURATION) {
+        return NCR_TV_RESULT_ERROR(@TEMPORAL_RESULT@,
+            "Temporal.plusDuration: argument must be a Duration", ncr_line, ncr_column);
+    }
+    ncr_obj_@TEMPORAL_ID@ *value = ncr_tv_clone(ncr_v_0, ncr_line, ncr_column);
+    bool valid = false;
+    if (value->kind == NCR_TV_DURATION || value->kind == NCR_TV_INSTANT) {
+        valid = ncr_tv_add_parts(value->epoch_second, value->nanosecond,
+            ncr_v_1->epoch_second, ncr_v_1->nanosecond,
+            &value->epoch_second, &value->nanosecond);
+    } else if (value->kind == NCR_TV_OFFSET_DATE_TIME
+        || value->kind == NCR_TV_ZONED_DATE_TIME) {
+        valid = ncr_tv_add_parts(value->epoch_second, value->nanosecond,
+            ncr_v_1->epoch_second, ncr_v_1->nanosecond,
+            &value->epoch_second, &value->nanosecond)
+            && ncr_tv_update_from_instant(value, ncr_line, ncr_column);
+    } else if (value->kind == NCR_TV_LOCAL_DATE_TIME) {
+        valid = ncr_tv_add_parts(value->local_second, value->nanosecond,
+            ncr_v_1->epoch_second, ncr_v_1->nanosecond,
+            &value->local_second, &value->nanosecond)
+            && ncr_tv_update_local_from_second(value, ncr_line, ncr_column);
+        value->epoch_second = value->local_second;
+    } else if (value->kind == NCR_TV_LOCAL_TIME) {
+        int64_t add_seconds = ncr_v_1->epoch_second % NCR_TV_SECONDS_PER_DAY;
+        int64_t sum = 0;
+        int64_t total_nanos = (int64_t)value->nanosecond + ncr_v_1->nanosecond;
+        int64_t carry = total_nanos >= NCR_TV_NANOS_PER_SECOND ? 1 : 0;
+        if (carry != 0) { total_nanos -= NCR_TV_NANOS_PER_SECOND; }
+        valid = ncr_tv_add_i64(value->local_second, add_seconds, &sum)
+            && ncr_tv_add_i64(sum, carry, &sum);
+        if (valid) {
+            sum %= NCR_TV_SECONDS_PER_DAY;
+            if (sum < 0) { sum += NCR_TV_SECONDS_PER_DAY; }
+            value->local_second = sum;
+            value->nanosecond = (int32_t)total_nanos;
+            value->hour = (int32_t)(sum / 3600);
+            value->minute = (int32_t)((sum % 3600) / 60);
+            value->second = (int32_t)(sum % 60);
+        }
+    }
+    if (!valid) {
+        ncr_drop_@TEMPORAL_ID@(value);
+        return NCR_TV_RESULT_ERROR(@TEMPORAL_RESULT@,
+            "Temporal.plusDuration: unsupported kind, overflow, or ICU range exceeded",
+            ncr_line, ncr_column);
+    }
+    return (ncr_obj_@TEMPORAL_RESULT@){ .tag = @TEMPORAL_OK_TAG@,
+        .data.v@TEMPORAL_OK_TAG@.f0 = value };
+}
+
+ncr_obj_@TEMPORAL_RESULT@ @TEMPORAL_PLUS_PERIOD@(
+    ncr_obj_@TEMPORAL_ID@ *ncr_v_0, ncr_obj_@TEMPORAL_ID@ *ncr_v_1,
+    bool ncr_v_2, size_t ncr_line, size_t ncr_column
+) {
+    if (ncr_v_1->kind != NCR_TV_PERIOD) {
+        return NCR_TV_RESULT_ERROR(@TEMPORAL_RESULT@,
+            "Temporal.plusPeriod: argument must be a Period", ncr_line, ncr_column);
+    }
+    if (ncr_v_0->kind != NCR_TV_LOCAL_DATE && ncr_v_0->kind != NCR_TV_LOCAL_DATE_TIME
+        && ncr_v_0->kind != NCR_TV_OFFSET_DATE_TIME
+        && ncr_v_0->kind != NCR_TV_ZONED_DATE_TIME) {
+        return NCR_TV_RESULT_ERROR(@TEMPORAL_RESULT@,
+            "Temporal.plusPeriod: receiver must have calendar date fields", ncr_line, ncr_column);
+    }
+    ncr_obj_@TEMPORAL_ID@ *value = ncr_tv_clone(ncr_v_0, ncr_line, ncr_column);
+    if (!ncr_tv_apply_calendar_period(value, ncr_v_1, ncr_v_2, ncr_line, ncr_column)) {
+        ncr_drop_@TEMPORAL_ID@(value);
+        return NCR_TV_RESULT_ERROR(@TEMPORAL_RESULT@,
+            "Temporal.plusPeriod: invalid target date, DST gap, overflow, or ICU range",
+            ncr_line, ncr_column);
+    }
+    return (ncr_obj_@TEMPORAL_RESULT@){ .tag = @TEMPORAL_OK_TAG@,
+        .data.v@TEMPORAL_OK_TAG@.f0 = value };
+}
+
+ncr_obj_@TEMPORAL_RESULT@ @TEMPORAL_AT_ZONE@(
+    ncr_obj_@TEMPORAL_ID@ *ncr_v_0, ncr_obj_@TEMPORAL_TEXT_ID@ *ncr_v_1,
+    bool ncr_v_2, size_t ncr_line, size_t ncr_column
+) {
+    if (ncr_v_0->kind != NCR_TV_LOCAL_DATE && ncr_v_0->kind != NCR_TV_LOCAL_DATE_TIME) {
+        return NCR_TV_RESULT_ERROR(@TEMPORAL_RESULT@,
+            "Temporal.atZone: receiver must be a LocalDate or LocalDateTime", ncr_line, ncr_column);
+    }
+    char *zone_bytes = NULL;
+    int32_t zone_bytes_length = 0;
+    UChar *zone = NULL;
+    int32_t zone_length = 0;
+    if (!ncr_tv_zone_from_text(ncr_v_1, &zone_bytes, &zone_bytes_length,
+        &zone, &zone_length, ncr_line, ncr_column)) {
+        return NCR_TV_RESULT_ERROR(@TEMPORAL_RESULT@,
+            "Temporal.atZone: zone must be a known ICU time-zone ID", ncr_line, ncr_column);
+    }
+    UCalendar *calendar = ncr_tv_open_calendar(zone, zone_length, ncr_v_0->calendar,
+        ncr_line, ncr_column);
+    ncr_deallocate(zone);
+    if (calendar == NULL) {
+        ncr_deallocate(zone_bytes);
+        return NCR_TV_RESULT_ERROR(@TEMPORAL_RESULT@,
+            "Temporal.atZone: ICU calendar initialization failed", ncr_line, ncr_column);
+    }
+    int64_t millis = 0;
+    struct ncr_tv_fields fields;
+    bool valid = ncr_tv_resolve_wall(calendar, ncr_v_0->era, ncr_v_0->year,
+        ncr_v_0->month, ncr_v_0->day, ncr_v_0->hour, ncr_v_0->minute,
+        ncr_v_0->second, ncr_v_0->nanosecond / 1000000, ncr_v_2, &millis, &fields);
+    int32_t offset = 0;
+    if (valid) { valid = ncr_tv_offset_seconds(calendar, &offset); }
+    ucal_close(calendar);
+    int64_t epoch_second = 0, local_second = 0;
+    int32_t nanos = 0;
+    if (valid) {
+        ncr_tv_parts_from_millis(millis, ncr_v_0->nanosecond % 1000000,
+            &epoch_second, &nanos);
+        valid = ncr_tv_add_i64(epoch_second, offset, &local_second);
+    }
+    if (!valid) {
+        ncr_deallocate(zone_bytes);
+        return NCR_TV_RESULT_ERROR(@TEMPORAL_RESULT@,
+            "Temporal.atZone: local time falls in a daylight-saving gap or ICU range",
+            ncr_line, ncr_column);
+    }
+    ncr_obj_@TEMPORAL_ID@ *value = ncr_tv_clone(ncr_v_0, ncr_line, ncr_column);
+    value->kind = NCR_TV_ZONED_DATE_TIME;
+    value->zone = zone_bytes;
+    value->zone_length = zone_bytes_length;
+    value->epoch_second = epoch_second;
+    value->local_second = local_second;
+    value->offset_seconds = offset;
+    value->nanosecond = nanos;
+    ncr_tv_store_fields(value, &fields, nanos);
+    return (ncr_obj_@TEMPORAL_RESULT@){ .tag = @TEMPORAL_OK_TAG@,
+        .data.v@TEMPORAL_OK_TAG@.f0 = value };
+}
+
+ncr_obj_@TEMPORAL_RESULT@ @TEMPORAL_WITH_ZONE@(
+    ncr_obj_@TEMPORAL_ID@ *ncr_v_0, ncr_obj_@TEMPORAL_TEXT_ID@ *ncr_v_1,
+    size_t ncr_line, size_t ncr_column
+) {
+    if (ncr_v_0->kind != NCR_TV_INSTANT && ncr_v_0->kind != NCR_TV_OFFSET_DATE_TIME
+        && ncr_v_0->kind != NCR_TV_ZONED_DATE_TIME) {
+        return NCR_TV_RESULT_ERROR(@TEMPORAL_RESULT@,
+            "Temporal.withZone: receiver must represent an instant", ncr_line, ncr_column);
+    }
+    char *zone_bytes = NULL;
+    int32_t zone_bytes_length = 0;
+    UChar *zone = NULL;
+    int32_t zone_length = 0;
+    if (!ncr_tv_zone_from_text(ncr_v_1, &zone_bytes, &zone_bytes_length,
+        &zone, &zone_length, ncr_line, ncr_column)) {
+        return NCR_TV_RESULT_ERROR(@TEMPORAL_RESULT@,
+            "Temporal.withZone: zone must be a known ICU time-zone ID", ncr_line, ncr_column);
+    }
+    ncr_obj_@TEMPORAL_ID@ *value = ncr_tv_copy_without_zone(ncr_v_0, ncr_line, ncr_column);
+    value->zone = zone_bytes;
+    value->zone_length = zone_bytes_length;
+    value->kind = NCR_TV_ZONED_DATE_TIME;
+    bool valid = ncr_tv_update_from_zone(value, zone, zone_length, ncr_line, ncr_column);
+    ncr_deallocate(zone);
+    if (!valid) {
+        ncr_drop_@TEMPORAL_ID@(value);
+        return NCR_TV_RESULT_ERROR(@TEMPORAL_RESULT@,
+            "Temporal.withZone: instant exceeds ICU's exact calendar range", ncr_line, ncr_column);
+    }
+    return (ncr_obj_@TEMPORAL_RESULT@){ .tag = @TEMPORAL_OK_TAG@,
+        .data.v@TEMPORAL_OK_TAG@.f0 = value };
+}
+
+ncr_obj_@TEMPORAL_RESULT@ @TEMPORAL_WITH_OFFSET@(
+    ncr_obj_@TEMPORAL_ID@ *ncr_v_0, int32_t ncr_v_1,
+    size_t ncr_line, size_t ncr_column
+) {
+    if (ncr_v_0->kind != NCR_TV_INSTANT && ncr_v_0->kind != NCR_TV_OFFSET_DATE_TIME
+        && ncr_v_0->kind != NCR_TV_ZONED_DATE_TIME) {
+        return NCR_TV_RESULT_ERROR(@TEMPORAL_RESULT@,
+            "Temporal.withOffset: receiver must represent an instant", ncr_line, ncr_column);
+    }
+    if (ncr_v_1 < -64800 || ncr_v_1 > 64800) {
+        return NCR_TV_RESULT_ERROR(@TEMPORAL_RESULT@,
+            "Temporal.withOffset: offset must be within plus or minus 18 hours",
+            ncr_line, ncr_column);
+    }
+    ncr_obj_@TEMPORAL_ID@ *value = ncr_tv_copy_without_zone(ncr_v_0, ncr_line, ncr_column);
+    value->kind = NCR_TV_OFFSET_DATE_TIME;
+    value->offset_seconds = ncr_v_1;
+    if (!ncr_tv_update_from_instant(value, ncr_line, ncr_column)) {
+        ncr_drop_@TEMPORAL_ID@(value);
+        return NCR_TV_RESULT_ERROR(@TEMPORAL_RESULT@,
+            "Temporal.withOffset: instant exceeds ICU's exact calendar range",
+            ncr_line, ncr_column);
+    }
+    return (ncr_obj_@TEMPORAL_RESULT@){ .tag = @TEMPORAL_OK_TAG@,
+        .data.v@TEMPORAL_OK_TAG@.f0 = value };
+}
+
+ncr_obj_@TEMPORAL_RESULT@ @TEMPORAL_WITH_TIME@(
+    ncr_obj_@TEMPORAL_ID@ *ncr_v_0, ncr_obj_@TEMPORAL_ID@ *ncr_v_1,
+    size_t ncr_line, size_t ncr_column
+) {
+    if (ncr_v_0->kind != NCR_TV_LOCAL_DATE || ncr_v_1->kind != NCR_TV_LOCAL_TIME) {
+        return NCR_TV_RESULT_ERROR(@TEMPORAL_RESULT@,
+            "Temporal.withTime: receiver must be LocalDate and argument LocalTime",
+            ncr_line, ncr_column);
+    }
+    int64_t local_second = 0;
+    struct ncr_tv_fields fields;
+    if (!ncr_tv_local_fields(ncr_v_0->calendar, ncr_v_0->era, ncr_v_0->year,
+        ncr_v_0->month, ncr_v_0->day, ncr_v_1->hour, ncr_v_1->minute,
+        ncr_v_1->second, ncr_v_1->nanosecond, &local_second, &fields,
+        ncr_line, ncr_column)) {
+        return NCR_TV_RESULT_ERROR(@TEMPORAL_RESULT@,
+            "Temporal.withTime: civil date/time exceeds ICU's exact range",
+            ncr_line, ncr_column);
+    }
+    ncr_obj_@TEMPORAL_ID@ *value = ncr_tv_clone(ncr_v_0, ncr_line, ncr_column);
+    value->kind = NCR_TV_LOCAL_DATE_TIME;
+    value->local_second = local_second;
+    value->epoch_second = local_second;
+    value->nanosecond = ncr_v_1->nanosecond;
+    ncr_tv_store_fields(value, &fields, value->nanosecond);
+    return (ncr_obj_@TEMPORAL_RESULT@){ .tag = @TEMPORAL_OK_TAG@,
+        .data.v@TEMPORAL_OK_TAG@.f0 = value };
+}
+
+ncr_obj_@TEMPORAL_RESULT@ @TEMPORAL_WITH_CALENDAR@(
+    ncr_obj_@TEMPORAL_ID@ *ncr_v_0, ncr_obj_@TEMPORAL_TEXT_ID@ *ncr_v_1,
+    size_t ncr_line, size_t ncr_column
+) {
+    int32_t calendar = 0;
+    if (!ncr_tv_calendar_from_text(ncr_v_1, &calendar)) {
+        return NCR_TV_RESULT_ERROR(@TEMPORAL_RESULT@,
+            "Temporal.withCalendar: unsupported ICU calendar identifier", ncr_line, ncr_column);
+    }
+    if (ncr_v_0->kind != NCR_TV_LOCAL_DATE && ncr_v_0->kind != NCR_TV_LOCAL_DATE_TIME
+        && ncr_v_0->kind != NCR_TV_OFFSET_DATE_TIME
+        && ncr_v_0->kind != NCR_TV_ZONED_DATE_TIME) {
+        return NCR_TV_RESULT_ERROR(@TEMPORAL_RESULT@,
+            "Temporal.withCalendar: receiver has no civil calendar fields", ncr_line, ncr_column);
+    }
+    ncr_obj_@TEMPORAL_ID@ *value = ncr_tv_clone(ncr_v_0, ncr_line, ncr_column);
+    value->calendar = calendar;
+    bool valid = value->kind == NCR_TV_LOCAL_DATE || value->kind == NCR_TV_LOCAL_DATE_TIME
+        ? ncr_tv_update_local_from_second(value, ncr_line, ncr_column)
+        : ncr_tv_update_from_instant(value, ncr_line, ncr_column);
+    if (!valid) {
+        ncr_drop_@TEMPORAL_ID@(value);
+        return NCR_TV_RESULT_ERROR(@TEMPORAL_RESULT@,
+            "Temporal.withCalendar: value exceeds ICU's exact calendar range", ncr_line, ncr_column);
+    }
+    return (ncr_obj_@TEMPORAL_RESULT@){ .tag = @TEMPORAL_OK_TAG@,
+        .data.v@TEMPORAL_OK_TAG@.f0 = value };
+}
+
+static bool ncr_tv_gregorian_fields(
+    const ncr_obj_@TEMPORAL_ID@ *value,
+    struct ncr_tv_fields *fields,
+    int32_t *offset,
+    size_t line,
+    size_t column
+) {
+    UChar fixed[20];
+    const UChar *zone = ncr_tv_utc_zone;
+    int32_t zone_length = 3;
+    UChar *owned_zone = NULL;
+    bool needs_zone = value->kind == NCR_TV_ZONED_DATE_TIME
+        || value->kind == NCR_TV_OFFSET_DATE_TIME;
+    if (value->kind == NCR_TV_ZONED_DATE_TIME) {
+        if (!ncr_tv_zone_to_uchar(value->zone, value->zone_length,
+            &owned_zone, &zone_length, line, column)) { return false; }
+        zone = owned_zone;
+    } else if (value->kind == NCR_TV_OFFSET_DATE_TIME) {
+        if (!ncr_tv_fixed_zone(value->offset_seconds, fixed, &zone_length)) { return false; }
+        zone = fixed;
+    }
+    UCalendar *calendar = ncr_tv_open_calendar(zone, zone_length,
+        NCR_TV_GREGORIAN, line, column);
+    if (owned_zone != NULL) { ncr_deallocate(owned_zone); }
+    if (calendar == NULL) { return false; }
+    int64_t seconds = value->kind == NCR_TV_LOCAL_DATE
+        || value->kind == NCR_TV_LOCAL_DATE_TIME
+        ? value->local_second : value->epoch_second;
+    int64_t millis = 0;
+    bool valid = ncr_tv_epoch_millis(seconds, value->nanosecond, &millis);
+    UErrorCode status = U_ZERO_ERROR;
+    if (valid) { ucal_setMillis(calendar, (UDate)millis, &status); }
+    valid = valid && U_SUCCESS(status);
+    if (valid && needs_zone) {
+        valid = ncr_tv_read_instant_fields(calendar, millis, fields, offset);
+    } else if (valid) {
+        *offset = 0;
+        valid = ncr_tv_read_fields(calendar, fields);
+    }
+    ucal_close(calendar);
+    return valid;
+}
+
+static bool ncr_tv_append_fraction(char *output, size_t capacity, size_t *used,
+                                   int32_t nanosecond) {
+    if (nanosecond == 0) { return true; }
+    char fraction[10];
+    (void)snprintf(fraction, sizeof(fraction), "%09d", nanosecond);
+    int32_t length = 9;
+    while (length > 0 && fraction[length - 1] == '0') { --length; }
+    if (*used + (size_t)length + 2 > capacity) { return false; }
+    output[(*used)++] = '.';
+    memcpy(output + *used, fraction, (size_t)length);
+    *used += (size_t)length;
+    output[*used] = '\0';
+    return true;
+}
+
+static bool ncr_tv_append_offset(char *output, size_t capacity, size_t *used,
+                                 int32_t offset_seconds) {
+    if (offset_seconds < -64800 || offset_seconds > 64800) { return false; }
+    int64_t magnitude = offset_seconds < 0 ? -(int64_t)offset_seconds : offset_seconds;
+    int32_t hours = (int32_t)(magnitude / 3600);
+    int32_t minutes = (int32_t)((magnitude % 3600) / 60);
+    int32_t seconds = (int32_t)(magnitude % 60);
+    int written = seconds == 0
+        ? snprintf(output + *used, capacity - *used, "%c%02d:%02d",
+            offset_seconds < 0 ? '-' : '+', hours, minutes)
+        : snprintf(output + *used, capacity - *used, "%c%02d:%02d:%02d",
+            offset_seconds < 0 ? '-' : '+', hours, minutes, seconds);
+    if (written < 0 || (size_t)written >= capacity - *used) { return false; }
+    *used += (size_t)written;
+    return true;
+}
+
+static bool ncr_tv_append_date(char *output, size_t capacity, size_t *used, int32_t year,
+                               int32_t month, int32_t day) {
+    char expanded_year[24];
+    if (year >= 0 && year <= 9999) {
+        (void)snprintf(expanded_year, sizeof(expanded_year), "%04d", year);
+    } else if (year < 0) {
+        (void)snprintf(expanded_year, sizeof(expanded_year), "-%06lld",
+            (long long)-(int64_t)year);
+    } else {
+        (void)snprintf(expanded_year, sizeof(expanded_year), "+%06d", year);
+    }
+    int written = snprintf(output + *used, capacity - *used, "%s-%02d-%02d",
+        expanded_year, month, day);
+    if (written < 0 || (size_t)written >= capacity - *used) { return false; }
+    *used += (size_t)written;
+    return true;
+}
+
+static bool ncr_tv_append_time(char *output, size_t capacity, size_t *used,
+                               int32_t hour, int32_t minute, int32_t second) {
+    int written = snprintf(output + *used, capacity - *used, "T%02d:%02d:%02d",
+        hour, minute, second);
+    if (written < 0 || (size_t)written >= capacity - *used) { return false; }
+    *used += (size_t)written;
+    return true;
+}
+
+ncr_obj_@TEMPORAL_TEXT_RESULT@ @TEMPORAL_FORMAT_ISO@(
+    ncr_obj_@TEMPORAL_ID@ *ncr_v_0, size_t ncr_line, size_t ncr_column
+) {
+    char output[256] = { 0 };
+    size_t used = 0;
+    if (ncr_v_0->kind == NCR_TV_DURATION) {
+        int64_t seconds = ncr_v_0->epoch_second;
+        int32_t nanos = ncr_v_0->nanosecond;
+        bool negative = seconds < 0;
+        uint64_t magnitude_seconds = negative
+            ? (uint64_t)(-(seconds + 1)) + 1 : (uint64_t)seconds;
+        uint32_t magnitude_nanos = (uint32_t)nanos;
+        if (negative && nanos != 0) {
+            --magnitude_seconds;
+            magnitude_nanos = (uint32_t)(1000000000 - nanos);
+        } else if (!negative && seconds == 0 && nanos != 0) {
+            negative = false;
+        }
+        int written = snprintf(output, sizeof(output), "PT%s%llu",
+            negative ? "-" : "", (unsigned long long)magnitude_seconds);
+        if (written < 0 || (size_t)written >= sizeof(output)) { goto format_error; }
+        used = (size_t)written;
+        if (!ncr_tv_append_fraction(output, sizeof(output), &used, (int32_t)magnitude_nanos)) {
+            goto format_error;
+        }
+        if (used + 1 >= sizeof(output)) { goto format_error; }
+        output[used++] = 'S';
+        output[used] = '\0';
+    } else if (ncr_v_0->kind == NCR_TV_PERIOD) {
+        int written = snprintf(output, sizeof(output), "P%dY%dM%dD",
+            ncr_v_0->period_years, ncr_v_0->period_months, ncr_v_0->period_days);
+        if (written < 0 || (size_t)written >= sizeof(output)) { goto format_error; }
+        used = (size_t)written;
+    } else if (ncr_v_0->kind == NCR_TV_LOCAL_TIME) {
+        int written = snprintf(output, sizeof(output), "%02d:%02d:%02d",
+            ncr_v_0->hour, ncr_v_0->minute, ncr_v_0->second);
+        if (written < 0 || (size_t)written >= sizeof(output)) { goto format_error; }
+        used = (size_t)written;
+        if (!ncr_tv_append_fraction(output, sizeof(output), &used, ncr_v_0->nanosecond)) {
+            goto format_error;
+        }
+    } else {
+        if (ncr_v_0->kind != NCR_TV_INSTANT && ncr_v_0->kind != NCR_TV_LOCAL_DATE
+            && ncr_v_0->kind != NCR_TV_LOCAL_DATE_TIME
+            && ncr_v_0->kind != NCR_TV_OFFSET_DATE_TIME
+            && ncr_v_0->kind != NCR_TV_ZONED_DATE_TIME) { goto format_error; }
+        struct ncr_tv_fields fields;
+        int32_t offset = 0;
+        if (!ncr_tv_gregorian_fields(ncr_v_0, &fields, &offset, ncr_line, ncr_column)
+            || !ncr_tv_append_date(output, sizeof(output), &used,
+                fields.extended_year, fields.month, fields.day)) { goto format_error; }
+        if (ncr_v_0->kind != NCR_TV_LOCAL_DATE) {
+            if (!ncr_tv_append_time(output, sizeof(output), &used,
+                fields.hour, fields.minute, fields.second)
+                || !ncr_tv_append_fraction(output, sizeof(output), &used,
+                    ncr_v_0->nanosecond)) { goto format_error; }
+        }
+        if (ncr_v_0->kind == NCR_TV_INSTANT) {
+            if (used + 1 >= sizeof(output)) { goto format_error; }
+            output[used++] = 'Z';
+            output[used] = '\0';
+        } else if (ncr_v_0->kind == NCR_TV_OFFSET_DATE_TIME
+            || ncr_v_0->kind == NCR_TV_ZONED_DATE_TIME) {
+            if (!ncr_tv_append_offset(output, sizeof(output), &used, offset)) { goto format_error; }
+            if (ncr_v_0->kind == NCR_TV_ZONED_DATE_TIME) {
+                int written = snprintf(output + used, sizeof(output) - used, "[%.*s]",
+                    ncr_v_0->zone_length, ncr_v_0->zone);
+                if (written < 0 || (size_t)written >= sizeof(output) - used) { goto format_error; }
+                used += (size_t)written;
+            }
+        }
+    }
+    {
+        ncr_obj_@TEMPORAL_TEXT_ID@ *text = ncr_tv_text_ascii(output, used, ncr_line, ncr_column);
+        if (text == NULL) { goto format_error; }
+        return (ncr_obj_@TEMPORAL_TEXT_RESULT@){ .tag = @TEMPORAL_TEXT_OK_TAG@,
+            .data.v@TEMPORAL_TEXT_OK_TAG@.f0 = text };
+    }
+
+format_error:
+    return NCR_TV_RESULT_ERROR(@TEMPORAL_TEXT_RESULT@,
+        "Temporal.formatIso: unsupported kind, invalid state, or ICU exact-range limit",
+        ncr_line, ncr_column);
+}
+
+static bool ncr_tv_parse_fraction(const unsigned char *bytes, size_t length,
+                                  size_t *position, int32_t *nanosecond) {
+    *nanosecond = 0;
+    if (*position >= length || bytes[*position] != '.') { return true; }
+    ++*position;
+    int32_t digits = 0;
+    while (*position < length && bytes[*position] >= '0' && bytes[*position] <= '9'
+        && digits < 9) {
+        *nanosecond = *nanosecond * 10 + (bytes[(*position)++] - '0');
+        ++digits;
+    }
+    if (digits == 0 || (*position < length
+        && bytes[*position] >= '0' && bytes[*position] <= '9')) { return false; }
+    for (; digits < 9; ++digits) { *nanosecond *= 10; }
+    return true;
+}
+static bool ncr_tv_parse_iso_year(const unsigned char *bytes, size_t length,
+                                  size_t *position, int32_t *year) {
+    int32_t sign = 1;
+    int32_t digits = 4;
+    if (*position < length && (bytes[*position] == '+' || bytes[*position] == '-')) {
+        sign = bytes[(*position)++] == '-' ? -1 : 1;
+        digits = 6;
+    }
+    int32_t magnitude = 0;
+    if (!ncr_tv_parse_digits(bytes, length, position, digits, &magnitude)) { return false; }
+    *year = sign * magnitude;
+    return true;
+}
+
+ncr_obj_@TEMPORAL_RESULT@ @TEMPORAL_PARSE_ISO@(
+    ncr_obj_@TEMPORAL_TEXT_ID@ *ncr_v_0, size_t ncr_line, size_t ncr_column
+) {
+    const unsigned char *bytes = ncr_v_0->bytes;
+    size_t length = (size_t)ncr_v_0->length;
+    size_t position = 0;
+    int32_t iso_year = 0, month = 0, day = 0, hour = 0, minute = 0, second = 0;
+    if (length == 0 || memchr(bytes, 0, length) != NULL) {
+        return NCR_TV_RESULT_ERROR(@TEMPORAL_RESULT@,
+            "Temporal.parseIso: input must be nonempty UTF-8 without NUL", ncr_line, ncr_column);
+    }
+    if (length >= 3 && bytes[2] == ':') {
+        int32_t nanos = 0;
+        if (!ncr_tv_parse_digits(bytes, length, &position, 2, &hour)
+            || !ncr_tv_next(bytes, length, &position, ':')
+            || !ncr_tv_parse_digits(bytes, length, &position, 2, &minute)
+            || !ncr_tv_next(bytes, length, &position, ':')
+            || !ncr_tv_parse_digits(bytes, length, &position, 2, &second)
+            || !ncr_tv_parse_fraction(bytes, length, &position, &nanos)
+            || position != length || hour > 23 || minute > 59 || second > 59) {
+            return NCR_TV_RESULT_ERROR(@TEMPORAL_RESULT@,
+                "Temporal.parseIso: invalid ISO local-time syntax", ncr_line, ncr_column);
+        }
+        ncr_obj_@TEMPORAL_ID@ *time = ncr_tv_new(NCR_TV_LOCAL_TIME, ncr_line, ncr_column);
+        time->hour = hour;
+        time->minute = minute;
+        time->second = second;
+        time->nanosecond = nanos;
+        time->local_second = (int64_t)hour * 3600 + minute * 60 + second;
+        return (ncr_obj_@TEMPORAL_RESULT@){ .tag = @TEMPORAL_OK_TAG@,
+            .data.v@TEMPORAL_OK_TAG@.f0 = time };
+    }
+    if (!ncr_tv_parse_iso_year(bytes, length, &position, &iso_year)
+        || !ncr_tv_next(bytes, length, &position, '-')
+        || !ncr_tv_parse_digits(bytes, length, &position, 2, &month)
+        || !ncr_tv_next(bytes, length, &position, '-')
+        || !ncr_tv_parse_digits(bytes, length, &position, 2, &day)) {
+        return NCR_TV_RESULT_ERROR(@TEMPORAL_RESULT@,
+            "Temporal.parseIso: invalid ISO date syntax", ncr_line, ncr_column);
+    }
+    int32_t era = iso_year <= 0 ? 0 : 1;
+    int32_t year = iso_year <= 0 ? 1 - iso_year : iso_year;
+    if (position == length) {
+        int64_t local_second = 0;
+        struct ncr_tv_fields fields;
+        if (!ncr_tv_local_fields(NCR_TV_GREGORIAN, era, year, month, day,
+            0, 0, 0, 0, &local_second, &fields, ncr_line, ncr_column)) {
+            return ncr_tv_failed(ncr_line, ncr_column);
+        }
+        ncr_obj_@TEMPORAL_ID@ *date = ncr_tv_new(NCR_TV_LOCAL_DATE, ncr_line, ncr_column);
+        date->calendar = NCR_TV_GREGORIAN;
+        date->local_second = local_second;
+        ncr_tv_store_fields(date, &fields, 0);
+        return (ncr_obj_@TEMPORAL_RESULT@){ .tag = @TEMPORAL_OK_TAG@,
+            .data.v@TEMPORAL_OK_TAG@.f0 = date };
+    }
+    int32_t nanos = 0;
+    if (!ncr_tv_next(bytes, length, &position, 'T')
+        || !ncr_tv_parse_digits(bytes, length, &position, 2, &hour)
+        || !ncr_tv_next(bytes, length, &position, ':')
+        || !ncr_tv_parse_digits(bytes, length, &position, 2, &minute)
+        || !ncr_tv_next(bytes, length, &position, ':')
+        || !ncr_tv_parse_digits(bytes, length, &position, 2, &second)
+        || !ncr_tv_parse_fraction(bytes, length, &position, &nanos)
+        || hour > 23 || minute > 59 || second > 59) {
+        return NCR_TV_RESULT_ERROR(@TEMPORAL_RESULT@,
+            "Temporal.parseIso: invalid ISO local date-time syntax", ncr_line, ncr_column);
+    }
+    bool has_offset = position < length
+        && (bytes[position] == 'Z' || bytes[position] == '+' || bytes[position] == '-');
+    int32_t offset = 0;
+    if (has_offset && !ncr_tv_offset_text(bytes, length, &position, &offset)) {
+        return NCR_TV_RESULT_ERROR(@TEMPORAL_RESULT@,
+            "Temporal.parseIso: invalid numeric UTC offset", ncr_line, ncr_column);
+    }
+    bool has_zone = position < length && bytes[position] == '[';
+    if (!has_offset && !has_zone) {
+        if (position != length) {
+            return NCR_TV_RESULT_ERROR(@TEMPORAL_RESULT@,
+                "Temporal.parseIso: trailing local date-time input", ncr_line, ncr_column);
+        }
+        int64_t local_second = 0;
+        struct ncr_tv_fields fields;
+        if (!ncr_tv_local_fields(NCR_TV_GREGORIAN, era, year, month, day,
+            hour, minute, second, nanos, &local_second, &fields, ncr_line, ncr_column)) {
+            return ncr_tv_failed(ncr_line, ncr_column);
+        }
+        ncr_obj_@TEMPORAL_ID@ *local = ncr_tv_new(NCR_TV_LOCAL_DATE_TIME,
+            ncr_line, ncr_column);
+        local->calendar = NCR_TV_GREGORIAN;
+        local->epoch_second = local_second;
+        local->local_second = local_second;
+        local->nanosecond = nanos;
+        ncr_tv_store_fields(local, &fields, nanos);
+        return (ncr_obj_@TEMPORAL_RESULT@){ .tag = @TEMPORAL_OK_TAG@,
+            .data.v@TEMPORAL_OK_TAG@.f0 = local };
+    }
+    if (has_zone && !has_offset) {
+        return NCR_TV_RESULT_ERROR(@TEMPORAL_RESULT@,
+            "Temporal.parseIso: a bracketed zone requires an explicit numeric offset",
+            ncr_line, ncr_column);
+    }
+    const unsigned char *zone_bytes_input = NULL;
+    size_t zone_input_length = 0;
+    if (has_zone) {
+        ++position;
+        size_t start = position;
+        while (position < length && bytes[position] != ']') { ++position; }
+        if (position == start || position >= length) {
+            return NCR_TV_RESULT_ERROR(@TEMPORAL_RESULT@,
+                "Temporal.parseIso: invalid bracketed time-zone ID", ncr_line, ncr_column);
+        }
+        zone_bytes_input = bytes + start;
+        zone_input_length = position - start;
+        ++position;
+    }
+    if (position != length) {
+        return NCR_TV_RESULT_ERROR(@TEMPORAL_RESULT@,
+            "Temporal.parseIso: trailing input", ncr_line, ncr_column);
+    }
+    if (has_offset && !has_zone) {
+        UCalendar *calendar = ncr_tv_open_utc(NCR_TV_GREGORIAN, ncr_line, ncr_column);
+        if (calendar == NULL) { return ncr_tv_failed(ncr_line, ncr_column); }
+        int64_t millis = 0;
+        struct ncr_tv_fields fields;
+        bool valid = ncr_tv_resolve_wall(calendar, era, year, month, day, hour,
+            minute, second, nanos / 1000000, false, &millis, &fields);
+        ucal_close(calendar);
+        int64_t local_second = 0, epoch_second = 0;
+        int32_t normalized_nanos = 0;
+        if (valid) {
+            ncr_tv_parts_from_millis(millis, nanos % 1000000,
+                &local_second, &normalized_nanos);
+            valid = ncr_tv_add_i64(local_second, -(int64_t)offset, &epoch_second);
+        }
+        if (!valid) { return ncr_tv_failed(ncr_line, ncr_column); }
+        ncr_obj_@TEMPORAL_ID@ *value = ncr_tv_new(NCR_TV_OFFSET_DATE_TIME,
+            ncr_line, ncr_column);
+        value->calendar = NCR_TV_GREGORIAN;
+        value->local_second = local_second;
+        value->epoch_second = epoch_second;
+        value->offset_seconds = offset;
+        value->nanosecond = normalized_nanos;
+        ncr_tv_store_fields(value, &fields, normalized_nanos);
+        return (ncr_obj_@TEMPORAL_RESULT@){ .tag = @TEMPORAL_OK_TAG@,
+            .data.v@TEMPORAL_OK_TAG@.f0 = value };
+    }
+    char *canonical_bytes = NULL;
+    int32_t canonical_length = 0;
+    UChar *zone = NULL;
+    int32_t zone_length = 0;
+    if (!ncr_tv_zone_from_bytes(zone_bytes_input, zone_input_length,
+        &canonical_bytes, &canonical_length, &zone, &zone_length, ncr_line, ncr_column)) {
+        return NCR_TV_RESULT_ERROR(@TEMPORAL_RESULT@,
+            "Temporal.parseIso: bracketed zone must be a known ICU system zone", ncr_line, ncr_column);
+    }
+    UCalendar *calendar = ncr_tv_open_calendar(zone, zone_length,
+        NCR_TV_GREGORIAN, ncr_line, ncr_column);
+    if (calendar == NULL) {
+        ncr_deallocate(zone);
+        ncr_deallocate(canonical_bytes);
+        return ncr_tv_failed(ncr_line, ncr_column);
+    }
+    int64_t first_millis = 0, later_millis = 0;
+    struct ncr_tv_fields first_fields = { 0 }, later_fields = { 0 };
+    bool first_valid = ncr_tv_resolve_wall(calendar, era, year, month, day,
+        hour, minute, second, nanos / 1000000, false, &first_millis, &first_fields);
+    bool later_valid = ncr_tv_resolve_wall(calendar, era, year, month, day,
+        hour, minute, second, nanos / 1000000, true, &later_millis, &later_fields);
+    int32_t first_offset = 0, later_offset = 0;
+    first_valid = first_valid && ncr_tv_offset_at(calendar, first_millis, &first_offset);
+    later_valid = later_valid && ncr_tv_offset_at(calendar, later_millis, &later_offset);
+    bool choose_later = later_valid && later_offset == offset
+        && (!first_valid || first_offset != offset || later_millis != first_millis);
+    bool choose_first = first_valid && first_offset == offset;
+    bool valid = choose_first || choose_later;
+    int64_t selected_millis = choose_later ? later_millis : first_millis;
+    struct ncr_tv_fields selected_fields = choose_later ? later_fields : first_fields;
+    ucal_close(calendar);
+    ncr_deallocate(zone);
+    int64_t epoch_second = 0, local_second = 0;
+    int32_t normalized_nanos = 0;
+    if (valid) {
+        ncr_tv_parts_from_millis(selected_millis, nanos % 1000000,
+            &epoch_second, &normalized_nanos);
+        valid = ncr_tv_add_i64(epoch_second, offset, &local_second);
+    }
+    if (!valid) {
+        ncr_deallocate(canonical_bytes);
+        return NCR_TV_RESULT_ERROR(@TEMPORAL_RESULT@,
+            "Temporal.parseIso: zone offset conflicts or local time is in a DST gap",
+            ncr_line, ncr_column);
+    }
+    ncr_obj_@TEMPORAL_ID@ *value = ncr_tv_new(NCR_TV_ZONED_DATE_TIME,
+        ncr_line, ncr_column);
+    value->calendar = NCR_TV_GREGORIAN;
+    value->zone = canonical_bytes;
+    value->zone_length = canonical_length;
+    value->epoch_second = epoch_second;
+    value->local_second = local_second;
+    value->offset_seconds = offset;
+    value->nanosecond = normalized_nanos;
+    ncr_tv_store_fields(value, &selected_fields, normalized_nanos);
+    return (ncr_obj_@TEMPORAL_RESULT@){ .tag = @TEMPORAL_OK_TAG@,
+        .data.v@TEMPORAL_OK_TAG@.f0 = value };
+}

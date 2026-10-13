@@ -32,6 +32,18 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   zone IDs. DateFields' private constructor now initializes every field.
   Class-presence emission replaces a duplicate expression traversal; advertised
   zone IDs are checked through actual temporal conversion.
+- `Temporal` adds affine nanosecond-precision instant, duration, period, local,
+  offset, and zoned values, with checked elapsed/calendar arithmetic, strict ISO
+  parsing, explicit DST overlap selection, and ICU calendars for Gregorian,
+  Japanese, Buddhist, ROC, and Islamic variants. Existing millisecond `DateTime`
+  behavior is unchanged.
+  The public nanosecond getter exposes exact fractions; normalized carry and
+  millisecond conversion check the final integer result, and calendar periods
+  reject precision loss after each component. Zone replacement copies scalar
+  state without allocating a zone buffer that would immediately be discarded.
+  Civil lookup and ISO formatting also check offset-adjusted milliseconds before
+  accepting ICU fields. Short text results use inline storage; fixed-offset
+  scratch and canonical zone conversion buffers are reused rather than copied.
 - Ordered-key queries preserve affine borrows and specialize every copied-key
   query consistently. Native iterator interface adapters include their diagnostic
   arguments, and mapper extraction uses the element representation, not the

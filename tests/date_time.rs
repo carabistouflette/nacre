@@ -332,3 +332,336 @@ void main() {
     assert_native_success(&output);
     assert_eq!(String::from_utf8(output.stdout).unwrap(), "2021-01-04\n1940\n2039\ntrue\ntrue\n");
 }
+
+#[test]
+fn temporal_preserves_nanoseconds_negative_epoch_and_checked_overflow() {
+    let output = execute(r#"
+Result<Unit, Text> check() {
+    Temporal negativeNano = Temporal.duration(0L, -1L)?;
+    println(negativeNano.durationSeconds()?);
+    println(negativeNano.nanosecond());
+
+    Temporal beforeEpoch = Temporal.instant(-1L, 999999999)?;
+    println(beforeEpoch.epochSecond()?);
+    println(beforeEpoch.nanosecond());
+    Text beforeEpochIso = beforeEpoch.formatIso()?;
+    beforeEpochIso.print();
+    Text parsedText = new Text("1969-12-31T23:59:59.999999999Z");
+    Temporal parsed = Temporal.parseIso(parsedText)?;
+    println(parsed.epochSecond()?);
+    println(parsed.nanosecond());
+    Text dateText = new Text("2020-01-02");
+    Temporal parsedDate = Temporal.parseIso(dateText)?;
+    Text formattedDate = parsedDate.formatIso()?;
+    println(formattedDate.equalsString("2020-01-02"));
+    Text timeText = new Text("23:59:59.250000001");
+    Temporal parsedTime = Temporal.parseIso(timeText)?;
+    println(parsedTime.hour()?);
+    println(parsedTime.nanosecond());
+    Text parsedKind = parsedTime.kind();
+    println(parsedKind.equalsString("localTime"));
+    Text formattedTime = parsedTime.formatIso()?;
+    println(formattedTime.equalsString("23:59:59.250000001"));
+    Text localDateTimeText = new Text("2020-01-02T03:04:05.000000001");
+    Temporal parsedLocalDateTime = Temporal.parseIso(localDateTimeText)?;
+    Text formattedLocalDateTime = parsedLocalDateTime.formatIso()?;
+    println(formattedLocalDateTime.equalsString("2020-01-02T03:04:05.000000001"));
+
+    Temporal base = Temporal.instant(0L, 999999999)?;
+    Temporal tick = Temporal.duration(0L, 1L)?;
+    Temporal advanced = base.plusDuration(tick)?;
+    println(advanced.epochSecond()?);
+    println(advanced.nanosecond());
+    println(base.epochSecond()?);
+    println(base.nanosecond());
+
+    match (Temporal.instant(9223372036854775807L, 999999999)) {
+        Ok(maximum) {
+            match (maximum.plusDuration(tick)) {
+                Ok(value) { println("INSTANT_OVERFLOW_ACCEPTED"); }
+                Err(error) { println("INSTANT_OVERFLOW_ERR"); }
+            }
+        }
+        Err(error) { println("MAX_INSTANT_REJECTED"); }
+    }
+    match (Temporal.duration(9223372036854775807L, 1000000000L)) {
+        Ok(value) { println("DURATION_OVERFLOW_ACCEPTED"); }
+        Err(error) { println("DURATION_OVERFLOW_ERR"); }
+    }
+    return new Result<Unit, Text>.Ok(());
+}
+void main() {
+    match (check()) {
+        Ok(unit) {}
+        Err(error) { error.print(); }
+    }
+}
+"#);
+    assert_native_success(&output);
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        concat!(
+            "-1\n999999999\n-1\n999999999\n1969-12-31T23:59:59.999999999Z\n-1\n999999999\n",
+            "true\n23\n250000001\ntrue\ntrue\ntrue\n",
+            "1\n0\n0\n999999999\nINSTANT_OVERFLOW_ERR\nDURATION_OVERFLOW_ERR\n"
+        )
+    );
+}
+
+#[test]
+fn temporal_calendars_validate_eras_and_separate_period_from_elapsed_time() {
+    let output = execute(r#"
+Result<Unit, Text> check() {
+    Text gregorianId = new Text("gregorian");
+    Temporal source = Temporal.localDate(1, 2019, 5, 1, gregorianId)?;
+    Text japaneseId = new Text("japanese");
+    Text buddhistId = new Text("buddhist");
+    Text rocId = new Text("roc");
+    Text islamicId = new Text("islamic");
+    Text islamicCivilId = new Text("islamic-civil");
+    Text islamicUmalquraId = new Text("islamic-umalqura");
+
+    Temporal japanese = source.withCalendar(japaneseId)?;
+    CalendarFields japaneseFields = japanese.fields()?;
+    println(japaneseFields.era() > 0);
+    println(japaneseFields.year() == 1);
+    Temporal buddhist = source.withCalendar(buddhistId)?;
+    CalendarFields buddhistFields = buddhist.fields()?;
+    println(buddhistFields.year() == 2562);
+    Temporal roc = source.withCalendar(rocId)?;
+    CalendarFields rocFields = roc.fields()?;
+    println(rocFields.year() == 108);
+    Temporal islamic = source.withCalendar(islamicId)?;
+    Temporal islamicCivil = source.withCalendar(islamicCivilId)?;
+    Temporal islamicUmalqura = source.withCalendar(islamicUmalquraId)?;
+    CalendarFields islamicFields = islamic.fields()?;
+    CalendarFields islamicCivilFields = islamicCivil.fields()?;
+    CalendarFields islamicUmalquraFields = islamicUmalqura.fields()?;
+    println(islamicFields.year() > 1);
+    println(islamicCivilFields.year() > 1);
+    println(islamicUmalquraFields.year() > 1);
+
+    boolean hasGregorian = false;
+    boolean hasJapanese = false;
+    boolean hasBuddhist = false;
+    boolean hasRoc = false;
+    boolean hasIslamic = false;
+    boolean hasIslamicCivil = false;
+    boolean hasIslamicUmalqura = false;
+    List<Text> calendars = Temporal.availableCalendars();
+    for (borrow Text name : calendars) {
+        if (name.equalsString("gregorian")) { hasGregorian = true; }
+        if (name.equalsString("japanese")) { hasJapanese = true; }
+        if (name.equalsString("buddhist")) { hasBuddhist = true; }
+        if (name.equalsString("roc")) { hasRoc = true; }
+        if (name.equalsString("islamic")) { hasIslamic = true; }
+        if (name.equalsString("islamic-civil")) { hasIslamicCivil = true; }
+        if (name.equalsString("islamic-umalqura")) { hasIslamicUmalqura = true; }
+    }
+    println(hasGregorian && hasJapanese && hasBuddhist && hasRoc && hasIslamic
+        && hasIslamicCivil && hasIslamicUmalqura);
+    match (Temporal.localDate(japaneseFields.era(), 1, 4, 1, japaneseId)) {
+        Ok(value) { println("INVALID_JAPANESE_ERA_ACCEPTED"); }
+        Err(error) { println("INVALID_JAPANESE_ERA_ERR"); }
+    }
+
+    Temporal localTime = Temporal.localTime(23, 59, 59, 987654321)?;
+    println(localTime.hour()?);
+    println(localTime.minute()?);
+    println(localTime.second()?);
+    Temporal combined = source.withTime(localTime)?;
+    CalendarFields combinedFields = combined.fields()?;
+    println(combined.nanosecond() == 987654321);
+    println(combinedFields.day() == 1);
+    Text sourceKind = source.kind();
+    Text sourceCalendar = source.calendar();
+    println(sourceKind.equalsString("localDate"));
+    println(sourceCalendar.equalsString("gregorian"));
+
+    Temporal january = Temporal.localDateTime(1, 2021, 1, 31, 12, 0, 0, 7, gregorianId)?;
+    Temporal month = Temporal.period(0, 1, 0)?;
+    println(month.periodYears()?);
+    println(month.periodMonths()?);
+    println(month.periodDays()?);
+    Temporal thirtyDays = Temporal.duration(2592000L, 0L)?;
+    Temporal byCalendar = january.plusPeriod(month, false)?;
+    Temporal byElapsedTime = january.plusDuration(thirtyDays)?;
+    CalendarFields calendarFields = byCalendar.fields()?;
+    CalendarFields elapsedFields = byElapsedTime.fields()?;
+    println(calendarFields.month());
+    println(calendarFields.day());
+    println(elapsedFields.month());
+    println(elapsedFields.day());
+    return new Result<Unit, Text>.Ok(());
+}
+void main() {
+    match (check()) {
+        Ok(unit) {}
+        Err(error) { error.print(); }
+    }
+}
+"#);
+    assert_native_success(&output);
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        concat!(
+            "true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\nINVALID_JAPANESE_ERA_ERR\n",
+            "23\n59\n59\ntrue\ntrue\ntrue\ntrue\n0\n1\n0\n2\n28\n3\n2\n"
+        )
+    );
+}
+
+#[test]
+fn temporal_dst_gap_overlap_policy_and_owned_zone_conversion() {
+    let output = execute(r#"
+Result<Unit, Text> check() {
+    Text gregorianId = new Text("gregorian");
+    Text newYorkId = new Text("America/New_York");
+    Text londonId = new Text("Europe/London");
+    Temporal gap = Temporal.localDateTime(1, 2024, 3, 10, 2, 30, 0, 123456789,
+        gregorianId)?;
+    match (gap.atZone(newYorkId, false)) {
+        Ok(value) { println("DST_GAP_ACCEPTED"); }
+        Err(error) { println("DST_GAP_ERR"); }
+    }
+
+    Temporal overlap = Temporal.localDateTime(1, 2024, 11, 3, 1, 30, 0, 123456789,
+        gregorianId)?;
+    Temporal earlier = overlap.atZone(newYorkId, false)?;
+    Temporal later = overlap.atZone(newYorkId, true)?;
+    long earlierEpoch = earlier.epochSecond()?;
+    long laterEpoch = later.epochSecond()?;
+    println(laterEpoch - earlierEpoch);
+    println(earlier.offsetSeconds()?);
+    println(later.offsetSeconds()?);
+    println(earlier.nanosecond() == 123456789);
+    Temporal fixedOffset = Temporal.offsetDateTime(1, 2024, 11, 3, 1, 30, 0,
+        123456789, -18000, gregorianId)?;
+    println(fixedOffset.compareTo(later)? == 0);
+    Temporal convertedFixed = later.withOffset(19800)?;
+    println(convertedFixed.epochSecond()? == laterEpoch);
+    println(convertedFixed.offsetSeconds()? == 19800);
+
+    Text zonedInput = new Text("2024-11-03T01:30:00.123456789-05:00[America/New_York]");
+    Temporal parsedZoned = Temporal.parseIso(zonedInput)?;
+    println(parsedZoned.epochSecond()? == laterEpoch);
+    println(parsedZoned.offsetSeconds()? == -18000);
+    Text zonedOutput = parsedZoned.formatIso()?;
+    println(zonedOutput.equalsString("2024-11-03T01:30:00.123456789-05:00[America/New_York]"));
+    Text mismatchedZoneOffset = new Text("2024-11-03T01:30:00-06:00[America/New_York]");
+    match (Temporal.parseIso(mismatchedZoneOffset)) {
+        Ok(value) { println("ZONE_OFFSET_MISMATCH_ACCEPTED"); }
+        Err(error) { println("ZONE_OFFSET_MISMATCH_ERR"); }
+    }
+
+    Temporal moved = earlier.withZone(londonId)?;
+    Text earlierZone = earlier.zoneId();
+    Text movedZone = moved.zoneId();
+    println(earlierZone.equalsString("America/New_York"));
+    println(movedZone.equalsString("Europe/London"));
+    long movedEpoch = moved.epochSecond()?;
+    println(earlierEpoch == movedEpoch);
+    int earlierOffset = earlier.offsetSeconds()?;
+    println(earlierOffset == -14400);
+    return new Result<Unit, Text>.Ok(());
+}
+void main() {
+    match (check()) {
+        Ok(unit) {}
+        Err(error) { error.print(); }
+    }
+}
+"#);
+    assert_native_success(&output);
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        "DST_GAP_ERR\n3600\n-14400\n-18000\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\nZONE_OFFSET_MISMATCH_ERR\ntrue\ntrue\ntrue\ntrue\n"
+    );
+}
+
+#[test]
+fn temporal_normalized_extremes_and_intermediate_calendar_precision_are_checked() {
+    let output = execute(r#"
+Result<Unit, Text> check() {
+    long minimum = -9223372036854775807L - 1L;
+    Temporal negativeTick = Temporal.duration(-1L, 1L)?;
+    Temporal low = Temporal.instant(minimum, 999999999)?;
+    Temporal carried = low.plusDuration(negativeTick)?;
+    println(carried.epochSecond()?);
+    println(carried.nanosecond());
+    Temporal lowDuration = Temporal.duration(minimum, 999999999L)?;
+    Temporal carriedDuration = lowDuration.plusDuration(negativeTick)?;
+    println(carriedDuration.durationSeconds()?);
+    println(carriedDuration.nanosecond());
+    Temporal negativeSecond = Temporal.duration(-1L, 999999999L)?;
+    Temporal largeRight = Temporal.duration(9223372036854775807L, 1L)?;
+    Temporal cancelledCarry = negativeSecond.plusDuration(largeRight)?;
+    println(cancelledCarry.durationSeconds()?);
+    println(cancelledCarry.nanosecond());
+    Text gregorian = new Text("gregorian");
+    Temporal precise = Temporal.localDateTime(1, 1970, 1, 1, 0, 0, 0, 1000001, gregorian)?;
+    Temporal excursion = Temporal.period(300000, -3600000, 0)?;
+    match (precise.plusPeriod(excursion, false)) {
+        Ok(value) { println("precision loss accepted"); }
+        Err(error) { println("intermediate precision rejected"); }
+    }
+    println(precise.nanosecond());
+    Temporal huge = Temporal.instant(9223372036854775L, 808000000)?;
+    match (huge.formatIso()) {
+        Ok(value) { println("huge format accepted"); }
+        Err(error) { println("huge format rejected"); }
+    }
+    match (huge.withOffset(0)) {
+        Ok(value) { println("huge offset accepted"); }
+        Err(error) { println("huge offset rejected"); }
+    }
+    Text utc = new Text("UTC");
+    match (huge.withZone(utc)) {
+        Ok(value) { println("huge zone accepted"); }
+        Err(error) { println("huge zone rejected"); }
+    }
+    return new Result<Unit, Text>.Ok(());
+}
+void main() {
+    match (check()) { Ok(unit) {} Err(error) { error.print(); } }
+}
+"#);
+    assert_native_success(&output);
+    assert_eq!(String::from_utf8(output.stdout).unwrap(), concat!(
+        "-9223372036854775808\n0\n-9223372036854775808\n0\n9223372036854775807\n0\n",
+        "intermediate precision rejected\n1000001\nhuge format rejected\n",
+        "huge offset rejected\nhuge zone rejected\n"
+    ));
+}
+
+#[test]
+fn temporal_rejects_offset_adjusted_civil_precision_loss() {
+    let output = execute(r#"
+Result<Unit, Text> check() {
+    Temporal upper = Temporal.instant(9007199254739L, 999000001)?;
+    match (upper.withOffset(64800)) {
+        Ok(value) { println("positive local rounding accepted"); }
+        Err(error) { println("positive local precision rejected"); }
+    }
+    Temporal lower = Temporal.instant(-9007199254740L, 1000001)?;
+    match (lower.withOffset(-64800)) {
+        Ok(value) { println("negative local rounding accepted"); }
+        Err(error) { println("negative local precision rejected"); }
+    }
+    Temporal exact = upper.withOffset(0)?;
+    CalendarFields fields = exact.fields()?;
+    println(fields.second());
+    println(exact.nanosecond());
+    Text iso = exact.formatIso()?;
+    Text suffix = new Text("59.999000001+00:00");
+    println(iso.endsWith(suffix));
+    return new Result<Unit, Text>.Ok(());
+}
+void main() {
+    match (check()) { Ok(unit) {} Err(error) { error.print(); } }
+}
+"#);
+    assert_native_success(&output);
+    assert_eq!(String::from_utf8(output.stdout).unwrap(),
+        "positive local precision rejected\nnegative local precision rejected\n59\n999000001\ntrue\n");
+}

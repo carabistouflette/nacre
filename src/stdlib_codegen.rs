@@ -26,6 +26,7 @@ mod text;
 mod unicode;
 mod time;
 mod date_time;
+mod temporal;
 mod network;
 mod http;
 mod monotonic;
@@ -89,6 +90,7 @@ pub fn fields(program: &t::Program, class: C, class_id: usize) -> String {
         C::Env => io::fields(),
         C::Command | C::Process | C::ProcessOutput => process::fields(program, class),
         C::Random => random::fields(),
+        C::Temporal => temporal::fields(),
         C::Math | C::Time | C::DateTime | C::Console | C::Args => io::fields(),
         C::Crypto => io::fields(),
         C::XmlReader | C::XmlEvent | C::XmlWriter => xml_stream::fields(class),
@@ -141,6 +143,7 @@ pub fn drop_fields(program: &t::Program, class: C, class_id: usize) -> String {
         C::Env => io::drop_fields(),
         C::Command | C::Process | C::ProcessOutput => process::drop_fields(program, class),
         C::Random => random::drop_fields(),
+        C::Temporal => temporal::drop_fields(),
         C::Math | C::Time | C::DateTime | C::Console | C::Args => io::drop_fields(),
         C::Crypto => String::new(),
         C::XmlReader | C::XmlEvent | C::XmlWriter => xml_stream::drop_fields(class_id, class),
@@ -228,6 +231,7 @@ fn append_body(program: &t::Program, out: &mut String, class: &t::Class, native:
         C::Crypto => crypto::implementation(program),
         C::Time => time::implementation(program),
         C::DateTime => date_time::implementation(program),
+        C::Temporal => temporal::implementation(program),
         C::Arrays => arrays::zeroed_implementations(program),
         C::ByteBuffer => buffer::implementation(program, class.id),
         C::Uuid => uuid::implementation(program, class.id),
@@ -266,6 +270,10 @@ pub fn implementations(program: &t::Program) -> String {
     out.push('\n');
     if let Some(text) = support::text_class(program) {
         out.push_str(&support::text_helpers(program, text));
+    }
+    if date_time::is_used(program) || temporal::is_used(program) {
+        out.push_str(&date_time::common_helpers(program));
+        out.push('\n');
     }
     // Native consumers use ByteBuffer's authoritative reserve helpers.
     // Emit that storage core before wrappers, independently of class numbering.

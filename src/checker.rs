@@ -56,7 +56,8 @@ impl Tables {
     fn is_static_native(&self, id: usize) -> bool {
         matches!(self.classes[id].native,
             Some(t::NativeClass::Arrays | t::NativeClass::Encoding | t::NativeClass::Console | t::NativeClass::Files |
-                t::NativeClass::Args | t::NativeClass::Math | t::NativeClass::Time | t::NativeClass::DateTime |
+                t::NativeClass::Args | t::NativeClass::Math | t::NativeClass::Time |
+                t::NativeClass::DateTime |
                 t::NativeClass::Env | t::NativeClass::Crypto | t::NativeClass::Compression |
                 t::NativeClass::Checksums | t::NativeClass::Iterators(_) |
                 t::NativeClass::Unicode | t::NativeClass::Character | t::NativeClass::Charset |
@@ -144,7 +145,8 @@ impl Tables {
                         t::NativeClass::BinaryReader | t::NativeClass::BinaryWriter |
                         t::NativeClass::Console | t::NativeClass::Files |
                         t::NativeClass::Args | t::NativeClass::Math |
-                        t::NativeClass::Random | t::NativeClass::Time | t::NativeClass::DateTime |
+                        t::NativeClass::Random | t::NativeClass::Time |
+                        t::NativeClass::DateTime | t::NativeClass::Temporal |
                         t::NativeClass::Compression | t::NativeClass::Checksums |
                         t::NativeClass::Unicode | t::NativeClass::Character |
                         t::NativeClass::Charset | t::NativeClass::Locale |
@@ -313,6 +315,7 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
             Some(a::NativeClass::Checksums) => Some(t::NativeClass::Checksums),
             Some(a::NativeClass::Time) => Some(t::NativeClass::Time),
             Some(a::NativeClass::DateTime) => Some(t::NativeClass::DateTime),
+            Some(a::NativeClass::Temporal) => Some(t::NativeClass::Temporal),
             Some(a::NativeClass::Unicode) => Some(t::NativeClass::Unicode),
             Some(a::NativeClass::Character) => Some(t::NativeClass::Character),
             Some(a::NativeClass::Charset) => Some(t::NativeClass::Charset),

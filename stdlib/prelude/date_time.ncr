@@ -43,3 +43,88 @@ class DateTime {
     public static Result<long, Text> durationMillis(long start, long end) {}
     public static List<Text> availableZones() {}
 }
+class CalendarFields {
+    private int eraValue;
+    private int yearValue;
+    private int extendedYearValue;
+    private int monthValue;
+    private int dayValue;
+    private int dayOfYearValue;
+    private int hourValue;
+    private int minuteValue;
+    private int secondValue;
+    private int nanosecondValue;
+    private int offsetSecondsValue;
+    private CalendarFields(int era, int year, int extendedYear, int month, int day,
+                           int dayOfYear, int hour, int minute, int second,
+                           int nanosecond, int offsetSeconds) {
+        this.eraValue = era;
+        this.yearValue = year;
+        this.extendedYearValue = extendedYear;
+        this.monthValue = month;
+        this.dayValue = day;
+        this.dayOfYearValue = dayOfYear;
+        this.hourValue = hour;
+        this.minuteValue = minute;
+        this.secondValue = second;
+        this.nanosecondValue = nanosecond;
+        this.offsetSecondsValue = offsetSeconds;
+    }
+    public readonly int era() { return this.eraValue; }
+    public readonly int year() { return this.yearValue; }
+    public readonly int extendedYear() { return this.extendedYearValue; }
+    public readonly int month() { return this.monthValue; }
+    public readonly int day() { return this.dayValue; }
+    public readonly int dayOfYear() { return this.dayOfYearValue; }
+    public readonly int hour() { return this.hourValue; }
+    public readonly int minute() { return this.minuteValue; }
+    public readonly int second() { return this.secondValue; }
+    public readonly int nanosecond() { return this.nanosecondValue; }
+    public readonly int offsetSeconds() { return this.offsetSecondsValue; }
+}
+
+class Temporal {
+    public static Result<Temporal, Text> instant(long epochSecond, int nanosecond) {}
+    public static Result<Temporal, Text> duration(long seconds, long nanoAdjustment) {}
+    public static Result<Temporal, Text> period(int years, int months, int days) {}
+    public static Result<Temporal, Text> localDate(int era, int year, int month, int day,
+                                                    borrow Text calendar) {}
+    public static Result<Temporal, Text> localTime(int hour, int minute, int second,
+                                                    int nanosecond) {}
+    public static Result<Temporal, Text> localDateTime(int era, int year, int month, int day,
+        int hour, int minute, int second, int nanosecond, borrow Text calendar) {}
+    public static Result<Temporal, Text> offsetDateTime(int era, int year, int month, int day,
+        int hour, int minute, int second, int nanosecond, int offsetSeconds,
+        borrow Text calendar) {}
+    public static Result<Temporal, Text> zonedDateTime(int era, int year, int month, int day,
+        int hour, int minute, int second, int nanosecond, borrow Text zone,
+        borrow Text calendar, boolean preferLaterOffset) {}
+    public static Result<Temporal, Text> parseIso(borrow Text value) {}
+    public static List<Text> availableCalendars() {}
+
+    public readonly Text kind() {}
+    public readonly Text calendar() {}
+    public readonly Text zoneId() {}
+    public readonly int nanosecond() {}
+    public readonly Result<long, Text> durationSeconds() {}
+    public readonly Result<int, Text> periodYears() {}
+    public readonly Result<int, Text> periodMonths() {}
+    public readonly Result<int, Text> periodDays() {}
+    public readonly Result<int, Text> hour() {}
+    public readonly Result<int, Text> minute() {}
+    public readonly Result<int, Text> second() {}
+    public readonly Result<long, Text> epochSecond() {}
+    public readonly Result<int, Text> offsetSeconds() {}
+    public readonly Result<CalendarFields, Text> fields() {}
+    public readonly Result<Text, Text> formatIso() {}
+    public readonly Result<int, Text> compareTo(borrow Temporal other) {}
+    public readonly Result<Temporal, Text> plusDuration(borrow Temporal duration) {}
+    public readonly Result<Temporal, Text> plusPeriod(borrow Temporal period,
+                                                       boolean preferLaterOffset) {}
+    public readonly Result<Temporal, Text> atZone(borrow Text zone,
+                                                  boolean preferLaterOffset) {}
+    public readonly Result<Temporal, Text> withZone(borrow Text zone) {}
+    public readonly Result<Temporal, Text> withOffset(int offsetSeconds) {}
+    public readonly Result<Temporal, Text> withCalendar(borrow Text calendar) {}
+    public readonly Result<Temporal, Text> withTime(borrow Temporal localTime) {}
+}

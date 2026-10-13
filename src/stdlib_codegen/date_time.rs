@@ -8,6 +8,14 @@ pub(super) fn is_used(program: &t::Program) -> bool {
     program.classes.iter().any(|class| matches!(class.native, Some(C::DateTime)))
 }
 
+pub(super) fn common_helpers(program: &t::Program) -> String {
+    let text = text_class(program).expect("temporal APIs require native Text");
+    replace_placeholders(include_str!("../../stdlib/date_time_common.c.in").to_owned(), &[
+        ("@DATE_TIME_TEXT_ID@", text.to_string()),
+        ("@DATE_TIME_TEXT_TAKE@", format!("ncr_text_take_bytes_{text}")),
+    ])
+}
+
 pub(super) fn implementation(program: &t::Program) -> String {
     let from_parts = native_function(program, |method| matches!(method, M::DateTimeFromParts));
     let parts = native_function(program, |method| matches!(method, M::DateTimeParts));
@@ -61,6 +69,6 @@ pub(super) fn implementation(program: &t::Program) -> String {
         ("@DATE_TIME_LIST_ADD@", format!("ncr_fn_{}", list_add.id)),
     ]);
     let body = replace_method_ids(body, program, None);
-    debug_assert!(!body.contains('@'), "unexpanded DateTime placeholder");
+    debug_assert!(!super::support::has_placeholder(&body), "unexpanded DateTime placeholder");
     body
 }

@@ -66,7 +66,7 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
             C::Unicode | C::Character | C::Charset | C::Locale |
             C::Regex | C::RegexMatch | C::Arrays | C::ByteBuffer | C::Encoding | C::Crypto |
             C::Path | C::File | C::Directory | C::FileInfo | C::Watcher | C::WatchEvent |
-            C::Console | C::Files | C::Args | C::Math | C::Time | C::DateTime |
+            C::Console | C::Files | C::Args | C::Math | C::Time | C::DateTime | C::Temporal |
             C::Compression | C::Checksums | C::BigInt | C::BigDecimal |
             C::CryptoKey | C::CryptoDigest | C::CryptoMac | C::Certificate |
             C::TlsConfig | C::TlsStream | C::WebSocket | C::WebSocketMessage |
@@ -552,6 +552,39 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
         (C::DateTime, "addCalendar") => M::DateTimeAddCalendar,
         (C::DateTime, "durationMillis") => M::DateTimeDurationMillis,
         (C::DateTime, "availableZones") => M::DateTimeAvailableZones,
+        (C::Temporal, "instant") => M::TemporalInstant,
+        (C::Temporal, "duration") => M::TemporalDuration,
+        (C::Temporal, "period") => M::TemporalPeriod,
+        (C::Temporal, "localDate") => M::TemporalLocalDate,
+        (C::Temporal, "localTime") => M::TemporalLocalTime,
+        (C::Temporal, "localDateTime") => M::TemporalLocalDateTime,
+        (C::Temporal, "offsetDateTime") => M::TemporalOffsetDateTime,
+        (C::Temporal, "zonedDateTime") => M::TemporalZonedDateTime,
+        (C::Temporal, "parseIso") => M::TemporalParseIso,
+        (C::Temporal, "availableCalendars") => M::TemporalAvailableCalendars,
+        (C::Temporal, "kind") => M::TemporalKind,
+        (C::Temporal, "calendar") => M::TemporalCalendar,
+        (C::Temporal, "zoneId") => M::TemporalZoneId,
+        (C::Temporal, "nanosecond") => M::TemporalNanosecond,
+        (C::Temporal, "epochSecond") => M::TemporalEpochSecond,
+        (C::Temporal, "offsetSeconds") => M::TemporalOffsetSeconds,
+        (C::Temporal, "fields") => M::TemporalFields,
+        (C::Temporal, "formatIso") => M::TemporalFormatIso,
+        (C::Temporal, "compareTo") => M::TemporalCompareTo,
+        (C::Temporal, "plusDuration") => M::TemporalPlusDuration,
+        (C::Temporal, "plusPeriod") => M::TemporalPlusPeriod,
+        (C::Temporal, "atZone") => M::TemporalAtZone,
+        (C::Temporal, "withZone") => M::TemporalWithZone,
+        (C::Temporal, "withCalendar") => M::TemporalWithCalendar,
+        (C::Temporal, "durationSeconds") => M::TemporalDurationSeconds,
+        (C::Temporal, "periodYears") => M::TemporalPeriodYears,
+        (C::Temporal, "periodMonths") => M::TemporalPeriodMonths,
+        (C::Temporal, "periodDays") => M::TemporalPeriodDays,
+        (C::Temporal, "hour") => M::TemporalHour,
+        (C::Temporal, "minute") => M::TemporalMinute,
+        (C::Temporal, "second") => M::TemporalSecond,
+        (C::Temporal, "withTime") => M::TemporalWithTime,
+        (C::Temporal, "withOffset") => M::TemporalWithOffset,
         (C::Thread(_), "spawn") => M::ThreadSpawn,
         (C::Thread(_), "join") => M::ThreadJoin,
         (C::Mutex(_), "create") => M::MutexCreate,
