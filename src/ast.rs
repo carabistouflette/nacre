@@ -1,7 +1,14 @@
 use crate::diagnostic::Span;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Type { Int, Boolean, String, Void, Named(String), Applied { name: String, args: Vec<Type> }, Borrow { name: String, args: Vec<Type>, mutable: bool } }
+pub enum Type { Byte, Char, Int, Long, Double, Unit, Boolean, String, Void, Named(String), Applied { name: String, args: Vec<Type> }, Borrow { name: String, args: Vec<Type>, mutable: bool } }
+impl Type {
+    pub fn is_primitive(&self) -> bool {
+        matches!(self, Self::Byte | Self::Char | Self::Int | Self::Long | Self::Double |
+            Self::Unit | Self::Boolean | Self::String)
+    }
+    pub fn is_copy(&self) -> bool { self.is_primitive() }
+}
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MapKeyKind { Int, Text }
 impl MapKeyKind {
@@ -79,17 +86,21 @@ pub struct MatchArm { pub variant: String, pub bindings: Vec<String>, pub body: 
 pub struct Expr { pub kind: ExprKind, pub span: Span, pub depth: usize }
 #[derive(Debug, Clone)]
 pub enum ExprKind {
-    Int(i32), Boolean(bool), String(String), Var(String), This,
+    Char(char), Int(i32), Long(i64), Double(f64), Unit, Boolean(bool), String(String), Var(String), This,
     Field { base: Box<Expr>, name: String },
     Call { name: String, args: Vec<Expr> },
     MethodCall { receiver: Box<Expr>, name: String, args: Vec<Expr> },
     New { class: String, type_args: Vec<Type>, args: Vec<Expr> },
     Variant { class: String, type_args: Vec<Type>, variant: String, args: Vec<Expr> },
     Borrow { expr: Box<Expr>, mutable: bool },
+    Cast { ty: Type, expr: Box<Expr> },
     Unary { op: UnaryOp, expr: Box<Expr> },
     Binary { op: BinaryOp, left: Box<Expr>, right: Box<Expr> },
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum UnaryOp { Neg, Not, Plus }
+pub enum UnaryOp { Neg, Not, Plus, BitNot }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BinaryOp { Add, Sub, Mul, Div, Rem, Eq, Ne, Lt, Le, Gt, Ge, And, Or }
+pub enum BinaryOp {
+    Add, Sub, Mul, Div, Rem, Eq, Ne, Lt, Le, Gt, Ge, And, Or,
+    BitAnd, BitOr, BitXor, ShiftLeft, ShiftRight,
+}

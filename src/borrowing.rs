@@ -415,7 +415,8 @@ impl<'a> Analyzer<'a> {
         }
         use t::ExprKind as E;
         match &expr.kind {
-            E::Int(_) | E::Boolean(_) | E::String(_) => {}
+            E::Char(_) | E::Int(_) | E::Long(_) | E::Double(_) | E::Unit
+            | E::Boolean(_) | E::String(_) => {}
             E::Read(place) => {
                 self.projections(place, expr.span)?;
                 self.access(self.origin(place), Access::Read, expr.span)?;
@@ -435,7 +436,7 @@ impl<'a> Analyzer<'a> {
             E::Move(id) => {
                 self.access(Origin { root: Root::Local(*id), via: None }, Access::Destroy, expr.span)?;
             }
-            E::Drop(inner) | E::Upcast { value: inner, .. } => self.expression(inner)?,
+            E::Drop(inner) | E::Cast { value: inner, .. } | E::Upcast { value: inner, .. } => self.expression(inner)?,
             E::New { class, constructor, args } => {
                 self.construct(*class, *constructor, args, expr.span, false)?;
             }

@@ -16,12 +16,15 @@ pub(super) fn marker(method: M) -> &'static str {
         M::MapGetMut => "@MAP_GET_MUT@", M::MapClear => "@MAP_CLEAR@",
         M::TextNew => "@TEXT_NEW@",
         M::TextAppend => "@TEXT_APPEND@", M::TextAppendInt => "@TEXT_APPEND_INT@",
+        M::TextAppendByte => "@TEXT_APPEND_BYTE@", M::TextAppendChar => "@TEXT_APPEND_CHAR@",
+        M::TextAppendLong => "@TEXT_APPEND_LONG@", M::TextAppendDouble => "@TEXT_APPEND_DOUBLE@",
         M::TextAppendBoolean => "@TEXT_APPEND_BOOLEAN@", M::TextAppendText => "@TEXT_APPEND_TEXT@",
         M::TextByteLength => "@TEXT_BYTE_LENGTH@", M::TextByteAt => "@TEXT_BYTE_AT@",
         M::TextIsEmpty => "@TEXT_IS_EMPTY@", M::TextClear => "@TEXT_CLEAR@",
         M::TextPrint => "@TEXT_PRINT@", M::TextClone => "@TEXT_CLONE@",
         M::TextEquals => "@TEXT_EQUALS@", M::TextEqualsString => "@TEXT_EQUALS_STRING@",
         M::TextParseInt => "@TEXT_PARSE_INT@", M::TextSliceBytes => "@TEXT_SLICE_BYTES@",
+        M::TextParseLong => "@TEXT_PARSE_LONG@", M::TextParseDouble => "@TEXT_PARSE_DOUBLE@",
         M::ConsoleReadLine => "@CONSOLE_READ_LINE@", M::ConsolePrint => "@CONSOLE_PRINT@",
         M::ConsolePrintText => "@CONSOLE_PRINT_TEXT@", M::FilesReadText => "@FILES_READ_TEXT@",
         M::FilesWriteText => "@FILES_WRITE_TEXT@", M::FilesWriteTextAtomic => "@FILES_WRITE_TEXT_ATOMIC@",
@@ -65,7 +68,7 @@ pub(super) fn text_helpers(program: &t::Program, text: usize) -> String {
     for function in &program.functions {
         if !matches!(function.native,
             Some(M::ConsoleReadLine | M::FilesReadText | M::FilesWriteText | M::FilesWriteTextAtomic
-                | M::ArgsGet | M::TextParseInt | M::TextSliceBytes)) {
+                | M::ArgsGet | M::TextParseInt | M::TextParseLong | M::TextParseDouble | M::TextSliceBytes)) {
             continue;
         }
         let class = result_id(function);

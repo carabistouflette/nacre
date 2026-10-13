@@ -77,8 +77,11 @@ pub fn expand(mut program: a::Program) -> Result<(a::Program, Vec<String>), Diag
 
 fn display_type(ty: &Type) -> String {
     match ty {
-        Type::Int => "int".to_owned(), Type::Boolean => "boolean".to_owned(),
-        Type::String => "String".to_owned(), Type::Void => "void".to_owned(),
+        Type::Byte => "byte".to_owned(), Type::Char => "char".to_owned(),
+        Type::Int => "int".to_owned(), Type::Long => "long".to_owned(),
+        Type::Double => "double".to_owned(), Type::Unit => "Unit".to_owned(),
+        Type::Boolean => "boolean".to_owned(), Type::String => "String".to_owned(),
+        Type::Void => "void".to_owned(),
         Type::Named(name) => name.clone(),
         Type::Applied { name, args } => format!("{}<{}>", name, args.iter().map(display_type).collect::<Vec<_>>().join(",")),
         Type::Borrow { name, args, mutable } => format!("borrow {}{}{}", if *mutable { "mut " } else { "" }, name,
@@ -90,7 +93,8 @@ impl Expander {
     fn ty(&mut self, ty: &Type, env: &Environment, span: Span, depth: usize) -> Result<Type, Diagnostic> {
         if depth > 32 { return Err(Diagnostic::new(span, "[E4199] generic type is too deep (limit 32)")); }
         match ty {
-            Type::Int | Type::Boolean | Type::String | Type::Void => Ok(ty.clone()),
+            Type::Byte | Type::Char | Type::Int | Type::Long | Type::Double |
+                Type::Unit | Type::Boolean | Type::String | Type::Void => Ok(ty.clone()),
             Type::Named(name) => {
                 if let Some(replacement) = env.get(name) { return Ok(replacement.clone()); }
                 if self.definitions.get(name).is_some_and(|c|
@@ -157,7 +161,7 @@ impl Expander {
             Some(a::NativeClass::List(element)) => {
                 *element = self.ty(element, env, class.span, 0)?;
                 // Primitive elements copy; nominal elements require receiver-bound loans.
-                if matches!(element, Type::Int | Type::Boolean | Type::String) {
+                if element.is_copy() {
                     class.methods.retain(|method| !matches!(method.name.as_str(), "getRef" | "getMut"));
                 } else {
                     class.methods.retain(|method| !matches!(method.name.as_str(), "get" | "tryGet"));
@@ -180,7 +184,7 @@ impl Expander {
                 }
                 // Primitive values copy; nominal values are only exposed through
                 // receiver-bound loans, never through a copied Option payload.
-                if matches!(value, Type::Int | Type::Boolean | Type::String) {
+                if value.is_copy() {
                     class.methods.retain(|method| !matches!(method.name.as_str(), "getRef" | "getMut"));
                 } else {
                     class.methods.retain(|method| method.name != "tryGet");
@@ -269,9 +273,10 @@ impl Expander {
                 self.expression(receiver, env)?;
                 for arg in args { self.expression(arg, env)?; }
             }
-            E::Unary { expr, .. } | E::Borrow { expr, .. } => self.expression(expr, env)?,
+            E::Unary { expr, .. } | E::Borrow { expr, .. } | E::Cast { expr, .. } => self.expression(expr, env)?,
             E::Binary { left, right, .. } => { self.expression(left, env)?; self.expression(right, env)?; }
-            E::Int(_) | E::Boolean(_) | E::String(_) | E::Var(_) | E::This => {}
+            E::Char(_) | E::Int(_) | E::Long(_) | E::Double(_) | E::Unit
+            | E::Boolean(_) | E::String(_) | E::Var(_) | E::This => {}
         }
         Ok(())
     }

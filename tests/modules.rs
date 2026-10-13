@@ -40,7 +40,7 @@ fn cli(args: &[&std::ffi::OsStr]) -> Output {
 fn cli_runs_modular_map_text_generic_global_and_static_calls() {
     let output = cli(&["run".as_ref(), Path::new("examples/language/modules").as_os_str()]);
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
-    assert_eq!(output.stdout.split(|byte| byte.is_ascii_whitespace()).filter(|part| !part.is_empty()).last(), Some(b"42".as_slice()));
+    assert_eq!(output.stdout.split(|byte| byte.is_ascii_whitespace()).filter(|part| !part.is_empty()).next_back(), Some(b"42".as_slice()));
 }
 
 #[test]
@@ -51,7 +51,7 @@ fn cli_init_creates_a_runnable_modular_project() {
     assert!(initialized.status.success(), "{}", String::from_utf8_lossy(&initialized.stderr));
     let output = cli(&["run".as_ref(), path.join("src").as_os_str()]);
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
-    assert_eq!(output.stdout.split(|byte| byte.is_ascii_whitespace()).filter(|part| !part.is_empty()).last(), Some(b"42".as_slice()));
+    assert_eq!(output.stdout.split(|byte| byte.is_ascii_whitespace()).filter(|part| !part.is_empty()).next_back(), Some(b"42".as_slice()));
 }
 
 #[test]
@@ -187,4 +187,16 @@ fn qualified_enum_constructor_resolves_owned_type_arguments_once() {
     let output = native::compile_c(&c_source).unwrap().output().unwrap();
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     assert_eq!(output.stdout, b"42\n");
+}
+
+#[test]
+fn numeric_casts_resolve_imported_calls_and_nested_generic_closers() {
+    let source = bundle(&[
+        ("numbers.ncr", "module library.numbers; public long answer() { return 42L; }"),
+        ("main.ncr", "module client.main; import library.numbers.answer; void main() { List<List<long>> nested = new List<List<long>>(); List<long> row = new List<long>(); row.add(answer()); nested.add(row); { borrow List<long> first = nested.getRef(0); println((int)first.get(0)); } println((int)library.numbers.answer()); println(8L >> 1); }"),
+    ]);
+    let c_source = source.compile_to_c().unwrap_or_else(|diagnostic| panic!("{}", source.render(&diagnostic)));
+    let output = native::compile_c(&c_source).unwrap().output().unwrap();
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert_eq!(output.stdout, b"42\n42\n4\n");
 }

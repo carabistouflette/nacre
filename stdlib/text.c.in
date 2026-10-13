@@ -28,6 +28,30 @@ static void @TEXT_APPEND_INT@(ncr_obj_@ID@ *p, int32_t value, size_t line, size_
     if (count < 0 || (size_t)count >= sizeof(buffer)) { ncr_fail("failed to format integer", line, column); }
     ncr_text_append_@ID@(p, (const unsigned char *)buffer, (size_t)count, line, column);
 }
+static void @TEXT_APPEND_BYTE@(ncr_obj_@ID@ *p, uint8_t value, size_t line, size_t column) {
+    char buffer[4];
+    int count = snprintf(buffer, sizeof(buffer), "%u", (unsigned)value);
+    if (count < 0 || (size_t)count >= sizeof(buffer)) { ncr_fail("[E6106] byte formatting failed", line, column); }
+    ncr_text_append_@ID@(p, (const unsigned char *)buffer, (size_t)count, line, column);
+}
+static void @TEXT_APPEND_CHAR@(ncr_obj_@ID@ *p, uint32_t value, size_t line, size_t column) {
+    unsigned char bytes[4];
+    size_t length = ncr_utf8_encode_scalar(value, bytes);
+    if (length == 0) { ncr_fail("[E6102] value is not a Unicode scalar", line, column); }
+    ncr_text_append_@ID@(p, bytes, length, line, column);
+}
+static void @TEXT_APPEND_LONG@(ncr_obj_@ID@ *p, int64_t value, size_t line, size_t column) {
+    char buffer[32];
+    int count = snprintf(buffer, sizeof(buffer), "%" PRId64, value);
+    if (count < 0 || (size_t)count >= sizeof(buffer)) { ncr_fail("[E6106] long formatting failed", line, column); }
+    ncr_text_append_@ID@(p, (const unsigned char *)buffer, (size_t)count, line, column);
+}
+static void @TEXT_APPEND_DOUBLE@(ncr_obj_@ID@ *p, double value, size_t line, size_t column) {
+    char buffer[64];
+    int count = snprintf(buffer, sizeof(buffer), "%.*g", DBL_DECIMAL_DIG, value);
+    if (count < 0 || (size_t)count >= sizeof(buffer)) { ncr_fail("[E6106] double formatting failed", line, column); }
+    ncr_text_append_@ID@(p, (const unsigned char *)buffer, (size_t)count, line, column);
+}
 static void @TEXT_APPEND_BOOLEAN@(ncr_obj_@ID@ *p, bool value, size_t line, size_t column) {
     const unsigned char *data = (const unsigned char *)(value ? "true" : "false");
     ncr_text_append_@ID@(p, data, value ? 4 : 5, line, column);
@@ -103,6 +127,92 @@ static ncr_obj_@PARSE_RESULT@ @TEXT_PARSE_INT@(ncr_obj_@ID@ *p, size_t line, siz
     return (ncr_obj_@PARSE_RESULT@){
         .tag = @PARSE_OK_TAG@,
         .data.v@PARSE_OK_TAG@.f0 = parsed
+    };
+}
+static ncr_obj_@PARSE_LONG_RESULT@ @TEXT_PARSE_LONG@(ncr_obj_@ID@ *p, size_t line, size_t column) {
+    static const char error_message[] = "[E6111] Text.parseLong: invalid or out-of-range integer";
+    size_t length = (size_t)p->length;
+    size_t index = 0;
+    bool negative = false;
+    if (length == 0) {
+        return @ERROR_PARSE_LONG_RESULT@(error_message, sizeof(error_message) - 1, line, column);
+    }
+    if (p->bytes[index] == '+' || p->bytes[index] == '-') {
+        negative = p->bytes[index] == '-';
+        ++index;
+    }
+    if (index == length) {
+        return @ERROR_PARSE_LONG_RESULT@(error_message, sizeof(error_message) - 1, line, column);
+    }
+    uint64_t limit = negative ? UINT64_C(9223372036854775808) : (uint64_t)INT64_MAX;
+    uint64_t value = 0;
+    for (; index < length; ++index) {
+        unsigned char byte = p->bytes[index];
+        if (byte < '0' || byte > '9') {
+            return @ERROR_PARSE_LONG_RESULT@(error_message, sizeof(error_message) - 1, line, column);
+        }
+        uint64_t digit = (uint64_t)(byte - '0');
+        if (value > (limit - digit) / 10) {
+            return @ERROR_PARSE_LONG_RESULT@(error_message, sizeof(error_message) - 1, line, column);
+        }
+        value = value * 10 + digit;
+    }
+    int64_t parsed = negative
+        ? (value == UINT64_C(9223372036854775808) ? INT64_MIN : -(int64_t)value)
+        : (int64_t)value;
+    return (ncr_obj_@PARSE_LONG_RESULT@){
+        .tag = @PARSE_LONG_OK_TAG@,
+        .data.v@PARSE_LONG_OK_TAG@.f0 = parsed
+    };
+}
+static bool ncr_text_double_syntax_@ID@(const unsigned char *bytes, size_t length) {
+    if (length == 0) { return false; }
+    size_t index = 0;
+    if (bytes[index] == '+' || bytes[index] == '-') { ++index; }
+    size_t digits = 0;
+    while (index < length && bytes[index] >= '0' && bytes[index] <= '9') { ++index; ++digits; }
+    if (index < length && bytes[index] == '.') {
+        ++index;
+        while (index < length && bytes[index] >= '0' && bytes[index] <= '9') { ++index; ++digits; }
+    }
+    if (digits == 0) { return false; }
+    if (index < length && (bytes[index] == 'e' || bytes[index] == 'E')) {
+        ++index;
+        if (index < length && (bytes[index] == '+' || bytes[index] == '-')) { ++index; }
+        size_t exponent_digits = 0;
+        while (index < length && bytes[index] >= '0' && bytes[index] <= '9') { ++index; ++exponent_digits; }
+        if (exponent_digits == 0) { return false; }
+    }
+    return index == length;
+}
+static bool ncr_text_double_special_@ID@(const unsigned char *bytes, size_t length) {
+    size_t index = length > 0 && (bytes[0] == '+' || bytes[0] == '-') ? 1 : 0;
+    if (length - index != 3) { return false; }
+    const unsigned char *word = bytes + index;
+    return ((word[0] | 0x20u) == 'n' && (word[1] | 0x20u) == 'a' && (word[2] | 0x20u) == 'n')
+        || ((word[0] | 0x20u) == 'i' && (word[1] | 0x20u) == 'n' && (word[2] | 0x20u) == 'f');
+}
+static ncr_obj_@PARSE_DOUBLE_RESULT@ @TEXT_PARSE_DOUBLE@(ncr_obj_@ID@ *p, size_t line, size_t column) {
+    static const char error_message[] = "[E6112] Text.parseDouble: invalid or out-of-range number";
+    size_t length = (size_t)p->length;
+    if (!ncr_text_double_syntax_@ID@(p->bytes, length)
+        && !ncr_text_double_special_@ID@(p->bytes, length)) {
+        return @ERROR_PARSE_DOUBLE_RESULT@(error_message, sizeof(error_message) - 1, line, column);
+    }
+    char *buffer = ncr_allocate(length + 1, line, column);
+    if (length > 0) { memcpy(buffer, p->bytes, length); }
+    buffer[length] = '\0';
+    char *end = NULL;
+    errno = 0;
+    double value = strtod(buffer, &end);
+    bool valid = end == buffer + length && errno != ERANGE;
+    ncr_deallocate(buffer);
+    if (!valid) {
+        return @ERROR_PARSE_DOUBLE_RESULT@(error_message, sizeof(error_message) - 1, line, column);
+    }
+    return (ncr_obj_@PARSE_DOUBLE_RESULT@){
+        .tag = @PARSE_DOUBLE_OK_TAG@,
+        .data.v@PARSE_DOUBLE_OK_TAG@.f0 = value
     };
 }
 

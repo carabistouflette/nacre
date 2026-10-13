@@ -28,8 +28,11 @@ pub fn generate(program: &t::Program, source: &str) -> String {
 }
 pub(crate) fn ctype(program: &t::Program, ty: Type) -> String {
     match ty {
-        Type::Int => "int32_t".to_owned(), Type::Boolean => "bool".to_owned(),
-        Type::String => "ncr_string".to_owned(), Type::Void => "void".to_owned(),
+        Type::Byte => "uint8_t".to_owned(), Type::Char => "uint32_t".to_owned(),
+        Type::Int => "int32_t".to_owned(), Type::Long => "int64_t".to_owned(),
+        Type::Double => "double".to_owned(), Type::Unit => "uint8_t".to_owned(),
+        Type::Boolean => "bool".to_owned(), Type::String => "ncr_string".to_owned(),
+        Type::Void => "void".to_owned(),
         Type::Object(id) => {
             if program.classes[id].variants.is_some() || program.classes[id].is_interface {
                 format!("ncr_obj_{id}")
@@ -47,6 +50,46 @@ pub(crate) fn object_zero(program: &t::Program, id: usize) -> String {
     if program.classes[id].is_interface { format!("(ncr_obj_{id}){{NULL, NULL}}") }
     else if program.classes[id].variants.is_some() { format!("(ncr_obj_{id}){{.tag = -1}}") }
     else { "NULL".to_owned() }
+}
+fn cast_expression(target: Type, source: Type, value: &str, line: usize, column: usize) -> String {
+    let checked = |name: &str| format!("{name}({value}, {line}, {column})");
+    match target {
+        Type::Byte => match source {
+            Type::Byte => value.to_owned(),
+            Type::Char => checked("ncr_cast_byte_u32"),
+            Type::Int => checked("ncr_cast_byte_i32"),
+            Type::Long => checked("ncr_cast_byte_i64"),
+            Type::Double => checked("ncr_cast_byte_f64"),
+            _ => unreachable!("checked numeric cast source"),
+        },
+        Type::Char => match source {
+            Type::Byte => format!("((uint32_t){value})"),
+            Type::Char => value.to_owned(),
+            Type::Int => checked("ncr_cast_char_i32"),
+            Type::Long => checked("ncr_cast_char_i64"),
+            Type::Double => checked("ncr_cast_char_f64"),
+            _ => unreachable!("checked numeric cast source"),
+        },
+        Type::Int => match source {
+            Type::Byte | Type::Char => format!("((int32_t){value})"),
+            Type::Int => value.to_owned(),
+            Type::Long => checked("ncr_cast_i32_i64"),
+            Type::Double => checked("ncr_cast_i32_f64"),
+            _ => unreachable!("checked numeric cast source"),
+        },
+        Type::Long => match source {
+            Type::Byte | Type::Char | Type::Int => format!("((int64_t){value})"),
+            Type::Long => value.to_owned(),
+            Type::Double => checked("ncr_cast_i64_f64"),
+            _ => unreachable!("checked numeric cast source"),
+        },
+        Type::Double => match source {
+            Type::Byte | Type::Char | Type::Int | Type::Long => format!("((double){value})"),
+            Type::Double => value.to_owned(),
+            _ => unreachable!("checked numeric cast source"),
+        },
+        _ => unreachable!("checked numeric cast target"),
+    }
 }
 
 fn signature(program: &t::Program, function: &t::Function) -> String {
@@ -276,7 +319,12 @@ impl Emitter<'_> {
                     None => match ty {
                         Type::Object(class) => object_zero(self.program, *class),
                         Type::Borrow { .. } => "NULL".to_owned(),
+                        Type::Byte => "UINT8_C(0)".to_owned(),
+                        Type::Char => "UINT32_C(0)".to_owned(),
                         Type::Int => "INT32_C(0)".to_owned(),
+                        Type::Long => "INT64_C(0)".to_owned(),
+                        Type::Double => "0.0".to_owned(),
+                        Type::Unit => "UINT8_C(0)".to_owned(),
                         Type::Boolean => "false".to_owned(),
                         Type::String => "{NULL, 0}".to_owned(),
                         Type::Void => unreachable!("checked local type"),
@@ -401,15 +449,29 @@ impl Emitter<'_> {
     fn expression(&mut self, expr: &t::Expr) -> String {
         use t::ExprKind as E;
         match &expr.kind {
+            E::Char(value) => self.bind(Type::Char, &format!("UINT32_C({})", *value as u32)),
             E::Int(n) => {
                 let value = if *n == i32::MIN { "INT32_MIN".to_owned() } else { format!("INT32_C({n})") };
                 self.bind(Type::Int, &value)
             }
+            E::Long(value) => {
+                let value = if *value == i64::MIN { "INT64_MIN".to_owned() } else { format!("INT64_C({value})") };
+                self.bind(Type::Long, &value)
+            }
+            E::Double(value) => self.bind(Type::Double, &format!("{value:.17e}")),
+            E::Unit => self.bind(Type::Unit, "UINT8_C(0)"),
             E::Boolean(value) => self.bind(Type::Boolean, if *value { "true" } else { "false" }),
             E::String(text) => {
                 let id = self.literals.len();
                 self.literals.push(text.clone());
                 self.bind(Type::String, &format!("{{ncr_lit_{id}, {}}}", text.len()))
+            }
+            E::Cast { value } => {
+                let source_type = value.ty;
+                let value = self.expression(value);
+                let (line, column) = line_column(self.source, expr.span.start);
+                let cast = cast_expression(expr.ty, source_type, &value, line, column);
+                self.bind(expr.ty, &cast)
             }
             E::Read(place) => self.bind(expr.ty, &place_text(place)),
             E::Borrow { place, .. } => {
@@ -478,8 +540,19 @@ impl Emitter<'_> {
             E::Unary { op, expr: inner } => {
                 let value = self.expression(inner);
                 let operation = match op {
-                    UnaryOp::Neg => format!("ncr_neg({value})"),
-                    UnaryOp::Not => format!("!{value}"), UnaryOp::Plus => value,
+                    UnaryOp::Neg => match expr.ty {
+                        Type::Int => format!("ncr_neg({value})"),
+                        Type::Long => format!("ncr_long_neg({value})"),
+                        Type::Double => format!("(-({value}))"),
+                        _ => unreachable!("checked unary negation type"),
+                    },
+                    UnaryOp::Not => format!("!({value})"),
+                    UnaryOp::Plus => value,
+                    UnaryOp::BitNot => match expr.ty {
+                        Type::Int => format!("ncr_i32_not({value})"),
+                        Type::Long => format!("ncr_i64_not({value})"),
+                        _ => unreachable!("checked bitwise not type"),
+                    },
                 };
                 self.bind(expr.ty, &operation)
             }
@@ -499,14 +572,52 @@ impl Emitter<'_> {
                 let right_value = self.expression(right);
                 let (line, column) = line_column(self.source, expr.span.start);
                 let operation = match op {
-                    B::Add => format!("ncr_add({left_value}, {right_value})"),
-                    B::Sub => format!("ncr_sub({left_value}, {right_value})"),
-                    B::Mul => format!("ncr_mul({left_value}, {right_value})"),
-                    B::Div => format!("ncr_div({left_value}, {right_value}, {line}, {column})"),
-                    B::Rem => format!("ncr_rem({left_value}, {right_value}, {line}, {column})"),
+                    B::Add | B::Sub | B::Mul | B::Div | B::Rem => match expr.ty {
+                        Type::Double => match op {
+                            B::Add => format!("({left_value} + {right_value})"),
+                            B::Sub => format!("({left_value} - {right_value})"),
+                            B::Mul => format!("({left_value} * {right_value})"),
+                            B::Div => format!("({left_value} / {right_value})"),
+                            B::Rem => format!("fmod({left_value}, {right_value})"),
+                            _ => unreachable!("floating arithmetic operation"),
+                        },
+                        Type::Long => match op {
+                            B::Add => format!("ncr_long_add({left_value}, {right_value})"),
+                            B::Sub => format!("ncr_long_sub({left_value}, {right_value})"),
+                            B::Mul => format!("ncr_long_mul({left_value}, {right_value})"),
+                            B::Div => format!("ncr_long_div({left_value}, {right_value}, {line}, {column})"),
+                            B::Rem => format!("ncr_long_rem({left_value}, {right_value}, {line}, {column})"),
+                            _ => unreachable!("long arithmetic operation"),
+                        },
+                        Type::Int => match op {
+                            B::Add => format!("ncr_add({left_value}, {right_value})"),
+                            B::Sub => format!("ncr_sub({left_value}, {right_value})"),
+                            B::Mul => format!("ncr_mul({left_value}, {right_value})"),
+                            B::Div => format!("ncr_div({left_value}, {right_value}, {line}, {column})"),
+                            B::Rem => format!("ncr_rem({left_value}, {right_value}, {line}, {column})"),
+                            _ => unreachable!("integer arithmetic operation"),
+                        },
+                        _ => unreachable!("checked arithmetic result type"),
+                    },
                     B::Eq => format!("{left_value} == {right_value}"), B::Ne => format!("{left_value} != {right_value}"),
                     B::Lt => format!("{left_value} < {right_value}"), B::Le => format!("{left_value} <= {right_value}"),
                     B::Gt => format!("{left_value} > {right_value}"), B::Ge => format!("{left_value} >= {right_value}"),
+                    B::BitAnd | B::BitOr | B::BitXor => match (expr.ty, op) {
+                        (Type::Int, B::BitAnd) => format!("ncr_i32_and({left_value}, {right_value})"),
+                        (Type::Int, B::BitOr) => format!("ncr_i32_or({left_value}, {right_value})"),
+                        (Type::Int, B::BitXor) => format!("ncr_i32_xor({left_value}, {right_value})"),
+                        (Type::Long, B::BitAnd) => format!("ncr_i64_and({left_value}, {right_value})"),
+                        (Type::Long, B::BitOr) => format!("ncr_i64_or({left_value}, {right_value})"),
+                        (Type::Long, B::BitXor) => format!("ncr_i64_xor({left_value}, {right_value})"),
+                        _ => unreachable!("checked bitwise operation"),
+                    },
+                    B::ShiftLeft | B::ShiftRight => match (expr.ty, op) {
+                        (Type::Int, B::ShiftLeft) => format!("ncr_i32_shl({left_value}, {right_value}, {line}, {column})"),
+                        (Type::Int, B::ShiftRight) => format!("ncr_i32_shr({left_value}, {right_value}, {line}, {column})"),
+                        (Type::Long, B::ShiftLeft) => format!("ncr_i64_shl({left_value}, {right_value}, {line}, {column})"),
+                        (Type::Long, B::ShiftRight) => format!("ncr_i64_shr({left_value}, {right_value}, {line}, {column})"),
+                        _ => unreachable!("checked shift operation"),
+                    },
                     B::And | B::Or => unreachable!("short-circuit handled above"),
                 };
                 self.bind(expr.ty, &operation)
@@ -526,8 +637,15 @@ impl Emitter<'_> {
                     },
                     CallTarget::Println => {
                         let name = match args[0].ty {
-                            Type::Int => "ncr_print_int", Type::Boolean => "ncr_print_boolean",
-                            Type::String => "ncr_print_string", Type::Void | Type::Object(_) | Type::Borrow { .. } => unreachable!("checked println argument"),
+                            Type::Byte => "ncr_print_byte",
+                            Type::Char => "ncr_print_char",
+                            Type::Int => "ncr_print_int",
+                            Type::Long => "ncr_print_long",
+                            Type::Double => "ncr_print_double",
+                            Type::Unit => "ncr_print_unit",
+                            Type::Boolean => "ncr_print_boolean",
+                            Type::String => "ncr_print_string",
+                            Type::Void | Type::Object(_) | Type::Borrow { .. } => unreachable!("checked println argument"),
                         };
                         format!("{name}({})", values[0])
                     }

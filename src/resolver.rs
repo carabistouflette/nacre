@@ -274,8 +274,6 @@ impl Resolver {
         self.block(&mut function.body, &mut context)
     }
 
-    // Numeric primitive variants require no module resolution.
-    #[allow(unreachable_patterns)]
     fn resolve_type(&self, unit: usize, parameters: &[String], ty: &mut Type, span: Span) -> Result<(), Diagnostic> {
         match ty {
             Type::Named(name) => {
@@ -301,8 +299,8 @@ impl Resolver {
                 }
                 for argument in args { self.resolve_type(unit, parameters, argument, span)?; }
             }
-            Type::Int | Type::Boolean | Type::String | Type::Void => {}
-            _ => {}
+            Type::Byte | Type::Char | Type::Int | Type::Long | Type::Double | Type::Unit |
+            Type::Boolean | Type::String | Type::Void => {}
         }
         Ok(())
     }
@@ -408,8 +406,6 @@ impl Resolver {
         Ok(())
     }
 
-    // Numeric literal variants do not contain names to resolve.
-    #[allow(unreachable_patterns)]
     fn expression(&self, expression: &mut Expr, context: &mut BodyContext) -> Result<(), Diagnostic> {
         if let E::MethodCall { receiver, name, args } = &mut expression.kind {
             let system_print = name == "println" && matches!(&receiver.kind,
@@ -487,9 +483,13 @@ impl Resolver {
             }
             E::Field { base, .. } => self.expression(base, context)?,
             E::Unary { expr, .. } | E::Borrow { expr, .. } => self.expression(expr, context)?,
+            E::Cast { ty, expr } => {
+                self.resolve_type(context.unit, &context.type_params, ty, expression.span)?;
+                self.expression(expr, context)?;
+            }
             E::Binary { left, right, .. } => { self.expression(left, context)?; self.expression(right, context)?; }
-            E::Int(_) | E::Boolean(_) | E::String(_) | E::Var(_) | E::This => {}
-            _ => {}
+            E::Char(_) | E::Int(_) | E::Long(_) | E::Double(_) | E::Unit |
+            E::Boolean(_) | E::String(_) | E::Var(_) | E::This => {}
         }
         Ok(())
     }

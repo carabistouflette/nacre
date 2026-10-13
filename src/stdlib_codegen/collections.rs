@@ -82,6 +82,10 @@ pub(super) fn drop_map_fields(program: &t::Program, key: MapKeyKind, value: Type
 }
 fn zero(program: &t::Program, ty: Type) -> String {
     match ty {
+        Type::Byte | Type::Unit => "UINT8_C(0)".to_owned(),
+        Type::Char => "UINT32_C(0)".to_owned(),
+        Type::Long => "INT64_C(0)".to_owned(),
+        Type::Double => "0.0".to_owned(),
         Type::Int => "INT32_C(0)".to_owned(),
         Type::Boolean => "false".to_owned(),
         Type::String => "(ncr_string){NULL, 0}".to_owned(),
@@ -145,7 +149,7 @@ fn option_tags(program: &t::Program, function: &t::Function, element: Type) -> (
 fn try_get_list_method(program: &t::Program, list_class: usize, element: Type) -> String {
     let Some(function) = list_native_function(program, list_class, |method| matches!(method, M::ListTryGet))
     else { return String::new(); };
-    assert!(matches!(element, Type::Int | Type::Boolean | Type::String),
+    assert!(element.is_copy(),
         "List tryGet must be pruned for non-copy elements");
     let (none_tag, some_tag) = option_tags(program, function, element);
     let index_type = function.params.first().expect("List tryGet index parameter").1;
@@ -217,7 +221,7 @@ fn borrowed_map_methods(program: &t::Program, map_class: usize, value: Type) -> 
 fn try_get_map_method(program: &t::Program, map_class: usize, value: Type) -> String {
     let Some(function) = map_native_function(program, map_class, |method| matches!(method, M::MapTryGet))
     else { return String::new(); };
-    assert!(matches!(value, Type::Int | Type::Boolean | Type::String),
+    assert!(value.is_copy(),
         "Map tryGet must be pruned for non-copy values");
     let (none_tag, some_tag) = option_tags(program, function, value);
     include_str!("../../stdlib/map_try_get.c.in")

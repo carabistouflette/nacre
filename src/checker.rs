@@ -27,7 +27,9 @@ struct Tables {
 impl Tables {
     fn resolve_type(&self, ty: &a::Type, span: Span) -> Result<Type, Diagnostic> {
         Ok(match ty {
-            a::Type::Int => Type::Int, a::Type::Boolean => Type::Boolean,
+            a::Type::Byte => Type::Byte, a::Type::Char => Type::Char,
+            a::Type::Int => Type::Int, a::Type::Long => Type::Long, a::Type::Double => Type::Double,
+            a::Type::Unit => Type::Unit, a::Type::Boolean => Type::Boolean,
             a::Type::String => Type::String, a::Type::Void => Type::Void,
             a::Type::Named(name) => {
                 let id = *self.names.get(name).ok_or_else(|| Diagnostic::new(span, format!("class `{name}` is unknown")))?;
@@ -55,8 +57,11 @@ impl Tables {
     }
     fn type_name(&self, ty: Type) -> String {
         match ty {
-            Type::Int => "int".to_owned(), Type::Boolean => "boolean".to_owned(),
-            Type::String => "String".to_owned(), Type::Void => "void".to_owned(),
+            Type::Byte => "byte".to_owned(), Type::Char => "char".to_owned(),
+            Type::Int => "int".to_owned(), Type::Long => "long".to_owned(),
+            Type::Double => "double".to_owned(), Type::Unit => "Unit".to_owned(),
+            Type::Boolean => "boolean".to_owned(), Type::String => "String".to_owned(),
+            Type::Void => "void".to_owned(),
             Type::Object(id) => self.classes[id].name.clone(),
             Type::Borrow { class, mutable } => format!("borrow {}{}", if mutable { "mut " } else { "" }, self.classes[class].name),
         }
@@ -92,6 +97,18 @@ impl Tables {
         self.signatures.push(Signature { id, owner, kind, name: f.name.clone(), params, return_type, visibility: f.visibility, readonly: f.readonly, virtual_slot });
         Ok(id)
     }
+}
+
+fn numeric_common(left: Type, right: Type) -> Option<Type> {
+    let left = left.promoted_numeric()?;
+    let right = right.promoted_numeric()?;
+    Some(if left.numeric_rank()? >= right.numeric_rank()? { left } else { right })
+}
+
+fn coerce_numeric(value: t::Expr, target: Type) -> t::Expr {
+    if value.ty == target { return value; }
+    let span = value.span;
+    t::Expr { kind: t::ExprKind::Cast { value: Box::new(value) }, ty: target, span }
 }
 
 pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
@@ -310,7 +327,8 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
             if productive[id] { continue; }
             let productive_type = |ty: Type| match ty {
                 Type::Object(child) => productive[child],
-                Type::Int | Type::Boolean | Type::String | Type::Void | Type::Borrow { .. } => true,
+                Type::Byte | Type::Char | Type::Int | Type::Long | Type::Double | Type::Unit |
+                Type::Boolean | Type::String | Type::Void | Type::Borrow { .. } => true,
             };
             let can_construct = if info.native.is_some() {
                 true
@@ -426,7 +444,7 @@ struct Checker<'a> {
 fn synthetic_expr(kind: a::ExprKind, span: Span) -> a::Expr {
     let depth = 1 + match &kind {
         a::ExprKind::Binary { left, right, .. } => left.depth.max(right.depth),
-        a::ExprKind::Unary { expr, .. } | a::ExprKind::Borrow { expr, .. } => expr.depth,
+        a::ExprKind::Unary { expr, .. } | a::ExprKind::Borrow { expr, .. } | a::ExprKind::Cast { expr, .. } => expr.depth,
         a::ExprKind::Call { args, .. } | a::ExprKind::New { args, .. } | a::ExprKind::Variant { args, .. } =>
             args.iter().map(|arg| arg.depth).max().unwrap_or(0),
         a::ExprKind::MethodCall { receiver, args, .. } =>
@@ -737,9 +755,13 @@ impl Checker<'_> {
     fn traversal_binding(&self, header: &a::Type, value_type: Type, span: Span) -> Result<(Type, bool), Diagnostic> {
         let header_type = self.tables.resolve_type(header, span)?;
         match value_type {
-            Type::Int | Type::Boolean | Type::String if header_type == value_type => Ok((value_type, false)),
-            Type::Int | Type::Boolean | Type::String => Err(Diagnostic::new(span, format!(
-                "incompatible element type: expected {}", self.tables.type_name(value_type)))),
+            ty if ty.is_copy() => {
+                if header_type == ty { Ok((ty, false)) } else {
+                    Err(Diagnostic::new(span, format!(
+                        "element type mismatch: expected {}, found {}",
+                        self.tables.type_name(value_type), self.tables.type_name(header_type))))
+                }
+            }
             Type::Object(class) => {
                 let Type::Borrow { class: header_class, mutable } = header_type else {
                     return Err(Diagnostic::new(span,
@@ -947,6 +969,14 @@ impl Checker<'_> {
                     ty: expected, span: expr.span });
             }
         }
+        if expected == value.ty { return Ok(value); }
+        if expected.is_numeric() && value.ty.is_numeric() {
+            let source = value.ty.promoted_numeric().expect("numeric source has a promotion");
+            if expected.promoted_numeric() == Some(expected)
+                && source.numeric_rank().zip(expected.numeric_rank()).is_some_and(|(from, to)| from <= to) {
+                return Ok(coerce_numeric(value, expected));
+            }
+        }
         self.require(expected, value.ty, value.span)?;
         Ok(value)
     }
@@ -1019,9 +1049,21 @@ impl Checker<'_> {
     fn expression_inner(&mut self, expr: &a::Expr) -> Result<t::Expr, Diagnostic> {
         use a::ExprKind as E;
         let (kind, ty) = match &expr.kind {
+            E::Char(value) => (t::ExprKind::Char(*value), Type::Char),
             E::Int(n) => (t::ExprKind::Int(*n), Type::Int),
+            E::Long(value) => (t::ExprKind::Long(*value), Type::Long),
+            E::Double(value) => (t::ExprKind::Double(*value), Type::Double),
+            E::Unit => (t::ExprKind::Unit, Type::Unit),
             E::Boolean(b) => (t::ExprKind::Boolean(*b), Type::Boolean),
             E::String(s) => (t::ExprKind::String(s.clone()), Type::String),
+            E::Cast { ty, expr: value } => {
+                let target = self.tables.resolve_type(ty, expr.span)?;
+                let value = self.expression(value)?;
+                if !target.is_numeric() || !value.ty.is_numeric() {
+                    return Err(Diagnostic::new(expr.span, "[E6102] numeric casts require numeric source and target types"));
+                }
+                (t::ExprKind::Cast { value: Box::new(value) }, target)
+            }
             E::Borrow { expr: inner, mutable } => {
                 let place = self.place(inner, false)?;
                 let class = place.ty.object_class()
@@ -1117,31 +1159,55 @@ impl Checker<'_> {
             }
             E::Unary { op, expr: inner } => {
                 let inner = self.expression(inner)?;
-                let expected = if *op == UnaryOp::Not { Type::Boolean } else { Type::Int };
-                self.require(expected, inner.ty, inner.span)?;
-                (t::ExprKind::Unary { op: *op, expr: Box::new(inner) }, expected)
+                let target = match op {
+                    UnaryOp::Not if inner.ty == Type::Boolean => Type::Boolean,
+                    UnaryOp::Neg | UnaryOp::Plus => inner.ty.promoted_numeric()
+                        .ok_or_else(|| Diagnostic::new(expr.span, "[E6105] unary arithmetic requires a numeric operand"))?,
+                    UnaryOp::BitNot => inner.ty.promoted_numeric().filter(|ty| ty.is_integer())
+                        .ok_or_else(|| Diagnostic::new(expr.span, "[E6105] bitwise not requires an integer operand"))?,
+                    UnaryOp::Not => return Err(Diagnostic::new(expr.span, "[E6105] logical not requires a boolean operand")),
+                };
+                let inner = if target.is_numeric() { coerce_numeric(inner, target) } else { inner };
+                (t::ExprKind::Unary { op: *op, expr: Box::new(inner) }, target)
             }
             E::Binary { op, left, right } => {
                 let left = self.expression(left)?;
                 let right = self.expression(right)?;
-                let ty = match op {
-                    B::Add | B::Sub | B::Mul | B::Div | B::Rem => {
-                        self.require(Type::Int, left.ty, left.span)?;
-                        self.require(Type::Int, right.ty, right.span)?; Type::Int
-                    }
+                let (left, right, ty) = match op {
+                    B::Add | B::Sub | B::Mul | B::Div | B::Rem |
                     B::Lt | B::Le | B::Gt | B::Ge => {
-                        self.require(Type::Int, left.ty, left.span)?;
-                        self.require(Type::Int, right.ty, right.span)?; Type::Boolean
+                        let common = numeric_common(left.ty, right.ty)
+                            .ok_or_else(|| Diagnostic::new(expr.span, "[E6105] numeric operator requires numeric operands"))?;
+                        let result = if matches!(op, B::Lt | B::Le | B::Gt | B::Ge) { Type::Boolean } else { common };
+                        (coerce_numeric(left, common), coerce_numeric(right, common), result)
+                    }
+                    B::BitAnd | B::BitOr | B::BitXor => {
+                        let common = numeric_common(left.ty, right.ty).filter(|ty| ty.is_integer())
+                            .ok_or_else(|| Diagnostic::new(expr.span, "[E6105] bitwise operators require integer operands"))?;
+                        (coerce_numeric(left, common), coerce_numeric(right, common), common)
+                    }
+                    B::ShiftLeft | B::ShiftRight => {
+                        let left_type = left.ty.promoted_numeric().filter(|ty| ty.is_integer())
+                            .ok_or_else(|| Diagnostic::new(expr.span, "[E6105] shift operators require an integer left operand"))?;
+                        let count_type = right.ty.promoted_numeric();
+                        if count_type != Some(Type::Int) {
+                            return Err(Diagnostic::new(expr.span, "[E6105] shift count must be a byte, char, or int"));
+                        }
+                        (coerce_numeric(left, left_type), coerce_numeric(right, Type::Int), left_type)
                     }
                     B::And | B::Or => {
                         self.require(Type::Boolean, left.ty, left.span)?;
-                        self.require(Type::Boolean, right.ty, right.span)?; Type::Boolean
+                        self.require(Type::Boolean, right.ty, right.span)?;
+                        (left, right, Type::Boolean)
                     }
                     B::Eq | B::Ne => {
-                        if !matches!(left.ty, Type::Int | Type::Boolean) {
-                            return Err(Diagnostic::new(expr.span, "== and != are limited to int and boolean"));
+                        if let Some(common) = numeric_common(left.ty, right.ty) {
+                            (coerce_numeric(left, common), coerce_numeric(right, common), Type::Boolean)
+                        } else if left.ty == Type::Boolean && right.ty == Type::Boolean {
+                            (left, right, Type::Boolean)
+                        } else {
+                            return Err(Diagnostic::new(expr.span, "[E6105] equality requires matching numeric or boolean operands"));
                         }
-                        self.require(left.ty, right.ty, right.span)?; Type::Boolean
                     }
                 };
                 (t::ExprKind::Binary { op: *op, left: Box::new(left), right: Box::new(right) }, ty)

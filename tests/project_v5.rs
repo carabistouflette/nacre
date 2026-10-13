@@ -138,7 +138,7 @@ fn project_init_then_run() {
     let t=Temp::new();let p=t.0.join("new project");
     assert!(cli(&["init".as_ref(),p.as_os_str()]).status.success());
     let out=cli(&["run".as_ref(),p.join("src").as_os_str()]);assert!(out.status.success(),"{}",String::from_utf8_lossy(&out.stderr));
-    assert_eq!(out.stdout.split(|byte| byte.is_ascii_whitespace()).filter(|part| !part.is_empty()).last(), Some(b"42".as_slice()));
+    assert_eq!(out.stdout.split(|byte| byte.is_ascii_whitespace()).filter(|part| !part.is_empty()).next_back(), Some(b"42".as_slice()));
 }
 #[test]
 fn init_never_overwrites_existing_project() {

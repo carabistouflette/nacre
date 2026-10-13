@@ -4,15 +4,16 @@ use crate::diagnostic::{Diagnostic, Span};
 use crate::lexer::{Token, TokenKind as K};
 
 pub fn parse(tokens: Vec<Token>) -> Result<Program, Diagnostic> {
-    Parser { tokens, pos: 0, depth: 0 }.program()
+    Parser { tokens, pos: 0, depth: 0, pending_greater: None }.program()
 }
 
-struct Parser { tokens: Vec<Token>, pos: usize, depth: usize }
+struct Parser { tokens: Vec<Token>, pos: usize, depth: usize, pending_greater: Option<Token> }
 
 impl Parser {
-    fn current(&self) -> &Token { &self.tokens[self.pos] }
+    fn current(&self) -> &Token { self.pending_greater.as_ref().unwrap_or(&self.tokens[self.pos]) }
     fn at(&self, kind: &K) -> bool { self.current().kind == *kind }
     fn bump(&mut self) -> Token {
+        if let Some(token) = self.pending_greater.take() { return token; }
         let token = self.current().clone();
         if token.kind != K::Eof { self.pos += 1; }
         token
@@ -257,8 +258,11 @@ impl Parser {
                 let args = self.type_arguments()?;
                 Ok(Type::Borrow { name, args, mutable })
             }
-            K::Int => Ok(Type::Int), K::Boolean => Ok(Type::Boolean),
-            K::StringType => Ok(Type::String), K::Ident(first) => {
+            K::Byte => Ok(Type::Byte), K::CharType => Ok(Type::Char),
+            K::Int => Ok(Type::Int), K::Long => Ok(Type::Long),
+            K::Double => Ok(Type::Double), K::UnitType => Ok(Type::Unit),
+            K::Boolean => Ok(Type::Boolean), K::StringType => Ok(Type::String),
+            K::Ident(first) => {
                 let mut name = first;
                 while self.eat(&K::Dot) {
                     let (part, _) = self.ident()?;
@@ -270,7 +274,7 @@ impl Parser {
             },
             K::Void if allow_void => Ok(Type::Void),
             K::Void => Err(Diagnostic::new(token.span, "`void` is reserved for function return types")),
-            _ => Err(Diagnostic::new(token.span, "expected a type: int, boolean, String, or a nominal type")),
+            _ => Err(Diagnostic::new(token.span, "expected type: byte, char, int, long, double, Unit, boolean, String, or a class name")),
         }
     }
     fn type_arguments(&mut self) -> Result<Vec<Type>, Diagnostic> {
@@ -285,9 +289,18 @@ impl Parser {
                 if args.len() > 8 { return Err(Diagnostic::new(p.current().span, "[E4199] limit of 8 type arguments")); }
                 if !p.eat(&K::Comma) { break; }
             }
-            p.expect(&K::Greater, "`>`")?;
+            p.type_greater()?;
             Ok(args)
         })
+    }
+    fn type_greater(&mut self) -> Result<Token, Diagnostic> {
+        if self.at(&K::ShiftRight) {
+            let token = self.bump();
+            let middle = token.span.start + 1;
+            self.pending_greater = Some(Token { kind: K::Greater, span: Span::new(middle, token.span.end) });
+            return Ok(Token { kind: K::Greater, span: Span::new(token.span.start, middle) });
+        }
+        self.expect(&K::Greater, "`>`")
     }
     fn parameters(&mut self) -> Result<Vec<Param>, Diagnostic> {
         self.expect(&K::LParen, "`(`")?;
@@ -324,11 +337,15 @@ impl Parser {
         self.nested(|p| p.statement_inner())
     }
     fn declaration_ahead(&mut self) -> bool {
-        if matches!(self.current().kind, K::Int | K::Boolean | K::StringType | K::Borrow) { return true; }
+        if matches!(self.current().kind,
+            K::Byte | K::CharType | K::Int | K::Long | K::Double | K::UnitType |
+            K::Boolean | K::StringType | K::Borrow) { return true; }
         if !matches!(self.current().kind, K::Ident(_)) { return false; }
         let save = self.pos;
+        let saved_greater = self.pending_greater.clone();
         let result = self.ty(false).is_ok() && matches!(self.current().kind, K::Ident(_));
         self.pos = save;
+        self.pending_greater = saved_greater;
         result
     }
     fn statement_inner(&mut self) -> Result<Stmt, Diagnostic> {
@@ -437,6 +454,12 @@ impl Parser {
         Ok(Stmt { kind, span: start.join(end) })
     }
     fn expression(&mut self) -> Result<Expr, Diagnostic> { self.binary(1) }
+    fn cast_ahead(&self) -> bool {
+        let target = self.tokens.get(self.pos + 1).map(|token| &token.kind);
+        self.at(&K::LParen)
+            && matches!(target, Some(K::Byte | K::CharType | K::Int | K::Long | K::Double))
+            && self.tokens.get(self.pos + 2).is_some_and(|token| token.kind == K::RParen)
+    }
     fn binary(&mut self, min_precedence: u8) -> Result<Expr, Diagnostic> {
         self.nested(|p| {
             let mut left = p.unary()?;
@@ -452,6 +475,14 @@ impl Parser {
     }
     fn unary(&mut self) -> Result<Expr, Diagnostic> {
         self.nested(|p| {
+            if p.cast_ahead() {
+                let start = p.bump().span;
+                let ty = p.ty(false)?;
+                p.expect(&K::RParen, "`)` after primitive cast")?;
+                let value = p.unary()?;
+                let span = start.join(value.span);
+                return make_expr(ExprKind::Cast { ty, expr: Box::new(value) }, span);
+            }
             if p.at(&K::Borrow) {
                 let start = p.bump().span;
                 let mutable = p.eat(&K::Mut);
@@ -461,14 +492,18 @@ impl Parser {
             }
             let op = match p.current().kind {
                 K::Minus => Some(UnaryOp::Neg), K::Bang => Some(UnaryOp::Not),
-                K::Plus => Some(UnaryOp::Plus), _ => None,
+                K::Plus => Some(UnaryOp::Plus), K::Tilde => Some(UnaryOp::BitNot), _ => None,
             };
             if let Some(op) = op {
                 let start = p.bump().span;
-                // The magnitude 2147483648 is only legal directly after unary minus.
                 if op == UnaryOp::Neg {
                     if let K::Number(text) = &p.current().kind {
-                        if text.parse::<u64>() == Ok(2_147_483_648) {
+                        if let Some(magnitude) = text.strip_suffix('L') {
+                            if magnitude.parse::<u64>() == Ok(9_223_372_036_854_775_808) {
+                                let end = p.bump().span;
+                                return make_expr(ExprKind::Long(i64::MIN), start.join(end));
+                            }
+                        } else if text.parse::<u64>() == Ok(2_147_483_648) {
                             let end = p.bump().span;
                             return make_expr(ExprKind::Int(i32::MIN), start.join(end));
                         }
@@ -510,8 +545,9 @@ impl Parser {
         let token = self.bump();
         let mut span = token.span;
         let kind = match token.kind {
-            K::Number(text) => ExprKind::Int(text.parse::<i32>().map_err(|_| Diagnostic::new(span, "integer out of range: -2147483648 to 2147483647"))?),
+            K::Number(text) => number_literal(&text, span)?,
             K::String(text) => ExprKind::String(text),
+            K::Character(value) => ExprKind::Char(value),
             K::True => ExprKind::Boolean(true), K::False => ExprKind::Boolean(false),
             K::This => ExprKind::This,
             K::New => {
@@ -534,6 +570,7 @@ impl Parser {
                 } else { ExprKind::Var(name) }
             }
             K::LParen => {
+                if self.eat(&K::RParen) { return make_expr(ExprKind::Unit, span.join(self.tokens[self.pos - 1].span)); }
                 let mut expr = self.expression()?;
                 expr.span = span.join(self.expect(&K::RParen, "`)`")?.span);
                 return Ok(expr);
@@ -549,13 +586,32 @@ fn binary_op(kind: &K) -> Option<(BinaryOp, u8)> {
     use BinaryOp as B;
     Some(match kind {
         K::OrOr => (B::Or, 1), K::AndAnd => (B::And, 2),
-        K::EqualEqual => (B::Eq, 3), K::BangEqual => (B::Ne, 3),
-        K::Less => (B::Lt, 4), K::LessEqual => (B::Le, 4),
-        K::Greater => (B::Gt, 4), K::GreaterEqual => (B::Ge, 4),
-        K::Plus => (B::Add, 5), K::Minus => (B::Sub, 5),
-        K::Star => (B::Mul, 6), K::Slash => (B::Div, 6), K::Percent => (B::Rem, 6),
+        K::Pipe => (B::BitOr, 3), K::Caret => (B::BitXor, 4),
+        K::Ampersand => (B::BitAnd, 5),
+        K::EqualEqual => (B::Eq, 6), K::BangEqual => (B::Ne, 6),
+        K::Less => (B::Lt, 7), K::LessEqual => (B::Le, 7),
+        K::Greater => (B::Gt, 7), K::GreaterEqual => (B::Ge, 7),
+        K::ShiftLeft => (B::ShiftLeft, 8), K::ShiftRight => (B::ShiftRight, 8),
+        K::Plus => (B::Add, 9), K::Minus => (B::Sub, 9),
+        K::Star => (B::Mul, 10), K::Slash => (B::Div, 10), K::Percent => (B::Rem, 10),
         _ => return None,
     })
+}
+fn number_literal(text: &str, span: Span) -> Result<ExprKind, Diagnostic> {
+    if let Some(magnitude) = text.strip_suffix('L') {
+        let value = magnitude.parse::<i64>()
+            .map_err(|_| Diagnostic::new(span, "[E6101] long literal is outside the range -9223372036854775808..=9223372036854775807"))?;
+        return Ok(ExprKind::Long(value));
+    }
+    if text.contains('.') || text.contains('e') || text.contains('E') {
+        let value = text.parse::<f64>()
+            .ok().filter(|value| value.is_finite())
+            .ok_or_else(|| Diagnostic::new(span, "[E6101] double literal is invalid or outside the finite range"))?;
+        return Ok(ExprKind::Double(value));
+    }
+    let value = text.parse::<i32>()
+        .map_err(|_| Diagnostic::new(span, "[E6001] int literal is outside the range -2147483648..=2147483647"))?;
+    Ok(ExprKind::Int(value))
 }
 
 // Cap the AST height at construction, not only during type checking. This
@@ -564,10 +620,11 @@ fn binary_op(kind: &K) -> Option<(BinaryOp, u8)> {
 fn make_expr(kind: ExprKind, span: Span) -> Result<Expr, Diagnostic> {
     let depth = 1 + match &kind {
         ExprKind::Binary { left, right, .. } => left.depth.max(right.depth),
-        ExprKind::Unary { expr, .. } | ExprKind::Borrow { expr, .. } => expr.depth,
+        ExprKind::Unary { expr, .. } | ExprKind::Borrow { expr, .. } | ExprKind::Cast { expr, .. } => expr.depth,
         ExprKind::Call { args, .. } | ExprKind::New { args, .. } | ExprKind::Variant { args, .. } =>
             args.iter().map(|arg| arg.depth).max().unwrap_or(0),
-        ExprKind::MethodCall { receiver, args, .. } => receiver.depth.max(args.iter().map(|arg| arg.depth).max().unwrap_or(0)),
+        ExprKind::MethodCall { receiver, args, .. } =>
+            receiver.depth.max(args.iter().map(|arg| arg.depth).max().unwrap_or(0)),
         ExprKind::Field { base, .. } => base.depth,
         _ => 0,
     };

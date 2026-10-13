@@ -79,7 +79,12 @@ pub(crate) fn type_dump(typed: &ir::Program) -> String {
             for variant in variants {
                 out.push_str(&format!("  {}({})\n", variant.name, variant.fields.iter()
                     .map(|ty| match ty {
+                        ir::Type::Byte => "byte".to_owned(),
+                        ir::Type::Char => "char".to_owned(),
                         ir::Type::Int => "int".to_owned(),
+                        ir::Type::Long => "long".to_owned(),
+                        ir::Type::Double => "double".to_owned(),
+                        ir::Type::Unit => "Unit".to_owned(),
                         ir::Type::Boolean => "boolean".to_owned(),
                         ir::Type::String => "String".to_owned(),
                         ir::Type::Void => "void".to_owned(),

@@ -90,6 +90,7 @@ pub fn compile_c_optimized(source: &str, optimization: &str, flags: &[&str]) -> 
         .args(["-std=c11", "-Wall", "-Wextra", "-pedantic", "-Wno-unused-function", "-Wno-unused-variable", "-Wno-unused-parameter", "-Wno-unused-but-set-variable"])
         .args(flags)
         .arg(&c_path).arg("-o").arg(&executable)
+        .args(if cfg!(unix) { &["-lm"][..] } else { &[][..] })
         .output().map_err(|e| format!("failed to start {compiler:?}: {e}"))?;
     if !output.status.success() {
         return Err(format!("C compiler {compiler:?} failed:\n{}\nTo inspect the generated code: nacre emit-c source.ncr -o debug.c", String::from_utf8_lossy(&output.stderr)));

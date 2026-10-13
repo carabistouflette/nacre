@@ -1,0 +1,122 @@
+void main() {
+    byte maximumByte = (byte)255;
+    // U+1F9EA is test data for Unicode scalar encoding and printing.
+    char symbol = '\u{1f9ea}';
+    int truncated = (int)3.75;
+    int wrappedInt = 2147483647 + 1;
+    long maximumLong = 9223372036854775807L;
+    long minimumLong = -9223372036854775808L;
+    long wrappedLong = maximumLong + 1L;
+    double finite = 3.25;
+    double nan = 0.0 / 0.0;
+    double infinity = 1.0 / 0.0;
+
+    println(maximumByte);
+    println((byte)'A');
+    println(symbol);
+    List<char> symbols = new List<char>();
+    symbols.add(symbol);
+    for (char value : symbols) {
+        println(value);
+    }
+    println(truncated);
+    println(wrappedInt);
+    println(wrappedLong);
+    println(minimumLong / -1L);
+    println(minimumLong % -1L);
+    println(nan == nan);
+    println(infinity > finite);
+    println(-9.0 % 4.0);
+    println(-9 >> 2);
+    println(1L << 63);
+    println(7L & 3L);
+    println(7L | 8L);
+    println(7L ^ 3L);
+    println(~0L);
+
+    List<byte> bytes = new List<byte>();
+    bytes.add(maximumByte);
+    bytes.add((byte)42);
+    int byteTotal = 0;
+    for (byte value : bytes) {
+        byteTotal = byteTotal + value;
+    }
+    println(byteTotal);
+
+    List<double> measurements = new List<double>();
+    measurements.add(nan);
+    measurements.add(infinity);
+    measurements.add(finite);
+    for (double value : measurements) {
+        println(value > 0.0);
+    }
+
+    Map<int, long> wideValues = new Map<int, long>();
+    wideValues.put(78, minimumLong);
+    for (int key, long value : wideValues) {
+        println(key);
+        println(value);
+    }
+
+    List<Unit> units = new List<Unit>();
+    units.add(());
+    println(units.get(0));
+    List<List<long>> nested = new List<List<long>>();
+    List<long> group = new List<long>();
+    group.add(7L);
+    nested.add(group);
+    println(nested.size());
+
+    Text encoded = new Text("");
+    encoded.appendByte(maximumByte);
+    encoded.append("|");
+    encoded.appendChar(symbol);
+    encoded.append("|");
+    encoded.appendLong(minimumLong);
+    encoded.append("|");
+    encoded.appendDouble(finite);
+    encoded.append("|");
+    encoded.appendDouble(infinity);
+    encoded.print();
+
+    Text minimumText = new Text("-9223372036854775808");
+    Result<long, Text> parsedLong = minimumText.parseLong();
+    match (parsedLong) {
+        Ok(value) { println(value); }
+        Err(error) { error.print(); }
+    }
+
+    Text overflowText = new Text("9223372036854775808");
+    Result<long, Text> failedLong = overflowText.parseLong();
+    match (failedLong) {
+        Ok(value) { println(value); }
+        Err(error) { error.print(); }
+    }
+
+    Text doubleText = new Text("3.125e2");
+    Result<double, Text> parsedDouble = doubleText.parseDouble();
+    match (parsedDouble) {
+        Ok(value) { println(value); }
+        Err(error) { error.print(); }
+    }
+
+    Text nanText = new Text("NaN");
+    Result<double, Text> parsedNan = nanText.parseDouble();
+    match (parsedNan) {
+        Ok(value) { println(value != value); }
+        Err(error) { error.print(); }
+    }
+
+    Text overflowDoubleText = new Text("1e9999");
+    Result<double, Text> failedDouble = overflowDoubleText.parseDouble();
+    match (failedDouble) {
+        Ok(value) { println(value); }
+        Err(error) { error.print(); }
+    }
+
+    Result<Unit, Text> unitResult = new Result<Unit, Text>.Ok(());
+    match (unitResult) {
+        Ok(value) { println(value); }
+        Err(error) { error.print(); }
+    }
+}

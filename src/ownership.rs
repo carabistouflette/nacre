@@ -199,7 +199,8 @@ impl Builder {
     fn expression(&mut self, expr: &t::Expr, at: NodeId) -> NodeId {
         use t::ExprKind as E;
         match &expr.kind {
-            E::Int(_) | E::Boolean(_) | E::String(_) => at,
+            E::Char(_) | E::Int(_) | E::Long(_) | E::Double(_) | E::Unit
+            | E::Boolean(_) | E::String(_) => at,
             E::Read(place) => self.read_place(place, expr.span, false, at),
             E::Borrow { place, .. } => self.read_place(place, expr.span, true, at),
             E::Move(id) => self.step(at, Op::Move { id: *id, span: expr.span }),
@@ -234,7 +235,7 @@ impl Builder {
                     t::CallTarget::Println => self.step(at, Op::Nop("println")),
                 }
             }
-            E::Unary { expr, .. } | E::Upcast { value: expr, .. } => self.expression(expr, at),
+            E::Unary { expr, .. } | E::Cast { value: expr, .. } | E::Upcast { value: expr, .. } => self.expression(expr, at),
             E::Binary { op, left, right } => {
                 let at = self.expression(left, at);
                 if matches!(op, BinaryOp::And | BinaryOp::Or) {

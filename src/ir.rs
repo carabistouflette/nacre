@@ -4,13 +4,38 @@ use crate::ast::{BinaryOp, MapKeyKind, UnaryOp};
 use crate::diagnostic::Span;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Type { Int, Boolean, String, Void, Object(usize), Borrow { class: usize, mutable: bool } }
+pub enum Type { Byte, Char, Int, Long, Double, Unit, Boolean, String, Void, Object(usize), Borrow { class: usize, mutable: bool } }
 impl Type {
     /// True only for an owning object/enum value, never for a borrowed pointer.
     pub fn is_object(self) -> bool { matches!(self, Self::Object(_)) }
     pub fn is_borrow(self) -> bool { matches!(self, Self::Borrow { .. }) }
     pub fn object_class(self) -> Option<usize> {
         match self { Self::Object(id) | Self::Borrow { class: id, .. } => Some(id), _ => None }
+    }
+    pub fn is_primitive(self) -> bool {
+        matches!(self, Self::Byte | Self::Char | Self::Int | Self::Long | Self::Double |
+            Self::Unit | Self::Boolean | Self::String)
+    }
+    pub fn is_copy(self) -> bool { self.is_primitive() }
+    pub fn is_numeric(self) -> bool {
+        matches!(self, Self::Byte | Self::Char | Self::Int | Self::Long | Self::Double)
+    }
+    pub fn is_integer(self) -> bool { matches!(self, Self::Byte | Self::Char | Self::Int | Self::Long) }
+    pub fn numeric_rank(self) -> Option<u8> {
+        match self {
+            Self::Byte | Self::Char => Some(0),
+            Self::Int => Some(1),
+            Self::Long => Some(2),
+            Self::Double => Some(3),
+            _ => None,
+        }
+    }
+    pub fn promoted_numeric(self) -> Option<Self> {
+        match self {
+            Self::Byte | Self::Char => Some(Self::Int),
+            ty if ty.is_numeric() => Some(ty),
+            _ => None,
+        }
     }
 }
 #[derive(Debug)]
@@ -69,7 +94,7 @@ impl Place {
 pub struct Expr { pub kind: ExprKind, pub ty: Type, pub span: Span }
 #[derive(Debug)]
 pub enum ExprKind {
-    Int(i32), Boolean(bool), String(String), Read(Place), Move(usize),
+    Char(char), Int(i32), Long(i64), Double(f64), Unit, Boolean(bool), String(String), Read(Place), Move(usize),
     Borrow { place: Place, mutable: bool },
     /// Compiler-only capacity read for a structurally frozen map.
     MapCapacity(Place),
@@ -83,6 +108,7 @@ pub enum ExprKind {
     Call { target: CallTarget, receiver: Option<Place>, args: Vec<Expr> },
     Unary { op: UnaryOp, expr: Box<Expr> },
     Binary { op: BinaryOp, left: Box<Expr>, right: Box<Expr> },
+    Cast { value: Box<Expr> },
 }
 #[derive(Debug, Clone, Copy)]
 pub enum MapSlotKind { Occupied, Key, Value }
@@ -98,9 +124,10 @@ pub enum NativeMethod {
     ListSet, ListPop, ListRemove, ListTryGet, ListTryPop, ListTryRemove, ListClear, ListReserve,
     MapNew, MapContainsKey, MapSize, MapIsEmpty, MapPut, MapTryRemove, MapTryGet,
     MapGetRef, MapGetMut, MapClear,
-    TextNew, TextAppend, TextAppendInt, TextAppendBoolean, TextAppendText,
+    TextNew, TextAppend, TextAppendInt, TextAppendByte, TextAppendChar, TextAppendLong, TextAppendDouble,
+    TextAppendBoolean, TextAppendText,
     TextByteLength, TextByteAt, TextIsEmpty, TextClear, TextPrint,
-    TextClone, TextEquals, TextEqualsString, TextParseInt, TextSliceBytes,
+    TextClone, TextEquals, TextEqualsString, TextParseInt, TextParseLong, TextParseDouble, TextSliceBytes,
     ConsoleReadLine, ConsolePrint, ConsolePrintText,
     FilesReadText, FilesWriteText, FilesWriteTextAtomic, ArgsCount, ArgsGet,
 }

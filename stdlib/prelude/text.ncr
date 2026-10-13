@@ -2,6 +2,10 @@ class Text {
     public Text(String initial) {}
     public void append(String value) {}
     public void appendInt(int value) {}
+    public void appendByte(byte value) {}
+    public void appendChar(char value) {}
+    public void appendLong(long value) {}
+    public void appendDouble(double value) {}
     public void appendBoolean(boolean value) {}
     public void appendText(borrow Text other) {}
     public readonly int byteLength() {}
@@ -13,5 +17,7 @@ class Text {
     public readonly boolean equals(borrow Text other) {}
     public readonly boolean equalsString(String other) {}
     public readonly Result<int, Text> parseInt() {}
+    public readonly Result<long, Text> parseLong() {}
+    public readonly Result<double, Text> parseDouble() {}
     public readonly Result<Text, Text> sliceBytes(int start, int end) {}
 }
