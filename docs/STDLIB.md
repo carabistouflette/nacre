@@ -64,6 +64,9 @@ with a runtime diagnostic rather than returning `Result`.
 Operations never convert through `double`; operands passed as `borrow` remain
 usable, and every returned object is a separately owned value. Use `clone()` only
 when an explicit independent copy is needed.
+Either numeric type can be used independently; referencing one does not require
+constructing or referencing the other. Native emission selects its template
+sections in one pass from the specialized classes.
 
 ```java
 static BigInt BigInt.fromLong(long value)

@@ -25,6 +25,9 @@ fn assert_lines(output: &Output, expected: &str) {
 #[test]
 fn bigint_uses_exact_gmp_arithmetic_and_checked_conversions() {
     let source = r#"
+Result<BigInt, Text> parseInteger(Text value, int radix) {
+    return BigInt.parse(value, radix);
+}
 void showBigInt(borrow BigInt value) {
     match (value.toText(10)) {
         Ok(text) { text.print(); }
@@ -63,7 +66,7 @@ void showBooleanResult(Result<boolean, Text> result) {
 }
 void main() {
     BigInt two = BigInt.fromLong(2L);
-    match (BigInt.parse(new Text("123456789012345678901234567890"), 10)) {
+    match (parseInteger(new Text("123456789012345678901234567890"), 10)) {
         Err(error) { println("PARSE-ERR"); }
         Ok(large) {
             showBigInt(large);
@@ -88,7 +91,8 @@ void main() {
     BigInt anded = minusSeven.bitAnd(three);
     BigInt ored = minusSeven.bitOr(three);
     BigInt xored = minusSeven.bitXor(three);
-    BigInt inverted = BigInt.fromLong(5L).bitNot();
+    BigInt five = BigInt.fromLong(5L);
+    BigInt inverted = five.bitNot();
     showBigInt(anded);
     showBigInt(ored);
     showBigInt(xored);
@@ -96,33 +100,53 @@ void main() {
     showBooleanResult(minusSeven.testBit(0));
     showBooleanResult(minusSeven.testBit(63));
     showBooleanResult(minusSeven.testBit(-1));
-    showBigInt(minusSeven.negate());
-    showBigInt(minusSeven.abs());
+    BigInt negated = minusSeven.negate();
+    BigInt absolute = minusSeven.abs();
+    showBigInt(negated);
+    showBigInt(absolute);
     println(minusSeven.signum());
-    showIntResult(BigInt.fromLong(-8L).bitLength());
+    BigInt minusEight = BigInt.fromLong(-8L);
+    showIntResult(minusEight.bitLength());
     showBigIntResult(minusSeven.shiftLeft(4));
-    showBigIntResult(BigInt.fromLong(12L).pow(10));
-    showBigIntResult(BigInt.fromLong(12L).pow(-1));
-    match (BigInt.fromLong(3L).pow(630000)) {
+    BigInt twelve = BigInt.fromLong(12L);
+    showBigIntResult(twelve.pow(10));
+    showBigIntResult(twelve.pow(-1));
+    match (three.pow(630000)) {
         Ok(value) { showIntResult(value.bitLength()); }
         Err(error) { println("ERR"); }
     }
-    showBigIntResult(BigInt.fromLong(2L).pow(1000000));
-    showBigIntResult(BigInt.fromLong(4L).modPow(BigInt.fromLong(13L), BigInt.fromLong(497L)));
-    showBigIntResult(BigInt.fromLong(4L).modPow(BigInt.fromLong(-1L), BigInt.fromLong(7L)));
-    showBigIntResult(BigInt.fromLong(17L).modInverse(BigInt.fromLong(3120L)));
-    showBigIntResult(BigInt.fromLong(6L).modInverse(BigInt.fromLong(9L)));
-    BigInt gcd = BigInt.fromLong(-54L).gcd(BigInt.fromLong(24L));
+    showBigIntResult(two.pow(1000000));
+    BigInt four = BigInt.fromLong(4L);
+    BigInt thirteen = BigInt.fromLong(13L);
+    BigInt modulus497 = BigInt.fromLong(497L);
+    BigInt minusOne = BigInt.fromLong(-1L);
+    BigInt seven = BigInt.fromLong(7L);
+    BigInt seventeen = BigInt.fromLong(17L);
+    BigInt modulus3120 = BigInt.fromLong(3120L);
+    BigInt six = BigInt.fromLong(6L);
+    BigInt nine = BigInt.fromLong(9L);
+    showBigIntResult(four.modPow(thirteen, modulus497));
+    showBigIntResult(four.modPow(minusOne, seven));
+    showBigIntResult(seventeen.modInverse(modulus3120));
+    showBigIntResult(six.modInverse(nine));
+    BigInt minus54 = BigInt.fromLong(-54L);
+    BigInt twentyFour = BigInt.fromLong(24L);
+    BigInt gcd = minus54.gcd(twentyFour);
     showBigInt(gcd);
     showBigIntResult(minusSeven.shiftLeft(-1));
-    showBigIntResult(minusSeven.divide(BigInt.fromLong(0L)));
-    showBigIntResult(minusSeven.mod(BigInt.fromLong(-3L)));
-    showBigIntResult(BigInt.parse(new Text(" 12"), 10));
-    showBigIntResult(BigInt.parse(new Text("ff"), 1));
-    showBigIntResult(BigInt.parse(new Text("-ff"), 16));
-    showTextResult(BigInt.fromLong(255L).toText(16));
-    showLongResult(BigInt.fromLong(9223372036854775807L).toLong());
-    showLongResult(BigInt.fromLong(-9223372036854775807L - 1L).toLong());
+    BigInt zero = BigInt.fromLong(0L);
+    BigInt minusThree = BigInt.fromLong(-3L);
+    showBigIntResult(minusSeven.divide(zero));
+    showBigIntResult(minusSeven.mod(minusThree));
+    showBigIntResult(parseInteger(new Text(" 12"), 10));
+    showBigIntResult(parseInteger(new Text("ff"), 1));
+    showBigIntResult(parseInteger(new Text("-ff"), 16));
+    BigInt byteMax = BigInt.fromLong(255L);
+    showTextResult(byteMax.toText(16));
+    BigInt longMax = BigInt.fromLong(9223372036854775807L);
+    BigInt longMin = BigInt.fromLong(-9223372036854775807L - 1L);
+    showLongResult(longMax.toLong());
+    showLongResult(longMin.toLong());
 }
 "#;
     let output = execute(source);
@@ -144,6 +168,9 @@ void main() {
 #[test]
 fn bigdecimal_preserves_scale_and_rounds_every_mode_exactly() {
     let source = r#"
+Result<BigDecimal, Text> parseDecimal(Text value) {
+    return BigDecimal.parse(value);
+}
 void showDecimal(borrow BigDecimal value) {
     match (value.toText()) {
         Ok(text) { text.print(); }
@@ -163,20 +190,20 @@ void showLongResult(Result<long, Text> result) {
     }
 }
 Result<Unit, Text> runDecimalScenarios() {
-    BigDecimal parsed = BigDecimal.parse(new Text("1.2300e2"))?;
+    BigDecimal parsed = parseDecimal(new Text("1.2300e2"))?;
     println(parsed.scale());
     showDecimal(parsed);
-    BigDecimal negativeScale = BigDecimal.parse(new Text("1.2e3"))?;
+    BigDecimal negativeScale = parseDecimal(new Text("1.2e3"))?;
     println(negativeScale.scale());
     showDecimal(negativeScale);
     showLongResult(negativeScale.toLong());
-    BigDecimal a = BigDecimal.parse(new Text("1.20"))?;
-    BigDecimal b = BigDecimal.parse(new Text("0.003"))?;
+    BigDecimal a = parseDecimal(new Text("1.20"))?;
+    BigDecimal b = parseDecimal(new Text("0.003"))?;
     showDecimalResult(a.add(b));
-    BigDecimal first = BigDecimal.parse(new Text("1.0"))?;
-    BigDecimal second = BigDecimal.parse(new Text("2.00"))?;
+    BigDecimal first = parseDecimal(new Text("1.0"))?;
+    BigDecimal second = parseDecimal(new Text("2.00"))?;
     showDecimalResult(first.subtract(second));
-    BigDecimal three = BigDecimal.parse(new Text("3.0"))?;
+    BigDecimal three = parseDecimal(new Text("3.0"))?;
     showDecimalResult(a.multiply(three));
     BigDecimal one = BigDecimal.fromLong(1L);
     BigDecimal eight = BigDecimal.fromLong(8L);
@@ -194,12 +221,12 @@ Result<Unit, Text> runDecimalScenarios() {
     showDecimalResult(one.divide(eight, 2, new RoundingMode.HalfUp()));
     showDecimalResult(one.divide(eight, 2, new RoundingMode.HalfDown()));
     showDecimalResult(one.divide(eight, 2, new RoundingMode.HalfEven()));
-    BigDecimal onePointThreeSevenFive = BigDecimal.parse(new Text("1.375"))?;
+    BigDecimal onePointThreeSevenFive = parseDecimal(new Text("1.375"))?;
     showDecimalResult(onePointThreeSevenFive.rescale(2, new RoundingMode.HalfEven()));
     showDecimalResult(one.divide(eight, 2, new RoundingMode.Unnecessary()));
     BigDecimal two = BigDecimal.fromLong(2L);
     showDecimalResult(one.divide(two, 2, new RoundingMode.Unnecessary()));
-    BigDecimal onePointTwoFive = BigDecimal.parse(new Text("1.25"))?;
+    BigDecimal onePointTwoFive = parseDecimal(new Text("1.25"))?;
     showDecimalResult(onePointTwoFive.rescale(1, new RoundingMode.HalfUp()));
     showDecimalResult(onePointTwoFive.rescale(1, new RoundingMode.HalfDown()));
     showDecimalResult(onePointTwoFive.rescale(1, new RoundingMode.HalfEven()));
@@ -207,21 +234,22 @@ Result<Unit, Text> runDecimalScenarios() {
     showDecimalResult(negativeOnePointTwoFive.rescale(1, new RoundingMode.HalfUp()));
     showDecimalResult(negativeOnePointTwoFive.rescale(1, new RoundingMode.HalfDown()));
     showDecimalResult(negativeOnePointTwoFive.rescale(1, new RoundingMode.HalfEven()));
-    BigDecimal onePointZero = BigDecimal.parse(new Text("1.0"))?;
-    BigDecimal onePointZeroZero = BigDecimal.parse(new Text("1.00"))?;
+    BigDecimal onePointZero = parseDecimal(new Text("1.0"))?;
+    BigDecimal onePointZeroZero = parseDecimal(new Text("1.00"))?;
     println(onePointZero.compareTo(onePointZeroZero));
-    BigDecimal whole = BigDecimal.parse(new Text("1200.00"))?;
+    BigDecimal whole = parseDecimal(new Text("1200.00"))?;
     showLongResult(whole.toLong());
     showLongResult(onePointTwoFive.toLong());
-    BigDecimal tooLarge = BigDecimal.parse(new Text("9223372036854775808"))?;
+    BigDecimal tooLarge = parseDecimal(new Text("9223372036854775808"))?;
     showLongResult(tooLarge.toLong());
-    showDecimalResult(one.divide(BigDecimal.fromLong(0L), 2, new RoundingMode.Down()));
-    showDecimalResult(BigDecimal.parse(new Text("1e100001")));
-    showDecimalResult(BigDecimal.parse(new Text("NaN")));
-    showDecimalResult(BigDecimal.parse(new Text(" 1")));
-    showDecimalResult(BigDecimal.parse(new Text("1.0x")));
-    BigDecimal scaleLimit = BigDecimal.parse(new Text("1e100000"))?;
-    BigDecimal onePower = BigDecimal.parse(new Text("1e1"))?;
+    BigDecimal zero = BigDecimal.fromLong(0L);
+    showDecimalResult(one.divide(zero, 2, new RoundingMode.Down()));
+    showDecimalResult(parseDecimal(new Text("1e100001")));
+    showDecimalResult(parseDecimal(new Text("NaN")));
+    showDecimalResult(parseDecimal(new Text(" 1")));
+    showDecimalResult(parseDecimal(new Text("1.0x")));
+    BigDecimal scaleLimit = parseDecimal(new Text("1e100000"))?;
+    BigDecimal onePower = parseDecimal(new Text("1e1"))?;
     showDecimalResult(scaleLimit.multiply(onePower));
     return new Result<Unit, Text>.Ok(());
 }
@@ -237,8 +265,8 @@ void main() {
         "2\n123.00\n-2\n1200\n1200\n1.203\n-1.00\n3.600\n-1\n1\n",
         "0.13\n0.12\n0.12\n0.13\n-0.13\n-0.12\n",
         "0.13\n0.12\n0.12\n1.38\nERR\n0.50\n",
-        "-1.3\n-1.2\n-1.2\n",
-        "1.3\n1.2\n1.2\n0\n1200\nERR\nERR\nERR\nERR\nERR\nERR\nERR\nERR\n",
+        "1.3\n1.2\n1.2\n",
+        "-1.3\n-1.2\n-1.2\n0\n1200\nERR\nERR\nERR\nERR\nERR\nERR\nERR\nERR\n",
     ));
 }
 #[test]
@@ -256,8 +284,10 @@ void show(Result<BigInt, Text> result) {
     }
 }
 void main() {
-    show(BigInt.parse(new Text("+123"), 10));
-    show(BigInt.parse(new Text("-123"), 10));
+    Text positive = new Text("+123");
+    Text negative = new Text("-123");
+    show(BigInt.parse(positive, 10));
+    show(BigInt.parse(negative, 10));
 }
 "#;
     let output = execute(source);
@@ -279,8 +309,10 @@ void show(Result<BigDecimal, Text> result) {
     }
 }
 void main() {
-    show(BigDecimal.parse(new Text("+12.50")));
-    show(BigDecimal.parse(new Text("-12.50")));
+    Text positive = new Text("+12.50");
+    Text negative = new Text("-12.50");
+    show(BigDecimal.parse(positive));
+    show(BigDecimal.parse(negative));
     BigDecimal one = BigDecimal.fromLong(1L);
     BigDecimal eight = BigDecimal.fromLong(8L);
     show(one.divide(eight, 2, new RoundingMode.HalfUp()));
@@ -291,39 +323,24 @@ void main() {
 }
 
 #[test]
-fn numeric_parse_accepts_exact_coefficient_bit_limits_and_strips_leading_zeroes() {
-    let source = r#"
-void showBigInt(Result<BigInt, Text> result) {
-    match (result) {
-        Ok(value) {
-            match (value.bitLength()) {
-                Ok(bits) { println(bits); }
-                Err(error) { println("ERR"); }
-            }
-        }
-        Err(error) { println("ERR"); }
+fn numeric_parse_enforces_coefficient_limits_and_strips_leading_zeroes() {
+    for (class, digits, radix, expected) in [
+        ("BigInt", "f".repeat(250_000), Some(16), "1000000\n"),
+        ("BigInt", format!("1{}", "0".repeat(250_000)), Some(16), "ERR\n"),
+        ("BigDecimal", format!("1{}", "0".repeat(301_029)), None, "1\n"),
+        ("BigDecimal", format!("1{}", "0".repeat(301_030)), None, "ERR\n"),
+        ("BigInt", format!("{}1", "0".repeat(400_000)), Some(10), "1\n"),
+        ("BigDecimal", format!("{}1", "0".repeat(400_000)), None, "1\n"),
+    ] {
+        let argument = radix.map_or(String::new(), |radix| format!(", {radix}"));
+        let query = if radix.is_some() {
+            "match (value.bitLength()) { Ok(bits) { println(bits); } Err(error) { println(\"ERR\"); } }"
+        } else {
+            "println(value.signum());"
+        };
+        let source = format!(
+            "void main() {{ Text input = new Text(\"{digits}\"); match ({class}.parse(input{argument})) {{ Ok(value) {{ {query} }} Err(error) {{ println(\"ERR\"); }} }} }}"
+        );
+        assert_lines(&execute(&source), expected);
     }
-}
-void showBigDecimal(Result<BigDecimal, Text> result) {
-    match (result) {
-        Ok(value) { println(value.signum()); }
-        Err(error) { println("ERR"); }
-    }
-}
-void main() {
-    showBigInt(BigInt.parse(new Text("@BIGINT_MAX@"), 16));
-    showBigInt(BigInt.parse(new Text("@BIGINT_OVER@"), 16));
-    showBigDecimal(BigDecimal.parse(new Text("@BIGDECIMAL_MAX@")));
-    showBigDecimal(BigDecimal.parse(new Text("@BIGDECIMAL_OVER@")));
-    showBigInt(BigInt.parse(new Text("@LEADING_ZEROES@1"), 10));
-    showBigDecimal(BigDecimal.parse(new Text("@LEADING_ZEROES@1")));
-}
-"#
-    .replace("@BIGINT_MAX@", &"f".repeat(250_000))
-    .replace("@BIGINT_OVER@", &format!("1{}", "0".repeat(250_000)))
-    .replace("@BIGDECIMAL_MAX@", &format!("9{}", "0".repeat(301_029)))
-    .replace("@BIGDECIMAL_OVER@", &format!("1{}", "0".repeat(301_030)))
-    .replace("@LEADING_ZEROES@", &"0".repeat(400_000));
-    let output = execute(&source);
-    assert_lines(&output, "1000000\nERR\n1\nERR\n1\n1\n");
 }

@@ -38,6 +38,10 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   either ASCII sign and checks significant coefficient size before GMP conversion;
   formatted Text adopts its completed buffer and terminal GMP results transfer with
   `mpz_swap` instead of copying completed limbs.
+- Numeric native emission derives method classification from its binding tables
+  and selects template sections in one pass, without a second expression visitor
+  or repeated whole-template copies. Numeric regressions use named borrowed
+  operands and exercise coefficient boundaries within the source-size limit.
 - Borrowed channel wakeup regressions synchronize closure after entry into the
   real condition wait, proving blocked receiver EOF and owned sender recovery.
 - Existing composition and lending examples use `ReadJob` and `DeskCommand`

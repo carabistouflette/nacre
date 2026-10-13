@@ -1,4 +1,4 @@
-use crate::ir::{self as t, CallTarget, Expr, ExprKind, NativeClass as C, NativeMethod as M, Stmt};
+use crate::ir::{self as t, NativeClass as C, NativeMethod as M};
 use super::support::{has_placeholder, native_function, replace_method_ids, result_id, variant_id};
 
 struct MethodBinding {
@@ -8,7 +8,7 @@ struct MethodBinding {
     result: bool,
 }
 
-const METHODS: &[MethodBinding] = &[
+const BIGINT_METHODS: &[MethodBinding] = &[
     MethodBinding { name: "BIGINT_FROM_LONG", method: M::BigIntFromLong, parameters: &[("@BIGINT_FROM_LONG_VALUE@", 0)], result: false },
     MethodBinding { name: "BIGINT_PARSE", method: M::BigIntParse, parameters: &[("@BIGINT_PARSE_TEXT@", 0), ("@BIGINT_PARSE_RADIX@", 1)], result: true },
     MethodBinding { name: "BIGINT_CLONE", method: M::BigIntClone, parameters: &[], result: false },
@@ -36,6 +36,9 @@ const METHODS: &[MethodBinding] = &[
     MethodBinding { name: "BIGINT_BIT_NOT", method: M::BigIntBitNot, parameters: &[], result: false },
     MethodBinding { name: "BIGINT_TEST_BIT", method: M::BigIntTestBit, parameters: &[("@BIGINT_TEST_BIT_BIT@", 0)], result: true },
     MethodBinding { name: "BIGINT_TO_LONG", method: M::BigIntToLong, parameters: &[], result: true },
+];
+
+const BIGDECIMAL_METHODS: &[MethodBinding] = &[
     MethodBinding { name: "BIGDECIMAL_PARSE", method: M::BigDecimalParse, parameters: &[("@BIGDECIMAL_PARSE_TEXT@", 0)], result: true },
     MethodBinding { name: "BIGDECIMAL_FROM_LONG", method: M::BigDecimalFromLong, parameters: &[("@BIGDECIMAL_FROM_LONG_VALUE@", 0)], result: false },
     MethodBinding { name: "BIGDECIMAL_CLONE", method: M::BigDecimalClone, parameters: &[], result: false },
@@ -53,70 +56,14 @@ const METHODS: &[MethodBinding] = &[
     MethodBinding { name: "BIGDECIMAL_TO_LONG", method: M::BigDecimalToLong, parameters: &[], result: true },
 ];
 
-fn is_bigint_method(method: M) -> bool {
-    matches!(method,
-        M::BigIntFromLong | M::BigIntParse | M::BigIntClone | M::BigIntToText |
-        M::BigIntCompareTo | M::BigIntSignum | M::BigIntBitLength | M::BigIntAdd |
-        M::BigIntSubtract | M::BigIntMultiply | M::BigIntDivide | M::BigIntRemainder |
-        M::BigIntGcd | M::BigIntMod | M::BigIntPow | M::BigIntModPow |
-        M::BigIntModInverse | M::BigIntNegate | M::BigIntAbs | M::BigIntShiftLeft |
-        M::BigIntShiftRight | M::BigIntBitAnd | M::BigIntBitOr | M::BigIntBitXor |
-        M::BigIntBitNot | M::BigIntTestBit | M::BigIntToLong)
-}
-
-fn is_bigdecimal_method(method: M) -> bool {
-    matches!(method,
-        M::BigDecimalParse | M::BigDecimalFromLong | M::BigDecimalClone |
-        M::BigDecimalToText | M::BigDecimalScale | M::BigDecimalCompareTo |
-        M::BigDecimalSignum | M::BigDecimalAdd | M::BigDecimalSubtract |
-        M::BigDecimalMultiply | M::BigDecimalDivide | M::BigDecimalRescale |
-        M::BigDecimalNegate | M::BigDecimalAbs | M::BigDecimalToLong)
-}
-
-fn expression_uses_class(program: &t::Program, expression: &Expr, bigint: bool) -> bool {
-    match &expression.kind {
-        ExprKind::Call { target, args, .. } => {
-            if let CallTarget::Function(id) = target {
-                if let Some(method) = program.functions[*id].native {
-                    if (bigint && is_bigint_method(method)) || (!bigint && is_bigdecimal_method(method)) {
-                        return true;
-                    }
-                }
-            }
-            args.iter().any(|argument| expression_uses_class(program, argument, bigint))
-        }
-        ExprKind::Drop(value) | ExprKind::Unary { expr: value, .. } |
-        ExprKind::Try { value, .. } | ExprKind::Cast { value } => expression_uses_class(program, value, bigint),
-        ExprKind::Binary { left, right, .. } => expression_uses_class(program, left, bigint) ||
-            expression_uses_class(program, right, bigint),
-        ExprKind::New { args, .. } | ExprKind::Variant { args, .. } =>
-            args.iter().any(|argument| expression_uses_class(program, argument, bigint)),
-        ExprKind::MapSlot { index, .. } => expression_uses_class(program, index, bigint),
-        ExprKind::Upcast { value, .. } => expression_uses_class(program, value, bigint),
-        ExprKind::Char(_) | ExprKind::Int(_) | ExprKind::Long(_) | ExprKind::Double(_) |
-        ExprKind::Unit | ExprKind::Boolean(_) | ExprKind::String(_) | ExprKind::Read(_) |
-        ExprKind::Move(_) | ExprKind::Borrow { .. } | ExprKind::MapCapacity(_) => false,
-    }
-}
-
-fn block_uses_class(program: &t::Program, block: &t::Block, bigint: bool) -> bool {
-    block.iter().any(|statement| match statement {
-        Stmt::Let { value, .. } => value.as_ref().is_some_and(|value| expression_uses_class(program, value, bigint)),
-        Stmt::Assign { value, .. } | Stmt::Expr(value) => expression_uses_class(program, value, bigint),
-        Stmt::If { condition, then_block, else_block } => expression_uses_class(program, condition, bigint) ||
-            block_uses_class(program, then_block, bigint) || else_block.as_ref().is_some_and(|block| block_uses_class(program, block, bigint)),
-        Stmt::While { condition, body } => expression_uses_class(program, condition, bigint) || block_uses_class(program, body, bigint),
-        Stmt::Match { value, arms } => expression_uses_class(program, value, bigint) ||
-            arms.iter().any(|arm| block_uses_class(program, &arm.body, bigint)),
-        Stmt::Return(value) => value.as_ref().is_some_and(|value| expression_uses_class(program, value, bigint)),
-        Stmt::Block(block) => block_uses_class(program, block, bigint),
-        Stmt::Break | Stmt::Continue => false,
-    })
-}
-
 fn class_is_used(program: &t::Program, bigint: bool) -> bool {
-    program.functions.iter().filter(|function| function.native.is_none())
-        .any(|function| block_uses_class(program, &function.body, bigint))
+    program.classes.iter().any(|class| {
+        if bigint {
+            matches!(class.native, Some(C::BigInt))
+        } else {
+            matches!(class.native, Some(C::BigDecimal))
+        }
+    })
 }
 
 pub(super) fn is_used(program: &t::Program) -> bool {
@@ -142,18 +89,32 @@ pub(super) fn drop_fields(program: &t::Program, class: C) -> String {
     }
 }
 pub(super) fn is_numeric_method(method: M) -> bool {
-    is_bigint_method(method) || is_bigdecimal_method(method)
+    BIGINT_METHODS.iter().chain(BIGDECIMAL_METHODS)
+        .any(|binding| binding.method == method)
 }
 
-fn without_group(body: String, name: &str) -> String {
-    let begin = format!("/* BIG_NUMBERS_GROUP {name} */");
-    let end = format!("/* BIG_NUMBERS_GROUP_END {name} */");
-    let (before, after_begin) = body.split_once(&begin).expect("numeric template group opener");
-    let (_, after_end) = after_begin.split_once(&end).expect("numeric template group closer");
-    let mut without = String::with_capacity(body.len());
-    without.push_str(before);
-    without.push_str(after_end);
-    without
+fn selected_template(bigint: bool, decimal: bool) -> String {
+    let source = include_str!("../../stdlib/big_numbers.c.in");
+    let mut body = String::with_capacity(source.len());
+    let mut include = true;
+    for line in source.split_inclusive('\n') {
+        if let Some(name) = line.strip_prefix("/* BIG_NUMBERS_GROUP ")
+            .and_then(|line| line.strip_suffix(" */\n"))
+        {
+            include = if name.starts_with("bigint_") {
+                bigint
+            } else if name.starts_with("decimal_") || name == "rounding_macros" {
+                decimal
+            } else {
+                unreachable!("unknown numeric template group: {name}")
+            };
+        } else if line.starts_with("/* BIG_NUMBERS_GROUP_END ") {
+            include = true;
+        } else if include {
+            body.push_str(line);
+        }
+    }
+    body
 }
 
 pub(super) fn implementation(program: &t::Program) -> String {
@@ -170,17 +131,7 @@ pub(super) fn implementation(program: &t::Program) -> String {
     let rounding = decimal_used.then(|| program.classes.iter()
         .find(|class| class.name == "RoundingMode").expect("BigDecimal API requires RoundingMode").id);
 
-    let mut body = include_str!("../../stdlib/big_numbers.c.in").to_owned();
-    if !bigint_used {
-        for group in ["bigint_new", "bigint_power_support", "bigint_parse_support", "bigint_methods"] {
-            body = without_group(body, group);
-        }
-    }
-    if !decimal_used {
-        for group in ["rounding_macros", "decimal_new", "decimal_support", "decimal_rounding", "decimal_methods"] {
-            body = without_group(body, group);
-        }
-    }
+    let mut body = selected_template(bigint_used, decimal_used);
 
     if let Some(bigint) = bigint {
         body = body.replace("@BIGINT_CLASS@", &bigint.to_string());
@@ -204,18 +155,22 @@ pub(super) fn implementation(program: &t::Program) -> String {
             body = body.replace(placeholder, &value);
         }
     }
-    for binding in METHODS {
-        let present_class = if is_bigint_method(binding.method) { bigint_used } else { decimal_used };
+    for (present_class, bindings) in [
+        (bigint_used, BIGINT_METHODS),
+        (decimal_used, BIGDECIMAL_METHODS),
+    ] {
         if !present_class { continue; }
-        let function = native_function(program, |method| method == binding.method);
-        for (placeholder, index) in binding.parameters {
-            body = body.replace(placeholder, &format!("ncr_v_{}", function.params[*index].0));
-        }
-        if binding.result {
-            let class = result_id(function);
-            body = body.replace(&format!("@{}_RESULT@", binding.name), &class.to_string());
-            body = body.replace(&format!("@{}_OK@", binding.name),
-                &variant_id(program, class, "Ok").to_string());
+        for binding in bindings {
+            let function = native_function(program, |method| method == binding.method);
+            for (placeholder, index) in binding.parameters {
+                body = body.replace(placeholder, &format!("ncr_v_{}", function.params[*index].0));
+            }
+            if binding.result {
+                let class = result_id(function);
+                body = body.replace(&format!("@{}_RESULT@", binding.name), &class.to_string());
+                body = body.replace(&format!("@{}_OK@", binding.name),
+                    &variant_id(program, class, "Ok").to_string());
+            }
         }
     }
     body = replace_method_ids(body, program, None);
