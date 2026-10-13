@@ -2,7 +2,7 @@ use crate::codegen::ctype;
 use crate::ir::{self as t, NativeMethod as M, Type};
 use super::support::{
     marker, native_function, replace_method_ids, replace_placeholders, result_id, text_class,
-    uses_native_methods,
+    native_function_if, has_placeholder, template_section,
 };
 
 pub(super) const IDNA_HELPER_NAME: &str = "ncr_dns_idna_host";
@@ -13,7 +13,7 @@ fn function(program: &t::Program, method: M) -> &t::Function {
 }
 
 fn parameter(function: &t::Function, index: usize) -> String {
-    format!("ncr_v_{}", function.params[index].0)
+    function.params[index].0.to_string()
 }
 
 fn signature(program: &t::Program, method: M) -> String {
@@ -26,12 +26,7 @@ fn signature(program: &t::Program, method: M) -> String {
     format!("static {} {}({})", ctype(program, function.return_type), marker(method), parameters.join(", "))
 }
 
-fn group(source: &str, name: &str) -> String {
-    let start = format!("/* DNS_GROUP {name} */");
-    let end = format!("/* DNS_GROUP_END {name} */");
-    source.split_once(&start).expect("DNS template group opener").1
-        .split_once(&end).expect("DNS template group closer").0.to_owned()
-}
+const TEMPLATE: &str = include_str!("../../stdlib/dns.c.in");
 
 fn text_result_layout(program: &t::Program, function: &t::Function, text: usize) -> (usize, usize, usize) {
     let result = result_id(function);
@@ -52,10 +47,10 @@ pub(super) fn implementation(
     transport_needs_idna: bool,
     transport_needs_resolver: bool,
 ) -> String {
-    let public_idna = uses_native_methods(program, &[M::DnsIdna]);
-    let public_resolve = uses_native_methods(program, &[M::DnsResolve]);
-    let reverse_used = uses_native_methods(program, &[M::DnsReverse]);
-    let hostname_used = uses_native_methods(program, &[M::DnsLocalHostName]);
+    let public_idna = native_function_if(program, |method| method == M::DnsIdna).is_some();
+    let public_resolve = native_function_if(program, |method| method == M::DnsResolve).is_some();
+    let reverse_used = native_function_if(program, |method| method == M::DnsReverse).is_some();
+    let hostname_used = native_function_if(program, |method| method == M::DnsLocalHostName).is_some();
     let resolver_used = public_resolve || transport_needs_resolver;
     let idna_core_used = public_idna || public_resolve || transport_needs_idna || transport_needs_resolver;
     if !idna_core_used && !reverse_used && !hostname_used { return String::new(); }
@@ -64,7 +59,8 @@ pub(super) fn implementation(
     let mut body = String::new();
     if idna_core_used {
         body.push_str("/* nacre-link: icu */\n#include <unicode/uidna.h>\n#include <arpa/inet.h>\n");
-        body.push_str(&group(include_str!("../../stdlib/dns.c.in"), "idna_core"));
+        body.push_str(template_section(TEMPLATE,
+            "/* DNS_GROUP idna_core */", "/* DNS_GROUP_END idna_core */"));
     }
 
     let idna_function = if public_idna { Some(function(program, M::DnsIdna)) } else { None };
@@ -72,12 +68,27 @@ pub(super) fn implementation(
     let reverse_function = if reverse_used { Some(function(program, M::DnsReverse)) } else { None };
     let hostname_function = if hostname_used { Some(function(program, M::DnsLocalHostName)) } else { None };
 
-    if public_idna { body.push_str(&group(include_str!("../../stdlib/dns.c.in"), "idna_public")); }
+    if public_idna {
+        body.push_str(template_section(TEMPLATE,
+            "/* DNS_GROUP idna_public */", "/* DNS_GROUP_END idna_public */"));
+    }
     let socket_resolve = if resolver_used { Some(function(program, M::SocketAddressResolve)) } else { None };
-    if resolver_used { body.push_str(&group(include_str!("../../stdlib/dns.c.in"), "resolve_core")); }
-    if public_resolve { body.push_str(&group(include_str!("../../stdlib/dns.c.in"), "resolve_public")); }
-    if reverse_used { body.push_str(&group(include_str!("../../stdlib/dns.c.in"), "reverse")); }
-    if hostname_used { body.push_str(&group(include_str!("../../stdlib/dns.c.in"), "hostname")); }
+    if resolver_used {
+        body.push_str(template_section(TEMPLATE,
+            "/* DNS_GROUP resolve_core */", "/* DNS_GROUP_END resolve_core */"));
+    }
+    if public_resolve {
+        body.push_str(template_section(TEMPLATE,
+            "/* DNS_GROUP resolve_public */", "/* DNS_GROUP_END resolve_public */"));
+    }
+    if reverse_used {
+        body.push_str(template_section(TEMPLATE,
+            "/* DNS_GROUP reverse */", "/* DNS_GROUP_END reverse */"));
+    }
+    if hostname_used {
+        body.push_str(template_section(TEMPLATE,
+            "/* DNS_GROUP hostname */", "/* DNS_GROUP_END hostname */"));
+    }
 
     let mut substitutions = vec![
         ("@TEXT_ID@", text.to_string()),
@@ -149,7 +160,7 @@ pub(super) fn implementation(
             ("@DNS_RESOLVE_RESULT_ID@", result_id(socket_resolve).to_string()),
             ("@DNS_RESOLVE_ERROR_TAG@", program.classes[result_id(socket_resolve)].result
                 .expect("SocketAddress.resolve returns Result").err_variant.to_string()),
-            ("@SOCKET_ADDRESS_RESOLVE@", marker(M::SocketAddressResolve)),
+            ("@SOCKET_ADDRESS_RESOLVE@", format!("ncr_fn_{}", socket_resolve.id)),
         ]);
     }
     if let Some(socket_resolve) = socket_resolve {
@@ -166,7 +177,7 @@ pub(super) fn implementation(
                 ("@DNS_RESOLVE_RESULT_ID@", result_id(socket_resolve).to_string()),
                 ("@DNS_RESOLVE_ERROR_TAG@", program.classes[result_id(socket_resolve)].result
                     .expect("SocketAddress.resolve returns Result").err_variant.to_string()),
-                ("@SOCKET_ADDRESS_RESOLVE@", marker(M::SocketAddressResolve)),
+                ("@SOCKET_ADDRESS_RESOLVE@", format!("ncr_fn_{}", socket_resolve.id)),
             ]);
         }
     }
@@ -195,6 +206,6 @@ pub(super) fn implementation(
 
     body = replace_placeholders(body, &substitutions);
     body = replace_method_ids(body, program, None);
-    debug_assert!(!body.contains('@'), "unexpanded DNS placeholder");
+    debug_assert!(!has_placeholder(&body), "unexpanded DNS placeholder");
     body
 }

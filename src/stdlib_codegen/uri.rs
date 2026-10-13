@@ -2,7 +2,7 @@ use crate::codegen::ctype;
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
 use super::support::{
     marker, native_function, replace_method_ids, replace_placeholders, result_id, text_class,
-    uses_native_methods, variant_id,
+    native_function_if, has_placeholder, variant_id,
 };
 
 fn function(program: &t::Program, method: M) -> &t::Function {
@@ -10,7 +10,7 @@ fn function(program: &t::Program, method: M) -> &t::Function {
 }
 
 fn parameter(function: &t::Function, index: usize) -> String {
-    format!("ncr_v_{}", function.params[index].0)
+    function.params[index].0.to_string()
 }
 
 fn signature(program: &t::Program, method: M) -> String {
@@ -46,17 +46,10 @@ pub(super) fn fields() -> String {
 pub(super) fn drop_fields() -> String {
     "    if (p->storage != NULL) {\n        if (p->drop_storage != NULL) { p->drop_storage(p->storage); }\n        ncr_deallocate(p->storage);\n        p->storage = NULL;\n        p->drop_storage = NULL;\n    }\n".to_owned()
 }
-const URI_METHODS: &[M] = &[
-    M::UriParse, M::UriFromIri, M::UriClone, M::UriToText, M::UriScheme,
-    M::UriUserInfo, M::UriHost, M::UriPath, M::UriQuery, M::UriFragment,
-    M::UriPort, M::UriIsAbsolute, M::UriNormalize, M::UriResolve,
-    M::UriRelativize, M::UriEquals, M::UriEncodeComponent,
-    M::UriDecodeComponent, M::UriPercentDecode,
-];
 
 pub(super) fn percent_helpers(program: &t::Program, dns_helper_required: bool) -> String {
-    if uses_native_methods(program, URI_METHODS)
-        || uses_native_methods(program, &[M::DnsIdna, M::DnsResolve])
+    if program.classes.iter().any(|class| matches!(class.native, Some(C::Uri)))
+        || native_function_if(program, |method| matches!(method, M::DnsIdna | M::DnsResolve)).is_some()
         || dns_helper_required {
         include_str!("../../stdlib/percent.c.in").to_owned()
     } else {
@@ -65,8 +58,9 @@ pub(super) fn percent_helpers(program: &t::Program, dns_helper_required: bool) -
 }
 
 pub(super) fn implementation(program: &t::Program) -> String {
-    if !uses_native_methods(program, URI_METHODS) { return String::new(); }
-    let uri = native_class_id(program, |native| matches!(native, C::Uri));
+    let Some(uri) = program.classes.iter()
+        .find(|class| matches!(class.native, Some(C::Uri))).map(|class| class.id)
+    else { return String::new(); };
     let text = text_class(program).expect("URI requires native Text");
     let buffer = native_class_id(program, |native| matches!(native, C::ByteBuffer));
     let parse = function(program, M::UriParse);
@@ -138,7 +132,8 @@ pub(super) fn implementation(program: &t::Program) -> String {
         ("@BUFFER_RESULT_ID@", buffer_result.to_string()),
         ("@BUFFER_RESULT_OK_TAG@", buffer_ok.to_string()),
     ];
-    for method in URI_METHODS {
+    for native in &program.functions {
+        let Some(method) = native.native else { continue; };
         let key = match method {
             M::UriParse => "@URI_PARSE_SIGNATURE@",
             M::UriFromIri => "@URI_FROM_IRI_SIGNATURE@",
@@ -159,9 +154,9 @@ pub(super) fn implementation(program: &t::Program) -> String {
             M::UriEncodeComponent => "@URI_ENCODE_COMPONENT_SIGNATURE@",
             M::UriDecodeComponent => "@URI_DECODE_COMPONENT_SIGNATURE@",
             M::UriPercentDecode => "@URI_PERCENT_DECODE_SIGNATURE@",
-            _ => unreachable!("URI native method list"),
+            _ => continue,
         };
-        substitutions.push((key, signature(program, *method)));
+        substitutions.push((key, signature(program, method)));
     }
     for (method, key) in [
         (M::UriParse, "@URI_PARSE_INPUT@"),
@@ -179,6 +174,6 @@ pub(super) fn implementation(program: &t::Program) -> String {
     let mut body = String::from("/* nacre-link: uri */\n#include <uriparser/Uri.h>\n");
     body.push_str(&replace_placeholders(include_str!("../../stdlib/uri.c.in").to_owned(), &substitutions));
     body = replace_method_ids(body, program, None);
-    debug_assert!(!body.contains('@'), "unexpanded URI placeholder");
+    debug_assert!(!has_placeholder(&body), "unexpanded URI placeholder");
     body
 }

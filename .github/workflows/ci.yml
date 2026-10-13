@@ -12,7 +12,7 @@ jobs:
       - name: Install native library headers
         run: |
           sudo apt-get update
-          sudo apt-get install -y libssl-dev zlib1g-dev libgmp-dev libcurl4-openssl-dev libicu-dev libarchive-dev libxml2-dev
+          sudo apt-get install -y libssl-dev zlib1g-dev libgmp-dev libcurl4-openssl-dev libicu-dev libarchive-dev libxml2-dev libsqlite3-dev liburiparser-dev
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust }}

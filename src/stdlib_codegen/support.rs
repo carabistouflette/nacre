@@ -405,49 +405,6 @@ pub(super) fn native_function_if(program: &t::Program, is: impl Fn(M) -> bool) -
 pub(super) fn native_function(program: &t::Program, is: impl Fn(M) -> bool) -> &t::Function {
     native_function_if(program, is).expect("compiler-owned native function is present")
 }
-pub(super) fn uses_native_methods(program: &t::Program, methods: &[M]) -> bool {
-    let ids: Vec<_> = program.functions.iter().filter_map(|function| {
-        function.native.filter(|method| methods.contains(method)).map(|_| function.id)
-    }).collect();
-    !ids.is_empty() && program.functions.iter()
-        .filter(|function| function.native.is_none())
-        .any(|function| block_calls(&function.body, &ids))
-}
-fn expression_calls(expr: &t::Expr, methods: &[usize]) -> bool {
-    use t::ExprKind as E;
-    match &expr.kind {
-        E::MapSlot { index, .. } => expression_calls(index, methods),
-        E::Drop(value) | E::Upcast { value, .. } | E::Unary { expr: value, .. } |
-        E::Try { value, .. } | E::Cast { value } => expression_calls(value, methods),
-        E::New { args, .. } | E::Variant { args, .. } =>
-            args.iter().any(|arg| expression_calls(arg, methods)),
-        E::Call { target, args, .. } =>
-            matches!(target, t::CallTarget::Function(id) if methods.contains(id))
-                || args.iter().any(|arg| expression_calls(arg, methods)),
-        E::Binary { left, right, .. } =>
-            expression_calls(left, methods) || expression_calls(right, methods),
-        E::Char(_) | E::Int(_) | E::Long(_) | E::Double(_) | E::Unit | E::Boolean(_) |
-        E::String(_) | E::Read(_) | E::Move(_) | E::Borrow { .. } | E::MapCapacity(_) => false,
-    }
-}
-fn block_calls(block: &t::Block, methods: &[usize]) -> bool {
-    use t::Stmt as S;
-    block.iter().any(|stmt| match stmt {
-        S::Let { value, .. } => value.as_ref().is_some_and(|value| expression_calls(value, methods)),
-        S::Assign { value, .. } | S::Expr(value) => expression_calls(value, methods),
-        S::If { condition, then_block, else_block } =>
-            expression_calls(condition, methods)
-                || block_calls(then_block, methods)
-                || else_block.as_ref().is_some_and(|block| block_calls(block, methods)),
-        S::While { condition, body } =>
-            expression_calls(condition, methods) || block_calls(body, methods),
-        S::Match { value, arms } =>
-            expression_calls(value, methods) || arms.iter().any(|arm| block_calls(&arm.body, methods)),
-        S::Return(value) => value.as_ref().is_some_and(|value| expression_calls(value, methods)),
-        S::Block(body) => block_calls(body, methods),
-        S::Break | S::Continue => false,
-    })
-}
 pub(super) fn result_id(function: &t::Function) -> usize {
     match function.return_type {
         Type::Object(id) => id,

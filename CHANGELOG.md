@@ -121,6 +121,10 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   percent-component codecs and byte-exact equality; `Dns` adds ICU UTS #46
   hostname conversion, reverse lookup, local hostname, and synchronous forward
   resolution composed through `SocketAddress.resolve`.
+  Native emission uses requested metadata rather than a duplicated URI-method
+  list or recursive expression visitor, and template slices reuse the shared
+  borrowed helper. URI/DNS parameter and Result substitutions follow one naming
+  convention; native linking and CI install the URI and SQLite prerequisites.
 - Design-principles review keeps TCP, UDP and address resolution in one cohesive
   networking unit, hides descriptor/sockaddr state, and keeps Datagram source
   ownership closed over its value. Results report timeouts; TCP EOF is Ok(0),

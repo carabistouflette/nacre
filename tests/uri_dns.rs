@@ -94,8 +94,9 @@ fn uri_resolve_matches_rfc3986_normal_and_abnormal_reference_vectors() {
         .collect::<Vec<_>>()
         .join("\n");
     let source = format!(r#"
-void check(borrow Uri base, borrow Text reference, String expected) {{
-    match (Uri.parse(reference)) {{
+void check(borrow Uri base, String reference, String expected) {{
+    Text referenceText = new Text(reference);
+    match (Uri.parse(referenceText)) {{
         Err(error) {{ println(false); }}
         Ok(parsed) {{
             match (base.resolve(parsed)) {{
@@ -109,7 +110,8 @@ void check(borrow Uri base, borrow Text reference, String expected) {{
     }}
 }}
 void main() {{
-    match (Uri.parse("http://a/b/c/d;p?q")) {{
+    Text baseText = new Text("http://a/b/c/d;p?q");
+    match (Uri.parse(baseText)) {{
         Err(error) {{ println("base parse failed"); }}
         Ok(base) {{
             {checks}
@@ -127,6 +129,26 @@ void main() {{
 #[test]
 fn uri_components_iri_normalization_and_owned_storage_are_exact() {
     let source = r#"
+Result<Uri, Text> parseUri(String input) {
+    Text text = new Text(input);
+    return Uri.parse(text);
+}
+Result<Uri, Text> fromIri(String input) {
+    Text text = new Text(input);
+    return Uri.fromIri(text);
+}
+Text encodeComponent(String input) {
+    Text text = new Text(input);
+    return Uri.encodeComponent(text);
+}
+Result<Text, Text> decodeComponent(String input) {
+    Text text = new Text(input);
+    return Uri.decodeComponent(text);
+}
+Result<ByteBuffer, Text> percentDecode(String input) {
+    Text text = new Text(input);
+    return Uri.percentDecode(text);
+}
 void main() {
     Text input = new Text("http://source.test/a%2Fb");
     match (Uri.parse(input)) {
@@ -136,21 +158,25 @@ void main() {
             println(cloned.equals(original));
             input.clear();
             drop(original);
-            println(cloned.toText().equalsString("http://source.test/a%2Fb"));
+            Text clonedText = cloned.toText();
+            println(clonedText.equalsString("http://source.test/a%2Fb"));
         }
     }
 
-    match (Uri.fromIri("https://example.test/café/雪")) {
+    match (fromIri("https://example.test/café/雪")) {
         Err(error) { println(false); }
-        Ok(uri) { println(uri.toText().equalsString("https://example.test/caf%C3%A9/%E9%9B%AA")); }
+        Ok(uri) {
+            Text rendered = uri.toText();
+            println(rendered.equalsString("https://example.test/caf%C3%A9/%E9%9B%AA"));
+        }
     }
-    Text encoded = Uri.encodeComponent("a/b +é\0");
+    Text encoded = encodeComponent("a/b +é\0");
     println(encoded.equalsString("a%2Fb%20%2B%C3%A9%00"));
-    match (Uri.decodeComponent("%F0%9F%8C%8D")) {
+    match (decodeComponent("%F0%9F%8C%8D")) {
         Err(error) { println(false); }
         Ok(decoded) { println(decoded.equalsString("🌍")); }
     }
-    match (Uri.decodeComponent("%00A")) {
+    match (decodeComponent("%00A")) {
         Err(error) { println(false); }
         Ok(decoded) {
             println(decoded.byteLength() == 2);
@@ -158,15 +184,15 @@ void main() {
             println(decoded.byteAt(1) == 65);
         }
     }
-    match (Uri.decodeComponent("%FF")) {
+    match (decodeComponent("%FF")) {
         Err(error) { println(true); }
         Ok(decoded) { println(false); }
     }
-    match (Uri.decodeComponent("%Q0")) {
+    match (decodeComponent("%Q0")) {
         Err(error) { println(true); }
         Ok(decoded) { println(false); }
     }
-    match (Uri.percentDecode("%FF%00+")) {
+    match (percentDecode("%FF%00+")) {
         Err(error) { println(false); }
         Ok(bytes) {
             println(bytes.length() == 3L);
@@ -176,12 +202,13 @@ void main() {
         }
     }
 
-    match (Uri.parse("http://user:pass@[2001:db8::1]:65535/a%2Fb?q=#frag")) {
+    match (parseUri("http://user:pass@[2001:db8::1]:65535/a%2Fb?q=#frag")) {
         Err(error) { println(false); }
         Ok(uri) {
             match (uri.userInfo()) { None { println(false); } Some(value) { println(value.equalsString("user:pass")); } }
             match (uri.host()) { None { println(false); } Some(value) { println(value.equalsString("2001:db8::1")); } }
-            println(uri.path().equalsString("/a%2Fb"));
+            Text path = uri.path();
+            println(path.equalsString("/a%2Fb"));
             match (uri.port()) {
                 Err(error) { println(false); }
                 Ok(port) { match (port) { None { println(false); } Some(value) { println(value == 65535); } } }
@@ -190,14 +217,14 @@ void main() {
             match (uri.fragment()) { None { println(false); } Some(value) { println(value.equalsString("frag")); } }
         }
     }
-    match (Uri.parse("http://example.test/?#")) {
+    match (parseUri("http://example.test/?#")) {
         Err(error) { println(false); }
         Ok(uri) {
             match (uri.query()) { None { println(false); } Some(value) { println(value.isEmpty()); } }
             match (uri.fragment()) { None { println(false); } Some(value) { println(value.isEmpty()); } }
         }
     }
-    match (Uri.parse("http://example.test/")) {
+    match (parseUri("http://example.test/")) {
         Err(error) { println(false); }
         Ok(uri) {
             match (uri.query()) { None { println(true); } Some(value) { println(false); } }
@@ -209,40 +236,44 @@ void main() {
         }
 
     }
-    match (Uri.parse("mailto:fred@example.test")) {
+    match (parseUri("mailto:fred@example.test")) {
         Err(error) { println(false); }
         Ok(uri) {
             println(uri.isAbsolute());
             match (uri.scheme()) { None { println(false); } Some(value) { println(value.equalsString("mailto")); } }
-            println(uri.path().equalsString("fred@example.test"));
+            Text path = uri.path();
+            println(path.equalsString("fred@example.test"));
             match (uri.host()) { None { println(true); } Some(value) { println(false); } }
         }
     }
 
-    match (Uri.parse("HTTP://Example.COM/a/../b%7e")) {
+    match (parseUri("HTTP://Example.COM/a/../b%7e")) {
         Err(error) { println(false); }
         Ok(raw) {
-            println(raw.toText().equalsString("HTTP://Example.COM/a/../b%7e"));
+            Text rawText = raw.toText();
+            println(rawText.equalsString("HTTP://Example.COM/a/../b%7e"));
             match (raw.normalize()) {
                 Err(error) { println(false); }
                 Ok(normalized) {
-                    println(normalized.toText().equalsString("http://example.com/b~"));
+                    Text normalizedText = normalized.toText();
+                    println(normalizedText.equalsString("http://example.com/b~"));
                     println(!raw.equals(normalized));
                 }
             }
         }
     }
 
-    match (Uri.parse("http://a/b/c/d;p?q")) {
+    match (parseUri("http://a/b/c/d;p?q")) {
         Err(error) { println(false); }
         Ok(base) {
-            match (Uri.parse("http://a/b/c/g")) {
+            match (parseUri("http://a/b/c/g")) {
                 Err(error) { println(false); }
                 Ok(target) {
                     match (base.relativize(target)) {
                         Err(error) { println(false); }
                         Ok(relative) {
-                            println(relative.toText().equalsString("g"));
+                            Text relativeText = relative.toText();
+                            println(relativeText.equalsString("g"));
                             match (base.resolve(relative)) {
                                 Err(error) { println(false); }
                                 Ok(roundTrip) { println(roundTrip.equals(target)); }
@@ -253,7 +284,7 @@ void main() {
             }
         }
     }
-    match (Uri.parse("http://example.test:/")) {
+    match (parseUri("http://example.test:/")) {
         Err(error) { println(false); }
         Ok(uri) {
             match (uri.port()) {
@@ -262,21 +293,21 @@ void main() {
             }
         }
     }
-    match (Uri.parse("http://example.test:65536/")) {
+    match (parseUri("http://example.test:65536/")) {
         Err(error) { println(true); }
         Ok(uri) {
             match (uri.port()) { Err(error) { println(true); } Ok(port) { println(false); } }
         }
     }
-    match (Uri.parse("http://example.test/a b")) {
+    match (parseUri("http://example.test/a b")) {
         Err(error) { println(true); }
         Ok(uri) { println(false); }
     }
-    match (Uri.parse("http://example.test/a\0b")) {
+    match (parseUri("http://example.test/a\0b")) {
         Err(error) { println(true); }
         Ok(uri) { println(false); }
     }
-    match (Uri.parse("http://example.test/café")) {
+    match (parseUri("http://example.test/café")) {
         Err(error) { println(true); }
         Ok(uri) { println(false); }
     }
@@ -291,65 +322,83 @@ void main() {
 #[test]
 fn dns_idna_and_local_resolution_use_owned_results_without_external_hosts() {
     let source = r#"
+Result<Text, Text> idna(String host) {
+    Text text = new Text(host);
+    return Dns.idna(text);
+}
+Result<List<SocketAddress>, Text> resolveDns(String host, int port) {
+    Text text = new Text(host);
+    return Dns.resolve(text, port);
+}
 void main() {
-    match (Dns.idna("Bücher.Example.")) {
+    match (idna("Bücher.Example.")) {
         Err(error) { println(false); }
         Ok(ascii) { println(ascii.equalsString("xn--bcher-kva.example.")); }
     }
-    match (Dns.idna("example%2Etest")) {
+    match (idna("example%2Etest")) {
         Err(error) { println(false); }
         Ok(ascii) { println(ascii.equalsString("example.test")); }
     }
-    match (Dns.idna("127.0.0.1")) {
+    match (idna("127.0.0.1")) {
         Err(error) { println(false); }
         Ok(ascii) { println(ascii.equalsString("127.0.0.1")); }
     }
-    match (Dns.idna("2001:0DB8:0:0::1")) {
+    match (idna("2001:0DB8:0:0::1")) {
         Err(error) { println(false); }
         Ok(ascii) { println(ascii.equalsString("2001:db8::1")); }
     }
-    match (Dns.idna("fe80::1%25lo")) {
+    match (idna("fe80::1%25lo")) {
         Err(error) { println(false); }
         Ok(ascii) { println(ascii.equalsString("fe80::1%lo")); }
     }
-    match (Dns.idna("bad_host")) { Err(error) { println(true); } Ok(ascii) { println(false); } }
-    match (Dns.idna("a..example")) { Err(error) { println(true); } Ok(ascii) { println(false); } }
-    match (Dns.idna("example%00.test")) { Err(error) { println(true); } Ok(ascii) { println(false); } }
-    match (Dns.resolve("bad_host", 0)) {
+    match (idna("bad_host")) { Err(error) { println(true); } Ok(ascii) { println(false); } }
+    match (idna("a..example")) { Err(error) { println(true); } Ok(ascii) { println(false); } }
+    match (idna("example%00.test")) { Err(error) { println(true); } Ok(ascii) { println(false); } }
+    match (resolveDns("bad_host", 0)) {
         Err(error) { println(true); }
         Ok(addresses) { println(false); }
     }
 
-    match (Dns.resolve("localhost", 0)) {
+    match (resolveDns("127.0.0.1", 0)) {
         Err(error) { println(false); }
         Ok(addresses) {
-            println(addresses.size() > 0);
-            boolean numeric_seen = false;
-            boolean reverse_seen = false;
-            int index = 0;
-            while (index < addresses.size()) {
-                {
-                    borrow SocketAddress address = addresses.getRef(index);
-                    Text numeric = address.toText();
-                    if (numeric.byteLength() > 0) { numeric_seen = true; }
-                    match (Dns.reverse(address)) {
-                        Err(error) { }
-                        Ok(name) { if (name.byteLength() > 0) { reverse_seen = true; } }
+            println(addresses.size() == 1);
+            borrow SocketAddress address = addresses.getRef(0);
+            Text numeric = address.toText();
+            println(numeric.equalsString("127.0.0.1:0"));
+            match (Dns.reverse(address)) {
+                Err(error) { println(false); }
+                Ok(name) {
+                    match (Dns.resolve(name, 0)) {
+                        Err(error) { println(false); }
+                        Ok(roundTrip) {
+                            boolean originalFound = false;
+                            int index = 0;
+                            while (index < roundTrip.size()) {
+                                {
+                                    borrow SocketAddress resolved = roundTrip.getRef(index);
+                                    Text rendered = resolved.toText();
+                                    if (rendered.equalsString("127.0.0.1:0")) { originalFound = true; }
+                                }
+                                index = index + 1;
+                            }
+                            println(originalFound);
+                        }
                     }
                 }
-                index = index + 1;
             }
-            println(numeric_seen);
-            println(reverse_seen);
         }
     }
     match (Dns.localHostName()) {
         Err(error) { println(false); }
-        Ok(name) { println(name.byteLength() > 0); }
+        Ok(name) { println(name.equalsString(@HOSTNAME@)); }
     }
 }
 "#;
-    let output = execute(&compile(source));
+    let hostname = std::fs::read_to_string("/proc/sys/kernel/hostname").unwrap();
+    let hostname = hostname.strip_suffix('\n').unwrap_or(&hostname);
+    let source = source.replace("@HOSTNAME@", &format!("{hostname:?}"));
+    let output = execute(&compile(&source));
     let stdout = String::from_utf8(output.stdout).unwrap();
     assert!(stdout.lines().all(|line| line == "true"), "{stdout}");
     assert_eq!(stdout.lines().count(), 13, "{stdout}");

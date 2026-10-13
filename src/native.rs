@@ -92,6 +92,7 @@ fn native_dependencies(source: &str) -> u16 {
             "/* nacre-link: sqlite */" => 128,
             "/* nacre-link: ssl */" => 256 | 1,
             "/* nacre-link: xslt */" => 512 | 64,
+            "/* nacre-link: uri */" => 1024,
             _ => 0,
         }
     })
@@ -100,7 +101,7 @@ fn native_dependencies(source: &str) -> u16 {
 fn native_link_flags(libraries: u16) -> impl Iterator<Item = &'static str> {
     [(256, "-lssl"), (1, "-lcrypto"), (2, "-lz"), (4, "-lgmp"), (8, "-lcurl"),
      (16, "-licuuc"), (16, "-licui18n"), (32, "-larchive"), (512, "-lxslt"),
-     (64, "-lxml2"), (128, "-lsqlite3")]
+     (64, "-lxml2"), (128, "-lsqlite3"), (1024, "-luriparser")]
         .into_iter()
         .filter_map(move |(bit, flag)| (libraries & bit != 0).then_some(flag))
 }

@@ -60,7 +60,7 @@ static bool ncr_uri_parse_storage_@URI_ID@(
     return true;
 }
 
-static ncr_obj_@URI_RESULT_TYPE@ ncr_uri_parse_failure_@URI_ID@(
+static @URI_RESULT_TYPE@ ncr_uri_parse_failure_@URI_ID@(
     const char *operation, int status, size_t offset, size_t line, size_t column
 ) {
     char message[160];

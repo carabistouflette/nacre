@@ -1664,8 +1664,8 @@ HTTP status codes, including non-2xx responses, are successful transport results
 TLS peer and hostname verification are always enabled, using system trust by
 default; `setCaFile` selects an explicit local CA file without disabling verification.
 Redirects are disabled, so caller-supplied `Authorization` or `Cookie` fields are
-never forwarded to another origin. The API does not add TLS to `TcpStream` or
-`UdpSocket`, and it does not provide a general-purpose URI type.
+never forwarded to another origin. The HTTP API does not add TLS to `TcpStream`
+or `UdpSocket`; general URI operations are provided separately by `Uri`.
 
 
 ## URI and DNS
@@ -1702,8 +1702,9 @@ brackets are excluded from `host`); an absent optional component is `None`,
 while a present-but-empty query or fragment is `Some(Text(""))`. `port` returns
 `None` for an absent or empty port, and `Err` for a nonnumeric or out-of-range
 port. `equals` compares serialized URI bytes exactly. Normalization is explicit;
-`resolve` and `relativize` use RFC 3986 URI-reference operations and return owned
-URIs or an error.
+`resolve` requires an absolute base; `relativize` requires absolute base and
+target URIs. Both return owned URIs or an error. Getters return owned Text values,
+not borrows into URI storage; these values remain valid after dropping the URI.
 
 Component encoding preserves only RFC 3986 unreserved ASCII bytes and emits
 uppercase percent escapes for all other UTF-8 bytes. `decodeComponent` strictly
@@ -1723,6 +1724,12 @@ without a timeout; any connection deadline begins only after resolution
 completes.
 `Dns.reverse` requires a name lookup (it does not fall back to a numeric
 address), and `localHostName` returns the system hostname.
+
+URI operations require uriparser development headers and `liburiparser`; IDNA
+requires ICU. Native emission follows the requested class and method metadata,
+without a separate exhaustive URI-method list or another expression-tree walk.
+DNS helper requests are supplied by the caller; DNS does not depend on higher-level
+transport types.
 
 ## Platform, allocation, and timing limits
 

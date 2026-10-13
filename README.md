@@ -25,7 +25,7 @@ C11 headers and a linker; Windows and macOS are not supported targets.
 Optional native library APIs require their development headers and libraries:
 OpenSSL 3 for `Crypto`, zlib for `Compression`/`Checksums`, GMP for arbitrary
 precision, ICU for Unicode/calendar APIs, libcurl for HTTP, libarchive for ZIP,
-and libxml2 for XML. Generated programs
+libxml2 for XML, SQLite for SQL, and uriparser for URI operations. Generated programs
 link only the libraries requested by their emitted native templates; ordinary
 programs retain their existing C11/POSIX dependencies. The compiler accepts only
 a fixed dependency allowlist, never linker flags supplied by Nacre source.
