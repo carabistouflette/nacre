@@ -17,8 +17,10 @@ implicit clone or general reference counting. `clone()` and the named shared-han
 operations below are explicit exceptions.
 
 Static-only prelude utility classes can be called by class name but cannot be
-used as value types. Factory-returned native values with instance methods, such as
-`RegexMatch` and `CryptoDigest`, remain usable affine values.
+used as value types. Factory-returned native owners remain usable affine values,
+including factory-only `TlsConfig` and values returned inside `Result` or `Option`.
+Native values with instance methods, such as `RegexMatch` and `CryptoDigest`,
+remain values as well.
 
 Fallible library operations use `Result<T, Text>`. A successful command returns
 `Ok(())`, where `()` is the value of the inhabited `Unit` type; an error returns an

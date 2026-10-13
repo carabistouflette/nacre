@@ -240,6 +240,33 @@ fn coerce_numeric(value: t::Expr, target: Type) -> t::Expr {
     t::Expr { kind: t::ExprKind::Cast { value: Box::new(value) }, ty: target, span }
 }
 
+// Factory-only native owners can be returned inside specialized result/option
+// values. Follow their payload graph, not generated names or a native whitelist.
+fn returns_native_owner(program: &a::Program, names: &HashMap<String, usize>,
+                        owner: usize, return_type: &a::Type) -> bool {
+    let mut pending = vec![return_type];
+    let mut visited = HashSet::new();
+    while let Some(ty) = pending.pop() {
+        let name = match ty {
+            a::Type::Named(name) => name,
+            a::Type::Applied { name, args } | a::Type::Borrow { name, args, .. } => {
+                pending.extend(args);
+                name
+            }
+            _ => continue,
+        };
+        let Some(&id) = names.get(name) else { continue };
+        if id == owner { return true; }
+        if !visited.insert(id) { continue; }
+        let class = &program.classes[id];
+        pending.extend(class.fields.iter().map(|field| &field.ty));
+        if let Some(variants) = &class.variants {
+            pending.extend(variants.iter().flat_map(|variant| &variant.fields));
+        }
+    }
+    false
+}
+
 pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
     if program.classes.iter().filter(|c| !c.is_builtin).count() > 128 {
         return Err(Diagnostic::new(Span::default(), "limit: 128 user classes per program"));
@@ -259,6 +286,10 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
             is_interface: class.is_interface, interface_methods: Vec::new(), implementations: Vec::new() });
     }
     for (id, class) in program.classes.iter().enumerate() {
+        if tables.classes[id].static_native && class.methods.iter().any(|method|
+            returns_native_owner(program, &tables.names, id, &method.return_type)) {
+            tables.classes[id].static_native = false;
+        }
         tables.classes[id].native = match &class.native {
             Some(a::NativeClass::Text) => Some(t::NativeClass::Text),
             Some(a::NativeClass::BigInt) => Some(t::NativeClass::BigInt),

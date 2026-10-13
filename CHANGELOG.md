@@ -8,8 +8,9 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   Zero and POSIX special permission bits remain valid.
 - Native prelude identities and constructor availability derive from trusted AST
   declarations. Static utilities follow their actual methods, while factory-
-  returned native values with instance queries remain values; declared concrete
-  constructors retain their direct code-generation mappings.
+  returned native owners remain values, including factory-only owners inside
+  result/option payloads; declared concrete constructors retain their direct
+  code-generation mappings.
 - Shared `Mutex<Unit>` control dependencies are defined once in the native
   catalog and consumed by generic specialization and state-helper emission;
   control ownership and runtime allocation behavior remain unchanged.
