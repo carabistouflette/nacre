@@ -23,13 +23,15 @@ const CHARACTER_METHODS: &[M] = &[
     M::CharacterCategory,
     M::CharacterNumericValue,
 ];
-const CHARSET_METHODS: &[M] = &[M::CharsetEncode, M::CharsetDecode];
+const CHARSET_METHODS: &[M] = &[M::CharsetAvailable, M::CharsetEncode, M::CharsetDecode];
 const LOCALE_METHODS: &[M] = &[
     M::LocaleAvailable,
     M::LocaleFormatNumber,
     M::LocaleFormatDecimal,
     M::LocaleParseNumber,
+    M::LocaleParseDecimal,
     M::LocaleFormatCurrency,
+    M::LocaleFormatCurrencyDecimal,
 ];
 const ICU_METHODS: &[M] = &[
     M::UnicodeToUpperCase,
@@ -48,13 +50,16 @@ const ICU_METHODS: &[M] = &[
     M::CharacterToLowerCase,
     M::CharacterCategory,
     M::CharacterNumericValue,
+    M::CharsetAvailable,
     M::CharsetEncode,
     M::CharsetDecode,
     M::LocaleAvailable,
     M::LocaleFormatNumber,
     M::LocaleFormatDecimal,
     M::LocaleParseNumber,
+    M::LocaleParseDecimal,
     M::LocaleFormatCurrency,
+    M::LocaleFormatCurrencyDecimal,
 ];
 
 type IcuUsage = [bool; ICU_METHODS.len()];
@@ -153,13 +158,15 @@ pub(super) fn implementation(program: &t::Program) -> String {
     let has_unicode = any_used(&usage, UNICODE_METHODS);
     let has_character = any_used(&usage, CHARACTER_METHODS);
     let has_charset = any_used(&usage, CHARSET_METHODS);
+    let has_charset_conversion = uses(&usage, M::CharsetEncode) || uses(&usage, M::CharsetDecode);
     let has_locale = any_used(&usage, LOCALE_METHODS);
     let has_locale_numbers = [
-        M::LocaleFormatNumber, M::LocaleFormatDecimal, M::LocaleParseNumber, M::LocaleFormatCurrency,
+        M::LocaleFormatNumber, M::LocaleFormatDecimal, M::LocaleParseNumber,
+        M::LocaleParseDecimal, M::LocaleFormatCurrency, M::LocaleFormatCurrencyDecimal,
     ].iter().any(|method| uses(&usage, *method));
     let has_text = has_unicode || has_charset || has_locale;
     let text = has_text.then(|| class_id(program, |native| matches!(native, t::NativeClass::Text)));
-    let buffer = has_charset.then(|| class_id(program, |native| matches!(native, t::NativeClass::ByteBuffer)));
+    let buffer = has_charset_conversion.then(|| class_id(program, |native| matches!(native, t::NativeClass::ByteBuffer)));
 
     let source = include_str!("../../stdlib/unicode.c.in");
     let locale_source = include_str!("../../stdlib/locale.c.in");
@@ -197,17 +204,17 @@ pub(super) fn implementation(program: &t::Program) -> String {
         }
     }
 
-    let needs_preflight = has_text;
+    let needs_preflight = has_unicode || has_charset_conversion || has_locale;
     let needs_text_to_utf16 = has_unicode || uses(&usage, M::CharsetEncode) || has_locale_numbers;
     let needs_utf16_to_utf8 = uses(&usage, M::UnicodeToUpperCase) || uses(&usage, M::UnicodeToLowerCase) ||
         uses(&usage, M::UnicodeCaseFold) || uses(&usage, M::UnicodeNormalize) ||
         uses(&usage, M::UnicodeGraphemeAt) || uses(&usage, M::CharsetDecode) ||
         uses(&usage, M::LocaleFormatNumber) || uses(&usage, M::LocaleFormatDecimal) ||
-        uses(&usage, M::LocaleFormatCurrency);
+        uses(&usage, M::LocaleFormatCurrency) || uses(&usage, M::LocaleFormatCurrencyDecimal);
     let needs_make_text = uses(&usage, M::UnicodeToUpperCase) || uses(&usage, M::UnicodeToLowerCase) ||
         uses(&usage, M::UnicodeCaseFold) || uses(&usage, M::UnicodeNormalize) ||
         uses(&usage, M::LocaleFormatNumber) || uses(&usage, M::LocaleFormatDecimal) ||
-        uses(&usage, M::LocaleFormatCurrency);
+        uses(&usage, M::LocaleFormatCurrency) || uses(&usage, M::LocaleFormatCurrencyDecimal);
     let needs_locale = uses(&usage, M::UnicodeToUpperCase) || uses(&usage, M::UnicodeToLowerCase) ||
         uses(&usage, M::UnicodeCompareLocale) || has_locale_numbers;
 
@@ -241,9 +248,11 @@ pub(super) fn implementation(program: &t::Program) -> String {
     if needs_locale {
         append_section(&mut body, source, "/* NACRE_UNICODE_BEGIN LOCALE */", "/* NACRE_UNICODE_END LOCALE */");
     }
-    if has_charset {
-        append_section(&mut body, source, "/* NACRE_UNICODE_BEGIN ASCII_EQUAL */", "/* NACRE_UNICODE_END ASCII_EQUAL */");
+    if has_charset_conversion {
         append_section(&mut body, source, "/* NACRE_UNICODE_BEGIN CHARSET_NAME */", "/* NACRE_UNICODE_END CHARSET_NAME */");
+    }
+    if uses(&usage, M::CharsetAvailable) {
+        append_section(&mut body, source, "/* NACRE_UNICODE_BEGIN CHARSET_AVAILABLE */", "/* NACRE_UNICODE_END CHARSET_AVAILABLE */");
     }
 
     let mut substitutions = Vec::new();
@@ -342,42 +351,62 @@ pub(super) fn implementation(program: &t::Program) -> String {
         add_param(&mut substitutions, "@DECODE_CHARSET@", function, 1);
     }
 
-    if uses(&usage, M::LocaleAvailable) {
-        append_section(&mut body, locale_source, "/* NACRE_LOCALE_BEGIN AVAILABLE */", "/* NACRE_LOCALE_END AVAILABLE */");
-        let function = native_function(program, |method| method == M::LocaleAvailable);
-        let Type::Object(list) = function.return_type else { unreachable!("Locale.available returns List<Text>") };
+    if uses(&usage, M::CharsetAvailable) || uses(&usage, M::LocaleAvailable) {
+        let function = native_function(program, |method|
+            method == M::LocaleAvailable || method == M::CharsetAvailable);
+        let Type::Object(list) = function.return_type else { unreachable!("Locale/Charset.available returns List<Text>") };
         let Some(t::NativeClass::List(Type::Object(text))) = program.classes[list].native else {
-            unreachable!("Locale.available specializes List<Text>");
+            unreachable!("Locale/Charset.available specializes List<Text>");
         };
         let list_new = program.functions.iter().find(|function| {
             function.receiver == Some(list) && function.native == Some(M::ListNew)
-        }).expect("Locale.available List<Text> constructor").id;
+        }).expect("available List<Text> constructor").id;
         let list_add = program.functions.iter().find(|function| {
             function.receiver == Some(list) && function.native == Some(M::ListAdd)
-        }).expect("Locale.available List<Text>.add").id;
+        }).expect("available List<Text>.add").id;
         substitutions.push(("@LIST_TYPE@", crate::codegen::ctype(program, Type::Object(list))));
         substitutions.push(("@LIST_NEW@", format!("ncr_fn_{list_new}")));
         substitutions.push(("@LIST_ADD@", format!("ncr_fn_{list_add}")));
         substitutions.push(("@LIST_ID@", list.to_string()));
         substitutions.push(("@LIST_DROP@", format!("ncr_drop_{list}")));
         assert!(matches!(program.classes[text].native, Some(t::NativeClass::Text)),
-            "Locale.available specializes List<Text>");
+            "Locale/Charset.available specializes List<Text>");
     }
 
     let uses_decimal_open = uses(&usage, M::LocaleFormatNumber) ||
-        uses(&usage, M::LocaleFormatDecimal) || uses(&usage, M::LocaleParseNumber);
+        uses(&usage, M::LocaleFormatDecimal) || uses(&usage, M::LocaleParseNumber) ||
+        uses(&usage, M::LocaleParseDecimal);
     if uses_decimal_open {
         append_section(&mut body, locale_source, "/* NACRE_LOCALE_BEGIN OPEN_DECIMAL */", "/* NACRE_LOCALE_END OPEN_DECIMAL */");
     }
-    if uses(&usage, M::LocaleFormatCurrency) {
+    if uses(&usage, M::LocaleFormatCurrency) || uses(&usage, M::LocaleFormatCurrencyDecimal) {
         append_section(&mut body, locale_source, "/* NACRE_LOCALE_BEGIN CURRENCY */", "/* NACRE_LOCALE_END CURRENCY */");
     }
     if uses(&usage, M::LocaleFormatNumber) || uses(&usage, M::LocaleFormatCurrency) {
         append_section(&mut body, locale_source, "/* NACRE_LOCALE_BEGIN FORMAT_DOUBLE */", "/* NACRE_LOCALE_END FORMAT_DOUBLE */");
     }
-    if uses(&usage, M::LocaleFormatDecimal) {
+    if uses(&usage, M::LocaleFormatDecimal) || uses(&usage, M::LocaleFormatCurrencyDecimal) {
         append_section(&mut body, locale_source, "/* NACRE_LOCALE_BEGIN FORMAT_DECIMAL */", "/* NACRE_LOCALE_END FORMAT_DECIMAL */");
         append_section(&mut body, locale_source, "/* NACRE_LOCALE_BEGIN EXACT_DECIMAL */", "/* NACRE_LOCALE_END EXACT_DECIMAL */");
+    }
+    if uses(&usage, M::LocaleParseDecimal) {
+        append_section(&mut body, locale_source, "/* NACRE_LOCALE_BEGIN DECIMAL_SYNTAX */", "/* NACRE_LOCALE_END DECIMAL_SYNTAX */");
+    }
+    if uses(&usage, M::LocaleParseDecimal) {
+        append_section(&mut body, locale_source, "/* NACRE_LOCALE_BEGIN PARSE_DECIMAL_API */", "/* NACRE_LOCALE_END PARSE_DECIMAL_API */");
+        let function = native_function(program, |method| method == M::LocaleParseDecimal);
+        add_result(program, &mut substitutions, function, "@PARSE_DECIMAL_RESULT@", "@PARSE_DECIMAL_OK@");
+        add_param(&mut substitutions, "@PARSE_DECIMAL_VALUE@", function, 0);
+        add_param(&mut substitutions, "@PARSE_DECIMAL_PATTERN@", function, 1);
+        add_param(&mut substitutions, "@PARSE_DECIMAL_LOCALE@", function, 2);
+    }
+    if uses(&usage, M::LocaleFormatCurrencyDecimal) {
+        append_section(&mut body, locale_source, "/* NACRE_LOCALE_BEGIN FORMAT_CURRENCY_DECIMAL */", "/* NACRE_LOCALE_END FORMAT_CURRENCY_DECIMAL */");
+        let function = native_function(program, |method| method == M::LocaleFormatCurrencyDecimal);
+        add_result(program, &mut substitutions, function, "@FORMAT_CURRENCY_DECIMAL_RESULT@", "@FORMAT_CURRENCY_DECIMAL_OK@");
+        add_param(&mut substitutions, "@FORMAT_CURRENCY_DECIMAL_VALUE@", function, 0);
+        add_param(&mut substitutions, "@FORMAT_CURRENCY_DECIMAL_CODE@", function, 1);
+        add_param(&mut substitutions, "@FORMAT_CURRENCY_DECIMAL_LOCALE@", function, 2);
     }
     if uses(&usage, M::LocaleFormatNumber) {
         append_section(&mut body, locale_source, "/* NACRE_LOCALE_BEGIN FORMAT_NUMBER */", "/* NACRE_LOCALE_END FORMAT_NUMBER */");

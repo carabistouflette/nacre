@@ -3,5 +3,7 @@ class Locale {
     public static Result<Text, Text> formatNumber(double value, borrow Text pattern, borrow Text locale) {}
     public static Result<Text, Text> formatDecimal(borrow Text exactDecimal, borrow Text pattern, borrow Text locale) {}
     public static Result<double, Text> parseNumber(borrow Text value, borrow Text pattern, borrow Text locale) {}
+    public static Result<Text, Text> parseDecimal(borrow Text value, borrow Text pattern, borrow Text locale) {}
     public static Result<Text, Text> formatCurrency(double value, borrow Text isoCurrency, borrow Text locale) {}
+    public static Result<Text, Text> formatCurrencyDecimal(borrow Text exactDecimal, borrow Text isoCurrency, borrow Text locale) {}
 }

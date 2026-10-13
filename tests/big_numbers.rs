@@ -344,3 +344,31 @@ fn numeric_parse_enforces_coefficient_limits_and_strips_leading_zeroes() {
         assert_lines(&execute(&source), expected);
     }
 }
+
+#[test]
+fn localized_exact_decimal_composes_with_bigdecimal_parse() {
+    let source = r##"
+void main() {
+    Text localized = new Text("9.007.199.254.740.993,01");
+    Text pattern = new Text("#,##0.00");
+    Text german = new Text("de-DE");
+    match (Locale.parseDecimal(localized, pattern, german)) {
+        Ok(exactText) {
+            println(exactText.equalsString("9007199254740993.01"));
+            match (BigDecimal.parse(exactText)) {
+                Ok(value) {
+                    match (value.toText()) {
+                        Ok(decimalText) { println(decimalText.equalsString("9007199254740993.01")); }
+                        Err(error) { println("BIGDECIMAL_TEXT_ERR"); }
+                    }
+                }
+                Err(error) { println("BIGDECIMAL_PARSE_ERR"); }
+            }
+        }
+        Err(error) { println("LOCALE_PARSE_ERR"); }
+    }
+}
+"##;
+    let output = execute(source);
+    assert_lines(&output, "true\ntrue\n");
+}

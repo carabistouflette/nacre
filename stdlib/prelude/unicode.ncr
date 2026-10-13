@@ -24,4 +24,5 @@ class Character {
 class Charset {
     public static Result<ByteBuffer, Text> encode(borrow Text text, borrow Text charset) {}
     public static Result<Text, Text> decode(borrow ByteBuffer bytes, borrow Text charset) {}
+    public static List<Text> available() {}
 }

@@ -129,6 +129,20 @@ void main() {
 fn charset_conversions_are_strict_and_preserve_explicit_endian_data() {
     let output = execute(r#"
 void main() {
+    List<Text> available = Charset.available();
+    Text emptyText = new Text("");
+    boolean everyAvailableNameOpens = available.size() > 0;
+    int availableIndex = 0;
+    while (availableIndex < available.size()) {
+        borrow Text name = available.getRef(availableIndex);
+        match (Charset.encode(emptyText, name)) {
+            Ok(bytes) { drop(bytes); }
+            Err(error) { everyAvailableNameOpens = false; drop(error); }
+        }
+        availableIndex = availableIndex + 1;
+    }
+    println(everyAvailableNameOpens);
+
     Text latinText = new Text("café");
     Text latinName = new Text("iso-8859-1");
     match (Charset.encode(latinText, latinName)) {
@@ -139,6 +153,19 @@ void main() {
             match (Charset.decode(latinBytes, latinName)) {
                 Ok(decoded) { println(decoded.equals(latinText)); }
                 Err(error) { println("LATIN_DECODE_ERR"); drop(error); }
+            }
+        }
+    }
+
+    Text euro = new Text("€");
+    Text windows1252 = new Text("windows-1252");
+    match (Charset.encode(euro, windows1252)) {
+        Err(error) { println("WINDOWS1252_ENCODE_ERR"); drop(error); }
+        Ok(bytes) {
+            println(bytes.length() == 1L && bytes.get(0L) == (byte)128);
+            match (Charset.decode(bytes, windows1252)) {
+                Ok(decoded) { println(decoded.equals(euro)); }
+                Err(error) { println("WINDOWS1252_DECODE_ERR"); drop(error); }
             }
         }
     }
@@ -166,14 +193,51 @@ void main() {
         }
     }
 
+    Text japanese = new Text("日本語");
+    Text statefulName = new Text("ISO-2022-JP");
+    match (Charset.encode(japanese, statefulName)) {
+        Err(error) { println("STATEFUL_ENCODE_ERR"); drop(error); }
+        Ok(encoded) {
+            println(encoded.length() > 3L);
+            drop(japanese);
+            match (Charset.decode(encoded, statefulName)) {
+                Ok(decoded) {
+                    drop(encoded);
+                    println(decoded.equalsString("日本語"));
+                }
+                Err(error) { println("STATEFUL_DECODE_ERR"); drop(error); }
+            }
+        }
+    }
+    Text unrepresentable = new Text("🦀");
+    match (Charset.encode(unrepresentable, statefulName)) {
+        Ok(bytes) { println("STATEFUL_UNREPRESENTABLE_ACCEPTED"); drop(bytes); }
+        Err(error) { println("STATEFUL_UNREPRESENTABLE_ERR"); drop(error); }
+    }
+
     Text asciiName = new Text("US-ASCII");
-    match (Charset.encode(latinText, asciiName)) {
+    match (Charset.encode(euro, asciiName)) {
         Ok(bytes) { println("ASCII_ACCEPTED_UNREPRESENTABLE_TEXT"); drop(bytes); }
         Err(error) { println("ASCII_ERR"); drop(error); }
     }
-    Text genericUtf16Name = new Text("UTF-16");
-    match (Charset.encode(latinText, genericUtf16Name)) {
-        Ok(bytes) { println("GENERIC_UTF16_ACCEPTED"); drop(bytes); }
+    Text emptyCharsetName = new Text("");
+    match (Charset.encode(euro, emptyCharsetName)) {
+        Ok(bytes) { println("EMPTY_CHARSET_ACCEPTED"); drop(bytes); }
+        Err(error) { println("EMPTY_CHARSET_ERR"); drop(error); }
+    }
+    Text defaultCharsetName = new Text("default");
+    match (Charset.encode(euro, defaultCharsetName)) {
+        Ok(bytes) { println("DEFAULT_CHARSET_ACCEPTED"); drop(bytes); }
+        Err(error) { println("DEFAULT_CHARSET_ERR"); drop(error); }
+    }
+    Text nulCharsetName = new Text("UTF-8\0alias");
+    match (Charset.encode(euro, nulCharsetName)) {
+        Ok(bytes) { println("NUL_CHARSET_ACCEPTED"); drop(bytes); }
+        Err(error) { println("NUL_CHARSET_ERR"); drop(error); }
+    }
+    Text unknownCharsetName = new Text("not-a-real-encoding");
+    match (Charset.encode(euro, unknownCharsetName)) {
+        Ok(bytes) { println("UNKNOWN_CHARSET_ACCEPTED"); drop(bytes); }
         Err(error) { println("UNKNOWN_CHARSET_ERR"); drop(error); }
     }
 
@@ -191,6 +255,19 @@ void main() {
         }
     }
     match (ByteBuffer.withCapacity(0L)) {
+        Err(error) { println("BE_BOM_BUFFER_ERR"); drop(error); }
+        Ok(bomBytes) {
+            bomBytes.append((byte)254);
+            bomBytes.append((byte)255);
+            bomBytes.append((byte)0);
+            bomBytes.append((byte)65);
+            match (Charset.decode(bomBytes, bigEndian)) {
+                Ok(decoded) { println(decoded.charCount() == 2); }
+                Err(error) { println("BE_BOM_DECODE_ERR"); drop(error); }
+            }
+        }
+    }
+    match (ByteBuffer.withCapacity(0L)) {
         Err(error) { println("SURROGATE_BUFFER_ERR"); drop(error); }
         Ok(invalidUtf16) {
             invalidUtf16.append((byte)0);
@@ -198,6 +275,17 @@ void main() {
             match (Charset.decode(invalidUtf16, littleEndian)) {
                 Ok(decoded) { println("UNPAIRED_SURROGATE_ACCEPTED"); drop(decoded); }
                 Err(error) { println("SURROGATE_ERR"); drop(error); }
+            }
+        }
+    }
+    match (ByteBuffer.withCapacity(0L)) {
+        Err(error) { println("STATEFUL_BUFFER_ERR"); drop(error); }
+        Ok(invalidStateful) {
+            invalidStateful.append((byte)27);
+            invalidStateful.append((byte)36);
+            match (Charset.decode(invalidStateful, statefulName)) {
+                Ok(decoded) { println("STATEFUL_MALFORMED_ACCEPTED"); drop(decoded); }
+                Err(error) { println("STATEFUL_MALFORMED_ERR"); drop(error); }
             }
         }
     }
@@ -218,7 +306,7 @@ void main() {
 "#, SANITIZERS);
     assert_clean(&output);
     assert_eq!(output.stdout,
-        "true\ntrue\ntrue\ntrue\ntrue\ntrue\nASCII_ERR\nUNKNOWN_CHARSET_ERR\ntrue\nSURROGATE_ERR\ntrue\ntrue\n".as_bytes());
+        "true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\nSTATEFUL_UNREPRESENTABLE_ERR\nASCII_ERR\nEMPTY_CHARSET_ERR\nDEFAULT_CHARSET_ERR\nNUL_CHARSET_ERR\nUNKNOWN_CHARSET_ERR\ntrue\ntrue\nSURROGATE_ERR\nSTATEFUL_MALFORMED_ERR\ntrue\ntrue\n".as_bytes());
 }
 
 #[test]
@@ -240,12 +328,35 @@ void main() {
 
     Text pattern = new Text("#,##0.00");
     Text german = new Text("de-DE");
+    Text us = new Text("en-US");
     match (Locale.formatNumber(12345.5, pattern, german)) {
         Ok(formatted) { formatted.print(); }
         Err(error) { println("NUMBER_FORMAT_ERR"); drop(error); }
     }
     Text exact = new Text("12345678901234567890.125");
     Text exactPattern = new Text("#,##0.000");
+    Text exactLocalized = new Text("9.007.199.254.740.993,01");
+    Text exactLocalizedPattern = new Text("#,##0.00");
+    match (Locale.parseDecimal(exactLocalized, exactLocalizedPattern, german)) {
+        Ok(parsedExact) {
+            println(parsedExact.equalsString("9007199254740993.01"));
+            match (Locale.formatDecimal(parsedExact, exactLocalizedPattern, german)) {
+                Ok(formatted) { println(formatted.equalsString("9.007.199.254.740.993,01")); }
+                Err(error) { println("EXACT_PARSE_FORMAT_ERR"); drop(error); }
+            }
+            Text usd = new Text("USD");
+            match (Locale.formatCurrencyDecimal(parsedExact, usd, us)) {
+                Ok(formatted) { println(formatted.equalsString("$9,007,199,254,740,993.01")); }
+                Err(error) { println("EXACT_CURRENCY_ERR"); drop(error); }
+            }
+        }
+        Err(error) { println("EXACT_PARSE_ERR"); drop(error); }
+    }
+    Text usLocalized = new Text("9,007,199,254,740,993.01");
+    match (Locale.parseDecimal(usLocalized, exactLocalizedPattern, us)) {
+        Ok(parsed) { println(parsed.equalsString("9007199254740993.01")); }
+        Err(error) { println("US_EXACT_PARSE_ERR"); drop(error); }
+    }
     match (Locale.formatDecimal(exact, exactPattern, german)) {
         Ok(formatted) { formatted.print(); }
         Err(error) { println("EXACT_FORMAT_ERR"); drop(error); }
@@ -262,7 +373,6 @@ void main() {
         Err(error) { println("NUMBER_PARSE_ERR"); drop(error); }
     }
     Text currency = new Text("usd");
-    Text us = new Text("en-US");
     match (Locale.formatCurrency(12.5, currency, us)) {
         Ok(formatted) { formatted.print(); }
         Err(error) { println("CURRENCY_FORMAT_ERR"); drop(error); }
@@ -273,10 +383,18 @@ void main() {
         Ok(number) { println("TRAILING_INPUT_ACCEPTED"); }
         Err(error) { println("TRAILING_ERR"); drop(error); }
     }
+    match (Locale.parseDecimal(trailing, oneDecimal, german)) {
+        Ok(parsed) { println("EXACT_TRAILING_INPUT_ACCEPTED"); drop(parsed); }
+        Err(error) { println("EXACT_TRAILING_ERR"); drop(error); }
+    }
     Text invalidPattern = new Text("#,##0.0.0");
     match (Locale.formatNumber(1.0, invalidPattern, german)) {
         Ok(formatted) { println("INVALID_PATTERN_ACCEPTED"); drop(formatted); }
         Err(error) { println("PATTERN_ERR"); drop(error); }
+    }
+    match (Locale.parseDecimal(localized, invalidPattern, german)) {
+        Ok(parsed) { println("INVALID_PARSE_PATTERN_ACCEPTED"); drop(parsed); }
+        Err(error) { println("EXACT_PATTERN_ERR"); drop(error); }
     }
     Text invalidLocale = new Text("zz-ZZ");
     match (Locale.formatNumber(1.0, pattern, invalidLocale)) {
@@ -288,11 +406,15 @@ void main() {
         Ok(formatted) { println("INVALID_CURRENCY_ACCEPTED"); drop(formatted); }
         Err(error) { println("CURRENCY_ERR"); drop(error); }
     }
+    match (Locale.formatCurrencyDecimal(exact, invalidCurrency, us)) {
+        Ok(formatted) { println("INVALID_EXACT_CURRENCY_ACCEPTED"); drop(formatted); }
+        Err(error) { println("EXACT_CURRENCY_ERR"); drop(error); }
+    }
 }
 "##, SANITIZERS);
     assert_clean(&output);
     assert_eq!(output.stdout,
-        "true\ntrue\n12.345,50\n12.345.678.901.234.567.890,125\nEXACT_DECIMAL_ERR\ntrue\n$12.50\nTRAILING_ERR\nPATTERN_ERR\nLOCALE_ERR\nCURRENCY_ERR\n".as_bytes());
+        "true\ntrue\n12.345,50\ntrue\ntrue\ntrue\ntrue\n12.345.678.901.234.567.890,125\nEXACT_DECIMAL_ERR\ntrue\n$12.50\nTRAILING_ERR\nEXACT_TRAILING_ERR\nPATTERN_ERR\nEXACT_PATTERN_ERR\nLOCALE_ERR\nCURRENCY_ERR\nEXACT_CURRENCY_ERR\n".as_bytes());
 }
 
 #[test]

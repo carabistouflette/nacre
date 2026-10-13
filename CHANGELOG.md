@@ -130,11 +130,14 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   concatenated gzip-member handling, and unsigned CRC-32/Adler-32 checksums over
   borrowed binary ByteBuffers. ZIP archive and entry operations remain a gap;
   gzip is not presented as ZIP compatibility.
-- Optional ICU-backed Unicode text transforms, grapheme boundaries, locale collation,
-  Unicode scalar properties, strict charset conversion, and locale-aware number
-  formatting use explicit root/BCP-47 locale rules, preserve supported Unicode
-  collation/numbering extensions, and preserve affine ownership. Ordinary Text
-  operations remain usable without ICU.
+- Optional ICU-backed Unicode transforms, grapheme boundaries, locale collation,
+  exact decimal parsing/formatting, currency formatting and strict charset
+  conversion preserve affine ownership. Locale parsing consumes complete input
+  through ICU's exact decimal interface; currency decimals avoid binary64.
+  Charset aliases and discoverable canonical names come from ICU's converter
+  registry, with STOP callbacks and explicit-endian UTF-16 behavior. Locale
+  arguments retain explicit root/BCP-47 rules and supported collation/numbering
+  extensions. Ordinary Text operations remain usable without ICU.
 - Adds affine SQLite `Database` with one explicitly owned internal prepared
   statement, copied length-delimited bindings/rows, strict type accessors,
   transactions, foreign-key enforcement, and bounded busy timeouts. `prepare`

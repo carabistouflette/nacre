@@ -475,38 +475,52 @@ static List<Text> available()
 static Result<Text, Text> formatNumber(double value, borrow Text pattern, borrow Text locale)
 static Result<Text, Text> formatDecimal(borrow Text exactDecimal, borrow Text pattern, borrow Text locale)
 static Result<double, Text> parseNumber(borrow Text value, borrow Text pattern, borrow Text locale)
+static Result<Text, Text> parseDecimal(borrow Text value, borrow Text pattern, borrow Text locale)
 static Result<Text, Text> formatCurrency(double value, borrow Text isoCurrency, borrow Text locale)
+static Result<Text, Text> formatCurrencyDecimal(borrow Text exactDecimal, borrow Text isoCurrency, borrow Text locale)
 ```
 
 Number patterns follow ICU `DecimalFormat` pattern syntax and the locale's
-numbering symbols. `formatNumber` formats a `double`; `formatDecimal` formats
-nonempty ASCII decimal text directly, without first rounding it through `double`.
-`parseNumber` uses the same pattern and locale and returns `Err` unless ICU parses
-the complete input. Invalid patterns, malformed numbers, and trailing content
-return `Err`. Embedded NUL is rejected in patterns, parse input, and currency
-codes; an empty locale is root.
+numbering symbols. `formatNumber` and `parseNumber` use `double`;
+`formatDecimal` and `formatCurrencyDecimal` pass nonempty ASCII decimal text to
+ICU without a binary64 intermediate. `parseDecimal` uses ICU's exact decimal
+parser and returns canonical ASCII decimal text, never converting the parsed
+value through binary64. Its output can be passed to `BigDecimal.parse` when
+arbitrary-precision arithmetic is needed and BigDecimal's configured text,
+coefficient, and scale bounds permit it; only programs that use `BigDecimal`
+link GMP. `Locale` alone remains ICU-backed and does not require GMP. The
+returned text does not promise preservation of the input's lexical scale.
 
-`formatCurrency` uses ICU's locale currency pattern with the explicit three-letter
-ISO 4217 code. The code is validated against ICU currency data; unrecognized codes
-return `Err` rather than being used as an invented currency.
+Both parse methods return `Err` unless ICU consumes the complete input. Invalid
+patterns, malformed numbers, and trailing content return `Err`. Embedded NUL is
+rejected in patterns, parse input, and currency codes; an empty locale is root.
+`formatCurrency` and `formatCurrencyDecimal` use ICU's locale currency pattern
+and rounding policy with an explicit three-letter ISO 4217 code. The code is
+validated against ICU currency data; unrecognized codes return `Err`.
 
 ## `Charset`
 
 ```java
+static List<Text> available()
 static Result<ByteBuffer, Text> encode(borrow Text text, borrow Text charset)
 static Result<Text, Text> decode(borrow ByteBuffer bytes, borrow Text charset)
 ```
 
-The supported case-insensitive charset names are `UTF-8`, `UTF-16LE`,
-`UTF-16BE`, `UTF-32LE`, `UTF-32BE`, `US-ASCII`, and `ISO-8859-1`. Generic
-`UTF-16` and platform-default encodings are not supported. Charset names with
-embedded NUL and unknown names return `Err`.
+`available()` enumerates ICU's canonical converter names; each returned name is
+supported by `encode` and `decode`. Either method also accepts aliases recognized
+by ICU. Empty names, the `default` pseudo-name, embedded NUL, non-ASCII names,
+and unknown labels return `Err`; no platform-default encoding is selected.
+Generic `UTF-16` follows ICU's BOM behavior, while explicit-endian `UTF-16LE` and
+`UTF-16BE` are independent of platform byte order.
 
 Conversions are strict: malformed input and text unrepresentable in the target
-charset return `Err` without replacement characters. UTF-16LE/BE encoding does
-not add a BOM; when decoding those explicit-endian encodings, a BOM is preserved
-as U+FEFF text. UTF-8 conversion preserves embedded NUL. Oversized ICU conversion
-inputs return `Err` before narrowing lengths to ICU's 32-bit API.
+charset return `Err` without replacement characters, including for stateful
+encodings. UTF-16LE/BE encoding does not add a BOM; decoding those explicit-
+endian encodings preserves a BOM as U+FEFF text. UTF-8 conversion preserves
+embedded NUL. Returned buffers and text are independent owned results.
+Oversized ICU conversion inputs return `Err` before narrowing lengths to ICU's
+32-bit API.
+
 ## OpenSSL cryptography
 
 `CryptoKey`, `CryptoDigest`, `CryptoMac`, and `Certificate` are unique affine

@@ -144,7 +144,37 @@ static bool ncr_locale_exact_decimal(ncr_obj_@TEXT_ID@ *text) {
     }
     return true;
 }
+
 /* NACRE_LOCALE_END EXACT_DECIMAL */
+
+/* NACRE_LOCALE_BEGIN DECIMAL_SYNTAX */
+static bool ncr_locale_decimal_syntax(const char *value, int32_t length) {
+    if (value == NULL || length <= 0) { return false; }
+    int32_t index = 0;
+    if (value[index] == '+' || value[index] == '-') { ++index; }
+    bool saw_digit = false;
+    bool saw_decimal_point = false;
+    for (; index < length; ++index) {
+        unsigned char byte = (unsigned char)value[index];
+        if (byte >= '0' && byte <= '9') { saw_digit = true; }
+        else if (byte == '.' && !saw_decimal_point) { saw_decimal_point = true; }
+        else { break; }
+    }
+    if (!saw_digit) { return false; }
+    if (index < length && (value[index] == 'e' || value[index] == 'E')) {
+        ++index;
+        if (index < length && (value[index] == '+' || value[index] == '-')) { ++index; }
+        int32_t exponent_digits = 0;
+        for (; index < length; ++index) {
+            unsigned char byte = (unsigned char)value[index];
+            if (byte < '0' || byte > '9') { return false; }
+            ++exponent_digits;
+        }
+        if (exponent_digits == 0) { return false; }
+    }
+    return index == length;
+}
+/* NACRE_LOCALE_END DECIMAL_SYNTAX */
 
 /* NACRE_LOCALE_BEGIN FORMAT_NUMBER */
 static ncr_obj_@FORMAT_NUMBER_RESULT@ @LOCALE_FORMAT_NUMBER@(double ncr_v_@FORMAT_NUMBER_VALUE@, ncr_obj_@TEXT_ID@ *ncr_v_@FORMAT_NUMBER_PATTERN@, ncr_obj_@TEXT_ID@ *ncr_v_@FORMAT_NUMBER_LOCALE@, size_t ncr_line, size_t ncr_column) {
@@ -211,6 +241,48 @@ static ncr_obj_@PARSE_NUMBER_RESULT@ @LOCALE_PARSE_NUMBER@(ncr_obj_@TEXT_ID@ *nc
     return (ncr_obj_@PARSE_NUMBER_RESULT@){ .tag = @PARSE_NUMBER_OK@, .data.v@PARSE_NUMBER_OK@.f0 = number };
 }
 /* NACRE_LOCALE_END PARSE_NUMBER */
+/* NACRE_LOCALE_BEGIN PARSE_DECIMAL_API */
+static ncr_obj_@PARSE_DECIMAL_RESULT@ @LOCALE_PARSE_DECIMAL@(ncr_obj_@TEXT_ID@ *ncr_v_@PARSE_DECIMAL_VALUE@, ncr_obj_@TEXT_ID@ *ncr_v_@PARSE_DECIMAL_PATTERN@, ncr_obj_@TEXT_ID@ *ncr_v_@PARSE_DECIMAL_LOCALE@, size_t ncr_line, size_t ncr_column) {
+    if (ncr_v_@PARSE_DECIMAL_VALUE@ == NULL || ncr_v_@PARSE_DECIMAL_VALUE@->length < 0 ||
+        memchr(ncr_v_@PARSE_DECIMAL_VALUE@->bytes, 0, (size_t)ncr_v_@PARSE_DECIMAL_VALUE@->length) != NULL) {
+        return ncr_result_error_@PARSE_DECIMAL_RESULT@("number text must not contain NUL", sizeof("number text must not contain NUL") - 1, ncr_line, ncr_column);
+    }
+    UNumberFormat *format = NULL;
+    if (!ncr_locale_open_decimal(ncr_v_@PARSE_DECIMAL_PATTERN@, ncr_v_@PARSE_DECIMAL_LOCALE@, &format, ncr_line, ncr_column)) {
+        return ncr_result_error_@PARSE_DECIMAL_RESULT@("invalid decimal pattern or BCP-47 locale", sizeof("invalid decimal pattern or BCP-47 locale") - 1, ncr_line, ncr_column);
+    }
+    UChar *value = NULL; int32_t value_length = 0;
+    if (!ncr_unicode_text_to_utf16(ncr_v_@PARSE_DECIMAL_VALUE@, &value, &value_length, ncr_line, ncr_column)) {
+        unum_close(format);
+        return ncr_result_error_@PARSE_DECIMAL_RESULT@("number text could not be converted to UTF-16", sizeof("number text could not be converted to UTF-16") - 1, ncr_line, ncr_column);
+    }
+    static const UChar empty[1] = { 0 };
+    const UChar *parse_value = value == NULL ? empty : value;
+    int32_t parse_position = 0;
+    UErrorCode status = U_ZERO_ERROR;
+    int32_t required = unum_parseDecimal(format, parse_value, value_length, &parse_position, NULL, 0, &status);
+    if (!ncr_unicode_preflight_ok(status) || required < 0 || required >= INT32_MAX ||
+        parse_position != value_length) {
+        unum_close(format);
+        if (value != NULL) { ncr_deallocate(value); }
+        return ncr_result_error_@PARSE_DECIMAL_RESULT@("number text is malformed or has trailing content", sizeof("number text is malformed or has trailing content") - 1, ncr_line, ncr_column);
+    }
+    char *decimal = ncr_allocate((size_t)required + 1, ncr_line, ncr_column);
+    parse_position = 0;
+    status = U_ZERO_ERROR;
+    int32_t written = unum_parseDecimal(format, parse_value, value_length, &parse_position, decimal, required + 1, &status);
+    unum_close(format);
+    if (value != NULL) { ncr_deallocate(value); }
+    if (U_FAILURE(status) || written != required || parse_position != value_length ||
+        !ncr_locale_decimal_syntax(decimal, written)) {
+        ncr_deallocate(decimal);
+        return ncr_result_error_@PARSE_DECIMAL_RESULT@("number text is malformed or has trailing content", sizeof("number text is malformed or has trailing content") - 1, ncr_line, ncr_column);
+    }
+    ncr_obj_@TEXT_ID@ *text = ncr_text_take_bytes_@TEXT_ID@((unsigned char *)decimal,
+        (size_t)written, (size_t)written + 1, ncr_line, ncr_column);
+    return (ncr_obj_@PARSE_DECIMAL_RESULT@){ .tag = @PARSE_DECIMAL_OK@, .data.v@PARSE_DECIMAL_OK@.f0 = text };
+}
+/* NACRE_LOCALE_END PARSE_DECIMAL_API */
 
 /* NACRE_LOCALE_BEGIN FORMAT_CURRENCY */
 static ncr_obj_@FORMAT_CURRENCY_RESULT@ @LOCALE_FORMAT_CURRENCY@(double ncr_v_@FORMAT_CURRENCY_VALUE@, ncr_obj_@TEXT_ID@ *ncr_v_@FORMAT_CURRENCY_CODE@, ncr_obj_@TEXT_ID@ *ncr_v_@FORMAT_CURRENCY_LOCALE@, size_t ncr_line, size_t ncr_column) {
@@ -228,3 +300,25 @@ static ncr_obj_@FORMAT_CURRENCY_RESULT@ @LOCALE_FORMAT_CURRENCY@(double ncr_v_@F
     return (ncr_obj_@FORMAT_CURRENCY_RESULT@){ .tag = @FORMAT_CURRENCY_OK@, .data.v@FORMAT_CURRENCY_OK@.f0 = text };
 }
 /* NACRE_LOCALE_END FORMAT_CURRENCY */
+/* NACRE_LOCALE_BEGIN FORMAT_CURRENCY_DECIMAL */
+static ncr_obj_@FORMAT_CURRENCY_DECIMAL_RESULT@ @LOCALE_FORMAT_CURRENCY_DECIMAL@(ncr_obj_@TEXT_ID@ *ncr_v_@FORMAT_CURRENCY_DECIMAL_VALUE@, ncr_obj_@TEXT_ID@ *ncr_v_@FORMAT_CURRENCY_DECIMAL_CODE@, ncr_obj_@TEXT_ID@ *ncr_v_@FORMAT_CURRENCY_DECIMAL_LOCALE@, size_t ncr_line, size_t ncr_column) {
+    if (!ncr_locale_exact_decimal(ncr_v_@FORMAT_CURRENCY_DECIMAL_VALUE@)) {
+        return ncr_result_error_@FORMAT_CURRENCY_DECIMAL_RESULT@("exact decimal must be nonempty ASCII numeric text without NUL", sizeof("exact decimal must be nonempty ASCII numeric text without NUL") - 1, ncr_line, ncr_column);
+    }
+    UNumberFormat *format = NULL;
+    if (!ncr_locale_open_currency(ncr_v_@FORMAT_CURRENCY_DECIMAL_CODE@, ncr_v_@FORMAT_CURRENCY_DECIMAL_LOCALE@, &format)) {
+        return ncr_result_error_@FORMAT_CURRENCY_DECIMAL_RESULT@("unknown ISO 4217 currency or invalid BCP-47 locale", sizeof("unknown ISO 4217 currency or invalid BCP-47 locale") - 1, ncr_line, ncr_column);
+    }
+    UChar *formatted = NULL; int32_t formatted_length = 0;
+    bool ok = ncr_locale_format_decimal(format,
+        (const char *)ncr_v_@FORMAT_CURRENCY_DECIMAL_VALUE@->bytes,
+        ncr_v_@FORMAT_CURRENCY_DECIMAL_VALUE@->length,
+        &formatted, &formatted_length, ncr_line, ncr_column);
+    unum_close(format);
+    if (!ok) { return ncr_result_error_@FORMAT_CURRENCY_DECIMAL_RESULT@("exact currency formatting failed", sizeof("exact currency formatting failed") - 1, ncr_line, ncr_column); }
+    ncr_obj_@TEXT_ID@ *text = ncr_unicode_make_text(formatted, formatted_length, ncr_line, ncr_column);
+    ncr_deallocate(formatted);
+    if (text == NULL) { return ncr_result_error_@FORMAT_CURRENCY_DECIMAL_RESULT@("formatted currency is not valid Unicode", sizeof("formatted currency is not valid Unicode") - 1, ncr_line, ncr_column); }
+    return (ncr_obj_@FORMAT_CURRENCY_DECIMAL_RESULT@){ .tag = @FORMAT_CURRENCY_DECIMAL_OK@, .data.v@FORMAT_CURRENCY_DECIMAL_OK@.f0 = text };
+}
+/* NACRE_LOCALE_END FORMAT_CURRENCY_DECIMAL */
