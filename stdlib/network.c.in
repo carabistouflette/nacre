@@ -53,6 +53,14 @@ static bool ncr_network_deadline(int64_t timeout_millis, bool *finite, int64_t *
     return true;
 }
 
+static int ncr_network_check_deadline(bool finite, int64_t deadline, bool *timed_out, int *failure) {
+    if (!finite) { return 1; }
+    int64_t now = 0;
+    if (!ncr_time_monotonic_value(&now, failure)) { return -1; }
+    if (now >= deadline) { *timed_out = true; return 0; }
+    return 1;
+}
+
 /* Return 1 when ready, 0 when the original deadline expires, and -1 on error. */
 static int ncr_network_poll(int fd, short events, bool finite, int64_t deadline, int *failure) {
     for (;;) {

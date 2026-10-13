@@ -124,6 +124,12 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   `ws`/`wss` upgrades, masked client frames, bounded message assembly, ping, and
   peer close handshakes. Both surfaces reuse shared socket, DNS, IDNA, and path
   helpers rather than duplicating platform conversion logic.
+  Each SSL attempt isolates OpenSSL error-queue state and scopes SIGPIPE to its
+  calling thread without changing process-wide signal handling. Shared deadline
+  checks bound continuously successful frame processing, and WSS shutdown keeps
+  the close operation's original deadline. Native dependency expansion retains
+  WebSocket's hidden address-resolution types without requiring a consumer to
+  mention `SocketAddress`.
   Compiler catalogs now register these native class/method identities for prelude
   injection and typed IR emission; VS Code, Zed, and Tree-sitter recognize their
   public builtin type names.

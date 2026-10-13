@@ -439,31 +439,6 @@ pub(super) fn native_class_id(program: &t::Program, is: impl Fn(C) -> bool) -> u
     native_class_id_if(program, is).expect("compiler-owned native class is present")
 }
 
-pub(super) fn template_section<'a>(source: &'a str, start: &str, end: &str) -> &'a str {
-    source.split_once(start).expect("native template section opener").1
-        .split_once(end).expect("native template section closer").0
-}
-
-pub(super) fn has_placeholder(source: &str) -> bool {
-    let bytes = source.as_bytes();
-    let mut offset = 0;
-    while let Some(relative) = bytes[offset..].iter().position(|byte| *byte == b'@') {
-        let start = offset + relative + 1;
-        let mut end = start;
-        if end < bytes.len() && bytes[end].is_ascii_uppercase() {
-            end += 1;
-            while end < bytes.len()
-                && (bytes[end].is_ascii_uppercase() || bytes[end].is_ascii_digit() || bytes[end] == b'_')
-            {
-                end += 1;
-            }
-            if end < bytes.len() && bytes[end] == b'@' { return true; }
-        }
-        offset = start;
-    }
-    false
-}
-
 pub(super) fn result_id(function: &t::Function) -> usize {
     match function.return_type {
         Type::Object(id) => id,

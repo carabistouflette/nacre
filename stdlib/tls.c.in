@@ -375,13 +375,6 @@ static bool ncr_tls_sigpipe_finish(struct ncr_tls_sigpipe_guard *guard,
     return true;
 }
 
-static int ncr_tls_check_deadline(bool finite, int64_t deadline, bool *timed_out, int *failure) {
-    if (!finite) { return 1; }
-    int64_t now = 0;
-    if (!ncr_time_monotonic_value(&now, failure)) { return -1; }
-    if (now >= deadline) { *timed_out = true; return 0; }
-    return 1;
-}
 
 static SSL *ncr_tls_ssl_for_config(
     ncr_obj_@CONFIG_MUTEX_ID@ *config_handle, int fd, bool client, int *failure
@@ -425,7 +418,7 @@ static int ncr_tls_handshake(SSL *ssl, int fd, bool client, bool finite, int64_t
     bool *timed_out, int *failure) {
     *timed_out = false;
     for (;;) {
-        int deadline_status = ncr_tls_check_deadline(finite, deadline, timed_out, failure);
+        int deadline_status = ncr_network_check_deadline(finite, deadline, timed_out, failure);
         if (deadline_status <= 0) { return deadline_status; }
         struct ncr_tls_sigpipe_guard guard;
         if (!ncr_tls_sigpipe_begin(&guard, failure)) { return -1; }
@@ -444,7 +437,7 @@ static ssize_t ncr_tls_read(SSL *ssl, int fd, unsigned char *destination, size_t
     bool finite, int64_t deadline, bool *timed_out, int *failure) {
     *timed_out = false;
     for (;;) {
-        int deadline_status = ncr_tls_check_deadline(finite, deadline, timed_out, failure);
+        int deadline_status = ncr_network_check_deadline(finite, deadline, timed_out, failure);
         if (deadline_status <= 0) { return -1; }
         struct ncr_tls_sigpipe_guard guard;
         if (!ncr_tls_sigpipe_begin(&guard, failure)) { return -1; }
@@ -465,7 +458,7 @@ static ssize_t ncr_tls_write(SSL *ssl, int fd, const unsigned char *source, size
     bool finite, int64_t deadline, bool *timed_out, int *failure) {
     *timed_out = false;
     for (;;) {
-        int deadline_status = ncr_tls_check_deadline(finite, deadline, timed_out, failure);
+        int deadline_status = ncr_network_check_deadline(finite, deadline, timed_out, failure);
         if (deadline_status <= 0) { return -1; }
         struct ncr_tls_sigpipe_guard guard;
         if (!ncr_tls_sigpipe_begin(&guard, failure)) { return -1; }
@@ -488,7 +481,7 @@ static int ncr_tls_shutdown(SSL *ssl, int fd, bool finite, int64_t deadline,
     bool *timed_out, int *failure) {
     *timed_out = false;
     for (;;) {
-        int deadline_status = ncr_tls_check_deadline(finite, deadline, timed_out, failure);
+        int deadline_status = ncr_network_check_deadline(finite, deadline, timed_out, failure);
         if (deadline_status <= 0) { return deadline_status; }
         struct ncr_tls_sigpipe_guard guard;
         if (!ncr_tls_sigpipe_begin(&guard, failure)) { return -1; }

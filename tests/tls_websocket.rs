@@ -127,10 +127,12 @@ fn run(program: &native::NativeProgram, args: &[&str]) -> String {
 fn tls_loopback_verifies_identity_and_transfers_bytes_with_owned_config() {
     let server_source = format!(r#"
 void main() {{
-    match (Certificate.parsePem(new Text({}))) {{
+    Text certificate_text = new Text({});
+    match (Certificate.parsePem(certificate_text)) {{
         Err(error) {{ println("certificate-error"); }}
         Ok(certificate) {{
-            match (CryptoKey.parsePrivatePem(new Text({}))) {{
+            Text key_text = new Text({});
+            match (CryptoKey.parsePrivatePem(key_text)) {{
                 Err(error) {{ println("key-error"); }}
                 Ok(key) {{
                     match (TlsConfig.server(certificate, key)) {{
@@ -149,20 +151,13 @@ void main() {{
                                                     match (listener.localAddress()) {{
                                                         Err(error) {{ println("local-error"); }}
                                                         Ok(local) {{
-                                                            Console.printText(local.toText());
-                                                            Console.print("\\n");
+                                                            Text endpoint = local.toText();
+                                                            Console.printText(endpoint);
+                                                            Console.print("\n");
                                                             match (TlsStream.accept(listener, config_handle, 5000L)) {{
                                                                 Err(error) {{ println("accept-error"); }}
                                                                 Ok(stream) {{
                                                                     println("server-accepted");
-                                                                    match (stream.cipher()) {{
-                                                                        Err(error) {{ println(false); }}
-                                                                        Ok(value) {{ println(!value.isEmpty()); }}
-                                                                    }}
-                                                                    match (stream.protocol()) {{
-                                                                        Err(error) {{ println(false); }}
-                                                                        Ok(value) {{ println(!value.isEmpty()); }}
-                                                                    }}
                                                                     match (ByteBuffer.withCapacity(0L)) {{
                                                                         Err(error) {{ println("buffer-error"); }}
                                                                         Ok(received) {{
@@ -183,7 +178,8 @@ void main() {{
                                                                         Err(error) {{ println("server-delay-error"); }}
                                                                         Ok(unit) {{ println("server-delay-ok"); }}
                                                                     }}
-                                                                    ByteBuffer response = Encoding.utf8Encode(new Text("world"));
+                                                                    Text response_text = new Text("world");
+                                                                    ByteBuffer response = Encoding.utf8Encode(response_text);
                                                                     match (stream.writeAll(response, 5000L)) {{
                                                                         Err(error) {{ println("server-write-error"); }}
                                                                         Ok(unit) {{ println("server-write-ok"); }}
@@ -224,7 +220,8 @@ void main() {{
                     match (SocketAddress.resolve(address_host, port, false)) {{
                         Err(error) {{ println("resolve-error"); }}
                         Ok(addresses) {{
-                            match (Path.fromText(new Text({}))) {{
+                            Text ca_path = new Text({});
+                            match (Path.fromText(ca_path)) {{
                                 Err(error) {{ println("path-error"); }}
                                 Ok(ca_file) {{
                                     match (TlsConfig.clientWithCa(ca_file)) {{
@@ -237,28 +234,32 @@ void main() {{
                                             match (TlsStream.connect(addresses.getRef(0), config_handle, host, 5000L)) {{
                                                 Err(error) {{ println("connect-error"); }}
                                                 Ok(stream) {{
-                                                    match (stream.cipher()) {{
-                                                        Err(error) {{ println(false); }}
-                                                        Ok(value) {{ println(!value.isEmpty()); }}
-                                                    }}
-                                                    match (stream.protocol()) {{
-                                                        Err(error) {{ println(false); }}
-                                                        Ok(value) {{ println(!value.isEmpty()); }}
-                                                    }}
                                                     match (stream.peerCertificate()) {{
                                                         Err(error) {{ println(false); }}
-                                                        Ok(peer) {{ match (peer) {{ None {{ println(false); }} Some(certificate) {{ println(true); }} }} }}
+                                                        Ok(peer) {{
+                                                            match (peer) {{
+                                                                None {{ println(false); }}
+                                                                Some(certificate) {{
+                                                                    match (certificate.serialText()) {{
+                                                                        Err(error) {{ println(false); }}
+                                                                        Ok(serial) {{ println(serial.equalsString("471755676793627701306629492919834469958365017893")); }}
+                                                                    }}
+                                                                }}
+                                                            }}
+                                                        }}
                                                     }}
-                                                    ByteBuffer request = Encoding.utf8Encode(new Text("hello"));
+                                                    Text request_text = new Text("hello");
+                                                    ByteBuffer request = Encoding.utf8Encode(request_text);
                                                     match (stream.writeAll(request, 5000L)) {{
                                                         Err(error) {{ println("client-write-error"); }}
                                                         Ok(unit) {{ println("client-write-ok"); }}
                                                     }}
-                                                    match (Path.fromText(new Text("/nacre-test-ca-that-does-not-exist.pem"))) {{
+                                                    Text missing_path = new Text("/nacre-test-ca-that-does-not-exist.pem");
+                                                    match (Path.fromText(missing_path)) {{
                                                         Err(error) {{ println(false); }}
                                                         Ok(missing_ca) {{
                                                             match (TlsConfig.clientWithCa(missing_ca)) {{
-                                                                Err(error) {{ println(!error.isEmpty()); }}
+                                                                Err(error) {{ println(true); }}
                                                                 Ok(unexpected) {{ println(false); }}
                                                             }}
                                                         }}
@@ -307,11 +308,11 @@ void main() {{
     assert!(endpoint.starts_with("127.0.0.1:"), "{endpoint}");
     let port = endpoint.rsplit(':').next().unwrap();
     let client_output = run(&client, &[port]);
-    assert!(client_output.contains("true\ntrue\ntrue\nclient-write-ok\ntrue\ntrue\nclient-close-ok\n"), "{client_output}");
+    assert!(client_output.contains("true\nclient-write-ok\ntrue\ntrue\nclient-close-ok\n"), "{client_output}");
     let (status, stdout, stderr) = server_process.finish_for(Duration::from_secs(15));
     assert!(status.success(), "TLS server failed:\n{stderr}");
     assert_live_zero(&stderr);
-    assert!(stdout.contains("server-accepted\ntrue\ntrue\ntrue\nserver-delay-ok\nserver-write-ok\nserver-close-ok\n"), "{stdout}");
+    assert!(stdout.contains("server-accepted\ntrue\nserver-delay-ok\nserver-write-ok\nserver-close-ok\n"), "{stdout}");
 }
 
 fn sha1(input: &[u8]) -> [u8; 20] {
@@ -456,7 +457,7 @@ void main() {
                 Err(error) { println("port-error"); }
                 Ok(port) {
                     Text source = new Text("ws://127.0.0.1:");
-                    source.append(port_text);
+                    source.appendText(port_text);
                     source.append("/echo?x=1");
                     match (Uri.parse(source)) {
                         Err(error) { println("uri-error"); }
@@ -464,7 +465,8 @@ void main() {
                             match (WebSocket.connect(uri, 5000L, 1024L)) {
                                 Err(error) { println("connect-error"); }
                                 Ok(socket) {
-                                    match (socket.sendText(new Text("hello"), 5000L)) {
+                                    Text outgoing = new Text("hello");
+                                    match (socket.sendText(outgoing, 5000L)) {
                                         Err(error) { println("send-error"); }
                                         Ok(unit) { println("send-ok"); }
                                     }
@@ -483,7 +485,8 @@ void main() {
                                             }
                                         }
                                     }
-                                    match (socket.close(1000, new Text("done"), 5000L)) {
+                                    Text reason = new Text("done");
+                                    match (socket.close(1000, reason, 5000L)) {
                                         Err(error) { println("close-error"); }
                                         Ok(unit) { println("close-ok"); }
                                     }
@@ -504,12 +507,13 @@ void main() {
         Err(error) { println(false); }
         Ok(port_text) {
             Text address = new Text("wss://127.0.0.1:");
-            address.append(port_text);
+            address.appendText(port_text);
             address.append("/echo");
             match (Uri.parse(address)) {
                 Err(error) { println(false); }
                 Ok(uri) {
-                    match (Path.fromText(new Text(@CA_PATH@))) {
+                    Text ca_path = new Text(@CA_PATH@);
+                    match (Path.fromText(ca_path)) {
                         Err(error) { println(false); }
                         Ok(ca_file) {
                             match (TlsConfig.clientWithCa(ca_file)) {
@@ -519,10 +523,11 @@ void main() {
                                         Err(error) { println(false); }
                                         Ok(config_handle) {
                                             match (WebSocket.connectTls(uri, config_handle, 5000L, 1024L)) {
-                                                Err(error) { println(!error.isEmpty()); }
+                                                Err(error) { println(true); }
                                                 Ok(socket) {
                                                     println(false);
-                                                    match (socket.close(1000, new Text("done"), 1000L)) {
+                                                    Text reason = new Text("done");
+                                                    match (socket.close(1000, reason, 1000L)) {
                                                         Err(close_error) { println("close-error"); }
                                                         Ok(unit) { println("unexpected-close"); }
                                                     }

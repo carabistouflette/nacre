@@ -406,6 +406,10 @@ impl Expander {
                     class.methods.retain(|method| !matches!(method.name.as_str(), "read" | "write"));
                 }
             }
+            Some(a::NativeClass::WebSocket) => {
+                // Native connection setup resolves addresses outside source-language bodies.
+                self.ty(&Type::Named("SocketAddress".to_owned()), env, class.span, 0)?;
+            }
             _ => {}
         }
         if !erase_native_interface_marker {

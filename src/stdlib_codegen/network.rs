@@ -86,36 +86,18 @@ fn has_any(program: &t::Program, methods: &[M]) -> bool {
     program.functions.iter().any(|function| function.native.is_some_and(|method| methods.contains(&method)))
 }
 
-pub(super) fn implementation(program: &t::Program) -> String {
-    const NETWORK_METHODS: &[M] = &[
-        M::SocketAddressResolve, M::SocketAddressToText,
-        M::TcpStreamConnect, M::TcpStreamReadSome, M::TcpStreamWriteSome, M::TcpStreamWriteAll,
-        M::TcpStreamRead, M::TcpStreamWrite, M::TcpStreamFlush,
-        M::TcpStreamPeerAddress, M::TcpStreamLocalAddress, M::TcpStreamClose,
-        M::DatagramSource, M::DatagramBytesRead, M::DatagramTruncated,
-        M::UdpSocketBind, M::UdpSocketSendTo, M::UdpSocketReceiveFrom, M::UdpSocketLocalAddress, M::UdpSocketClose,
-    ];
-    const TLS_WAIT_METHODS: &[M] = &[
-        M::TlsStreamConnect, M::TlsStreamAccept,
-        M::TlsStreamReadSome, M::TlsStreamWriteSome, M::TlsStreamWriteAll,
-        M::TlsStreamCipher, M::TlsStreamProtocol, M::TlsStreamPeerCertificate,
-        M::TlsStreamClose, M::TlsStreamRead, M::TlsStreamWrite, M::TlsStreamFlush,
-    ];
-    const WEBSOCKET_METHODS: &[M] = &[
-        M::WebSocketConnect, M::WebSocketConnectTls, M::WebSocketSendText,
-        M::WebSocketSendBinary, M::WebSocketPing, M::WebSocketReceive, M::WebSocketClose,
-    ];
-    const CONNECT_METHODS: &[M] = &[M::TlsStreamConnect, M::WebSocketConnect, M::WebSocketConnectTls];
-
-    let has_network_methods = has_any(program, NETWORK_METHODS);
-    let has_tls_io = has_any(program, TLS_WAIT_METHODS);
-    let has_websocket_io = has_any(program, WEBSOCKET_METHODS);
-    let has_dns_resolve = program.functions.iter().any(|function| function.native == Some(M::DnsResolve));
-    let has_shared_connect = has_any(program, CONNECT_METHODS);
-    let need_wait = has_network_methods || has_tls_io || has_websocket_io;
-    let need_address_helpers = has_network_methods || has_dns_resolve || has_shared_connect;
-    let need_descriptor_helper = has_network_methods || has_websocket_io || has_shared_connect;
-    let need_connect_helper = has_network_methods || has_shared_connect;
+pub(super) fn implementation(
+    program: &t::Program,
+    transport_needs_wait: bool,
+    transport_needs_connect: bool,
+    transport_needs_resolver: bool,
+) -> String {
+    let has_network_methods = program.classes.iter().any(|class| matches!(class.native,
+        Some(C::SocketAddress | C::TcpListener | C::TcpStream | C::Datagram | C::UdpSocket)));
+    let need_wait = has_network_methods || transport_needs_wait;
+    let need_address_helpers = has_network_methods || transport_needs_resolver || transport_needs_connect;
+    let need_descriptor_helper = has_network_methods || transport_needs_connect;
+    let need_connect_helper = has_network_methods || transport_needs_connect;
     if !need_wait && !need_address_helpers && !need_descriptor_helper { return String::new(); }
 
     let address = if need_address_helpers || need_connect_helper {
@@ -125,7 +107,7 @@ pub(super) fn implementation(program: &t::Program) -> String {
     };
     let template = include_str!("../../stdlib/network.c.in");
     let mut body = String::new();
-    if has_network_methods || has_dns_resolve { body.push_str(&group(template, "common")); }
+    body.push_str(&group(template, "common"));
     if need_wait { body.push_str(&group(template, "wait")); }
     if need_address_helpers { body.push_str(&group(template, "address_helpers")); }
     if need_descriptor_helper { body.push_str(&group(template, "descriptor_helper")); }

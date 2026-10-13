@@ -21,13 +21,6 @@
 #define NCR_WS_IO_CHUNK 4096U
 #define NCR_WS_CLOSE_PAYLOAD_LIMIT 125U
 
-static int ncr_ws_check_deadline(bool finite, int64_t deadline, bool *timed_out, int *failure) {
-    if (!finite) { return 1; }
-    int64_t now = 0;
-    if (!ncr_time_monotonic_value(&now, failure)) { return -1; }
-    if (now >= deadline) { *timed_out = true; return 0; }
-    return 1;
-}
 /* WEBSOCKET_GROUP_END constants */
 
 /* WEBSOCKET_GROUP connect_text */
@@ -176,7 +169,7 @@ static int ncr_ws_read_some(@WEBSOCKET_TYPE@ ws, unsigned char *destination, siz
     size_t *received, bool finite, int64_t deadline, bool *timed_out, int *failure) {
     *received = 0;
     if (maximum == 0) { return 1; }
-    int deadline_status = ncr_ws_check_deadline(finite, deadline, timed_out, failure);
+    int deadline_status = ncr_network_check_deadline(finite, deadline, timed_out, failure);
     if (deadline_status <= 0) { return deadline_status; }
     if (ws->read_buffer_offset == ws->read_buffer_length) {
         int status = ncr_ws_fill(ws, finite, deadline, timed_out, failure);
@@ -210,7 +203,7 @@ static bool ncr_ws_write_all(@WEBSOCKET_TYPE@ ws, const unsigned char *source, s
     bool finite, int64_t deadline, bool *timed_out, int *failure) {
     size_t offset = 0;
     while (offset < length) {
-        int deadline_status = ncr_ws_check_deadline(finite, deadline, timed_out, failure);
+        int deadline_status = ncr_network_check_deadline(finite, deadline, timed_out, failure);
         if (deadline_status <= 0) { return false; }
         if (ws->fd < 0 || ws->closed) { *failure = EBADF; return false; }
         if (ws->ssl != NULL) {
@@ -235,7 +228,7 @@ static bool ncr_ws_send_frame(@WEBSOCKET_TYPE@ ws, unsigned char opcode, bool fi
     const unsigned char *payload, size_t length, bool finite, int64_t deadline,
     bool *timed_out, int *failure) {
     if (length > (size_t)INT64_MAX || (length > 0 && payload == NULL)) { *failure = EINVAL; return false; }
-    int deadline_status = ncr_ws_check_deadline(finite, deadline, timed_out, failure);
+    int deadline_status = ncr_network_check_deadline(finite, deadline, timed_out, failure);
     if (deadline_status <= 0) { return false; }
     unsigned char mask[4];
     if (RAND_bytes(mask, (int)sizeof(mask)) != 1) { *failure = EIO; return false; }
@@ -412,7 +405,7 @@ static bool ncr_ws_http_handshake(@WEBSOCKET_TYPE@ ws, const ncr_obj_@TEXT_ID@ *
 /* WEBSOCKET_GROUP tls_shutdown */
 static bool ncr_ws_tls_shutdown(@WEBSOCKET_TYPE@ ws, bool finite, int64_t deadline,
     bool *timed_out, int *failure) {
-    int deadline_status = ncr_ws_check_deadline(finite, deadline, timed_out, failure);
+    int deadline_status = ncr_network_check_deadline(finite, deadline, timed_out, failure);
     if (deadline_status <= 0) { return false; }
     if (ws->ssl == NULL) { return true; }
     @TLS_SHUTDOWN_BRANCH@
@@ -478,7 +471,7 @@ static int ncr_ws_receive_inner(@WEBSOCKET_TYPE@ ws, bool finite, int64_t deadli
     bool fragmented = false;
 
     for (;;) {
-        int deadline_status = ncr_ws_check_deadline(finite, deadline, timed_out, failure);
+        int deadline_status = ncr_network_check_deadline(finite, deadline, timed_out, failure);
         if (deadline_status <= 0) {
             if (deadline_status < 0 || accumulated != NULL || fragmented) { ncr_ws_transport_cleanup(ws); }
             ncr_ws_drop_accumulator(accumulated);
@@ -584,7 +577,7 @@ static int ncr_ws_receive_inner(@WEBSOCKET_TYPE@ ws, bool finite, int64_t deadli
         }
         if (opcode == 0U) { fragmented = false; }
         if (*message_text && !ncr_ws_valid_utf8(accumulated->bytes, accumulated->length)) { goto protocol_error; }
-        int deadline_status = ncr_ws_check_deadline(finite, deadline, timed_out, failure);
+        deadline_status = ncr_network_check_deadline(finite, deadline, timed_out, failure);
         if (deadline_status <= 0) {
             if (deadline_status < 0) { ncr_ws_transport_cleanup(ws); }
             ncr_ws_drop_accumulator(accumulated);
@@ -729,7 +722,7 @@ static @CONNECT_CORE_RESULT_TYPE@ ncr_ws_connect_impl(@URI_TYPE@ uri, int64_t ti
         goto failed;
     }
     if (!ncr_ws_http_handshake(websocket, path, &query, @URI_TEXT_SOME_TAG@,
-        authority_bytes, authority_length, key, expected_accept, finite, deadline, &timed_out, &failure)) {
+        (const unsigned char *)authority_bytes, authority_length, key, expected_accept, finite, deadline, &timed_out, &failure)) {
         error_message = timed_out ? "WebSocket handshake timed out" : "WebSocket handshake failed";
         goto failed;
     }

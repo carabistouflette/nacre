@@ -280,11 +280,18 @@ pub fn implementations(program: &t::Program) -> String {
         out.push_str(&args);
         out.push('\n');
     }
-    out.push_str(&network::implementation(program));
+    let transport_needs_connect = program.functions.iter().any(|function| matches!(function.native,
+        Some(t::NativeMethod::TlsStreamConnect | t::NativeMethod::WebSocketConnect |
+            t::NativeMethod::WebSocketConnectTls)));
+    let transport_needs_wait = transport_needs_connect || program.classes.iter().any(|class|
+        matches!(class.native, Some(C::TlsStream | C::WebSocket)));
+    let resolver_needed = transport_needs_connect || program.functions.iter().any(|function|
+        function.native == Some(t::NativeMethod::DnsResolve));
+    out.push_str(&network::implementation(program, transport_needs_wait, transport_needs_connect, resolver_needed));
     out.push_str(&http::implementation(program));
-    out.push_str(&uri::percent_helpers(program, false));
+    out.push_str(&uri::percent_helpers(program, transport_needs_connect));
     out.push_str(&uri::implementation(program));
-    out.push_str(&dns::implementation(program, false, false));
+    out.push_str(&dns::implementation(program, transport_needs_connect, transport_needs_connect));
     if let Some(filesystem) = filesystem::implementations(program) {
         out.push_str(&filesystem);
         out.push('\n');

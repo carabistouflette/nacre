@@ -1734,6 +1734,7 @@ requires ICU. Native emission follows the requested class and method metadata,
 without a separate exhaustive URI-method list or another expression-tree walk.
 DNS helper requests are supplied by the caller; DNS does not depend on higher-level
 transport types.
+
 ## TLS
 
 `TlsConfig`, `TlsStream`, `WebSocket`, and `WebSocketMessage` are compiler-owned
@@ -1784,6 +1785,12 @@ uses a separate 250 ms deadline for TLS shutdown before releasing the transport.
 `cipher`, `protocol`, and `peerCertificate` return owned results; the peer certificate
 is `None` when the remote side supplied no certificate.
 
+TLS operations clear their thread-local OpenSSL error queue before each SSL
+attempt, so a failed unrelated configuration operation cannot poison a later
+read, write, or handshake. Socket-generated SIGPIPE is handled with a scoped
+thread signal mask; the library does not change the process-wide disposition,
+and preserves the calling thread's prior mask and already-pending SIGPIPE.
+
 ## WebSocket
 
 ```java
@@ -1809,6 +1816,10 @@ UTF-8, I/O, and timeout failures are owned `Err(Text)` values. `close` sends a
 close frame and completes the peer close handshake, then releases the transport.
 Each positive WebSocket timeout is one monotonic deadline through frame and control
 processing, including WSS TLS shutdown; zero means unbounded waiting.
+
+Network, TLS, and WebSocket operations share the same deadline-checking helper.
+The emission coordinator requests lower-level resolver and readiness helpers;
+those modules do not enumerate higher-level TLS or WebSocket methods.
 
 ## Platform, allocation, and timing limits
 
