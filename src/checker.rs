@@ -288,7 +288,8 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
             if class.is_interface { tables.classes[class_id].interface_methods.push(id); }
             declarations.push(method.clone());
         }
-        if class.is_interface || class.variants.is_some() || tables.is_static_native(class_id) { continue; }
+        if class.is_interface || class.variants.is_some() || tables.is_static_native(class_id)
+            || (class.native.is_some() && class.constructor.is_none()) { continue; }
         let constructor = class.constructor.clone().unwrap_or_else(|| a::Function {
             name: class.name.clone(), span: class.span, return_type: a::Type::Void,
             params: Vec::new(), body: Vec::new(), visibility: Visibility::Public, is_static: false, readonly: false,
