@@ -1,5 +1,0 @@
---- a/libarchive/archive_read_support_format_zip.c
-+++ b/libarchive/archive_read_support_format_zip.c
-@@ -4052,1 +4052,1 @@
--	for (i = tail - 22; i > 0;) {
-+	for (i = tail - 22; i >= 0;) {

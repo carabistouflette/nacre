@@ -113,13 +113,13 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 - Affine ZipReader and ZipWriter use libarchive for sequential ZIP/Zip64 reads and
   store/DEFLATE writes with thread-scoped C.UTF-8 pathname conversion. File and
   memory readers require a complete seekable ZIP directory; bounded reads check
-  decompressed output, CRC and truncation. Entries own their UTF-8 metadata, regular
-  file additions reject trailing slashes, and writers require explicit close to
-  report final directory errors without extracting or normalizing entry names.
-  Header rejection leaves no readable current entry while allowing subsequent
-  advancement. The native dependency build pins and verifies libarchive 3.8.9
-  with its upstream zero-entry bidder correction; strict central-directory
-  validation is preserved rather than falling back to streaming format detection.
+  decompressed output, CRC and truncation. UTF-8-flagged entry names preserve their
+  exact bytes and separators without normalization; invalid complete UTF-8 names
+  and embedded NUL are rejected before conversion. Header rejection leaves no
+  readable current entry and permits advancement. The pinned private libarchive
+  correction validates EOCD comment extent and parsed directory entry counts and
+  searches the entire legal 65,557-byte EOCD/comment range while retaining strict
+  seekable ZIP/Zip64 handling without streaming fallback.
 
 - Affine XML uses libxml2 for namespace-aware DOM/XPath, mutation, serialization,
   XSD validation, incremental pull events with stable owned snapshots, and

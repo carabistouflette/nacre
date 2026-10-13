@@ -533,3 +533,289 @@ void main() {
     let output = run(&program, &[]);
     assert_eq!(output.stdout, b"true\n");
 }
+
+fn append_le16(bytes: &mut Vec<u8>, value: u16) {
+    bytes.extend_from_slice(&value.to_le_bytes());
+}
+
+fn append_le32(bytes: &mut Vec<u8>, value: u32) {
+    bytes.extend_from_slice(&value.to_le_bytes());
+}
+
+fn make_zip(
+    entries: &[(&[u8], u16)],
+    comment: &[u8],
+    declared_entry_count: Option<u16>,
+    declared_comment_length: Option<u16>,
+) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    let mut central = Vec::new();
+    for &(name, flags) in entries {
+        let local_offset = bytes.len() as u32;
+        bytes.extend_from_slice(b"PK\x03\x04");
+        append_le16(&mut bytes, 20);
+        append_le16(&mut bytes, flags);
+        append_le16(&mut bytes, 0);
+        append_le16(&mut bytes, 0);
+        append_le16(&mut bytes, 0);
+        append_le32(&mut bytes, 0);
+        append_le32(&mut bytes, 0);
+        append_le32(&mut bytes, 0);
+        append_le16(&mut bytes, name.len() as u16);
+        append_le16(&mut bytes, 0);
+        bytes.extend_from_slice(name);
+
+        central.extend_from_slice(b"PK\x01\x02");
+        append_le16(&mut central, 20);
+        append_le16(&mut central, 20);
+        append_le16(&mut central, flags);
+        append_le16(&mut central, 0);
+        append_le16(&mut central, 0);
+        append_le16(&mut central, 0);
+        append_le32(&mut central, 0);
+        append_le32(&mut central, 0);
+        append_le32(&mut central, 0);
+        append_le16(&mut central, name.len() as u16);
+        append_le16(&mut central, 0);
+        append_le16(&mut central, 0);
+        append_le16(&mut central, 0);
+        append_le16(&mut central, 0);
+        append_le32(&mut central, 0);
+        append_le32(&mut central, local_offset);
+        central.extend_from_slice(name);
+    }
+
+    let central_offset = bytes.len() as u32;
+    let central_size = central.len() as u32;
+    bytes.extend_from_slice(&central);
+    bytes.extend_from_slice(b"PK\x05\x06");
+    append_le16(&mut bytes, 0);
+    append_le16(&mut bytes, 0);
+    let entry_count = declared_entry_count.unwrap_or(entries.len() as u16);
+    append_le16(&mut bytes, entry_count);
+    append_le16(&mut bytes, entry_count);
+    append_le32(&mut bytes, central_size);
+    append_le32(&mut bytes, central_offset);
+    append_le16(&mut bytes, declared_comment_length.unwrap_or(comment.len() as u16));
+    bytes.extend_from_slice(comment);
+    bytes
+}
+
+const ZIP_BOUNDARY_SOURCE: &str = r#"
+Result<Unit, Text> require(boolean condition, String message) {
+    if (!condition) { return new Result<Unit, Text>.Err(new Text(message)); }
+    return new Result<Unit, Text>.Ok(());
+}
+Result<Path, Text> argumentPath(int index) {
+    Text text = Args.get(index)?;
+    return Path.fromText(text);
+}
+Result<ByteBuffer, Text> readFile(borrow Path path) {
+    File file = File.openRead(path)?;
+    ByteBuffer bytes = ByteBuffer.withCapacity(0L)?;
+    long count = 1L;
+    while (count > 0L) { count = file.readSome(bytes, 65536L)?; }
+    file.close()?;
+    return new Result<ByteBuffer, Text>.Ok(bytes);
+}
+Result<Unit, Text> assertRawNames(borrow mut ZipReader reader) {
+    int index = 0;
+    while (index < 3) {
+        match (reader.next()?) {
+            None { return new Result<Unit, Text>.Err(new Text("raw-name archive ended early")); }
+            Some(entry) {
+                borrow Text name = entry.name();
+                if (index == 0) { require(name.equalsString("é"), "composed name changed")?; }
+                if (index == 1) { require(name.equalsString("é"), "decomposed name changed")?; }
+                if (index == 2) { require(name.equalsString("a\\b"), "backslash name changed")?; }
+                index = index + 1;
+            }
+        }
+    }
+    match (reader.next()?) {
+        None {}
+        Some(entry) { return new Result<Unit, Text>.Err(new Text("raw-name archive had extra entries")); }
+    }
+    reader.close()?;
+    return new Result<Unit, Text>.Ok(());
+}
+Result<Unit, Text> checkRawFactories(borrow Path path) {
+    ZipReader fileReader = ZipReader.open(path)?;
+    assertRawNames(fileReader)?;
+    ByteBuffer source = readFile(path)?;
+    ZipReader memoryReader = ZipReader.fromBytes(source)?;
+    source.clear();
+    assertRawNames(memoryReader)?;
+    return new Result<Unit, Text>.Ok(());
+}
+Result<Unit, Text> assertRejectedAndRecovered(borrow mut ZipReader reader) {
+    match (reader.next()) {
+        Err(error) {}
+        Ok(option) { return new Result<Unit, Text>.Err(new Text("malformed filename was accepted")); }
+    }
+    match (reader.readEntry(0L)) {
+        Err(error) {}
+        Ok(bytes) { return new Result<Unit, Text>.Err(new Text("rejected filename remained readable")); }
+    }
+    match (reader.next()?) {
+        None { return new Result<Unit, Text>.Err(new Text("valid entry after rejected filename was lost")); }
+        Some(entry) {
+            borrow Text name = entry.name();
+            require(name.equalsString("valid"), "reader did not recover to valid entry")?;
+            ByteBuffer payload = reader.readEntry(0L)?;
+            require(payload.length() == 0L, "recovered entry payload changed")?;
+        }
+    }
+    reader.close()?;
+    return new Result<Unit, Text>.Ok(());
+}
+Result<Unit, Text> checkMalformedNameFactories(borrow Path path) {
+    ZipReader fileReader = ZipReader.open(path)?;
+    assertRejectedAndRecovered(fileReader)?;
+    ByteBuffer source = readFile(path)?;
+    ZipReader memoryReader = ZipReader.fromBytes(source)?;
+    source.clear();
+    assertRejectedAndRecovered(memoryReader)?;
+    return new Result<Unit, Text>.Ok(());
+}
+Result<boolean, Text> rejectsMalformedFile(borrow Path path) {
+    boolean rejected = false;
+    match (ZipReader.open(path)) {
+        Err(error) { rejected = true; }
+        Ok(reader) {
+            match (reader.next()) {
+                Err(error) { rejected = true; }
+                Ok(option) { rejected = false; }
+            }
+            match (reader.close()) {
+                Err(error) {}
+                Ok(unit) {}
+            }
+        }
+    }
+    return new Result<boolean, Text>.Ok(rejected);
+}
+Result<boolean, Text> rejectsMalformedMemory(borrow Path path) {
+    ByteBuffer source = readFile(path)?;
+    boolean rejected = false;
+    match (ZipReader.fromBytes(source)) {
+        Err(error) { rejected = true; }
+        Ok(reader) {
+            match (reader.next()) {
+                Err(error) { rejected = true; }
+                Ok(option) { rejected = false; }
+            }
+            match (reader.close()) {
+                Err(error) {}
+                Ok(unit) {}
+            }
+        }
+    }
+    return new Result<boolean, Text>.Ok(rejected);
+}
+Result<Unit, Text> checkMalformedEocdFactories(borrow Path path) {
+    require(rejectsMalformedFile(path)?, "file reader accepted malformed EOCD")?;
+    require(rejectsMalformedMemory(path)?, "memory reader accepted malformed EOCD")?;
+    return new Result<Unit, Text>.Ok(());
+}
+Result<Unit, Text> assertEmptyArchive(borrow Path path) {
+    ZipReader reader = ZipReader.open(path)?;
+    match (reader.next()?) {
+        None {}
+        Some(entry) { return new Result<Unit, Text>.Err(new Text("long-comment archive was not empty")); }
+    }
+    reader.close()?;
+    ByteBuffer source = readFile(path)?;
+    ZipReader memoryReader = ZipReader.fromBytes(source)?;
+    source.clear();
+    match (memoryReader.next()?) {
+        None {}
+        Some(entry) { return new Result<Unit, Text>.Err(new Text("memory long-comment archive was not empty")); }
+    }
+    memoryReader.close()?;
+    return new Result<Unit, Text>.Ok(());
+}
+Result<Unit, Text> exercise() {
+    Path rawNames = argumentPath(0)?;
+    Path cesu8 = argumentPath(1)?;
+    Path nulName = argumentPath(2)?;
+    Path wrongCount = argumentPath(3)?;
+    Path shortComment = argumentPath(4)?;
+    Path longComment = argumentPath(5)?;
+    Path maximumComment = argumentPath(6)?;
+    checkRawFactories(rawNames)?;
+    checkMalformedNameFactories(cesu8)?;
+    checkMalformedNameFactories(nulName)?;
+    checkMalformedEocdFactories(wrongCount)?;
+    checkMalformedEocdFactories(shortComment)?;
+    assertEmptyArchive(longComment)?;
+    assertEmptyArchive(maximumComment)?;
+    return new Result<Unit, Text>.Ok(());
+}
+void main() {
+    match (exercise()) {
+        Err(error) { Console.printText(error); Console.print("\n"); }
+        Ok(unit) { println("ZIP_BOUNDARY_OK"); }
+    }
+}
+"#;
+
+#[test]
+fn reader_preserves_raw_names_rejects_malformed_names_and_checks_eocd_bounds() {
+    let scratch = Scratch::new();
+    let raw_names = scratch.path("raw-names.zip");
+    let cesu8 = scratch.path("cesu8.zip");
+    let nul_name = scratch.path("nul-name.zip");
+    let wrong_count = scratch.path("wrong-count.zip");
+    let short_comment = scratch.path("short-comment.zip");
+    let long_comment = scratch.path("long-comment.zip");
+    let maximum_comment = scratch.path("maximum-comment.zip");
+
+    let utf8_flag = 0x0800;
+    fs::write(
+        &raw_names,
+        make_zip(
+            &[
+                ("é".as_bytes(), utf8_flag),
+                ("e\u{301}".as_bytes(), utf8_flag),
+                (b"a\\b", utf8_flag),
+            ],
+            &[],
+            None,
+            None,
+        ),
+    ).unwrap();
+    fs::write(
+        &cesu8,
+        make_zip(
+            &[(b"\xed\xa0\xbd\xed\xb8\x80", utf8_flag), (b"valid", utf8_flag)],
+            &[],
+            None,
+            None,
+        ),
+    ).unwrap();
+    fs::write(
+        &nul_name,
+        make_zip(&[(b"a\0\xff", utf8_flag), (b"valid", utf8_flag)], &[], None, None),
+    ).unwrap();
+    fs::write(&wrong_count, make_zip(&[], &[], Some(1), None)).unwrap();
+    fs::write(&short_comment, make_zip(&[], &[], None, Some(1))).unwrap();
+    fs::write(&long_comment, make_zip(&[], &vec![b'x'; 20_000], None, None)).unwrap();
+    fs::write(&maximum_comment, make_zip(&[], &vec![b'x'; 65_535], None, None)).unwrap();
+
+    let program = compile(ZIP_BOUNDARY_SOURCE);
+    let output = run(
+        &program,
+        &[
+            &raw_names,
+            &cesu8,
+            &nul_name,
+            &wrong_count,
+            &short_comment,
+            &long_comment,
+            &maximum_comment,
+        ],
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("ZIP_BOUNDARY_OK"), "{stdout}");
+}

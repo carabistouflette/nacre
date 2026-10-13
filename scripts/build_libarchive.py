@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Build pinned libarchive with its upstream zero-entry ZIP bidder correction.
+"""Build pinned libarchive with ZIP-specific boundary corrections.
 
-The released seekable reader skips an EOCD at offset zero. Keep the correction
-at the dependency boundary: neither duplicate ZIP parsing nor weaken validation
-by falling back to the streaming reader. Installation is prefix-local, not global.
+The private patch preserves ZIP names, validates complete filename fields and
+EOCD metadata, and searches the full legal comment range without weakening the
+strict seekable reader. Installation is prefix-local, not global.
 """
 
 import argparse
@@ -41,7 +41,7 @@ def build(prefix: Path) -> None:
         with tarfile.open(package) as archive:
             archive.extractall(work, filter="data")
         source = work / f"libarchive-{VERSION}"
-        patch = Path(__file__).with_name("libarchive-empty-zip.patch").resolve()
+        patch = Path(__file__).with_name("libarchive-zip-boundary.patch").resolve()
         subprocess.run(
             ["patch", "--batch", "--forward", "--fuzz=0", "-p1", "-i", str(patch)],
             cwd=source, check=True,

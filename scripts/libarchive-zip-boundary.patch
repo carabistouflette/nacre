@@ -1,0 +1,296 @@
+--- a/libarchive/archive_string.h
++++ b/libarchive/archive_string.h
+@@ -228,6 +228,8 @@
+ int archive_mstring_copy_mbs_len(struct archive_mstring *, const char *mbs,
+ 	    size_t);
+ int archive_mstring_copy_utf8(struct archive_mstring *, const char *utf8);
++int archive_mstring_copy_utf8_len(struct archive_mstring *, const char *utf8,
++	    size_t);
+ int archive_mstring_copy_wcs(struct archive_mstring *, const wchar_t *wcs);
+ int archive_mstring_copy_wcs_len(struct archive_mstring *,
+ 	    const wchar_t *wcs, size_t);
+--- a/libarchive/archive_string.c
++++ b/libarchive/archive_string.c
+@@ -4203,7 +4203,26 @@
+   archive_strncpy(&(aes->aes_utf8), utf8, strlen(utf8));
+   return (int)strlen(utf8);
+ }
+ 
++int
++archive_mstring_copy_utf8_len(struct archive_mstring *aes, const char *utf8,
++    size_t len)
++{
++	if (utf8 == NULL) {
++		aes->aes_set = 0;
++		return (0);
++	}
++	aes->aes_set = AES_SET_UTF8;
++	archive_string_empty(&(aes->aes_mbs));
++	archive_string_empty(&(aes->aes_wcs));
++	if (archive_strncpy(&(aes->aes_utf8), utf8, len) == NULL) {
++		aes->aes_set = 0;
++		errno = ENOMEM;
++		return (-1);
++	}
++	return (0);
++}
++
+ int
+ archive_mstring_copy_wcs_len(struct archive_mstring *aes, const wchar_t *wcs,
+     size_t len)
+--- a/libarchive/archive_entry_private.h
++++ b/libarchive/archive_entry_private.h
+@@ -208,4 +208,7 @@
+ 	int ae_symlink_type;
+ };
+ 
++int _archive_entry_copy_pathname_utf8_len(struct archive_entry *,
++	const char *, size_t);
++
+ #endif /* !ARCHIVE_ENTRY_PRIVATE_H_INCLUDED */
+--- a/libarchive/archive_entry.c
++++ b/libarchive/archive_entry.c
+@@ -1311,7 +1311,14 @@
+ 	return (archive_mstring_copy_mbs_len_l(&entry->ae_pathname,
+ 	    name, len, sc));
+ }
+ 
++int
++_archive_entry_copy_pathname_utf8_len(struct archive_entry *entry,
++    const char *name, size_t len)
++{
++	return (archive_mstring_copy_utf8_len(&entry->ae_pathname, name, len));
++}
++
+ void
+ archive_entry_set_perm(struct archive_entry *entry, __LA_MODE_T p)
+ {
+--- a/libarchive/archive_read_support_format_zip.c
++++ b/libarchive/archive_read_support_format_zip.c
+@@ -66,6 +66,7 @@
+ #include "archive_cryptor_private.h"
+ #include "archive_endian.h"
+ #include "archive_entry.h"
++#include "archive_entry_private.h"
+ #include "archive_entry_locale.h"
+ #include "archive_hmac_private.h"
+ #include "archive_private.h"
+@@ -135,2 +136,53 @@
+ #define LA_USED_ZIP64	(1 << 0)
+ #define LA_FROM_CENTRAL_DIRECTORY (1 << 1)
++#define LA_INVALID_FILENAME (1 << 2)
++
++/* Validate length-delimited names before conversion or C-string use. */
++static int
++zip_filename_is_valid(const unsigned char *name, size_t length, int utf8)
++{
++	size_t i = 0;
++
++	while (i < length) {
++		unsigned char c = name[i++];
++		if (c == 0)
++			return 0;
++		if (!utf8 || c <= 0x7f)
++			continue;
++		if (c >= 0xc2 && c <= 0xdf) {
++			if (i >= length || (name[i++] & 0xc0) != 0x80)
++				return 0;
++			continue;
++		}
++		if (c >= 0xe0 && c <= 0xef) {
++			unsigned char c1, c2;
++			if (length - i < 2)
++				return 0;
++			c1 = name[i];
++			c2 = name[i + 1];
++			if ((c1 & 0xc0) != 0x80 || (c2 & 0xc0) != 0x80 ||
++			    (c == 0xe0 && c1 < 0xa0) ||
++			    (c == 0xed && c1 >= 0xa0))
++				return 0;
++			i += 2;
++			continue;
++		}
++		if (c >= 0xf0 && c <= 0xf4) {
++			unsigned char c1, c2, c3;
++			if (length - i < 3)
++				return 0;
++			c1 = name[i];
++			c2 = name[i + 1];
++			c3 = name[i + 2];
++			if ((c1 & 0xc0) != 0x80 || (c2 & 0xc0) != 0x80 ||
++			    (c3 & 0xc0) != 0x80 ||
++			    (c == 0xf0 && c1 < 0x90) ||
++			    (c == 0xf4 && c1 > 0x8f))
++				return 0;
++			i += 3;
++			continue;
++		}
++		return 0;
++	}
++	return 1;
++}
+@@ -152,4 +204,5 @@
+ 	struct archive_string	format_name;
+ 	int64_t			central_directory_offset;
+ 	int64_t			central_directory_offset_adjusted;
++	uint64_t		central_directory_entries;
+ 	int			has_encrypted_entries;
+@@ -970,5 +1023,7 @@
+ 		switch (archive_le16dec(p + offset)) {
+ 		case 0x7075:
++			if (zip_entry->zip_flags & ZIP_UTF8_NAME)
++				break;
+ 			/* Info-ZIP Unicode Path Extra Field. */
+ 			if (datasize < 5)
+ 				break;
+@@ -1175,3 +1230,9 @@
+ 		return ARCHIVE_FATAL;
+ 	}
++	if (!zip_filename_is_valid((const unsigned char *)h, filename_length,
++	    (zip_entry->zip_flags & ZIP_UTF8_NAME) != 0)) {
++		archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
++		    "Invalid ZIP entry pathname");
++		return ARCHIVE_WARN;
++	}
+ 	if (zip_entry->zip_flags & ZIP_UTF8_NAME) {
+@@ -1192,4 +1253,5 @@
+-	if (archive_entry_copy_pathname_l(entry,
+-	    h, filename_length, sconv) != 0) {
++	if (((zip_entry->zip_flags & ZIP_UTF8_NAME) != 0
++	    ? _archive_entry_copy_pathname_utf8_len(entry, h, filename_length)
++	    : archive_entry_copy_pathname_l(entry, h, filename_length, sconv)) != 0) {
+ 		if (errno == ENOMEM) {
+ 			archive_set_error(&a->archive, ENOMEM,
+@@ -1233,17 +1295,1 @@
+-	/* Windows archivers sometimes use backslash as the directory
+-	 * separator. Normalize to slash. */
+-	if (zip_entry->system == 0 &&
+-	    (wp = archive_entry_pathname_w(entry)) != NULL) {
+-		if (wcschr(wp, L'/') == NULL && wcschr(wp, L'\\') != NULL) {
+-			size_t i;
+-			struct archive_wstring s;
+-			archive_string_init(&s);
+-			archive_wstrcpy(&s, wp);
+-			for (i = 0; i < archive_strlen(&s); i++) {
+-				if (s.s[i] == L'\\')
+-					s.s[i] = '/';
+-			}
+-			archive_entry_copy_pathname_w(entry, s.s);
+-			archive_wstring_free(&s);
+-		}
+-	}
++	/* ZIP path separators are stored name bytes, not filesystem separators. */
+@@ -1276,28 +1322,3 @@
+-	/* Make sure directories end in '/' */
++	/* Directory type is metadata; preserve its original name as stored. */
+-	if ((zip_entry->mode & AE_IFMT) == AE_IFDIR) {
+-		wp = archive_entry_pathname_w(entry);
+-		if (wp != NULL) {
+-			len = wcslen(wp);
+-			if (len > 0 && wp[len - 1] != L'/') {
+-				struct archive_wstring s;
+-				archive_string_init(&s);
+-				archive_wstrcat(&s, wp);
+-				archive_wstrappend_wchar(&s, L'/');
+-				archive_entry_copy_pathname_w(entry, s.s);
+-				archive_wstring_free(&s);
+-			}
+-		} else {
+-			cp = archive_entry_pathname(entry);
+-			len = (cp != NULL)?strlen(cp):0;
+-			if (len > 0 && cp[len - 1] != '/') {
+-				struct archive_string s;
+-				archive_string_init(&s);
+-				archive_strcat(&s, cp);
+-				archive_strappend_char(&s, '/');
+-				archive_entry_set_pathname(entry, s.s);
+-				archive_string_free(&s);
+-			}
+-		}
+-	}
+ 
+ 	if (zip_entry->flags & LA_FROM_CENTRAL_DIRECTORY) {
+@@ -3939,4 +3960,6 @@
+-read_eocd(struct zip *zip, const char *p, int64_t current_offset)
++read_eocd(struct zip *zip, const char *p, int64_t current_offset,
++	int64_t file_size)
+ {
+ 	uint16_t disk_num;
+ 	uint32_t cd_size, cd_offset;
++	uint16_t comment_length;
+@@ -3944,3 +3967,8 @@
+ 	disk_num = archive_le16dec(p + 4);
+ 	cd_size = archive_le32dec(p + 12);
+ 	cd_offset = archive_le32dec(p + 16);
++	comment_length = archive_le16dec(p + 20);
++	if (current_offset < 0 || current_offset > file_size ||
++	    file_size - current_offset < 22 ||
++	    (int64_t)comment_length != file_size - current_offset - 22)
++		return 0;
+@@ -3956,4 +3984,5 @@
+ 	/* All central directory entries must be on this volume. */
+ 	if (archive_le16dec(p + 10) != archive_le16dec(p + 8))
+ 		return 0;
++	zip->central_directory_entries = archive_le16dec(p + 10);
+ 	/* Central directory can't extend beyond start of EOCD record. */
+@@ -4016,2 +4045,3 @@
+ 	zip->central_directory_offset = archive_le64dec(p + 48);
++	zip->central_directory_entries = archive_le64dec(p + 32);
+ 	/* TODO: Needs scanning backwards to find the eocd64 instead of assuming */
+@@ -4040,2 +4070,2 @@
+-	/* Search last 16k of file for end-of-central-directory
+-	 * record (which starts with PK\005\006) */
++	/* Search the full legal EOCD range: 22 fixed bytes plus a
++	 * maximum 65,535-byte comment. */
+@@ -4042,1 +4072,1 @@
+-	tail = (int)zipmin(1024 * 16, file_size);
++	tail = (int)zipmin(22 + 65535, file_size);
+@@ -4052,1 +4082,1 @@
+-	for (i = tail - 22; i > 0;) {
++	for (i = tail - 22; i >= 0;) {
+@@ -4056,2 +4086,2 @@
+-				int ret = read_eocd(zip, p + i,
+-				    current_offset + i);
++				int ret = read_eocd(zip, p + i,
++				    current_offset + i, file_size);
+@@ -4177,2 +4207,3 @@
+ 	ssize_t bytes_avail;
+ 	const char *p;
++	uint64_t central_directory_entries = 0;
+@@ -4240,3 +4271,8 @@
+ 		if (memcmp(p, "PK\006\006", 4) == 0
+ 		    || memcmp(p, "PK\005\006", 4) == 0) {
++			if (central_directory_entries != zip->central_directory_entries) {
++				archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
++				    "Inconsistent ZIP central directory entry count");
++				return ARCHIVE_FATAL;
++			}
+ 			break;
+@@ -4314,8 +4350,11 @@
+ 		if (p == NULL) {
+ 			archive_set_error(&a->archive,
+ 			    ARCHIVE_ERRNO_FILE_FORMAT,
+ 			    "Truncated ZIP file header");
+ 			return ARCHIVE_FATAL;
+ 		}
++		if (!zip_filename_is_valid((const unsigned char *)p, filename_length,
++		    (zip_entry->zip_flags & ZIP_UTF8_NAME) != 0))
++			zip_entry->flags |= LA_INVALID_FILENAME;
+ 		if (ARCHIVE_OK != process_extra(a, entry, p + filename_length,
+ 		    extra_length, zip_entry)) {
+@@ -4390,4 +4429,5 @@
+ 		__archive_read_consume(a,
+ 		    filename_length + extra_length + comment_length);
++		central_directory_entries++;
+ 	}
+ 	return ARCHIVE_OK;
+@@ -4609,4 +4649,9 @@
+ 	if (zip->entry == NULL)
+ 		return ARCHIVE_EOF;
++	if (zip->entry->flags & LA_INVALID_FILENAME) {
++		archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
++		    "Invalid ZIP entry pathname");
++		return ARCHIVE_WARN;
++	}
+ 
+ 	if (zip->entry->rsrcname.s)

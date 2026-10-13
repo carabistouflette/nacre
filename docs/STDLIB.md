@@ -1405,17 +1405,21 @@ document their own field order and schema evolution.
 
 ## ZIP archives
 
-The pinned private dependency build in `scripts/build_libarchive.py` applies the
-upstream seekable-reader correction for a zero-entry archive whose end record is
-at offset zero. See README for compile/runtime library paths. Both file and memory
-readers use the same strict seekable format configuration.
+The pinned private dependency build in `scripts/build_libarchive.py` applies
+ZIP-specific corrections to libarchive 3.8.9: complete filename validation before
+conversion, EOCD comment-extent and parsed-entry-count checks, and a search across
+the full legal 65,557-byte EOCD/comment range. See README for compile/runtime
+library paths. Both file and memory readers use the same strict seekable format.
 
 `ZipReader` and `ZipWriter` use libarchive's ZIP support, including Zip64. They
-operate on archive entries only: no method extracts to the filesystem. Entry names
-are preserved as UTF-8, including absolute names and `.`/`..` components, so callers
-that later extract entries must apply their own destination-path policy. Writers
-permit duplicate names; entries remain in the order written and readers expose
-them sequentially without merging or replacing them.
+operate on archive entries only: no method extracts to the filesystem. UTF-8-flagged
+names preserve their exact UTF-8 bytes, including decomposed Unicode and literal
+backslashes; names are not normalized or rewritten as filesystem paths. Names
+without the UTF-8 flag retain libarchive's charset decoding. Absolute names and
+`.`/`..` components remain data, so callers that later extract entries must apply
+their own destination-path policy. Writers permit duplicate names; entries remain
+in the order written and readers expose them sequentially without merging or
+replacing them.
 
 ```java
 static Result<ZipReader, Text> ZipReader.open(borrow Path path)
@@ -1445,9 +1449,9 @@ current file at most once, returns an owned binary buffer, and errors if the act
 decompressed bytes exceed `maxBytes`; the archive's declared size is metadata only
 and is never used to preallocate the result. `ZipEntry.size` is the declared
 uncompressed size, or -1 when the header omits it. A negative limit, a second read,
-unsupported entry types, encrypted entries, invalid UTF-8 names, truncated data,
-and decompression or CRC failures return `Err`. Use `skipEntry` to discard the
-current entry explicitly. Directories have no file data.
+unsupported entry types, encrypted entries, invalid UTF-8 names or embedded NULs,
+truncated data, and decompression or CRC failures return `Err`. Use `skipEntry` to
+discard the current entry explicitly. Directories have no file data.
 A header rejected by `next` does not become a readable current entry.
 `readEntry` and `skipEntry` then return `Err`; a subsequent `next` can advance
 past that header when the archive backend can continue.

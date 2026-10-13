@@ -31,9 +31,12 @@ requested by their emitted native templates; ordinary programs retain their
 existing C11/POSIX dependencies. The compiler accepts only a fixed dependency
 allowlist, never linker flags supplied by Nacre source.
 
-ZIP's strict seekable reader needs the upstream correction for zero-entry archives
-that is not in released libarchive 3.8.9. The pinned dependency build verifies the
-release SHA-256 and applies that one-line correction; it does not install globally.
+ZIP uses pinned libarchive 3.8.9 with a private ZIP-boundary correction. It
+validates length-delimited filenames before conversion, preserves ZIP path names,
+checks EOCD comment extent and declared entry counts, and searches the complete
+legal 65,557-byte EOCD range, including zero-entry archives at offset zero. The
+dependency build verifies the release SHA-256 and applies the patch with zero
+fuzz; it installs only to the chosen private prefix.
 With Python 3.12+, CMake, `patch`, and the native development packages installed:
 
 ```sh
