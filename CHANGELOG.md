@@ -117,6 +117,10 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   Time and networking; no DNS-timeout or descriptor-sharing API is implied.
 - Datagram accessors are emitted independently of UdpSocket specialization,
   including unoptimized native compilation of standalone borrowed helpers.
+- `Uri` adds owned RFC 3986 parsing, explicit normalization/resolution,
+  percent-component codecs and byte-exact equality; `Dns` adds ICU UTS #46
+  hostname conversion, reverse lookup, local hostname, and synchronous forward
+  resolution composed through `SocketAddress.resolve`.
 - Design-principles review keeps TCP, UDP and address resolution in one cohesive
   networking unit, hides descriptor/sockaddr state, and keeps Datagram source
   ownership closed over its value. Results report timeouts; TCP EOF is Ok(0),

@@ -69,7 +69,8 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
             C::Compression | C::Checksums | C::BigInt | C::BigDecimal |
             C::CryptoKey | C::CryptoDigest | C::CryptoMac | C::Certificate |
             C::Thread(_) | C::Mutex(_) | C::Guard(_) | C::Channel(_) |
-            C::Sender(_) | C::Receiver(_) | C::Env | C::Command | C::Process | C::ProcessOutput =>
+            C::Sender(_) | C::Receiver(_) | C::Env | C::Command | C::Process | C::ProcessOutput |
+            C::Uri | C::Dns =>
                 unreachable!("static or factory-only native class has no constructor"),
             C::SocketAddress | C::TcpListener | C::TcpStream | C::Datagram | C::UdpSocket |
             C::HttpRequest | C::HttpResponse | C::ListIterator(_) | C::Iterators(_) |
@@ -596,6 +597,29 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
         (C::Certificate, "notAfterUnixSeconds") => M::CertificateNotAfterUnixSeconds,
         (C::Certificate, "matchesHost") => M::CertificateMatchesHost,
         (C::Certificate, "verify") => M::CertificateVerify,
+        (C::Uri, "parse") => M::UriParse,
+        (C::Uri, "fromIri") => M::UriFromIri,
+        (C::Uri, "clone") => M::UriClone,
+        (C::Uri, "toText") => M::UriToText,
+        (C::Uri, "scheme") => M::UriScheme,
+        (C::Uri, "userInfo") => M::UriUserInfo,
+        (C::Uri, "host") => M::UriHost,
+        (C::Uri, "path") => M::UriPath,
+        (C::Uri, "query") => M::UriQuery,
+        (C::Uri, "fragment") => M::UriFragment,
+        (C::Uri, "port") => M::UriPort,
+        (C::Uri, "isAbsolute") => M::UriIsAbsolute,
+        (C::Uri, "normalize") => M::UriNormalize,
+        (C::Uri, "resolve") => M::UriResolve,
+        (C::Uri, "relativize") => M::UriRelativize,
+        (C::Uri, "equals") => M::UriEquals,
+        (C::Uri, "encodeComponent") => M::UriEncodeComponent,
+        (C::Uri, "decodeComponent") => M::UriDecodeComponent,
+        (C::Uri, "percentDecode") => M::UriPercentDecode,
+        (C::Dns, "idna") => M::DnsIdna,
+        (C::Dns, "resolve") => M::DnsResolve,
+        (C::Dns, "reverse") => M::DnsReverse,
+        (C::Dns, "localHostName") => M::DnsLocalHostName,
         (C::Args, "get") => M::ArgsGet,
         (C::Env, "get") => M::EnvGet,
         (C::Env, "set") => M::EnvSet,

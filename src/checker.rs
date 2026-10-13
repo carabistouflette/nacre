@@ -147,6 +147,7 @@ impl Tables {
                         t::NativeClass::HttpResponse | t::NativeClass::CryptoKey |
                         t::NativeClass::CryptoDigest | t::NativeClass::CryptoMac |
                         t::NativeClass::Certificate | t::NativeClass::Env |
+                        t::NativeClass::Uri | t::NativeClass::Dns |
                         t::NativeClass::Command | t::NativeClass::Process |
                         t::NativeClass::ProcessOutput | t::NativeClass::Database) | None => (None, None, None),
                 };
@@ -312,6 +313,8 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
             Some(a::NativeClass::CryptoDigest) => Some(t::NativeClass::CryptoDigest),
             Some(a::NativeClass::CryptoMac) => Some(t::NativeClass::CryptoMac),
             Some(a::NativeClass::Certificate) => Some(t::NativeClass::Certificate),
+            Some(a::NativeClass::Uri) => Some(t::NativeClass::Uri),
+            Some(a::NativeClass::Dns) => Some(t::NativeClass::Dns),
             Some(a::NativeClass::Thread(_)) => Some(t::NativeClass::Thread(Type::Void)),
             Some(a::NativeClass::Mutex(_)) => Some(t::NativeClass::Mutex(Type::Void)),
             Some(a::NativeClass::Guard(_)) => Some(t::NativeClass::Guard(Type::Void)),

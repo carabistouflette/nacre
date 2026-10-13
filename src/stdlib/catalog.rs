@@ -57,6 +57,8 @@ enum NativeBuiltin {
     CryptoDigest,
     CryptoMac,
     Certificate,
+    Uri,
+    Dns,
     Thread,
     Mutex,
     Guard,
@@ -149,6 +151,8 @@ impl NativeBuiltin {
             Self::CryptoDigest => NativeClass::CryptoDigest,
             Self::CryptoMac => NativeClass::CryptoMac,
             Self::Certificate => NativeClass::Certificate,
+            Self::Uri => NativeClass::Uri,
+            Self::Dns => NativeClass::Dns,
             Self::Thread => NativeClass::Thread(Type::Named("T".to_owned())),
             Self::Mutex => NativeClass::Mutex(Type::Named("T".to_owned())),
             Self::Guard => NativeClass::Guard(Type::Named("T".to_owned())),
@@ -331,6 +335,13 @@ pub(super) const PRELUDE_UNITS: &[PreludeUnit] = &[
             Builtin { name: "UdpSocket", native: Some(NativeBuiltin::UdpSocket) },
             Builtin { name: "HttpRequest", native: Some(NativeBuiltin::HttpRequest) },
             Builtin { name: "HttpResponse", native: Some(NativeBuiltin::HttpResponse) },
+        ],
+    },
+    PreludeUnit {
+        source: include_str!("../../stdlib/prelude/uri_dns.ncr"),
+        builtins: &[
+            Builtin { name: "Uri", native: Some(NativeBuiltin::Uri) },
+            Builtin { name: "Dns", native: Some(NativeBuiltin::Dns) },
         ],
     },
     PreludeUnit {

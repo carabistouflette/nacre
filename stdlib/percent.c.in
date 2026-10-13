@@ -1,0 +1,40 @@
+static bool ncr_percent_decode_length(
+    const unsigned char *input, size_t length, size_t *decoded_length
+) {
+    size_t output = 0;
+    for (size_t index = 0; index < length; ++index) {
+        if (input[index] == '%') {
+            if (length - index < 3) { return false; }
+            unsigned char high = input[index + 1];
+            unsigned char low = input[index + 2];
+            bool high_ok = (high >= '0' && high <= '9') || (high >= 'a' && high <= 'f') || (high >= 'A' && high <= 'F');
+            bool low_ok = (low >= '0' && low <= '9') || (low >= 'a' && low <= 'f') || (low >= 'A' && low <= 'F');
+            if (!high_ok || !low_ok) { return false; }
+            index += 2;
+        }
+        ++output;
+    }
+    *decoded_length = output;
+    return true;
+}
+
+static unsigned char ncr_percent_hex(unsigned char byte) {
+    if (byte >= '0' && byte <= '9') { return (unsigned char)(byte - '0'); }
+    if (byte >= 'a' && byte <= 'f') { return (unsigned char)(byte - 'a' + 10); }
+    return (unsigned char)(byte - 'A' + 10);
+}
+
+static void ncr_percent_decode_into(
+    const unsigned char *input, size_t length, unsigned char *output
+) {
+    size_t target = 0;
+    for (size_t index = 0; index < length; ++index) {
+        if (input[index] == '%') {
+            output[target++] = (unsigned char)((ncr_percent_hex(input[index + 1]) << 4)
+                | ncr_percent_hex(input[index + 2]));
+            index += 2;
+        } else {
+            output[target++] = input[index];
+        }
+    }
+}

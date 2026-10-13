@@ -1667,6 +1667,63 @@ Redirects are disabled, so caller-supplied `Authorization` or `Cookie` fields ar
 never forwarded to another origin. The API does not add TLS to `TcpStream` or
 `UdpSocket`, and it does not provide a general-purpose URI type.
 
+
+## URI and DNS
+
+```java
+static Result<Uri, Text> Uri.parse(borrow Text text)
+static Result<Uri, Text> Uri.fromIri(borrow Text iri)
+readonly Uri Uri.clone()
+readonly Text Uri.toText()
+readonly Option<Text> Uri.scheme(), Uri.userInfo(), Uri.host(), Uri.query(), Uri.fragment()
+readonly Text Uri.path()
+readonly Result<Option<int>, Text> Uri.port()
+readonly boolean Uri.isAbsolute()
+readonly Result<Uri, Text> Uri.normalize()
+readonly Result<Uri, Text> Uri.resolve(borrow Uri reference)
+readonly Result<Uri, Text> Uri.relativize(borrow Uri target)
+readonly boolean Uri.equals(borrow Uri other)
+static Text Uri.encodeComponent(borrow Text input)
+static Result<Text, Text> Uri.decodeComponent(borrow Text input)
+static Result<ByteBuffer, Text> Uri.percentDecode(borrow Text input)
+
+static Result<Text, Text> Dns.idna(borrow Text host)
+static Result<List<SocketAddress>, Text> Dns.resolve(borrow Text host, int port)
+static Result<Text, Text> Dns.reverse(borrow SocketAddress address)
+static Result<Text, Text> Dns.localHostName()
+```
+
+`Uri.parse` accepts a length-delimited, NUL-free ASCII RFC 3986 URI; it rejects
+raw whitespace, non-ASCII bytes, malformed percent escapes, and invalid URI
+syntax. `Uri.fromIri` percent-encodes non-ASCII UTF-8 bytes before applying the
+same URI syntax checks; it is not a separate IRI parser. URI objects own their
+serialized input. Getters return the encoded component spelling (the IPv6
+brackets are excluded from `host`); an absent optional component is `None`,
+while a present-but-empty query or fragment is `Some(Text(""))`. `port` returns
+`None` for an absent or empty port, and `Err` for a nonnumeric or out-of-range
+port. `equals` compares serialized URI bytes exactly. Normalization is explicit;
+`resolve` and `relativize` use RFC 3986 URI-reference operations and return owned
+URIs or an error.
+
+Component encoding preserves only RFC 3986 unreserved ASCII bytes and emits
+uppercase percent escapes for all other UTF-8 bytes. `decodeComponent` strictly
+decodes percent escapes and requires the decoded bytes to be valid UTF-8;
+`percentDecode` instead returns arbitrary decoded bytes in a `ByteBuffer`,
+including NUL and invalid UTF-8. A literal `+` is never treated as a space.
+
+`Dns.idna` percent-decodes host bytes, applies ICU UTS #46 nontransitional
+ToASCII processing with STD3, BIDI, and ContextJ checks, preserves a trailing
+root dot, and rejects encoded inputs longer than 3072 bytes or decoded inputs
+longer than 1024 bytes. Numeric IPv4 and IPv6 literals are canonicalized
+directly; an IPv6 zone identifier is retained after the address, so URI
+authority hosts must encode its leading percent as `%25`. `Dns.resolve`
+normalizes through `Dns.idna` and delegates to `SocketAddress.resolve` with
+passive lookup disabled. It returns all resolved addresses and is synchronous,
+without a timeout; any connection deadline begins only after resolution
+completes.
+`Dns.reverse` requires a name lookup (it does not fall back to a numeric
+address), and `localHostName` returns the system hostname.
+
 ## Platform, allocation, and timing limits
 
 This native systems surface targets Linux and POSIX facilities. It is not a

@@ -1,0 +1,247 @@
+/* DNS_GROUP idna */
+static bool ncr_dns_unreserved(unsigned char byte) {
+    return (byte >= 'a' && byte <= 'z') || (byte >= 'A' && byte <= 'Z')
+        || (byte >= '0' && byte <= '9') || byte == '-' || byte == '.' || byte == '_' || byte == '~';
+}
+
+static @TEXT_RESULT_TYPE@ ncr_dns_idna_error(
+    const char *message, size_t length, size_t line, size_t column
+) {
+    return ncr_result_error_@TEXT_RESULT_ID@(message, length, line, column);
+}
+
+@DNS_IDNA_SIGNATURE@ {
+    if (ncr_v_@DNS_IDNA_INPUT@ == NULL) {
+        static const char message[] = "Dns.idna: host is missing";
+        return ncr_dns_idna_error(message, sizeof(message) - 1, ncr_line, ncr_column);
+    }
+    const unsigned char *input = ncr_v_@DNS_IDNA_INPUT@->bytes;
+    const size_t input_length = (size_t)ncr_v_@DNS_IDNA_INPUT@->length;
+    if (input_length > (size_t)INT32_MAX || (input_length > 0 && input == NULL)) {
+        static const char message[] = "Dns.idna: host is missing or too large";
+        return ncr_dns_idna_error(message, sizeof(message) - 1, ncr_line, ncr_column);
+    }
+    if (input_length > 3072) {
+        static const char message[] = "Dns.idna: encoded host exceeds the 3072-byte input bound";
+        return ncr_dns_idna_error(message, sizeof(message) - 1, ncr_line, ncr_column);
+    }
+    if (!ncr_utf8_valid(input, input_length)
+        || (input_length > 0 && memchr(input, 0, input_length) != NULL)) {
+        static const char message[] = "Dns.idna: host must be NUL-free valid UTF-8";
+        return ncr_dns_idna_error(message, sizeof(message) - 1, ncr_line, ncr_column);
+    }
+    size_t decoded_length = 0;
+    if (!ncr_percent_decode_length(input, input_length, &decoded_length)) {
+        static const char message[] = "Dns.idna: malformed percent escape";
+        return ncr_dns_idna_error(message, sizeof(message) - 1, ncr_line, ncr_column);
+    }
+    if (decoded_length > 1024) {
+        static const char message[] = "Dns.idna: decoded host exceeds the 1024-byte input bound";
+        return ncr_dns_idna_error(message, sizeof(message) - 1, ncr_line, ncr_column);
+    }
+    unsigned char *decoded = ncr_allocate(input_length + 1, ncr_line, ncr_column);
+    ncr_percent_decode_into(input, input_length, decoded);
+    decoded[decoded_length] = 0;
+    if (decoded_length == 0 || !ncr_utf8_valid(decoded, decoded_length)
+        || memchr(decoded, 0, decoded_length) != NULL) {
+        ncr_deallocate(decoded);
+        static const char message[] = "Dns.idna: decoded host must be nonempty, NUL-free UTF-8";
+        return ncr_dns_idna_error(message, sizeof(message) - 1, ncr_line, ncr_column);
+    }
+
+    struct in_addr ipv4;
+    if (inet_pton(AF_INET, (const char *)decoded, &ipv4) == 1) {
+        char numeric[INET_ADDRSTRLEN];
+        if (inet_ntop(AF_INET, &ipv4, numeric, sizeof(numeric)) == NULL) {
+            ncr_deallocate(decoded);
+            static const char message[] = "Dns.idna: IPv4 normalization failed";
+            return ncr_dns_idna_error(message, sizeof(message) - 1, ncr_line, ncr_column);
+        }
+        ncr_obj_@TEXT_ID@ *text = ncr_text_from_bytes_@TEXT_ID@(
+            (const unsigned char *)numeric, strlen(numeric), ncr_line, ncr_column);
+        ncr_deallocate(decoded);
+        return (@TEXT_RESULT_TYPE@){ .tag = @DNS_IDNA_OK_TAG@,
+            .data.v@DNS_IDNA_OK_TAG@.f0 = text };
+    }
+
+    bool has_colon = memchr(decoded, ':', decoded_length) != NULL;
+    if (has_colon) {
+        unsigned char *zone = memchr(decoded, '%', decoded_length);
+        size_t address_length = zone == NULL ? decoded_length : (size_t)(zone - decoded);
+        size_t zone_length = zone == NULL ? 0 : decoded_length - address_length - 1;
+        if (address_length == 0 || address_length >= INET6_ADDRSTRLEN
+            || (zone != NULL && (zone_length == 0 || zone_length > 255))) {
+            ncr_deallocate(decoded);
+            static const char message[] = "Dns.idna: invalid IPv6 literal or zone identifier";
+            return ncr_dns_idna_error(message, sizeof(message) - 1, ncr_line, ncr_column);
+        }
+        for (size_t index = 0; index < zone_length; ++index) {
+            if (!ncr_dns_unreserved(zone[index + 1])) {
+                ncr_deallocate(decoded);
+                static const char message[] = "Dns.idna: IPv6 zone identifier must use unreserved ASCII";
+                return ncr_dns_idna_error(message, sizeof(message) - 1, ncr_line, ncr_column);
+            }
+        }
+        char address_text[INET6_ADDRSTRLEN];
+        memcpy(address_text, decoded, address_length);
+        address_text[address_length] = '\0';
+        struct in6_addr ipv6;
+        if (inet_pton(AF_INET6, address_text, &ipv6) != 1) {
+            ncr_deallocate(decoded);
+            static const char message[] = "Dns.idna: invalid IPv6 literal";
+            return ncr_dns_idna_error(message, sizeof(message) - 1, ncr_line, ncr_column);
+        }
+        char canonical[INET6_ADDRSTRLEN];
+        if (inet_ntop(AF_INET6, &ipv6, canonical, sizeof(canonical)) == NULL) {
+            ncr_deallocate(decoded);
+            static const char message[] = "Dns.idna: IPv6 normalization failed";
+            return ncr_dns_idna_error(message, sizeof(message) - 1, ncr_line, ncr_column);
+        }
+        const size_t canonical_length = strlen(canonical);
+        if (zone != NULL && canonical_length + 1 + zone_length > (size_t)INT32_MAX) {
+            ncr_deallocate(decoded);
+            static const char message[] = "Dns.idna: normalized IPv6 literal is too large";
+            return ncr_dns_idna_error(message, sizeof(message) - 1, ncr_line, ncr_column);
+        }
+        unsigned char local[INET6_ADDRSTRLEN];
+        unsigned char *normalized = (unsigned char *)canonical;
+        size_t normalized_length = canonical_length;
+        if (zone != NULL) {
+            normalized_length = canonical_length + 1 + zone_length;
+            normalized = ncr_allocate(normalized_length, ncr_line, ncr_column);
+            memcpy(normalized, canonical, canonical_length);
+            normalized[canonical_length] = '%';
+            memcpy(normalized + canonical_length + 1, zone + 1, zone_length);
+        } else {
+            memcpy(local, canonical, canonical_length);
+            normalized = local;
+        }
+        ncr_obj_@TEXT_ID@ *text = ncr_text_from_bytes_@TEXT_ID@(
+            normalized, normalized_length, ncr_line, ncr_column);
+        if (zone != NULL) { ncr_deallocate(normalized); }
+        ncr_deallocate(decoded);
+        return (@TEXT_RESULT_TYPE@){ .tag = @DNS_IDNA_OK_TAG@,
+            .data.v@DNS_IDNA_OK_TAG@.f0 = text };
+    }
+
+    bool numeric_dotted = true;
+    bool has_dot = false;
+    for (size_t index = 0; index < decoded_length; ++index) {
+        if (decoded[index] == '.') {
+            has_dot = true;
+        } else if (decoded[index] < '0' || decoded[index] > '9') {
+            numeric_dotted = false;
+            break;
+        }
+    }
+    if (numeric_dotted && has_dot) {
+        ncr_deallocate(decoded);
+        static const char message[] = "Dns.idna: invalid IPv4 literal";
+        return ncr_dns_idna_error(message, sizeof(message) - 1, ncr_line, ncr_column);
+    }
+
+    UErrorCode status = U_ZERO_ERROR;
+    UIDNA *idna = uidna_openUTS46(
+        UIDNA_USE_STD3_RULES | UIDNA_CHECK_BIDI | UIDNA_CHECK_CONTEXTJ
+            | UIDNA_NONTRANSITIONAL_TO_ASCII,
+        &status);
+    if (U_FAILURE(status) || idna == NULL) {
+        ncr_deallocate(decoded);
+        static const char message[] = "Dns.idna: ICU IDNA initialization failed";
+        return ncr_dns_idna_error(message, sizeof(message) - 1, ncr_line, ncr_column);
+    }
+    char ascii[256];
+    UIDNAInfo info = UIDNA_INFO_INITIALIZER;
+    status = U_ZERO_ERROR;
+    int32_t ascii_length = uidna_nameToASCII_UTF8(idna, (const char *)decoded,
+        (int32_t)decoded_length, ascii, (int32_t)sizeof(ascii), &info, &status);
+    uidna_close(idna);
+    ncr_deallocate(decoded);
+    if (U_FAILURE(status) || info.errors != 0 || ascii_length <= 0 || ascii_length > 255) {
+        static const char message[] = "Dns.idna: invalid IDNA hostname or label";
+        return ncr_dns_idna_error(message, sizeof(message) - 1, ncr_line, ncr_column);
+    }
+    for (int32_t index = 0; index < ascii_length; ++index) {
+        if ((unsigned char)ascii[index] > 0x7fu) {
+            static const char message[] = "Dns.idna: IDNA conversion did not produce ASCII";
+            return ncr_dns_idna_error(message, sizeof(message) - 1, ncr_line, ncr_column);
+        }
+    }
+    ncr_obj_@TEXT_ID@ *text = ncr_text_from_bytes_@TEXT_ID@(
+        (const unsigned char *)ascii, (size_t)ascii_length, ncr_line, ncr_column);
+    return (@TEXT_RESULT_TYPE@){ .tag = @DNS_IDNA_OK_TAG@,
+        .data.v@DNS_IDNA_OK_TAG@.f0 = text };
+}
+/* DNS_GROUP_END idna */
+
+/* DNS_GROUP resolve */
+@DNS_RESOLVE_SIGNATURE@ {
+    @TEXT_RESULT_TYPE@ idna = @DNS_IDNA@(ncr_v_@DNS_RESOLVE_INPUT@, ncr_line, ncr_column);
+    if (idna.tag == @DNS_IDNA_ERROR_TAG@) {
+        ncr_obj_@TEXT_ID@ *error = idna.data.v@DNS_IDNA_ERROR_TAG@.f0;
+        idna.tag = -1;
+        return (@DNS_RESOLVE_RESULT_TYPE@){
+            .tag = @DNS_RESOLVE_ERROR_TAG@,
+            .data.v@DNS_RESOLVE_ERROR_TAG@.f0 = error
+        };
+    }
+    ncr_obj_@TEXT_ID@ *ascii_host = idna.data.v@DNS_IDNA_OK_TAG@.f0;
+    idna.tag = -1;
+    @DNS_RESOLVE_RESULT_TYPE@ resolved = @SOCKET_ADDRESS_RESOLVE@(
+        ascii_host, ncr_v_@DNS_RESOLVE_PORT@, false, ncr_line, ncr_column);
+    ncr_drop_@TEXT_ID@(ascii_host);
+    return resolved;
+}
+/* DNS_GROUP_END resolve */
+
+/* DNS_GROUP reverse */
+@DNS_REVERSE_SIGNATURE@ {
+    if (!ncr_network_valid_address(ncr_v_@DNS_REVERSE_ADDRESS@)) {
+        static const char message[] = "Dns.reverse: invalid SocketAddress";
+        return ncr_result_error_@TEXT_RESULT_ID@(message, sizeof(message) - 1, ncr_line, ncr_column);
+    }
+    char host[NI_MAXHOST];
+    int code = getnameinfo((const struct sockaddr *)&ncr_v_@DNS_REVERSE_ADDRESS@->address,
+        ncr_v_@DNS_REVERSE_ADDRESS@->length, host, sizeof(host), NULL, 0, NI_NAMEREQD);
+    int system_error = code == EAI_SYSTEM ? errno : 0;
+    if (code != 0) {
+        char message[256];
+        int written = code == EAI_SYSTEM
+            ? snprintf(message, sizeof(message), "Dns.reverse failed (EAI=%d: %s; errno=%d)", code, gai_strerror(code), system_error)
+            : snprintf(message, sizeof(message), "Dns.reverse failed (EAI=%d: %s)", code, gai_strerror(code));
+        size_t length = written < 0 ? 0 : ((size_t)written < sizeof(message) ? (size_t)written : sizeof(message) - 1);
+        return ncr_result_error_@TEXT_RESULT_ID@(message, length, ncr_line, ncr_column);
+    }
+    size_t length = strnlen(host, sizeof(host));
+    if (length == sizeof(host) || !ncr_utf8_valid((const unsigned char *)host, length)) {
+        static const char message[] = "Dns.reverse: hostname is not valid UTF-8";
+        return ncr_result_error_@TEXT_RESULT_ID@(message, sizeof(message) - 1, ncr_line, ncr_column);
+    }
+    ncr_obj_@TEXT_ID@ *text = ncr_text_from_bytes_@TEXT_ID@(
+        (const unsigned char *)host, length, ncr_line, ncr_column);
+    return (@TEXT_RESULT_TYPE@){ .tag = @TEXT_RESULT_OK_TAG@,
+        .data.v@TEXT_RESULT_OK_TAG@.f0 = text };
+}
+/* DNS_GROUP_END reverse */
+
+/* DNS_GROUP hostname */
+@DNS_LOCAL_HOST_NAME_SIGNATURE@ {
+    char host[256];
+    if (gethostname(host, sizeof(host)) != 0) {
+        int failure = errno;
+        char message[128];
+        int written = snprintf(message, sizeof(message), "Dns.localHostName failed (errno=%d)", failure);
+        size_t length = written < 0 ? 0 : ((size_t)written < sizeof(message) ? (size_t)written : sizeof(message) - 1);
+        return ncr_result_error_@TEXT_RESULT_ID@(message, length, ncr_line, ncr_column);
+    }
+    size_t length = strnlen(host, sizeof(host));
+    if (length == sizeof(host) || !ncr_utf8_valid((const unsigned char *)host, length)) {
+        static const char message[] = "Dns.localHostName: hostname is not valid UTF-8 or exceeds 255 bytes";
+        return ncr_result_error_@TEXT_RESULT_ID@(message, sizeof(message) - 1, ncr_line, ncr_column);
+    }
+    ncr_obj_@TEXT_ID@ *text = ncr_text_from_bytes_@TEXT_ID@(
+        (const unsigned char *)host, length, ncr_line, ncr_column);
+    return (@TEXT_RESULT_TYPE@){ .tag = @TEXT_RESULT_OK_TAG@,
+        .data.v@TEXT_RESULT_OK_TAG@.f0 = text };
+}
+/* DNS_GROUP_END hostname */

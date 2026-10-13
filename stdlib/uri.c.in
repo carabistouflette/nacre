@@ -1,0 +1,434 @@
+static void ncr_uri_release_state_@URI_ID@(void *state) {
+    uriFreeUriMembersA((UriUriA *)state);
+}
+
+static UriUriA *ncr_uri_parsed_@URI_ID@(ncr_obj_@URI_ID@ *uri) {
+    return (UriUriA *)uri->storage;
+}
+
+static unsigned char *ncr_uri_source_@URI_ID@(ncr_obj_@URI_ID@ *uri) {
+    return (unsigned char *)uri->storage + sizeof(UriUriA);
+}
+
+static const unsigned char *ncr_uri_source_const_@URI_ID@(const ncr_obj_@URI_ID@ *uri) {
+    return (const unsigned char *)uri->storage + sizeof(UriUriA);
+}
+
+static bool ncr_uri_allocate_storage_@URI_ID@(
+    ncr_obj_@URI_ID@ *uri, size_t length, size_t line, size_t column
+) {
+    if (length > SIZE_MAX - sizeof(UriUriA) - 1) { return false; }
+    uri->storage = ncr_allocate(sizeof(UriUriA) + length + 1, line, column);
+    uri->drop_storage = ncr_uri_release_state_@URI_ID@;
+    uri->raw_length = length;
+    return true;
+}
+
+static void ncr_uri_path_range_@URI_ID@(ncr_obj_@URI_ID@ *uri) {
+    const unsigned char *raw = ncr_uri_source_const_@URI_ID@(uri);
+    const size_t length = uri->raw_length;
+    const UriUriA *parsed = ncr_uri_parsed_@URI_ID@(uri);
+    size_t start = 0;
+    if (parsed->scheme.first != NULL) {
+        start = (size_t)(parsed->scheme.afterLast - (const char *)raw) + 1;
+    }
+    if (start + 1 < length && raw[start] == '/' && raw[start + 1] == '/') {
+        start += 2;
+        while (start < length && raw[start] != '/' && raw[start] != '?' && raw[start] != '#') {
+            ++start;
+        }
+    }
+    size_t end = start;
+    while (end < length && raw[end] != '?' && raw[end] != '#') { ++end; }
+    uri->path_offset = start;
+    uri->path_length = end - start;
+}
+
+static bool ncr_uri_parse_storage_@URI_ID@(
+    ncr_obj_@URI_ID@ *uri, int *status, size_t *error_offset
+) {
+    UriUriA *parsed = ncr_uri_parsed_@URI_ID@(uri);
+    const unsigned char *raw = ncr_uri_source_const_@URI_ID@(uri);
+    const char *error = NULL;
+    *status = uriParseSingleUriExA(parsed, (const char *)raw,
+        (const char *)raw + uri->raw_length, &error);
+    if (*status != URI_SUCCESS) {
+        *error_offset = error == NULL ? 0 : (size_t)(error - (const char *)raw);
+        return false;
+    }
+    ncr_uri_path_range_@URI_ID@(uri);
+    return true;
+}
+
+static ncr_obj_@URI_RESULT_TYPE@ ncr_uri_parse_failure_@URI_ID@(
+    const char *operation, int status, size_t offset, size_t line, size_t column
+) {
+    char message[160];
+    int written = snprintf(message, sizeof(message),
+        "%s: invalid RFC 3986 URI (parser=%d, byte=%zu)", operation, status, offset);
+    size_t length = written < 0 ? 0 : ((size_t)written < sizeof(message) ? (size_t)written : sizeof(message) - 1);
+    return ncr_result_error_@URI_RESULT_ID@(message, length, line, column);
+}
+
+static bool ncr_uri_ascii_syntax_input_@URI_ID@(const unsigned char *bytes, size_t length) {
+    if (length > (size_t)INT32_MAX || (length > 0 && bytes == NULL)) { return false; }
+    for (size_t index = 0; index < length; ++index) {
+        if (bytes[index] < 0x21u || bytes[index] > 0x7eu) { return false; }
+    }
+    return true;
+}
+
+static ncr_obj_@URI_ID@ *ncr_uri_parse_copy_@URI_ID@(
+    const unsigned char *bytes, size_t length, size_t line, size_t column,
+    int *status, size_t *error_offset
+) {
+    ncr_obj_@URI_ID@ *uri = ncr_allocate(sizeof(*uri), line, column);
+    if (!ncr_uri_allocate_storage_@URI_ID@(uri, length, line, column)) {
+        ncr_drop_@URI_ID@(uri);
+        *status = URI_ERROR_OUTPUT_TOO_LARGE;
+        *error_offset = 0;
+        return NULL;
+    }
+    unsigned char *raw = ncr_uri_source_@URI_ID@(uri);
+    if (length > 0) { memcpy(raw, bytes, length); }
+    raw[length] = 0;
+    if (!ncr_uri_parse_storage_@URI_ID@(uri, status, error_offset)) {
+        ncr_drop_@URI_ID@(uri);
+        return NULL;
+    }
+    return uri;
+}
+
+static ncr_obj_@URI_ID@ *ncr_uri_serialized_copy_@URI_ID@(
+    const UriUriA *source, size_t line, size_t column, int *status, size_t *error_offset
+) {
+    int required = 0;
+    *status = uriToStringCharsRequiredA(source, &required);
+    if (*status != URI_SUCCESS || required < 0 || required == INT_MAX) {
+        if (*status == URI_SUCCESS) { *status = URI_ERROR_OUTPUT_TOO_LARGE; }
+        *error_offset = 0;
+        return NULL;
+    }
+    ncr_obj_@URI_ID@ *uri = ncr_allocate(sizeof(*uri), line, column);
+    if (!ncr_uri_allocate_storage_@URI_ID@(uri, (size_t)required, line, column)) {
+        ncr_drop_@URI_ID@(uri);
+        *status = URI_ERROR_OUTPUT_TOO_LARGE;
+        *error_offset = 0;
+        return NULL;
+    }
+    unsigned char *raw = ncr_uri_source_@URI_ID@(uri);
+    int written = 0;
+    *status = uriToStringA((char *)raw, source, required + 1, &written);
+    if (*status != URI_SUCCESS) {
+        ncr_drop_@URI_ID@(uri);
+        *error_offset = 0;
+        return NULL;
+    }
+    raw[required] = 0;
+    if (!ncr_uri_parse_storage_@URI_ID@(uri, status, error_offset)) {
+        ncr_drop_@URI_ID@(uri);
+        return NULL;
+    }
+    return uri;
+}
+
+
+@URI_PARSE_SIGNATURE@ {
+    if (ncr_v_@URI_PARSE_INPUT@ == NULL
+        || !ncr_uri_ascii_syntax_input_@URI_ID@(ncr_v_@URI_PARSE_INPUT@->bytes,
+            (size_t)ncr_v_@URI_PARSE_INPUT@->length)) {
+        static const char message[] = "Uri.parse: input must be ASCII URI syntax without raw whitespace or NUL";
+        return ncr_result_error_@URI_RESULT_ID@(message, sizeof(message) - 1, ncr_line, ncr_column);
+    }
+    int status = URI_SUCCESS;
+    size_t error_offset = 0;
+    ncr_obj_@URI_ID@ *uri = ncr_uri_parse_copy_@URI_ID@(
+        ncr_v_@URI_PARSE_INPUT@->bytes, (size_t)ncr_v_@URI_PARSE_INPUT@->length,
+        ncr_line, ncr_column, &status, &error_offset);
+    if (uri == NULL) {
+        return ncr_uri_parse_failure_@URI_ID@("Uri.parse", status, error_offset, ncr_line, ncr_column);
+    }
+    return (@URI_RESULT_TYPE@){ .tag = @URI_RESULT_OK_TAG@, .data.v@URI_RESULT_OK_TAG@.f0 = uri };
+}
+
+@URI_FROM_IRI_SIGNATURE@ {
+    if (ncr_v_@URI_FROM_IRI_INPUT@ == NULL
+        || !ncr_utf8_valid(ncr_v_@URI_FROM_IRI_INPUT@->bytes, (size_t)ncr_v_@URI_FROM_IRI_INPUT@->length)) {
+        static const char message[] = "Uri.fromIri: input is not valid UTF-8";
+        return ncr_result_error_@URI_RESULT_ID@(message, sizeof(message) - 1, ncr_line, ncr_column);
+    }
+    const unsigned char *input = ncr_v_@URI_FROM_IRI_INPUT@->bytes;
+    const size_t input_length = (size_t)ncr_v_@URI_FROM_IRI_INPUT@->length;
+    if (input_length > (size_t)INT32_MAX) {
+        static const char message[] = "Uri.fromIri: input is too large";
+        return ncr_result_error_@URI_RESULT_ID@(message, sizeof(message) - 1, ncr_line, ncr_column);
+    }
+    size_t output_length = 0;
+    for (size_t index = 0; index < input_length; ++index) {
+        if (input[index] < 0x21u || input[index] == 0x7fu) {
+            static const char message[] = "Uri.fromIri: raw whitespace, control, and NUL bytes are not allowed";
+            return ncr_result_error_@URI_RESULT_ID@(message, sizeof(message) - 1, ncr_line, ncr_column);
+        }
+        size_t increment = input[index] >= 0x80u ? 3 : 1;
+        if (output_length > (size_t)INT32_MAX - increment) {
+            static const char message[] = "Uri.fromIri: escaped URI is too large";
+            return ncr_result_error_@URI_RESULT_ID@(message, sizeof(message) - 1, ncr_line, ncr_column);
+        }
+        output_length += increment;
+    }
+    ncr_obj_@URI_ID@ *uri = ncr_allocate(sizeof(*uri), ncr_line, ncr_column);
+    if (!ncr_uri_allocate_storage_@URI_ID@(uri, output_length, ncr_line, ncr_column)) {
+        ncr_drop_@URI_ID@(uri);
+        static const char message[] = "Uri.fromIri: escaped URI is too large";
+        return ncr_result_error_@URI_RESULT_ID@(message, sizeof(message) - 1, ncr_line, ncr_column);
+    }
+    unsigned char *raw = ncr_uri_source_@URI_ID@(uri);
+    static const unsigned char hex[] = "0123456789ABCDEF";
+    size_t target = 0;
+    for (size_t index = 0; index < input_length; ++index) {
+        unsigned char byte = input[index];
+        if (byte >= 0x80u) {
+            raw[target++] = '%';
+            raw[target++] = hex[byte >> 4];
+            raw[target++] = hex[byte & 0x0fu];
+        } else {
+            raw[target++] = byte;
+        }
+    }
+    raw[target] = 0;
+    int status = URI_SUCCESS;
+    size_t error_offset = 0;
+    if (!ncr_uri_parse_storage_@URI_ID@(uri, &status, &error_offset)) {
+        ncr_drop_@URI_ID@(uri);
+        return ncr_uri_parse_failure_@URI_ID@("Uri.fromIri", status, error_offset, ncr_line, ncr_column);
+    }
+    return (@URI_RESULT_TYPE@){ .tag = @URI_RESULT_OK_TAG@, .data.v@URI_RESULT_OK_TAG@.f0 = uri };
+}
+
+@URI_CLONE_SIGNATURE@ {
+    const unsigned char *raw = ncr_uri_source_const_@URI_ID@(ncr_self);
+    int status = URI_SUCCESS;
+    size_t error_offset = 0;
+    ncr_obj_@URI_ID@ *copy = ncr_uri_parse_copy_@URI_ID@(
+        raw, ncr_self->raw_length, ncr_line, ncr_column, &status, &error_offset);
+    if (copy == NULL) { ncr_fail("Uri.clone: invalid owned URI state", ncr_line, ncr_column); }
+    return copy;
+}
+
+@URI_TO_TEXT_SIGNATURE@ {
+    return ncr_text_from_bytes_@TEXT_ID@(
+        ncr_uri_source_const_@URI_ID@(ncr_self), ncr_self->raw_length, ncr_line, ncr_column);
+}
+
+static ncr_obj_@OPTION_TEXT_ID@ ncr_uri_option_text_@URI_ID@(
+    const UriTextRangeA *range, size_t line, size_t column
+) {
+    if (range->first == NULL) {
+        return (ncr_obj_@OPTION_TEXT_ID@){ .tag = @OPTION_TEXT_NONE_TAG@ };
+    }
+    size_t length = (size_t)(range->afterLast - range->first);
+    ncr_obj_@TEXT_ID@ *text = ncr_text_from_bytes_@TEXT_ID@(
+        (const unsigned char *)range->first, length, line, column);
+    return (ncr_obj_@OPTION_TEXT_ID@){
+        .tag = @OPTION_TEXT_SOME_TAG@,
+        .data.v@OPTION_TEXT_SOME_TAG@.f0 = text
+    };
+}
+
+@URI_SCHEME_SIGNATURE@ {
+    return ncr_uri_option_text_@URI_ID@(&ncr_uri_parsed_@URI_ID@(ncr_self)->scheme, ncr_line, ncr_column);
+}
+
+@URI_USER_INFO_SIGNATURE@ {
+    return ncr_uri_option_text_@URI_ID@(&ncr_uri_parsed_@URI_ID@(ncr_self)->userInfo, ncr_line, ncr_column);
+}
+
+@URI_HOST_SIGNATURE@ {
+    return ncr_uri_option_text_@URI_ID@(&ncr_uri_parsed_@URI_ID@(ncr_self)->hostText, ncr_line, ncr_column);
+}
+
+@URI_PATH_SIGNATURE@ {
+    const unsigned char *raw = ncr_uri_source_const_@URI_ID@(ncr_self);
+    return ncr_text_from_bytes_@TEXT_ID@(raw + ncr_self->path_offset,
+        ncr_self->path_length, ncr_line, ncr_column);
+}
+
+@URI_QUERY_SIGNATURE@ {
+    return ncr_uri_option_text_@URI_ID@(&ncr_uri_parsed_@URI_ID@(ncr_self)->query, ncr_line, ncr_column);
+}
+
+@URI_FRAGMENT_SIGNATURE@ {
+    return ncr_uri_option_text_@URI_ID@(&ncr_uri_parsed_@URI_ID@(ncr_self)->fragment, ncr_line, ncr_column);
+}
+
+@URI_PORT_SIGNATURE@ {
+    const UriTextRangeA *range = &ncr_uri_parsed_@URI_ID@(ncr_self)->portText;
+    if (range->first == NULL || range->first == range->afterLast) {
+        return (@PORT_RESULT_TYPE@){ .tag = @PORT_RESULT_OK_TAG@,
+            .data.v@PORT_RESULT_OK_TAG@.f0 = (ncr_obj_@OPTION_INT_ID@){ .tag = @OPTION_INT_NONE_TAG@ } };
+    }
+    uint32_t value = 0;
+    for (const char *cursor = range->first; cursor < range->afterLast; ++cursor) {
+        if (*cursor < '0' || *cursor > '9') {
+            static const char message[] = "Uri.port: port is not a decimal number";
+            return ncr_result_error_@PORT_RESULT_ID@(message, sizeof(message) - 1, ncr_line, ncr_column);
+        }
+        uint32_t digit = (uint32_t)(*cursor - '0');
+        if (value > (UINT32_C(65535) - digit) / UINT32_C(10)) {
+            static const char message[] = "Uri.port: port is outside 0..65535";
+            return ncr_result_error_@PORT_RESULT_ID@(message, sizeof(message) - 1, ncr_line, ncr_column);
+        }
+        value = value * UINT32_C(10) + digit;
+    }
+    return (@PORT_RESULT_TYPE@){ .tag = @PORT_RESULT_OK_TAG@,
+        .data.v@PORT_RESULT_OK_TAG@.f0 = (ncr_obj_@OPTION_INT_ID@){ .tag = @OPTION_INT_SOME_TAG@,
+            .data.v@OPTION_INT_SOME_TAG@.f0 = (int32_t)value } };
+}
+
+@URI_IS_ABSOLUTE_SIGNATURE@ {
+    return ncr_uri_parsed_@URI_ID@(ncr_self)->scheme.first != NULL;
+}
+
+@URI_NORMALIZE_SIGNATURE@ {
+    UriUriA normalized = { 0 };
+    const unsigned char *raw = ncr_uri_source_const_@URI_ID@(ncr_self);
+    const char *error = NULL;
+    int status = uriParseSingleUriExA(&normalized, (const char *)raw,
+        (const char *)raw + ncr_self->raw_length, &error);
+    size_t error_offset = error == NULL ? 0 : (size_t)(error - (const char *)raw);
+    if (status == URI_SUCCESS) { status = uriNormalizeSyntaxA(&normalized); }
+    if (status != URI_SUCCESS) {
+        uriFreeUriMembersA(&normalized);
+        return ncr_uri_parse_failure_@URI_ID@("Uri.normalize", status, error_offset, ncr_line, ncr_column);
+    }
+    error_offset = 0;
+    ncr_obj_@URI_ID@ *value = ncr_uri_serialized_copy_@URI_ID@(
+        &normalized, ncr_line, ncr_column, &status, &error_offset);
+    uriFreeUriMembersA(&normalized);
+    if (value == NULL) {
+        return ncr_uri_parse_failure_@URI_ID@("Uri.normalize", status, error_offset, ncr_line, ncr_column);
+    }
+    return (@URI_RESULT_TYPE@){ .tag = @URI_RESULT_OK_TAG@, .data.v@URI_RESULT_OK_TAG@.f0 = value };
+}
+
+@URI_RESOLVE_SIGNATURE@ {
+    UriUriA resolved = { 0 };
+    UriUriA *base = ncr_uri_parsed_@URI_ID@(ncr_self);
+    UriUriA *reference = ncr_uri_parsed_@URI_ID@(ncr_v_@URI_RESOLVE_REFERENCE@);
+    if (base->scheme.first == NULL) {
+        static const char message[] = "Uri.resolve: base URI must be absolute";
+        return ncr_result_error_@URI_RESULT_ID@(message, sizeof(message) - 1, ncr_line, ncr_column);
+    }
+    int status = uriAddBaseUriA(&resolved, reference, base);
+    if (status != URI_SUCCESS) {
+        uriFreeUriMembersA(&resolved);
+        return ncr_uri_parse_failure_@URI_ID@("Uri.resolve", status, 0, ncr_line, ncr_column);
+    }
+    int serialize_status = URI_SUCCESS;
+    size_t error_offset = 0;
+    ncr_obj_@URI_ID@ *value = ncr_uri_serialized_copy_@URI_ID@(
+        &resolved, ncr_line, ncr_column, &serialize_status, &error_offset);
+    uriFreeUriMembersA(&resolved);
+    if (value == NULL) {
+        return ncr_uri_parse_failure_@URI_ID@("Uri.resolve", serialize_status, error_offset, ncr_line, ncr_column);
+    }
+    return (@URI_RESULT_TYPE@){ .tag = @URI_RESULT_OK_TAG@, .data.v@URI_RESULT_OK_TAG@.f0 = value };
+}
+
+@URI_RELATIVIZE_SIGNATURE@ {
+    UriUriA relative = { 0 };
+    UriUriA *base = ncr_uri_parsed_@URI_ID@(ncr_self);
+    UriUriA *target = ncr_uri_parsed_@URI_ID@(ncr_v_@URI_RELATIVIZE_TARGET@);
+    if (base->scheme.first == NULL || target->scheme.first == NULL) {
+        static const char message[] = "Uri.relativize: base and target URIs must be absolute";
+        return ncr_result_error_@URI_RESULT_ID@(message, sizeof(message) - 1, ncr_line, ncr_column);
+    }
+    int status = uriRemoveBaseUriA(&relative, target, base, URI_FALSE);
+    if (status != URI_SUCCESS) {
+        uriFreeUriMembersA(&relative);
+        return ncr_uri_parse_failure_@URI_ID@("Uri.relativize", status, 0, ncr_line, ncr_column);
+    }
+    int serialize_status = URI_SUCCESS;
+    size_t error_offset = 0;
+    ncr_obj_@URI_ID@ *value = ncr_uri_serialized_copy_@URI_ID@(
+        &relative, ncr_line, ncr_column, &serialize_status, &error_offset);
+    uriFreeUriMembersA(&relative);
+    if (value == NULL) {
+        return ncr_uri_parse_failure_@URI_ID@("Uri.relativize", serialize_status, error_offset, ncr_line, ncr_column);
+    }
+    return (@URI_RESULT_TYPE@){ .tag = @URI_RESULT_OK_TAG@, .data.v@URI_RESULT_OK_TAG@.f0 = value };
+}
+
+@URI_EQUALS_SIGNATURE@ {
+    if (ncr_self == NULL || ncr_v_@URI_EQUALS_OTHER@ == NULL) { return false; }
+    if (ncr_self->raw_length != ncr_v_@URI_EQUALS_OTHER@->raw_length) { return false; }
+    return ncr_self->raw_length == 0 || memcmp(ncr_uri_source_const_@URI_ID@(ncr_self),
+        ncr_uri_source_const_@URI_ID@(ncr_v_@URI_EQUALS_OTHER@), ncr_self->raw_length) == 0;
+}
+
+static bool ncr_uri_unreserved_@URI_ID@(unsigned char byte) {
+    return (byte >= 'a' && byte <= 'z') || (byte >= 'A' && byte <= 'Z')
+        || (byte >= '0' && byte <= '9') || byte == '-' || byte == '.' || byte == '_' || byte == '~';
+}
+
+@URI_ENCODE_COMPONENT_SIGNATURE@ {
+    const unsigned char *input = ncr_v_@URI_ENCODE_INPUT@->bytes;
+    const size_t input_length = (size_t)ncr_v_@URI_ENCODE_INPUT@->length;
+    size_t output_length = 0;
+    for (size_t index = 0; index < input_length; ++index) {
+        size_t increment = ncr_uri_unreserved_@URI_ID@(input[index]) ? 1 : 3;
+        if (output_length > (size_t)INT32_MAX - increment) {
+            ncr_fail("Uri.encodeComponent output is too large", ncr_line, ncr_column);
+        }
+        output_length += increment;
+    }
+    unsigned char *output = output_length == 0 ? NULL : ncr_allocate(output_length, ncr_line, ncr_column);
+    static const unsigned char hex[] = "0123456789ABCDEF";
+    size_t target = 0;
+    for (size_t index = 0; index < input_length; ++index) {
+        unsigned char byte = input[index];
+        if (ncr_uri_unreserved_@URI_ID@(byte)) {
+            output[target++] = byte;
+        } else {
+            output[target++] = '%';
+            output[target++] = hex[byte >> 4];
+            output[target++] = hex[byte & 0x0fu];
+        }
+    }
+    return ncr_text_take_bytes_@TEXT_ID@(output, output_length, output_length, ncr_line, ncr_column);
+}
+
+@URI_DECODE_COMPONENT_SIGNATURE@ {
+    const unsigned char *input = ncr_v_@URI_DECODE_INPUT@->bytes;
+    const size_t input_length = (size_t)ncr_v_@URI_DECODE_INPUT@->length;
+    size_t output_length = 0;
+    if (!ncr_percent_decode_length(input, input_length, &output_length)) {
+        static const char message[] = "Uri.decodeComponent: malformed percent escape";
+        return ncr_result_error_@TEXT_RESULT_ID@(message, sizeof(message) - 1, ncr_line, ncr_column);
+    }
+    unsigned char *output = output_length == 0 ? NULL : ncr_allocate(output_length, ncr_line, ncr_column);
+    ncr_percent_decode_into(input, input_length, output);
+    if (!ncr_utf8_valid(output, output_length)) {
+        ncr_deallocate(output);
+        static const char message[] = "Uri.decodeComponent: decoded bytes are not valid UTF-8";
+        return ncr_result_error_@TEXT_RESULT_ID@(message, sizeof(message) - 1, ncr_line, ncr_column);
+    }
+    ncr_obj_@TEXT_ID@ *text = ncr_text_take_bytes_@TEXT_ID@(output, output_length, output_length, ncr_line, ncr_column);
+    return (@TEXT_RESULT_TYPE@){ .tag = @TEXT_RESULT_OK_TAG@, .data.v@TEXT_RESULT_OK_TAG@.f0 = text };
+}
+
+@URI_PERCENT_DECODE_SIGNATURE@ {
+    const unsigned char *input = ncr_v_@URI_PERCENT_DECODE_INPUT@->bytes;
+    const size_t input_length = (size_t)ncr_v_@URI_PERCENT_DECODE_INPUT@->length;
+    size_t output_length = 0;
+    if (!ncr_percent_decode_length(input, input_length, &output_length)) {
+        static const char message[] = "Uri.percentDecode: malformed percent escape";
+        return ncr_result_error_@BUFFER_RESULT_ID@(message, sizeof(message) - 1, ncr_line, ncr_column);
+    }
+    ncr_obj_@BUFFER_ID@ *buffer = ncr_allocate(sizeof(*buffer), ncr_line, ncr_column);
+    if (output_length > 0) { @BUFFER_RESERVE@(buffer, output_length, ncr_line, ncr_column); }
+    ncr_percent_decode_into(input, input_length, buffer->bytes);
+    buffer->length = output_length;
+    return (@BUFFER_RESULT_TYPE@){ .tag = @BUFFER_RESULT_OK_TAG@,
+        .data.v@BUFFER_RESULT_OK_TAG@.f0 = buffer };
+}

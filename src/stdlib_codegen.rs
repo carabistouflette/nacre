@@ -34,6 +34,8 @@ mod cryptokeys;
 mod process;
 mod crypto;
 mod big_numbers;
+mod uri;
+mod dns;
 
 use crate::ir::{self as t, NativeClass as C, Type};
 
@@ -84,6 +86,8 @@ pub fn fields(program: &t::Program, class: C, class_id: usize) -> String {
         C::HttpRequest | C::HttpResponse => http::fields(program, class),
         C::CryptoKey | C::CryptoDigest | C::CryptoMac | C::Certificate =>
             cryptokeys::fields(class),
+        C::Uri => uri::fields(),
+        C::Dns => dns::fields(),
         C::Thread(_) | C::Mutex(_) | C::Guard(_) | C::Channel(_) |
         C::Sender(_) | C::Receiver(_) => concurrency::fields(program, class, class_id),
     }
@@ -125,6 +129,8 @@ pub fn drop_fields(program: &t::Program, class: C, class_id: usize) -> String {
         C::HttpRequest | C::HttpResponse => http::drop_fields(program, class),
         C::CryptoKey | C::CryptoDigest | C::CryptoMac | C::Certificate =>
             cryptokeys::drop_fields(class, class_id),
+        C::Uri => uri::drop_fields(),
+        C::Dns => dns::drop_fields(),
         C::Thread(_) | C::Mutex(_) | C::Guard(_) | C::Channel(_) |
         C::Sender(_) | C::Receiver(_) => concurrency::drop_fields(class_id),
     }
@@ -195,7 +201,8 @@ fn append_body(program: &t::Program, out: &mut String, class: &t::Class, native:
         C::ByteBuffer => buffer::implementation(program, class.id),
         C::BinaryReader | C::BinaryWriter => binary::implementation(program, class.id, native),
         C::Database => database::implementation(program, class.id),
-        C::SocketAddress | C::TcpListener | C::TcpStream | C::Datagram | C::UdpSocket => return,
+        C::SocketAddress | C::TcpListener | C::TcpStream | C::Datagram | C::UdpSocket |
+        C::Uri | C::Dns => return,
         C::Path | C::File | C::Directory | C::FileInfo | C::Watcher | C::WatchEvent => return,
         C::Thread(_) | C::Mutex(_) | C::Guard(_) | C::Channel(_) |
         C::Sender(_) | C::Receiver(_) => return,
@@ -267,6 +274,9 @@ pub fn implementations(program: &t::Program) -> String {
     }
     out.push_str(&network::implementation(program));
     out.push_str(&http::implementation(program));
+    out.push_str(&uri::percent_helpers(program));
+    out.push_str(&uri::implementation(program));
+    out.push_str(&dns::implementation(program));
     if let Some(filesystem) = filesystem::implementations(program) {
         out.push_str(&filesystem);
         out.push('\n');

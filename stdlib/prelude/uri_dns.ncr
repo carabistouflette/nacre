@@ -1,0 +1,28 @@
+class Uri {
+    public static Result<Uri, Text> parse(borrow Text text) {}
+    public static Result<Uri, Text> fromIri(borrow Text iri) {}
+    public readonly Uri clone() {}
+    public readonly Text toText() {}
+    public readonly Option<Text> scheme() {}
+    public readonly Option<Text> userInfo() {}
+    public readonly Option<Text> host() {}
+    public readonly Text path() {}
+    public readonly Option<Text> query() {}
+    public readonly Option<Text> fragment() {}
+    public readonly Result<Option<int>, Text> port() {}
+    public readonly boolean isAbsolute() {}
+    public readonly Result<Uri, Text> normalize() {}
+    public readonly Result<Uri, Text> resolve(borrow Uri reference) {}
+    public readonly Result<Uri, Text> relativize(borrow Uri target) {}
+    public readonly boolean equals(borrow Uri other) {}
+    public static Text encodeComponent(borrow Text input) {}
+    public static Result<Text, Text> decodeComponent(borrow Text input) {}
+    public static Result<ByteBuffer, Text> percentDecode(borrow Text input) {}
+}
+
+class Dns {
+    public static Result<Text, Text> idna(borrow Text host) {}
+    public static Result<List<SocketAddress>, Text> resolve(borrow Text host, int port) {}
+    public static Result<Text, Text> reverse(borrow SocketAddress address) {}
+    public static Result<Text, Text> localHostName() {}
+}
