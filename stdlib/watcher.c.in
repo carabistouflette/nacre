@@ -1,0 +1,189 @@
+#include <sys/inotify.h>
+
+static ncr_obj_@WATCHER_OPEN_RESULT@ @WATCHER_OPEN@(ncr_obj_@PATH_ID@ *@WATCHER_OPEN_PATH@, size_t ncr_line, size_t ncr_column) {
+    char *path = ncr_fs_path_cstring_@TEXT_ID@(@WATCHER_OPEN_PATH@->text, ncr_line, ncr_column);
+    if (path == NULL) { NCR_FS_RETURN_ERROR(@WATCHER_OPEN_RESULT@, "Watcher.open", errno, ncr_line, ncr_column); }
+    int descriptor;
+    do { descriptor = inotify_init1(IN_CLOEXEC | IN_NONBLOCK); } while (descriptor < 0 && errno == EINTR);
+    if (descriptor < 0) {
+        int error = errno;
+        ncr_deallocate(path);
+        NCR_FS_RETURN_ERROR(@WATCHER_OPEN_RESULT@, "Watcher.open inotify_init1", error, ncr_line, ncr_column);
+    }
+    uint32_t mask = IN_CREATE | IN_MODIFY | IN_ATTRIB | IN_CLOSE_WRITE | IN_DELETE
+        | IN_MOVED_FROM | IN_MOVED_TO | IN_MOVE_SELF | IN_DELETE_SELF;
+    int watch;
+    do { watch = inotify_add_watch(descriptor, path, mask | IN_ONLYDIR | IN_DONT_FOLLOW); }
+    while (watch < 0 && errno == EINTR);
+    int error = errno;
+    ncr_deallocate(path);
+    if (watch < 0) {
+        (void)close(descriptor);
+        NCR_FS_RETURN_ERROR(@WATCHER_OPEN_RESULT@, "Watcher.open inotify_add_watch", error, ncr_line, ncr_column);
+    }
+    ncr_obj_@WATCHER_ID@ *owner = ncr_allocate(sizeof(*owner), ncr_line, ncr_column);
+    owner->events = ncr_allocate((size_t)65536, ncr_line, ncr_column);
+    owner->events_length = 0;
+    owner->events_offset = 0;
+    owner->fd = descriptor;
+    owner->invalidated = false;
+    return (ncr_obj_@WATCHER_OPEN_RESULT@){ .tag = @WATCHER_OPEN_OK_TAG@, .data.v@WATCHER_OPEN_OK_TAG@.f0 = owner };
+}
+
+static ncr_obj_@WATCHER_NEXT_RESULT@ @WATCHER_NEXT@(ncr_obj_@WATCHER_ID@ *@WATCHER_NEXT_SELF@, int64_t @WATCHER_NEXT_TIMEOUT@, size_t ncr_line, size_t ncr_column) {
+    if (@WATCHER_NEXT_SELF@->fd < 0) return ncr_result_error_@WATCHER_NEXT_RESULT@("Watcher.next: handle is closed", sizeof("Watcher.next: handle is closed") - 1, ncr_line, ncr_column);
+    if (@WATCHER_NEXT_TIMEOUT@ < 0) return ncr_result_error_@WATCHER_NEXT_RESULT@("Watcher.next: timeoutMillis must be non-negative", sizeof("Watcher.next: timeoutMillis must be non-negative") - 1, ncr_line, ncr_column);
+    int64_t now = 0;
+    int clock_error = 0;
+    int64_t deadline = 0;
+    if (!ncr_time_monotonic_value(&now, &clock_error)) { NCR_FS_RETURN_ERROR(@WATCHER_NEXT_RESULT@, "Watcher.next clock_gettime", clock_error, ncr_line, ncr_column); }
+    if (!ncr_time_deadline_after_millis(now, @WATCHER_NEXT_TIMEOUT@, &deadline)) {
+        return ncr_result_error_@WATCHER_NEXT_RESULT@("Watcher.next: timeout exceeds monotonic deadline range", sizeof("Watcher.next: timeout exceeds monotonic deadline range") - 1, ncr_line, ncr_column);
+    }
+    bool polled_once = false;
+    for (;;) {
+        if (@WATCHER_NEXT_SELF@->events_offset < @WATCHER_NEXT_SELF@->events_length) { break; }
+        @WATCHER_NEXT_SELF@->events_length = 0;
+        @WATCHER_NEXT_SELF@->events_offset = 0;
+        if (@WATCHER_NEXT_SELF@->invalidated) return ncr_result_error_@WATCHER_NEXT_RESULT@("Watcher.next: directory watch is invalidated", sizeof("Watcher.next: directory watch is invalidated") - 1, ncr_line, ncr_column);
+        if (!ncr_time_monotonic_value(&now, &clock_error)) { NCR_FS_RETURN_ERROR(@WATCHER_NEXT_RESULT@, "Watcher.next clock_gettime", clock_error, ncr_line, ncr_column); }
+        int poll_timeout = 0;
+        if (@WATCHER_NEXT_TIMEOUT@ == 0) {
+            if (polled_once) {
+                ncr_obj_@WATCHER_OPTION_ID@ none = { .tag = @WATCHER_OPTION_NONE_TAG@ };
+                return (ncr_obj_@WATCHER_NEXT_RESULT@){ .tag = @WATCHER_NEXT_OK_TAG@, .data.v@WATCHER_NEXT_OK_TAG@.f0 = none };
+            }
+        } else {
+            if (now >= deadline) {
+                ncr_obj_@WATCHER_OPTION_ID@ none = { .tag = @WATCHER_OPTION_NONE_TAG@ };
+                return (ncr_obj_@WATCHER_NEXT_RESULT@){ .tag = @WATCHER_NEXT_OK_TAG@, .data.v@WATCHER_NEXT_OK_TAG@.f0 = none };
+            }
+            int64_t remaining = deadline - now;
+            int64_t millis = remaining / INT64_C(1000000);
+            if (remaining % INT64_C(1000000) != 0) { ++millis; }
+            poll_timeout = millis > INT_MAX ? INT_MAX : (int)millis;
+        }
+        struct pollfd descriptor = { .fd = @WATCHER_NEXT_SELF@->fd, .events = POLLIN };
+        int ready = poll(&descriptor, 1, poll_timeout);
+        if (ready < 0) {
+            if (errno == EINTR) { continue; }
+            NCR_FS_RETURN_ERROR(@WATCHER_NEXT_RESULT@, "Watcher.next poll", errno, ncr_line, ncr_column);
+        }
+        polled_once = true;
+        if (ready == 0) {
+            if (@WATCHER_NEXT_TIMEOUT@ == 0) {
+                ncr_obj_@WATCHER_OPTION_ID@ none = { .tag = @WATCHER_OPTION_NONE_TAG@ };
+                return (ncr_obj_@WATCHER_NEXT_RESULT@){ .tag = @WATCHER_NEXT_OK_TAG@, .data.v@WATCHER_NEXT_OK_TAG@.f0 = none };
+            }
+            continue;
+        }
+        if (descriptor.revents & (POLLERR | POLLHUP | POLLNVAL)) { NCR_FS_RETURN_ERROR(@WATCHER_NEXT_RESULT@, "Watcher.next poll state", EIO, ncr_line, ncr_column); }
+        ssize_t length;
+        do { length = read(@WATCHER_NEXT_SELF@->fd, @WATCHER_NEXT_SELF@->events, (size_t)65536); }
+        while (length < 0 && errno == EINTR);
+        if (length < 0) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) { continue; }
+            NCR_FS_RETURN_ERROR(@WATCHER_NEXT_RESULT@, "Watcher.next read", errno, ncr_line, ncr_column);
+        }
+        if (length == 0) { NCR_FS_RETURN_ERROR(@WATCHER_NEXT_RESULT@, "Watcher.next read", EIO, ncr_line, ncr_column); }
+        @WATCHER_NEXT_SELF@->events_length = (size_t)length;
+    }
+
+    size_t remaining = @WATCHER_NEXT_SELF@->events_length - @WATCHER_NEXT_SELF@->events_offset;
+    if (remaining < sizeof(struct inotify_event)) {
+        @WATCHER_NEXT_SELF@->invalidated = true;
+        NCR_FS_RETURN_ERROR(@WATCHER_NEXT_RESULT@, "Watcher.next malformed event header", EPROTO, ncr_line, ncr_column);
+    }
+    const struct inotify_event *native_event = (const struct inotify_event *)(const void *)(@WATCHER_NEXT_SELF@->events + @WATCHER_NEXT_SELF@->events_offset);
+    if ((size_t)native_event->len > remaining - sizeof(struct inotify_event)) {
+        @WATCHER_NEXT_SELF@->invalidated = true;
+        NCR_FS_RETURN_ERROR(@WATCHER_NEXT_RESULT@, "Watcher.next malformed event length", EPROTO, ncr_line, ncr_column);
+    }
+    @WATCHER_NEXT_SELF@->events_offset += sizeof(struct inotify_event) + (size_t)native_event->len;
+    uint32_t actions = native_event->mask & (IN_CREATE | IN_MODIFY | IN_ATTRIB | IN_CLOSE_WRITE | IN_DELETE
+        | IN_MOVED_FROM | IN_MOVED_TO | IN_MOVE_SELF | IN_DELETE_SELF | IN_IGNORED | IN_Q_OVERFLOW);
+    if (actions == 0 || (actions & (actions - 1)) != 0) {
+        @WATCHER_NEXT_SELF@->invalidated = true;
+        NCR_FS_RETURN_ERROR(@WATCHER_NEXT_RESULT@, "Watcher.next unsupported event mask", EPROTO, ncr_line, ncr_column);
+    }
+    uint32_t allowed_mask = actions | IN_ISDIR;
+    if ((native_event->mask & ~allowed_mask) != 0) {
+        @WATCHER_NEXT_SELF@->invalidated = true;
+        NCR_FS_RETURN_ERROR(@WATCHER_NEXT_RESULT@, "Watcher.next unsupported event bits", EPROTO, ncr_line, ncr_column);
+    }
+    size_t name_length = 0;
+    const unsigned char *name_bytes = (const unsigned char *)"";
+    if (native_event->len > 0) {
+        const unsigned char *native_name = (const unsigned char *)native_event->name;
+        const unsigned char *terminator = memchr(native_name, 0, (size_t)native_event->len);
+        if (terminator == NULL) {
+            @WATCHER_NEXT_SELF@->invalidated = true;
+            NCR_FS_RETURN_ERROR(@WATCHER_NEXT_RESULT@, "Watcher.next malformed event name", EPROTO, ncr_line, ncr_column);
+        }
+        name_bytes = native_name;
+        name_length = (size_t)(terminator - native_name);
+    }
+    int32_t kind_tag;
+    if (actions == IN_CREATE) { kind_tag = @WATCH_KIND_CREATED_TAG@; }
+    else if (actions == IN_MODIFY) { kind_tag = @WATCH_KIND_MODIFIED_TAG@; }
+    else if (actions == IN_ATTRIB) { kind_tag = @WATCH_KIND_ATTRIBUTES_CHANGED_TAG@; }
+    else if (actions == IN_CLOSE_WRITE) { kind_tag = @WATCH_KIND_CLOSED_FOR_WRITE_TAG@; }
+    else if (actions == IN_DELETE) { kind_tag = @WATCH_KIND_DELETED_TAG@; }
+    else if (actions == IN_MOVED_FROM) { kind_tag = @WATCH_KIND_MOVED_FROM_TAG@; }
+    else if (actions == IN_MOVED_TO) { kind_tag = @WATCH_KIND_MOVED_TO_TAG@; }
+    else if (actions == IN_MOVE_SELF) { kind_tag = @WATCH_KIND_MOVED_SELF_TAG@; }
+    else if (actions == IN_DELETE_SELF) { kind_tag = @WATCH_KIND_DELETED_SELF_TAG@; }
+    else if (actions == IN_IGNORED) { kind_tag = @WATCH_KIND_IGNORED_TAG@; }
+    else { kind_tag = @WATCH_KIND_OVERFLOW_TAG@; }
+    bool name_expected = actions != IN_Q_OVERFLOW && actions != IN_MOVE_SELF && actions != IN_DELETE_SELF && actions != IN_IGNORED;
+    if ((name_expected && name_length == 0) || (!name_expected && name_length != 0)) {
+        @WATCHER_NEXT_SELF@->invalidated = true;
+        NCR_FS_RETURN_ERROR(@WATCHER_NEXT_RESULT@, "Watcher.next malformed event name", EPROTO, ncr_line, ncr_column);
+    }
+    if (name_length > 0 && !ncr_utf8_valid(name_bytes, name_length)) {
+        @WATCHER_NEXT_SELF@->invalidated = true;
+        return ncr_result_error_@WATCHER_NEXT_RESULT@("Watcher.next event name is not valid UTF-8", sizeof("Watcher.next event name is not valid UTF-8") - 1, ncr_line, ncr_column);
+    }
+    ncr_obj_@TEXT_ID@ *name = ncr_text_from_bytes_@TEXT_ID@(name_bytes, name_length, ncr_line, ncr_column);
+    ncr_obj_@WATCH_EVENT_ID@ *event = ncr_allocate(sizeof(*event), ncr_line, ncr_column);
+    event->name = name;
+    event->kind = (ncr_obj_@WATCH_KIND_ID@){ .tag = kind_tag };
+    event->cookie = (uint32_t)native_event->cookie;
+    event->is_directory = (native_event->mask & IN_ISDIR) != 0;
+    event->overflow = actions == IN_Q_OVERFLOW;
+    if (actions == IN_DELETE_SELF || actions == IN_IGNORED) { @WATCHER_NEXT_SELF@->invalidated = true; }
+    ncr_obj_@WATCHER_OPTION_ID@ some = { .tag = @WATCHER_OPTION_SOME_TAG@, .data.v@WATCHER_OPTION_SOME_TAG@.f0 = event };
+    return (ncr_obj_@WATCHER_NEXT_RESULT@){ .tag = @WATCHER_NEXT_OK_TAG@, .data.v@WATCHER_NEXT_OK_TAG@.f0 = some };
+}
+
+static ncr_obj_@WATCHER_CLOSE_RESULT@ @WATCHER_CLOSE@(ncr_obj_@WATCHER_ID@ *@WATCHER_CLOSE_SELF@, size_t ncr_line, size_t ncr_column) {
+    if (@WATCHER_CLOSE_SELF@->fd < 0) return (ncr_obj_@WATCHER_CLOSE_RESULT@){ .tag = @WATCHER_CLOSE_OK_TAG@, .data.v@WATCHER_CLOSE_OK_TAG@.f0 = UINT8_C(0) };
+    int descriptor = @WATCHER_CLOSE_SELF@->fd;
+    @WATCHER_CLOSE_SELF@->fd = -1;
+    if (@WATCHER_CLOSE_SELF@->events != NULL) { ncr_deallocate(@WATCHER_CLOSE_SELF@->events); @WATCHER_CLOSE_SELF@->events = NULL; }
+    @WATCHER_CLOSE_SELF@->events_length = 0;
+    @WATCHER_CLOSE_SELF@->events_offset = 0;
+    if (close(descriptor) != 0) { NCR_FS_RETURN_ERROR(@WATCHER_CLOSE_RESULT@, "Watcher.close", errno, ncr_line, ncr_column); }
+    return (ncr_obj_@WATCHER_CLOSE_RESULT@){ .tag = @WATCHER_CLOSE_OK_TAG@, .data.v@WATCHER_CLOSE_OK_TAG@.f0 = UINT8_C(0) };
+}
+
+static ncr_obj_@TEXT_ID@ *@WATCH_EVENT_NAME@(ncr_obj_@WATCH_EVENT_ID@ *ncr_self, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column;
+    return ncr_self->name;
+}
+static ncr_obj_@WATCH_KIND_ID@ @WATCH_EVENT_KIND@(ncr_obj_@WATCH_EVENT_ID@ *ncr_self, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column;
+    return ncr_self->kind;
+}
+static int64_t @WATCH_EVENT_COOKIE@(ncr_obj_@WATCH_EVENT_ID@ *ncr_self, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column;
+    return (int64_t)ncr_self->cookie;
+}
+static bool @WATCH_EVENT_IS_DIRECTORY@(ncr_obj_@WATCH_EVENT_ID@ *ncr_self, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column;
+    return ncr_self->is_directory;
+}
+static bool @WATCH_EVENT_OVERFLOW@(ncr_obj_@WATCH_EVENT_ID@ *ncr_self, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column;
+    return ncr_self->overflow;
+}

@@ -1,3 +1,14 @@
+static bool ncr_fs_time_millis(struct timespec timestamp, int64_t *millis) {
+    if (timestamp.tv_nsec < 0 || timestamp.tv_nsec >= 1000000000L) { return false; }
+    intmax_t seconds = (intmax_t)timestamp.tv_sec;
+    if (seconds > INT64_MAX / INT64_C(1000) || seconds < INT64_MIN / INT64_C(1000)) { return false; }
+    int64_t base = (int64_t)seconds * INT64_C(1000);
+    int64_t fraction = (int64_t)(timestamp.tv_nsec / 1000000L);
+    if (base > INT64_MAX - fraction) { return false; }
+    *millis = base + fraction;
+    return true;
+}
+
 static ncr_obj_@FILES_METADATA_RESULT@ @FILES_METADATA@(ncr_obj_@PATH_ID@ *@FILES_METADATA_PATH@, size_t ncr_line, size_t ncr_column) {
     char *path = ncr_fs_path_cstring_@TEXT_ID@(@FILES_METADATA_PATH@->text, ncr_line, ncr_column);
     if (path == NULL) { NCR_FS_RETURN_ERROR(@FILES_METADATA_RESULT@, "Files.metadata", errno, ncr_line, ncr_column); }
@@ -9,11 +20,22 @@ static ncr_obj_@FILES_METADATA_RESULT@ @FILES_METADATA@(ncr_obj_@PATH_ID@ *@FILE
     if (status.st_size < 0 || (uintmax_t)status.st_size > (uintmax_t)INT64_MAX) {
         NCR_FS_RETURN_ERROR(@FILES_METADATA_RESULT@, "Files.metadata size", EOVERFLOW, ncr_line, ncr_column);
     }
+    int64_t modified_millis, accessed_millis, changed_millis;
+    if (!ncr_fs_time_millis(status.st_mtim, &modified_millis)
+        || !ncr_fs_time_millis(status.st_atim, &accessed_millis)
+        || !ncr_fs_time_millis(status.st_ctim, &changed_millis)
+        || (uintmax_t)status.st_mode > (uintmax_t)INT32_MAX) {
+        NCR_FS_RETURN_ERROR(@FILES_METADATA_RESULT@, "Files.metadata attributes", EOVERFLOW, ncr_line, ncr_column);
+    }
     ncr_obj_@FILE_INFO_ID@ *info = ncr_allocate(sizeof(*info), ncr_line, ncr_column);
     info->size = (int64_t)status.st_size;
     info->is_file = S_ISREG(status.st_mode);
     info->is_directory = S_ISDIR(status.st_mode);
     info->is_symlink = S_ISLNK(status.st_mode);
+    info->modified_millis = modified_millis;
+    info->accessed_millis = accessed_millis;
+    info->changed_millis = changed_millis;
+    info->mode = (int32_t)status.st_mode;
     return (ncr_obj_@FILES_METADATA_RESULT@){ .tag = @FILES_METADATA_OK_TAG@, .data.v@FILES_METADATA_OK_TAG@.f0 = info };
 }
 

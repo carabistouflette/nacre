@@ -1,0 +1,207 @@
+static bool ncr_fs_copy_regular_@TEXT_ID@(ncr_obj_@PATH_ID@ *source, ncr_obj_@PATH_ID@ *target, bool replace, int *failure, size_t line, size_t column) {
+    char *source_path = ncr_fs_path_cstring_@TEXT_ID@(source->text, line, column);
+    if (source_path == NULL) { *failure = errno; return false; }
+    char *target_path = ncr_fs_path_cstring_@TEXT_ID@(target->text, line, column);
+    if (target_path == NULL) {
+        *failure = errno;
+        ncr_deallocate(source_path);
+        return false;
+    }
+    int source_fd = -1;
+    int target_fd = -1;
+    int error = 0;
+    do { source_fd = open(source_path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK); }
+    while (source_fd < 0 && errno == EINTR);
+    if (source_fd < 0) { error = errno; goto copy_done; }
+    struct stat source_status;
+    int status;
+    do { status = fstat(source_fd, &source_status); } while (status != 0 && errno == EINTR);
+    if (status != 0) { error = errno; goto copy_done; }
+    if (!S_ISREG(source_status.st_mode)) { error = S_ISDIR(source_status.st_mode) ? EISDIR : EINVAL; goto copy_done; }
+    int target_flags = O_WRONLY | O_CREAT | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK;
+    if (!replace) { target_flags |= O_EXCL; }
+    do { target_fd = open(target_path, target_flags, (mode_t)0666); }
+    while (target_fd < 0 && errno == EINTR);
+    if (target_fd < 0) { error = errno; goto copy_done; }
+    struct stat target_status;
+    do { status = fstat(target_fd, &target_status); } while (status != 0 && errno == EINTR);
+    if (status != 0) { error = errno; goto copy_done; }
+    if (!S_ISREG(target_status.st_mode)) { error = S_ISDIR(target_status.st_mode) ? EISDIR : EINVAL; goto copy_done; }
+    if (source_status.st_dev == target_status.st_dev && source_status.st_ino == target_status.st_ino) { goto copy_done; }
+    do { status = ftruncate(target_fd, 0); } while (status != 0 && errno == EINTR);
+    if (status != 0) { error = errno; goto copy_done; }
+    unsigned char buffer[65536];
+    for (;;) {
+        ssize_t count;
+        do { count = read(source_fd, buffer, sizeof(buffer)); } while (count < 0 && errno == EINTR);
+        if (count < 0) { error = errno; goto copy_done; }
+        if (count == 0) { break; }
+        if (!ncr_fs_write_all(target_fd, buffer, (size_t)count, &error)) { goto copy_done; }
+    }
+copy_done:
+    if (target_fd >= 0 && close(target_fd) != 0 && error == 0) { error = errno; }
+    if (source_fd >= 0 && close(source_fd) != 0 && error == 0) { error = errno; }
+    ncr_deallocate(source_path);
+    ncr_deallocate(target_path);
+    if (error != 0) { *failure = error; return false; }
+    return true;
+}
+
+static ncr_obj_@FILES_COPY_RESULT@ @FILES_COPY@(ncr_obj_@PATH_ID@ *@FILES_COPY_SOURCE@, ncr_obj_@PATH_ID@ *@FILES_COPY_TARGET@, bool @FILES_COPY_REPLACE@, size_t ncr_line, size_t ncr_column) {
+    int failure = 0;
+    if (!ncr_fs_copy_regular_@TEXT_ID@(@FILES_COPY_SOURCE@, @FILES_COPY_TARGET@, @FILES_COPY_REPLACE@, &failure, ncr_line, ncr_column)) {
+        NCR_FS_RETURN_ERROR(@FILES_COPY_RESULT@, "Files.copy", failure, ncr_line, ncr_column);
+    }
+    return (ncr_obj_@FILES_COPY_RESULT@){ .tag = @FILES_COPY_OK_TAG@, .data.v@FILES_COPY_OK_TAG@.f0 = UINT8_C(0) };
+}
+
+static ncr_obj_@FILES_CREATE_DIRECTORIES_RESULT@ @FILES_CREATE_DIRECTORIES@(ncr_obj_@PATH_ID@ *@FILES_CREATE_DIRECTORIES_PATH@, int32_t @FILES_CREATE_DIRECTORIES_MODE@, size_t ncr_line, size_t ncr_column) {
+    char *path = ncr_fs_path_cstring_@TEXT_ID@(@FILES_CREATE_DIRECTORIES_PATH@->text, ncr_line, ncr_column);
+    if (path == NULL) { NCR_FS_RETURN_ERROR(@FILES_CREATE_DIRECTORIES_RESULT@, "Files.createDirectories", errno, ncr_line, ncr_column); }
+    size_t length = strlen(path);
+    size_t start = path[0] == '/' ? 1 : 0;
+    int failure = 0;
+    while (start < length) {
+        size_t end = start;
+        while (end < length && path[end] != '/') { ++end; }
+        if (end == start) { start = end + 1; continue; }
+        char separator = path[end];
+        path[end] = '\0';
+        int status;
+        do { status = mkdir(path, (mode_t)@FILES_CREATE_DIRECTORIES_MODE@); } while (status != 0 && errno == EINTR);
+        if (status != 0) {
+            failure = errno;
+            if (failure == EEXIST) {
+                struct stat info;
+                do { status = stat(path, &info); } while (status != 0 && errno == EINTR);
+                if (status == 0 && S_ISDIR(info.st_mode)) { failure = 0; }
+                else if (status == 0) { failure = ENOTDIR; }
+                else { failure = errno; }
+            }
+        }
+        path[end] = separator;
+        if (failure != 0) { break; }
+        start = end + 1;
+    }
+    ncr_deallocate(path);
+    if (failure != 0) { NCR_FS_RETURN_ERROR(@FILES_CREATE_DIRECTORIES_RESULT@, "Files.createDirectories", failure, ncr_line, ncr_column); }
+    return (ncr_obj_@FILES_CREATE_DIRECTORIES_RESULT@){ .tag = @FILES_CREATE_DIRECTORIES_OK_TAG@, .data.v@FILES_CREATE_DIRECTORIES_OK_TAG@.f0 = UINT8_C(0) };
+}
+
+static ncr_obj_@FILES_READ_LINK_RESULT@ @FILES_READ_LINK@(ncr_obj_@PATH_ID@ *@FILES_READ_LINK_PATH@, size_t ncr_line, size_t ncr_column) {
+    char *path = ncr_fs_path_cstring_@TEXT_ID@(@FILES_READ_LINK_PATH@->text, ncr_line, ncr_column);
+    if (path == NULL) { NCR_FS_RETURN_ERROR(@FILES_READ_LINK_RESULT@, "Files.readLink", errno, ncr_line, ncr_column); }
+    const size_t limit = (size_t)1048576;
+    size_t capacity = (size_t)256;
+    unsigned char *bytes = ncr_allocate(capacity, ncr_line, ncr_column);
+    ssize_t length;
+    for (;;) {
+        do { length = readlink(path, (char *)bytes, capacity); } while (length < 0 && errno == EINTR);
+        if (length < 0) {
+            int error = errno;
+            ncr_deallocate(bytes);
+            ncr_deallocate(path);
+            NCR_FS_RETURN_ERROR(@FILES_READ_LINK_RESULT@, "Files.readLink", error, ncr_line, ncr_column);
+        }
+        if ((size_t)length < capacity) { break; }
+        if (capacity == limit) {
+            ncr_deallocate(bytes);
+            ncr_deallocate(path);
+            NCR_FS_RETURN_ERROR(@FILES_READ_LINK_RESULT@, "Files.readLink target limit", EOVERFLOW, ncr_line, ncr_column);
+        }
+        size_t next_capacity = capacity > limit / 2 ? limit : capacity * 2;
+        unsigned char *next = ncr_allocate(next_capacity, ncr_line, ncr_column);
+        memcpy(next, bytes, capacity);
+        ncr_deallocate(bytes);
+        bytes = next;
+        capacity = next_capacity;
+    }
+    if (!ncr_utf8_valid(bytes, (size_t)length)) {
+        ncr_deallocate(bytes);
+        ncr_deallocate(path);
+        NCR_FS_RETURN_ERROR(@FILES_READ_LINK_RESULT@, "Files.readLink target is not valid UTF-8", EILSEQ, ncr_line, ncr_column);
+    }
+    ncr_deallocate(path);
+    ncr_obj_@TEXT_ID@ *text = ncr_text_from_bytes_@TEXT_ID@(bytes, (size_t)length, ncr_line, ncr_column);
+    ncr_deallocate(bytes);
+    return @PATH_FROM_TEXT@(text, ncr_line, ncr_column);
+}
+
+static ncr_obj_@FILES_SYMLINK_RESULT@ @FILES_SYMLINK@(ncr_obj_@PATH_ID@ *@FILES_SYMLINK_TARGET@, ncr_obj_@PATH_ID@ *@FILES_SYMLINK_LINK@, size_t ncr_line, size_t ncr_column) {
+    char *target = ncr_fs_path_cstring_@TEXT_ID@(@FILES_SYMLINK_TARGET@->text, ncr_line, ncr_column);
+    if (target == NULL) { NCR_FS_RETURN_ERROR(@FILES_SYMLINK_RESULT@, "Files.symlink target", errno, ncr_line, ncr_column); }
+    char *link = ncr_fs_path_cstring_@TEXT_ID@(@FILES_SYMLINK_LINK@->text, ncr_line, ncr_column);
+    if (link == NULL) {
+        int error = errno;
+        ncr_deallocate(target);
+        NCR_FS_RETURN_ERROR(@FILES_SYMLINK_RESULT@, "Files.symlink link", error, ncr_line, ncr_column);
+    }
+    int status = symlink(target, link);
+    int error = errno;
+    ncr_deallocate(target);
+    ncr_deallocate(link);
+    if (status != 0) { NCR_FS_RETURN_ERROR(@FILES_SYMLINK_RESULT@, "Files.symlink", error, ncr_line, ncr_column); }
+    return (ncr_obj_@FILES_SYMLINK_RESULT@){ .tag = @FILES_SYMLINK_OK_TAG@, .data.v@FILES_SYMLINK_OK_TAG@.f0 = UINT8_C(0) };
+}
+
+static ncr_obj_@FILES_CHMOD_RESULT@ @FILES_CHMOD@(ncr_obj_@PATH_ID@ *@FILES_CHMOD_PATH@, int32_t @FILES_CHMOD_MODE@, size_t ncr_line, size_t ncr_column) {
+    char *path = ncr_fs_path_cstring_@TEXT_ID@(@FILES_CHMOD_PATH@->text, ncr_line, ncr_column);
+    if (path == NULL) { NCR_FS_RETURN_ERROR(@FILES_CHMOD_RESULT@, "Files.chmod", errno, ncr_line, ncr_column); }
+    int status = chmod(path, (mode_t)@FILES_CHMOD_MODE@);
+    int error = errno;
+    ncr_deallocate(path);
+    if (status != 0) { NCR_FS_RETURN_ERROR(@FILES_CHMOD_RESULT@, "Files.chmod", error, ncr_line, ncr_column); }
+    return (ncr_obj_@FILES_CHMOD_RESULT@){ .tag = @FILES_CHMOD_OK_TAG@, .data.v@FILES_CHMOD_OK_TAG@.f0 = UINT8_C(0) };
+}
+
+static ncr_obj_@FILES_LIST_RESULT@ @FILES_LIST@(ncr_obj_@PATH_ID@ *@FILES_LIST_PATH@, size_t ncr_line, size_t ncr_column) {
+    const size_t maximum_entries = (size_t)65536;
+    const size_t maximum_bytes = (size_t)16777216;
+    @LIST_TYPE@ *names = ncr_allocate(sizeof(*names), ncr_line, ncr_column);
+    @LIST_NEW@(names, ncr_line, ncr_column);
+    DIR *directory = ncr_fs_opendir_@TEXT_ID@(@FILES_LIST_PATH@->text, ncr_line, ncr_column);
+    if (directory == NULL) {
+        int error = errno;
+        ncr_drop_@LIST_ID@(names);
+        NCR_FS_RETURN_ERROR(@FILES_LIST_RESULT@, "Files.list", error, ncr_line, ncr_column);
+    }
+    size_t count = 0;
+    size_t total_bytes = 0;
+    int failure = 0;
+    for (;;) {
+        errno = 0;
+        struct dirent *entry = readdir(directory);
+        if (entry == NULL) {
+            if (errno == EINTR) { continue; }
+            if (errno != 0) { failure = errno; }
+            break;
+        }
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) { continue; }
+        size_t length = strlen(entry->d_name);
+        if (count == maximum_entries || length > maximum_bytes - total_bytes) { failure = EOVERFLOW; break; }
+        if (!ncr_utf8_valid((const unsigned char *)entry->d_name, length)) { failure = EILSEQ; break; }
+        ncr_obj_@TEXT_ID@ *name = ncr_text_from_bytes_@TEXT_ID@((const unsigned char *)entry->d_name, length, ncr_line, ncr_column);
+        @LIST_ADD@(names, name, ncr_line, ncr_column);
+        ++count;
+        total_bytes += length;
+    }
+    if (closedir(directory) != 0 && failure == 0) { failure = errno; }
+    if (failure != 0) {
+        ncr_drop_@LIST_ID@(names);
+        NCR_FS_RETURN_ERROR(@FILES_LIST_RESULT@, "Files.list", failure, ncr_line, ncr_column);
+    }
+    return (ncr_obj_@FILES_LIST_RESULT@){ .tag = @FILES_LIST_OK_TAG@, .data.v@FILES_LIST_OK_TAG@.f0 = names };
+}
+
+static ncr_obj_@FILES_CANONICAL_RESULT@ @FILES_CANONICAL@(ncr_obj_@PATH_ID@ *@FILES_CANONICAL_PATH@, size_t ncr_line, size_t ncr_column) {
+    char *path = ncr_fs_path_cstring_@TEXT_ID@(@FILES_CANONICAL_PATH@->text, ncr_line, ncr_column);
+    if (path == NULL) { NCR_FS_RETURN_ERROR(@FILES_CANONICAL_RESULT@, "Files.canonical", errno, ncr_line, ncr_column); }
+    char *resolved = realpath(path, NULL);
+    int error = errno;
+    ncr_deallocate(path);
+    if (resolved == NULL) { NCR_FS_RETURN_ERROR(@FILES_CANONICAL_RESULT@, "Files.canonical", error, ncr_line, ncr_column); }
+    size_t length = strlen(resolved);
+    ncr_obj_@TEXT_ID@ *text = ncr_text_from_bytes_@TEXT_ID@((const unsigned char *)resolved, length, ncr_line, ncr_column);
+    free(resolved);
+    return @PATH_FROM_TEXT@(text, ncr_line, ncr_column);
+}

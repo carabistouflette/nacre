@@ -1,0 +1,107 @@
+static ncr_obj_@FILE_OPEN_READ_WRITE_RESULT@ @FILE_OPEN_READ_WRITE@(ncr_obj_@PATH_ID@ *@FILE_OPEN_READ_WRITE_PATH@, int32_t @FILE_OPEN_READ_WRITE_MODE@, bool @FILE_OPEN_READ_WRITE_CREATE@, size_t ncr_line, size_t ncr_column) {
+    int flags = O_RDWR;
+    if (@FILE_OPEN_READ_WRITE_CREATE@) { flags |= O_CREAT; }
+    int descriptor = ncr_fs_open_@TEXT_ID@(@FILE_OPEN_READ_WRITE_PATH@->text, flags, (mode_t)@FILE_OPEN_READ_WRITE_MODE@, ncr_line, ncr_column);
+    if (descriptor < 0) { NCR_FS_RETURN_ERROR(@FILE_OPEN_READ_WRITE_RESULT@, "File.openReadWrite", errno, ncr_line, ncr_column); }
+    ncr_obj_@FILE_ID@ *file = ncr_allocate(sizeof(*file), ncr_line, ncr_column);
+    file->fd = descriptor;
+    return (ncr_obj_@FILE_OPEN_READ_WRITE_RESULT@){ .tag = @FILE_OPEN_READ_WRITE_OK_TAG@, .data.v@FILE_OPEN_READ_WRITE_OK_TAG@.f0 = file };
+}
+
+static ncr_obj_@FILE_READ_RESULT@ @FILE_READ@(ncr_obj_@FILE_ID@ *@FILE_READ_INTERFACE_SELF@, ncr_obj_@BUFFER_ID@ *@FILE_READ_INTERFACE_DESTINATION@, int64_t @FILE_READ_INTERFACE_MAX@, size_t ncr_line, size_t ncr_column) {
+    return @FILE_READ_SOME@(@FILE_READ_INTERFACE_SELF@, @FILE_READ_INTERFACE_DESTINATION@, @FILE_READ_INTERFACE_MAX@, ncr_line, ncr_column);
+}
+
+static ncr_obj_@FILE_WRITE_RESULT@ @FILE_WRITE@(ncr_obj_@FILE_ID@ *@FILE_WRITE_INTERFACE_SELF@, ncr_obj_@BUFFER_ID@ *@FILE_WRITE_INTERFACE_SOURCE@, int64_t @FILE_WRITE_INTERFACE_OFFSET@, int64_t @FILE_WRITE_INTERFACE_MAX@, size_t ncr_line, size_t ncr_column) {
+    return @FILE_WRITE_SOME@(@FILE_WRITE_INTERFACE_SELF@, @FILE_WRITE_INTERFACE_SOURCE@, @FILE_WRITE_INTERFACE_OFFSET@, @FILE_WRITE_INTERFACE_MAX@, ncr_line, ncr_column);
+}
+
+static ncr_obj_@FILE_POSITION_RESULT@ @FILE_POSITION@(ncr_obj_@FILE_ID@ *@FILE_POSITION_SELF@, size_t ncr_line, size_t ncr_column) {
+    if (@FILE_POSITION_SELF@->fd < 0) return ncr_result_error_@FILE_POSITION_RESULT@("File.position: handle is closed", sizeof("File.position: handle is closed") - 1, ncr_line, ncr_column);
+    off_t position;
+    do { position = lseek(@FILE_POSITION_SELF@->fd, 0, SEEK_CUR); } while (position < 0 && errno == EINTR);
+    if (position < 0) { NCR_FS_RETURN_ERROR(@FILE_POSITION_RESULT@, "File.position", errno, ncr_line, ncr_column); }
+    if ((uintmax_t)position > (uintmax_t)INT64_MAX) { NCR_FS_RETURN_ERROR(@FILE_POSITION_RESULT@, "File.position", EOVERFLOW, ncr_line, ncr_column); }
+    return (ncr_obj_@FILE_POSITION_RESULT@){ .tag = @FILE_POSITION_OK_TAG@, .data.v@FILE_POSITION_OK_TAG@.f0 = (int64_t)position };
+}
+
+static ncr_obj_@FILE_SEEK_RESULT@ @FILE_SEEK@(ncr_obj_@FILE_ID@ *@FILE_SEEK_SELF@, int64_t @FILE_SEEK_OFFSET@, int32_t @FILE_SEEK_ORIGIN@, size_t ncr_line, size_t ncr_column) {
+    if (@FILE_SEEK_SELF@->fd < 0) return ncr_result_error_@FILE_SEEK_RESULT@("File.seek: handle is closed", sizeof("File.seek: handle is closed") - 1, ncr_line, ncr_column);
+    int whence;
+    if (@FILE_SEEK_ORIGIN@ == 0) { whence = SEEK_SET; }
+    else if (@FILE_SEEK_ORIGIN@ == 1) { whence = SEEK_CUR; }
+    else if (@FILE_SEEK_ORIGIN@ == 2) { whence = SEEK_END; }
+    else return ncr_result_error_@FILE_SEEK_RESULT@("File.seek: origin must be 0 (begin), 1 (current), or 2 (end)", sizeof("File.seek: origin must be 0 (begin), 1 (current), or 2 (end)") - 1, ncr_line, ncr_column);
+    off_t offset = (off_t)@FILE_SEEK_OFFSET@;
+    if ((int64_t)offset != @FILE_SEEK_OFFSET@) { NCR_FS_RETURN_ERROR(@FILE_SEEK_RESULT@, "File.seek offset", EOVERFLOW, ncr_line, ncr_column); }
+    off_t position;
+    do { position = lseek(@FILE_SEEK_SELF@->fd, offset, whence); } while (position < 0 && errno == EINTR);
+    if (position < 0) { NCR_FS_RETURN_ERROR(@FILE_SEEK_RESULT@, "File.seek", errno, ncr_line, ncr_column); }
+    if ((uintmax_t)position > (uintmax_t)INT64_MAX) { NCR_FS_RETURN_ERROR(@FILE_SEEK_RESULT@, "File.seek", EOVERFLOW, ncr_line, ncr_column); }
+    return (ncr_obj_@FILE_SEEK_RESULT@){ .tag = @FILE_SEEK_OK_TAG@, .data.v@FILE_SEEK_OK_TAG@.f0 = (int64_t)position };
+}
+
+static ncr_obj_@FILE_TRUNCATE_RESULT@ @FILE_TRUNCATE@(ncr_obj_@FILE_ID@ *@FILE_TRUNCATE_SELF@, int64_t @FILE_TRUNCATE_LENGTH@, size_t ncr_line, size_t ncr_column) {
+    if (@FILE_TRUNCATE_SELF@->fd < 0) return ncr_result_error_@FILE_TRUNCATE_RESULT@("File.truncate: handle is closed", sizeof("File.truncate: handle is closed") - 1, ncr_line, ncr_column);
+    if (@FILE_TRUNCATE_LENGTH@ < 0) return ncr_result_error_@FILE_TRUNCATE_RESULT@("File.truncate: length must be non-negative", sizeof("File.truncate: length must be non-negative") - 1, ncr_line, ncr_column);
+    off_t length = (off_t)@FILE_TRUNCATE_LENGTH@;
+    if (length < 0 || (int64_t)length != @FILE_TRUNCATE_LENGTH@) { NCR_FS_RETURN_ERROR(@FILE_TRUNCATE_RESULT@, "File.truncate length", EOVERFLOW, ncr_line, ncr_column); }
+    int status;
+    do { status = ftruncate(@FILE_TRUNCATE_SELF@->fd, length); } while (status != 0 && errno == EINTR);
+    if (status != 0) { NCR_FS_RETURN_ERROR(@FILE_TRUNCATE_RESULT@, "File.truncate", errno, ncr_line, ncr_column); }
+    return (ncr_obj_@FILE_TRUNCATE_RESULT@){ .tag = @FILE_TRUNCATE_OK_TAG@, .data.v@FILE_TRUNCATE_OK_TAG@.f0 = UINT8_C(0) };
+}
+
+static ncr_obj_@FILE_READ_AT_RESULT@ @FILE_READ_AT@(ncr_obj_@FILE_ID@ *@FILE_READ_AT_SELF@, ncr_obj_@BUFFER_ID@ *@FILE_READ_AT_DESTINATION@, int64_t @FILE_READ_AT_FILE_OFFSET@, int64_t @FILE_READ_AT_MAX@, size_t ncr_line, size_t ncr_column) {
+    if (@FILE_READ_AT_SELF@->fd < 0) return ncr_result_error_@FILE_READ_AT_RESULT@("File.readAt: handle is closed", sizeof("File.readAt: handle is closed") - 1, ncr_line, ncr_column);
+    if (@FILE_READ_AT_FILE_OFFSET@ < 0 || @FILE_READ_AT_MAX@ < 0) return ncr_result_error_@FILE_READ_AT_RESULT@("File.readAt: fileOffset and maxBytes must be non-negative", sizeof("File.readAt: fileOffset and maxBytes must be non-negative") - 1, ncr_line, ncr_column);
+    if (@FILE_READ_AT_MAX@ > INT64_MAX - @FILE_READ_AT_FILE_OFFSET@) { NCR_FS_RETURN_ERROR(@FILE_READ_AT_RESULT@, "File.readAt offset range", EOVERFLOW, ncr_line, ncr_column); }
+    off_t file_offset = (off_t)@FILE_READ_AT_FILE_OFFSET@;
+    if (file_offset < 0 || (int64_t)file_offset != @FILE_READ_AT_FILE_OFFSET@) { NCR_FS_RETURN_ERROR(@FILE_READ_AT_RESULT@, "File.readAt offset", EOVERFLOW, ncr_line, ncr_column); }
+    if (@FILE_READ_AT_MAX@ == 0) return (ncr_obj_@FILE_READ_AT_RESULT@){ .tag = @FILE_READ_AT_OK_TAG@, .data.v@FILE_READ_AT_OK_TAG@.f0 = INT64_C(0) };
+    if (@FILE_READ_AT_DESTINATION@->length < 0 || @FILE_READ_AT_DESTINATION@->length >= INT32_MAX) { NCR_FS_RETURN_ERROR(@FILE_READ_AT_RESULT@, "File.readAt destination capacity", EOVERFLOW, ncr_line, ncr_column); }
+    uint64_t amount = (uint64_t)@FILE_READ_AT_MAX@;
+    if (amount > UINT64_C(65536)) { amount = UINT64_C(65536); }
+    if (amount > (uint64_t)SSIZE_MAX) { amount = (uint64_t)SSIZE_MAX; }
+    uint64_t remaining = (uint64_t)INT32_MAX - (uint64_t)@FILE_READ_AT_DESTINATION@->length;
+    if (amount > remaining) { amount = remaining; }
+    if (amount > (uint64_t)(INT64_MAX - @FILE_READ_AT_FILE_OFFSET@)) { amount = (uint64_t)(INT64_MAX - @FILE_READ_AT_FILE_OFFSET@); }
+    if (amount == 0) { NCR_FS_RETURN_ERROR(@FILE_READ_AT_RESULT@, "File.readAt destination capacity", EOVERFLOW, ncr_line, ncr_column); }
+    size_t requested = (size_t)amount;
+    if (@FILE_READ_AT_DESTINATION@->capacity - @FILE_READ_AT_DESTINATION@->length < requested) {
+        @BUFFER_RESERVE@(@FILE_READ_AT_DESTINATION@, @FILE_READ_AT_DESTINATION@->length + (int32_t)requested, ncr_line, ncr_column);
+    }
+    size_t available = @FILE_READ_AT_DESTINATION@->capacity - @FILE_READ_AT_DESTINATION@->length;
+    size_t count = available < requested ? available : requested;
+    ssize_t bytes_read;
+    do { bytes_read = pread(@FILE_READ_AT_SELF@->fd, @FILE_READ_AT_DESTINATION@->bytes + @FILE_READ_AT_DESTINATION@->length, count, file_offset); }
+    while (bytes_read < 0 && errno == EINTR);
+    if (bytes_read < 0) { NCR_FS_RETURN_ERROR(@FILE_READ_AT_RESULT@, "File.readAt", errno, ncr_line, ncr_column); }
+    if (bytes_read > 0) { @FILE_READ_AT_DESTINATION@->length += (int32_t)bytes_read; }
+    return (ncr_obj_@FILE_READ_AT_RESULT@){ .tag = @FILE_READ_AT_OK_TAG@, .data.v@FILE_READ_AT_OK_TAG@.f0 = (int64_t)bytes_read };
+}
+
+static ncr_obj_@FILE_WRITE_AT_RESULT@ @FILE_WRITE_AT@(ncr_obj_@FILE_ID@ *@FILE_WRITE_AT_SELF@, ncr_obj_@BUFFER_ID@ *@FILE_WRITE_AT_SOURCE@, int64_t @FILE_WRITE_AT_BUFFER_OFFSET@, int64_t @FILE_WRITE_AT_FILE_OFFSET@, int64_t @FILE_WRITE_AT_MAX@, size_t ncr_line, size_t ncr_column) {
+    if (@FILE_WRITE_AT_SELF@->fd < 0) return ncr_result_error_@FILE_WRITE_AT_RESULT@("File.writeAt: handle is closed", sizeof("File.writeAt: handle is closed") - 1, ncr_line, ncr_column);
+    if (@FILE_WRITE_AT_BUFFER_OFFSET@ < 0 || @FILE_WRITE_AT_FILE_OFFSET@ < 0 || @FILE_WRITE_AT_MAX@ < 0
+        || @FILE_WRITE_AT_BUFFER_OFFSET@ > @FILE_WRITE_AT_SOURCE@->length
+        || @FILE_WRITE_AT_MAX@ > (int64_t)@FILE_WRITE_AT_SOURCE@->length - @FILE_WRITE_AT_BUFFER_OFFSET@) {
+        return ncr_result_error_@FILE_WRITE_AT_RESULT@("File.writeAt: invalid source range or file offset", sizeof("File.writeAt: invalid source range or file offset") - 1, ncr_line, ncr_column);
+    }
+    if (@FILE_WRITE_AT_MAX@ > INT64_MAX - @FILE_WRITE_AT_FILE_OFFSET@) { NCR_FS_RETURN_ERROR(@FILE_WRITE_AT_RESULT@, "File.writeAt offset range", EOVERFLOW, ncr_line, ncr_column); }
+    off_t file_offset = (off_t)@FILE_WRITE_AT_FILE_OFFSET@;
+    if (file_offset < 0 || (int64_t)file_offset != @FILE_WRITE_AT_FILE_OFFSET@) { NCR_FS_RETURN_ERROR(@FILE_WRITE_AT_RESULT@, "File.writeAt offset", EOVERFLOW, ncr_line, ncr_column); }
+    int flags;
+    do { flags = fcntl(@FILE_WRITE_AT_SELF@->fd, F_GETFL); } while (flags < 0 && errno == EINTR);
+    if (flags < 0) { NCR_FS_RETURN_ERROR(@FILE_WRITE_AT_RESULT@, "File.writeAt fcntl", errno, ncr_line, ncr_column); }
+    if ((flags & O_APPEND) != 0) return ncr_result_error_@FILE_WRITE_AT_RESULT@("File.writeAt: append-mode descriptors are not supported", sizeof("File.writeAt: append-mode descriptors are not supported") - 1, ncr_line, ncr_column);
+    if (@FILE_WRITE_AT_MAX@ == 0) return (ncr_obj_@FILE_WRITE_AT_RESULT@){ .tag = @FILE_WRITE_AT_OK_TAG@, .data.v@FILE_WRITE_AT_OK_TAG@.f0 = INT64_C(0) };
+    uint64_t requested = (uint64_t)@FILE_WRITE_AT_MAX@;
+    if (requested > (uint64_t)SSIZE_MAX) { requested = (uint64_t)SSIZE_MAX; }
+    size_t count = (size_t)requested;
+    ssize_t bytes_written;
+    do { bytes_written = pwrite(@FILE_WRITE_AT_SELF@->fd, @FILE_WRITE_AT_SOURCE@->bytes + (size_t)@FILE_WRITE_AT_BUFFER_OFFSET@, count, file_offset); }
+    while (bytes_written < 0 && errno == EINTR);
+    if (bytes_written < 0) { NCR_FS_RETURN_ERROR(@FILE_WRITE_AT_RESULT@, "File.writeAt", errno, ncr_line, ncr_column); }
+    return (ncr_obj_@FILE_WRITE_AT_RESULT@){ .tag = @FILE_WRITE_AT_OK_TAG@, .data.v@FILE_WRITE_AT_OK_TAG@.f0 = (int64_t)bytes_written };
+}

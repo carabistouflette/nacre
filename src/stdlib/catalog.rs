@@ -33,7 +33,10 @@ enum NativeBuiltin {
     File,
     Directory,
     FileInfo,
-    Console,
+    Watcher,
+    WatchEvent,
+    BinaryReader,
+    BinaryWriter,
     Files,
     Args,
     Math,
@@ -118,7 +121,10 @@ impl NativeBuiltin {
             Self::File => NativeClass::File,
             Self::Directory => NativeClass::Directory,
             Self::FileInfo => NativeClass::FileInfo,
-            Self::Regex => NativeClass::Regex,
+            Self::Watcher => NativeClass::Watcher,
+            Self::WatchEvent => NativeClass::WatchEvent,
+            Self::BinaryReader => NativeClass::BinaryReader,
+            Self::BinaryWriter => NativeClass::BinaryWriter,
             Self::RegexMatch => NativeClass::RegexMatch,
             Self::Console => NativeClass::Console,
             Self::Files => NativeClass::Files,
@@ -262,6 +268,17 @@ pub(super) const PRELUDE_UNITS: &[PreludeUnit] = &[
         builtins: &[Builtin { name: "Crypto", native: Some(NativeBuiltin::Crypto) }],
     },
     PreludeUnit {
+        source: include_str!("../../stdlib/prelude/streams.ncr"),
+        builtins: &[
+            Builtin { name: "ByteSource", native: None },
+            Builtin { name: "ByteSink", native: None },
+            Builtin { name: "Streams", native: None },
+            Builtin { name: "BinaryReader", native: Some(NativeBuiltin::BinaryReader) },
+            Builtin { name: "BinaryWriter", native: Some(NativeBuiltin::BinaryWriter) },
+        ],
+    },
+
+    PreludeUnit {
         source: include_str!("../../stdlib/prelude/filesystem.ncr"),
         builtins: &[
             Builtin { name: "Path", native: Some(NativeBuiltin::Path) },
@@ -269,6 +286,9 @@ pub(super) const PRELUDE_UNITS: &[PreludeUnit] = &[
             Builtin { name: "Directory", native: Some(NativeBuiltin::Directory) },
             Builtin { name: "FileInfo", native: Some(NativeBuiltin::FileInfo) },
             Builtin { name: "Files", native: Some(NativeBuiltin::Files) },
+            Builtin { name: "WatchKind", native: None },
+            Builtin { name: "Watcher", native: Some(NativeBuiltin::Watcher) },
+            Builtin { name: "WatchEvent", native: Some(NativeBuiltin::WatchEvent) },
         ],
     },
     PreludeUnit {

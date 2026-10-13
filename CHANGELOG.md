@@ -70,18 +70,30 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   rather than shadowing the new reserved Task and Command builtins.
 - Public references describe the settled alpha in English; obsolete milestone
   documents are removed and examples retain their organized domain paths.
-- The mandatory design-principles review found `src/stdlib_codegen/io.rs` mixing
+- Mandatory design-principles review found `src/stdlib_codegen/io.rs` mixing
   Console, Args and filesystem lowering (SRP), while `stdlib/files.c.in` kept a
   separate whole-file stdio path (DRY). Filesystem declarations/emission now have
-  a dedicated prelude unit and backend leaf; `Files.readText`/`writeText` reuse the
+  a dedicated prelude unit and backend leaf; `Files.readText`/`writeText` reuse
   direct ByteBuffer/descriptor helpers, and atomic replacement reuses path/write
-  helpers with close-on-exec temporary descriptors. The remediation stays within
-  the filesystem contract; no universal stream abstraction was added.
-- Linux filesystem support adds immutable Path, binary descriptor-backed File
-  and Directory, `lstat` metadata, and nonrecursive Files operations. Files writes
-  return Result<Unit,Text>; standalone postfix `?` preserves ordinary call-statement
-  success cleanup and propagates owned errors.
+  helpers with close-on-exec temporary descriptors. Filesystem APIs remain direct;
+  the separate allocation-free ByteSource/ByteSink interfaces and bounded Streams
+  loops provide reusable transfer operations.
+- Linux filesystem support adds immutable Path, affine descriptor-backed File and
+  Directory, `lstat` metadata, and nonrecursive Files operations. File supports
+  cursor positioning, truncation, and cursor-preserving `pread`/`pwrite`; append
+  descriptors reject positioned writes. FileInfo reports POSIX mode and Unix-
+  millisecond timestamps. Files copy streams regular files with bounded memory,
+  create directories, manage links and modes, list names, and resolve canonical
+  paths. Linux inotify Watcher emits stable event kinds and explicit queue
+  overflow, uses monotonic deadlines, invalidates on self-deletion, and closes
+  idempotently. Files writes return `Result<Unit,Text>`; standalone postfix `?`
+  preserves ordinary call-statement success cleanup and propagates owned errors.
   FIFO write failures preserve the caller's signal mask and pending SIGPIPE state.
+- BinaryReader and BinaryWriter are unique-owned, choose byte order explicitly,
+  preserve reader cursors on incomplete/invalid UTF-8 input, and transfer the
+  writer's exact buffer on finish. ByteSource/ByteSink are allocation-free
+  interfaces implemented by File and TcpStream; bounded Streams loops handle
+  partial transfers, reject zero progress, and flush according to sink semantics.
 
 - Linux networking adds immutable IPv4/IPv6 `SocketAddress`, owned TCP listeners/streams,
   UDP sockets and datagrams with poll-based deadlines and direct ByteBuffer appends.

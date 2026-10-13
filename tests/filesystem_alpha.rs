@@ -831,3 +831,574 @@ fn filesystem_binary_streams_run_under_address_and_undefined_sanitizers() {
     expected.push(88);
     assert_eq!(fs::read(path).unwrap(), expected);
 }
+#[test]
+fn positioned_file_io_preserves_the_cursor_and_metadata_is_observable() {
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+
+    let scratch = Scratch::new();
+    let file = scratch.0.join("positioned.bin");
+    let created = scratch.0.join("created.bin");
+    fs::write(&file, b"abcdefghij").unwrap();
+    fs::set_permissions(&file, fs::Permissions::from_mode(0o640)).unwrap();
+    let source = r#"
+Result<Unit,Text> exercise(borrow Path path, borrow Path createdPath) {
+    File file = File.openReadWrite(path, 384, false)?;
+    println(file.position()?);
+    ByteBuffer destination = ByteBuffer.withCapacity(0L)?;
+    println(file.readAt(destination, 3L, 4L)?);
+    println(file.position()?);
+    ByteBuffer replacement = ByteBuffer.withCapacity(0L)?;
+    replacement.append((byte)88);
+    replacement.append((byte)89);
+    println(file.writeAt(replacement, 0L, 6L, 2L)?);
+    println(file.position()?);
+    match (file.readAt(destination, -1L, 1L)) {
+        Err(error) { println("READAT_NEGATIVE_OFFSET_REJECTED"); }
+        Ok(count) { println("READAT_NEGATIVE_OFFSET_ACCEPTED"); }
+    }
+    match (file.writeAt(replacement, 1L, 0L, 2L)) {
+        Err(error) { println("WRITEAT_INVALID_RANGE_REJECTED"); }
+        Ok(count) { println("WRITEAT_INVALID_RANGE_ACCEPTED"); }
+    }
+    println(file.position()?);
+    println(file.seek(3L, 0)?);
+    match (file.seek(-5L, 1)) {
+        Err(error) { println("SEEK_NEGATIVE_REJECTED"); }
+        Ok(position) { println("SEEK_NEGATIVE_ACCEPTED"); }
+    }
+    println(file.position()?);
+    println(file.seek(5L, 0)?);
+    file.truncate(4L)?;
+    println(file.position()?);
+    FileInfo info = Files.metadata(path)?;
+    println(info.size());
+    println(info.modifiedMillis());
+    println(info.accessedMillis());
+    println(info.changedMillis());
+    println(info.mode());
+    file.close()?;
+
+    File append = File.openAppend(path, 384)?;
+    match (append.writeAt(replacement, 0L, 0L, 1L)) {
+        Err(error) { println("APPEND_PWRITE_REJECTED"); }
+        Ok(count) { println("APPEND_PWRITE_ACCEPTED"); }
+    }
+    append.close()?;
+    match (File.openReadWrite(createdPath, 384, false)) {
+        Err(error) { println("NO_CREATE_REJECTED"); }
+        Ok(unexpected) { unexpected.close()?; println("NO_CREATE_ACCEPTED"); }
+    }
+    File created = File.openReadWrite(createdPath, 384, true)?;
+    created.close()?;
+    return new Result<Unit,Text>.Ok(());
+}
+void main() {
+    match (Args.get(0)) {
+        Err(error) { println("FILE_ARG_ERROR"); }
+        Ok(fileText) {
+            match (Path.fromText(fileText)) {
+                Err(error) { println("FILE_PATH_ERROR"); }
+                Ok(filePath) {
+                    match (Args.get(1)) {
+                        Err(error) { println("CREATED_ARG_ERROR"); }
+                        Ok(createdText) {
+                            match (Path.fromText(createdText)) {
+                                Err(error) { println("CREATED_PATH_ERROR"); }
+                                Ok(createdPath) {
+                                    match (exercise(filePath, createdPath)) {
+                                        Err(error) { Console.printText(error); println(""); }
+                                        Ok(unit) { println("COMPLETE"); }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+"#;
+    let output = run_source(source, &[file.as_path(), created.as_path()]);
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let lines: Vec<_> = stdout.lines().collect();
+    assert_eq!(
+        &lines[..13],
+        [
+            "0",
+            "4",
+            "0",
+            "2",
+            "0",
+            "READAT_NEGATIVE_OFFSET_REJECTED",
+            "WRITEAT_INVALID_RANGE_REJECTED",
+            "0",
+            "3",
+            "SEEK_NEGATIVE_REJECTED",
+            "3",
+            "5",
+            "5"
+        ]
+    );
+    assert_eq!(lines[13], "4");
+    assert_eq!(lines[18..], ["APPEND_PWRITE_REJECTED", "NO_CREATE_REJECTED", "COMPLETE"]);
+    assert_eq!(fs::read(&file).unwrap(), b"abcd");
+    assert_eq!(fs::metadata(&created).unwrap().len(), 0);
+    let metadata = fs::metadata(&file).unwrap();
+    let millis = |seconds: i64, nanos: i64| seconds * 1000 + nanos / 1_000_000;
+    assert_eq!(lines[14].parse::<i64>().unwrap(), millis(metadata.mtime(), metadata.mtime_nsec()));
+    assert_eq!(lines[15].parse::<i64>().unwrap(), millis(metadata.atime(), metadata.atime_nsec()));
+    assert_eq!(lines[16].parse::<i64>().unwrap(), millis(metadata.ctime(), metadata.ctime_nsec()));
+    assert_eq!(lines[17].parse::<i32>().unwrap(), metadata.mode() as i32);
+}
+
+#[test]
+fn files_copy_links_directories_listing_and_canonical_paths_use_real_state() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let scratch = Scratch::new();
+    let source_file = scratch.0.join("source.bin");
+    let target_file = scratch.0.join("target.bin");
+    let link_file = scratch.0.join("link.bin");
+    let rejected_file = scratch.0.join("rejected.bin");
+    let nested = scratch.0.join("nested").join("deeper");
+    let payload = vec![b'x'; 200_000];
+    fs::write(&source_file, &payload).unwrap();
+    let source = r#"
+Result<Unit,Text> exercise(borrow Path root, borrow Path source, borrow Path target, borrow Path link, borrow Path rejected) {
+    match (Files.copy(source, target, false)) {
+        Err(error) { println("COPY_NEW_ERROR"); }
+        Ok(unit) { println("COPY_NEW_OK"); }
+    }
+    match (Files.copy(source, target, false)) {
+        Err(error) { println("COPY_EXISTING_REJECTED"); }
+        Ok(unit) { println("COPY_EXISTING_ACCEPTED"); }
+    }
+    Files.copy(source, target, true)?;
+    Files.symlink(source, link)?;
+    match (Files.copy(link, rejected, false)) {
+        Err(error) { println("COPY_SYMLINK_REJECTED"); }
+        Ok(unit) { println("COPY_SYMLINK_ACCEPTED"); }
+    }
+    Files.createDirectories(rejected, 448)?;
+    Path nestedPart = Path.fromText(new Text("nested/deeper"))?;
+    Path nested = Path.join(root, nestedPart)?;
+    Files.createDirectories(nested, 448)?;
+    Path linkTarget = Files.readLink(link)?;
+    Console.printText(linkTarget.asText()); println("");
+    Files.chmod(target, 416)?;
+    FileInfo info = Files.metadata(target)?;
+    println(info.size());
+    println(info.mode());
+    List<Text> names = Files.list(root)?;
+    println(names.size());
+    Path canonical = Files.canonical(source)?;
+    Console.printText(canonical.asText()); println("");
+    return new Result<Unit,Text>.Ok(());
+}
+void main() {
+    match (Args.get(0)) {
+        Err(error) { println("ROOT_ARG_ERROR"); }
+        Ok(rootText) {
+            match (Path.fromText(rootText)) {
+                Err(error) { println("ROOT_PATH_ERROR"); }
+                Ok(root) {
+                    match (Args.get(1)) {
+                        Err(error) { println("SOURCE_ARG_ERROR"); }
+                        Ok(sourceText) {
+                            match (Path.fromText(sourceText)) {
+                                Err(error) { println("SOURCE_PATH_ERROR"); }
+                                Ok(source) {
+                                    match (Args.get(2)) {
+                                        Err(error) { println("TARGET_ARG_ERROR"); }
+                                        Ok(targetText) {
+                                            match (Path.fromText(targetText)) {
+                                                Err(error) { println("TARGET_PATH_ERROR"); }
+                                                Ok(target) {
+                                                    match (Args.get(3)) {
+                                                        Err(error) { println("LINK_ARG_ERROR"); }
+                                                        Ok(linkText) {
+                                                            match (Path.fromText(linkText)) {
+                                                                Err(error) { println("LINK_PATH_ERROR"); }
+                                                                Ok(link) {
+                                                                    match (Args.get(4)) {
+                                                                        Err(error) { println("REJECTED_ARG_ERROR"); }
+                                                                        Ok(rejectedText) {
+                                                                            match (Path.fromText(rejectedText)) {
+                                                                                Err(error) { println("REJECTED_PATH_ERROR"); }
+                                                                                Ok(rejected) {
+                                                                                    match (exercise(root, source, target, link, rejected)) {
+                                                                                        Err(error) { Console.printText(error); println(""); }
+                                                                                        Ok(unit) { println("COMPLETE"); }
+                                                                                    }
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+"#;
+    let source_path = fs::canonicalize(&source_file).unwrap();
+    let output = run_source(
+        source,
+        &[
+            scratch.0.as_path(),
+            source_file.as_path(),
+            target_file.as_path(),
+            link_file.as_path(),
+            rejected_file.as_path(),
+        ],
+    );
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let lines: Vec<_> = stdout.lines().collect();
+    assert!(lines.contains(&"COPY_NEW_OK"));
+    assert!(lines.contains(&"COPY_EXISTING_REJECTED"));
+    assert!(lines.contains(&"COPY_SYMLINK_REJECTED"));
+    assert!(lines.contains(&"COMPLETE"));
+    assert_eq!(lines[3], source_file.to_str().unwrap());
+    assert_eq!(lines[4], "200000");
+    assert_eq!(lines[5].parse::<u32>().unwrap(), fs::metadata(&target_file).unwrap().mode() as u32);
+    assert_eq!(lines[6], "5");
+    assert_eq!(lines[7], source_path.to_str().unwrap());
+    assert_eq!(fs::read(&target_file).unwrap(), payload);
+    assert_eq!(fs::read_link(&link_file).unwrap(), source_file);
+    assert!(fs::symlink_metadata(&rejected_file).unwrap().is_dir());
+    assert!(nested.is_dir());
+    assert_eq!(
+        fs::metadata(&target_file).unwrap().permissions().mode() & 0o777,
+        0o640
+    );
+}
+
+fn spawn_watcher(
+    program: &native::NativeProgram,
+    path: &Path,
+) -> (Child, BufReader<std::process::ChildStdout>) {
+    let mut child = Command::new(program.path())
+        .arg(path)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut output = BufReader::new(child.stdout.take().unwrap());
+    assert_eq!(take_line(&mut output), "WATCH_READY");
+    (child, output)
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn watcher_observes_create_write_rename_delete_after_a_readiness_barrier() {
+    let scratch = Scratch::new();
+    let entry = scratch.0.join("entry");
+    let renamed = scratch.0.join("renamed");
+    let source = r#"
+void printEvent(borrow WatchEvent event) {
+    Console.printText(event.name());
+    Console.print(" ");
+    match (event.kind()) {
+        Created { Console.print("Created"); }
+        Modified { Console.print("Modified"); }
+        AttributesChanged { Console.print("AttributesChanged"); }
+        ClosedForWrite { Console.print("ClosedForWrite"); }
+        Deleted { Console.print("Deleted"); }
+        MovedFrom { Console.print("MovedFrom"); }
+        MovedTo { Console.print("MovedTo"); }
+        MovedSelf { Console.print("MovedSelf"); }
+        DeletedSelf { Console.print("DeletedSelf"); }
+        Ignored { Console.print("Ignored"); }
+        Overflow { Console.print("Overflow"); }
+    }
+    Console.print(" ");
+    println(event.cookie());
+}
+Result<Unit,Text> watch(borrow Path path) {
+    Watcher watcher = Watcher.open(path)?;
+    match (watcher.next(0L)?) {
+        None { println("NONBLOCK_EMPTY"); }
+        Some(event) { println("NONBLOCK_UNEXPECTED_EVENT"); }
+    }
+    println("WATCH_READY");
+    match (Console.readLine()) {
+        Err(error) { return new Result<Unit,Text>.Err(error); }
+        Ok(option) { drop(option); }
+    }
+    boolean finished = false;
+    while (!finished) {
+        match (watcher.next(200L)?) {
+            None { finished = true; }
+            Some(event) { printEvent(event); }
+        }
+    }
+    watcher.close()?;
+    watcher.close()?;
+    println("CLOSE_IDEMPOTENT");
+    match (watcher.next(0L)) {
+        Err(error) { println("CLOSED_NEXT_REJECTED"); }
+        Ok(option) { println("CLOSED_NEXT_ACCEPTED"); }
+    }
+    return new Result<Unit,Text>.Ok(());
+}
+void main() {
+    match (Args.get(0)) {
+        Err(error) { println("ARG_ERROR"); }
+        Ok(pathText) {
+            match (Path.fromText(pathText)) {
+                Err(error) { println("PATH_ERROR"); }
+                Ok(path) {
+                    match (watch(path)) {
+                        Err(error) { Console.printText(error); println(""); }
+                        Ok(unit) { println("WATCH_DONE"); }
+                    }
+                }
+            }
+        }
+    }
+}
+"#;
+    let program = compile(source);
+    let mut child = Command::new(program.path())
+        .arg(&scratch.0)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut output = BufReader::new(child.stdout.take().unwrap());
+    assert_eq!(take_line(&mut output), "NONBLOCK_EMPTY");
+    assert_eq!(take_line(&mut output), "WATCH_READY");
+
+    fs::write(&entry, b"payload").unwrap();
+    fs::rename(&entry, &renamed).unwrap();
+    fs::remove_file(&renamed).unwrap();
+    send_line(&mut child);
+    drop(output);
+    let result = child.wait_with_output().unwrap();
+    assert!(result.status.success(), "{}", String::from_utf8_lossy(&result.stderr));
+    assert_live_zero(&result);
+    let stdout = String::from_utf8(result.stdout).unwrap();
+    assert!(stdout.contains("entry Created "));
+    assert!(stdout.contains("entry Modified "));
+    assert!(stdout.contains("entry ClosedForWrite "));
+    assert!(stdout.contains("entry MovedFrom "));
+    assert!(stdout.contains("renamed MovedTo "));
+    assert!(stdout.contains("renamed Deleted "));
+    assert!(stdout.contains("CLOSE_IDEMPOTENT\n"));
+    assert!(stdout.contains("CLOSED_NEXT_REJECTED\n"));
+    assert!(stdout.contains("WATCH_DONE\n"));
+    let from_cookie = stdout
+        .lines()
+        .find(|line| line.starts_with("entry MovedFrom "))
+        .unwrap()
+        .split_whitespace()
+        .nth(2)
+        .unwrap()
+        .parse::<u32>()
+        .unwrap();
+    let to_cookie = stdout
+        .lines()
+        .find(|line| line.starts_with("renamed MovedTo "))
+        .unwrap()
+        .split_whitespace()
+        .nth(2)
+        .unwrap()
+        .parse::<u32>()
+        .unwrap();
+    assert_ne!(from_cookie, 0);
+    assert_eq!(from_cookie, to_cookie);
+    assert!(!entry.exists());
+    assert!(!renamed.exists());
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn watcher_reports_real_inotify_queue_overflow() {
+    let scratch = Scratch::new();
+    let source = r#"
+Result<Unit,Text> drain(borrow Path path) {
+    Watcher watcher = Watcher.open(path)?;
+    println("WATCH_READY");
+    match (Console.readLine()) {
+        Err(error) { return new Result<Unit,Text>.Err(error); }
+        Ok(option) { drop(option); }
+    }
+    boolean finished = false;
+    boolean overflow = false;
+    boolean overflowKind = false;
+    while (!finished) {
+        match (watcher.next(0L)?) {
+            None { finished = true; }
+            Some(event) {
+                if (event.overflow()) {
+                    overflow = true;
+                    match (event.kind()) {
+                        Created { }
+                        Modified { }
+                        AttributesChanged { }
+                        ClosedForWrite { }
+                        Deleted { }
+                        MovedFrom { }
+                        MovedTo { }
+                        MovedSelf { }
+                        DeletedSelf { }
+                        Ignored { }
+                        Overflow { overflowKind = true; }
+                    }
+                }
+            }
+        }
+    }
+    if (overflow && overflowKind) { println("OVERFLOW_KIND_SEEN"); }
+    else { println("OVERFLOW_KIND_MISSING"); }
+    watcher.close()?;
+    watcher.close()?;
+    println("CLOSE_IDEMPOTENT");
+    return new Result<Unit,Text>.Ok(());
+}
+void main() {
+    match (Args.get(0)) {
+        Err(error) { println("ARG_ERROR"); }
+        Ok(pathText) {
+            match (Path.fromText(pathText)) {
+                Err(error) { println("PATH_ERROR"); }
+                Ok(path) {
+                    match (drain(path)) {
+                        Err(error) { Console.printText(error); println(""); }
+                        Ok(unit) { println("WATCH_DONE"); }
+                    }
+                }
+            }
+        }
+    }
+}
+"#;
+    let queue_limit = fs::read_to_string("/proc/sys/fs/inotify/max_queued_events")
+        .unwrap()
+        .trim()
+        .parse::<usize>()
+        .unwrap();
+    let program = compile(source);
+    let (mut child, output) = spawn_watcher(&program, &scratch.0);
+
+    for index in 0..=queue_limit {
+        let path = scratch.0.join(format!("overflow-{index:08x}"));
+        let file = fs::OpenOptions::new()
+            .read(true)
+            .create_new(true)
+            .open(path)
+            .unwrap();
+        drop(file);
+    }
+    send_line(&mut child);
+    drop(output);
+    let result = child.wait_with_output().unwrap();
+    assert!(result.status.success(), "{}", String::from_utf8_lossy(&result.stderr));
+    assert_live_zero(&result);
+    let stdout = String::from_utf8(result.stdout).unwrap();
+    assert!(stdout.contains("OVERFLOW_KIND_SEEN\n"), "{stdout}");
+    assert!(stdout.contains("CLOSE_IDEMPOTENT\n"));
+    assert!(stdout.contains("WATCH_DONE\n"));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn watcher_reports_self_deletion_invalidation_and_close_is_idempotent() {
+    let scratch = Scratch::new();
+    let watched_directory = scratch.0.join("watched");
+    fs::create_dir(&watched_directory).unwrap();
+    let source = r#"
+Result<Unit,Text> watch(borrow Path path) {
+    Watcher watcher = Watcher.open(path)?;
+    println("WATCH_READY");
+    match (Console.readLine()) {
+        Err(error) { return new Result<Unit,Text>.Err(error); }
+        Ok(option) { drop(option); }
+    }
+    boolean sawDeletedSelf = false;
+    boolean finished = false;
+    while (!finished) {
+        match (watcher.next(2000L)) {
+            Err(error) {
+                if (sawDeletedSelf) { println("INVALIDATED_AFTER_DELETE_SELF"); }
+                else { println("INVALIDATED_WITHOUT_DELETE_SELF"); }
+                finished = true;
+            }
+            Ok(option) {
+                match (option) {
+                    None { println("UNEXPECTED_TIMEOUT"); finished = true; }
+                    Some(event) {
+                        match (event.kind()) {
+                            Created { }
+                            Modified { }
+                            AttributesChanged { }
+                            ClosedForWrite { }
+                            Deleted { }
+                            MovedFrom { }
+                            MovedTo { }
+                            MovedSelf { }
+                            DeletedSelf { sawDeletedSelf = true; println("DELETE_SELF_EVENT"); }
+                            Ignored { }
+                            Overflow { }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    watcher.close()?;
+    watcher.close()?;
+    println("CLOSE_IDEMPOTENT");
+    match (watcher.next(0L)) {
+        Err(error) { println("CLOSED_NEXT_REJECTED"); }
+        Ok(option) { println("CLOSED_NEXT_ACCEPTED"); }
+    }
+    return new Result<Unit,Text>.Ok(());
+}
+void main() {
+    match (Args.get(0)) {
+        Err(error) { println("ARG_ERROR"); }
+        Ok(pathText) {
+            match (Path.fromText(pathText)) {
+                Err(error) { println("PATH_ERROR"); }
+                Ok(path) {
+                    match (watch(path)) {
+                        Err(error) { Console.printText(error); println(""); }
+                        Ok(unit) { println("WATCH_DONE"); }
+                    }
+                }
+            }
+        }
+    }
+}
+"#;
+    let program = compile(source);
+    let (mut child, output) = spawn_watcher(&program, &watched_directory);
+
+    fs::remove_dir(&watched_directory).unwrap();
+    send_line(&mut child);
+    drop(output);
+    let result = child.wait_with_output().unwrap();
+    assert!(result.status.success(), "{}", String::from_utf8_lossy(&result.stderr));
+    assert_live_zero(&result);
+    let stdout = String::from_utf8(result.stdout).unwrap();
+    assert!(stdout.contains("DELETE_SELF_EVENT\n"));
+    assert!(stdout.contains("INVALIDATED_AFTER_DELETE_SELF\n"));
+    assert!(stdout.contains("CLOSE_IDEMPOTENT\n"));
+    assert!(stdout.contains("CLOSED_NEXT_REJECTED\n"));
+    assert!(stdout.contains("WATCH_DONE\n"));
+}

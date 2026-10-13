@@ -6,6 +6,8 @@ mod compression;
 mod buffer;
 mod collections;
 mod filesystem;
+mod binary;
+mod database;
 mod console;
 mod args;
 mod io;
@@ -67,7 +69,10 @@ pub fn fields(program: &t::Program, class: C, class_id: usize) -> String {
         C::Locale => arrays::utility_fields(),
         C::ByteBuffer => buffer::fields(),
         C::Compression | C::Checksums => io::fields(),
-        C::Path | C::File | C::Directory | C::FileInfo | C::Files => filesystem::fields(program, class),
+        C::Path | C::File | C::Directory | C::FileInfo | C::Watcher | C::WatchEvent | C::Files =>
+            filesystem::fields(program, class),
+        C::BinaryReader | C::BinaryWriter => binary::fields(program, class, class_id),
+        C::Database => database::fields(),
         C::Env => io::fields(),
         C::Command | C::Process | C::ProcessOutput => process::fields(program, class),
         C::Random => random::fields(),
@@ -105,7 +110,10 @@ pub fn drop_fields(program: &t::Program, class: C, class_id: usize) -> String {
         C::ByteBuffer => buffer::drop_fields(),
         C::Encoding => io::drop_fields(),
         C::Compression | C::Checksums => io::drop_fields(),
-        C::Path | C::File | C::Directory | C::FileInfo | C::Files => filesystem::drop_fields(program, class),
+        C::Path | C::File | C::Directory | C::FileInfo | C::Watcher | C::WatchEvent | C::Files =>
+            filesystem::drop_fields(program, class),
+        C::BinaryReader | C::BinaryWriter => binary::drop_fields(program, class, class_id),
+        C::Database => database::drop_fields(),
         C::Env => io::drop_fields(),
         C::Command | C::Process | C::ProcessOutput => process::drop_fields(program, class),
         C::Random => random::drop_fields(),
@@ -184,9 +192,10 @@ fn append_body(program: &t::Program, out: &mut String, class: &t::Class, native:
         C::DateTime => date_time::implementation(program),
         C::Arrays => arrays::zeroed_implementations(program),
         C::ByteBuffer => buffer::implementation(program, class.id),
-        C::Encoding => encoding::implementation(program, class.id),
+        C::BinaryReader | C::BinaryWriter => binary::implementation(program, class.id, native),
+        C::Database => database::implementation(program, class.id),
         C::SocketAddress | C::TcpListener | C::TcpStream | C::Datagram | C::UdpSocket => return,
-        C::Path | C::File | C::Directory | C::FileInfo => return,
+        C::Path | C::File | C::Directory | C::FileInfo | C::Watcher | C::WatchEvent => return,
         C::Thread(_) | C::Mutex(_) | C::Guard(_) | C::Channel(_) |
         C::Sender(_) | C::Receiver(_) => return,
         C::HttpRequest | C::HttpResponse | C::Unicode | C::Character | C::Charset | C::Locale |
@@ -196,7 +205,10 @@ fn append_body(program: &t::Program, out: &mut String, class: &t::Class, native:
         C::BigInt | C::BigDecimal => return,
     };
     body = body.replace("@ID@", &class.id.to_string());
-    let receiver = match native { C::Arrays | C::ByteBuffer | C::Encoding | C::Crypto => None, _ => Some(class.id) };
+    let receiver = match native {
+        C::Arrays | C::ByteBuffer | C::Encoding | C::Crypto | C::Database => None,
+        _ => Some(class.id),
+    };
     body = support::replace_method_ids(body, program, receiver);
     debug_assert!(!support::has_placeholder(&body), "unexpanded standard-library placeholder");
     out.push_str(&body);

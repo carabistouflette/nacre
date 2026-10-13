@@ -31,6 +31,7 @@ pub enum NativeClass {
     Unicode, Character, Charset, Locale,
     SocketAddress, TcpListener, TcpStream, Datagram, UdpSocket, HttpRequest, HttpResponse,
     CryptoKey, CryptoDigest, CryptoMac, Certificate,
+    Watcher, WatchEvent, BinaryReader, BinaryWriter,
     Thread(Type), Mutex(Type), Guard(Type), Channel(Type), Sender(Type), Receiver(Type),
     Env, Command, Process, ProcessOutput,
 }

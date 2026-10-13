@@ -14,3 +14,19 @@ static bool @FILE_INFO_IS_SYMLINK@(ncr_obj_@FILE_INFO_ID@ *ncr_self, size_t ncr_
     (void)ncr_line; (void)ncr_column;
     return ncr_self->is_symlink;
 }
+static int64_t @FILE_INFO_MODIFIED_MILLIS@(ncr_obj_@FILE_INFO_ID@ *ncr_self, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column;
+    return ncr_self->modified_millis;
+}
+static int64_t @FILE_INFO_ACCESSED_MILLIS@(ncr_obj_@FILE_INFO_ID@ *ncr_self, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column;
+    return ncr_self->accessed_millis;
+}
+static int64_t @FILE_INFO_CHANGED_MILLIS@(ncr_obj_@FILE_INFO_ID@ *ncr_self, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column;
+    return ncr_self->changed_millis;
+}
+static int32_t @FILE_INFO_MODE@(ncr_obj_@FILE_INFO_ID@ *ncr_self, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column;
+    return ncr_self->mode;
+}

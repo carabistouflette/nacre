@@ -865,11 +865,11 @@ copy and reports an invalid index or non-UTF-8 argument as `Err`.
 
 ## Paths and filesystem
 
-`Path`, `File`, `Directory`, `FileInfo`, and `ByteBuffer` are opaque native owners;
+`Path`, `File`, `Directory`, `FileInfo`, `Watcher`, `WatchEvent`, and `ByteBuffer` are opaque native owners;
 resource handles have no public constructors. Factories return fully initialized
 owners or a `Result` error. Explicit `close()` reports errors and invalidates the
-handle; ordinary scope cleanup best-effort closes an open descriptor. Calls on a
-closed resource return `Err`.
+handle, except `Watcher.close()`, which is idempotent. Ordinary scope cleanup
+best-effort closes an open descriptor. Calls on a closed resource return `Err`.
 
 ### `Path`, `File`, and `Directory`
 
@@ -883,9 +883,17 @@ readonly borrow Text Path.asText()
 static Result<File, Text> File.openRead(borrow Path path)
 static Result<File, Text> File.create(borrow Path path, int mode)
 static Result<File, Text> File.openAppend(borrow Path path, int mode)
+static Result<File, Text> File.openReadWrite(borrow Path path, int mode, boolean create)
 Result<long, Text> File.readSome(borrow mut ByteBuffer destination, long maxBytes)
 Result<long, Text> File.writeSome(borrow ByteBuffer source, long offset, long maxBytes)
+Result<long, Text> File.read(borrow mut ByteBuffer destination, long maxBytes)
+Result<long, Text> File.write(borrow ByteBuffer source, long offset, long maxBytes)
 Result<Unit, Text> File.writeAll(borrow ByteBuffer source)
+Result<long, Text> File.position()
+Result<long, Text> File.seek(long offset, int origin)
+Result<Unit, Text> File.truncate(long length)
+Result<long, Text> File.readAt(borrow mut ByteBuffer destination, long fileOffset, long maxBytes)
+Result<long, Text> File.writeAt(borrow ByteBuffer source, long bufferOffset, long fileOffset, long maxBytes)
 Result<Unit, Text> File.flush()
 Result<Unit, Text> File.close()
 
@@ -900,15 +908,26 @@ absolute child and joins components without resolving symlinks, canonicalizing,
 or normalizing `.`/`..`. `asText` is a shared borrow. Paths are UTF-8 boundary
 strings; embedded NUL is rejected.
 
-`File.create` and `openAppend` use POSIX permission modes subject to the process
-umask. `readSome` appends at most `maxBytes`, returns the count, `0` at EOF, or
-`Err`; a zero maximum performs no read. `writeSome` writes at most the selected
-`[offset, offset + maxBytes)` source range and returns one partial count. Invalid
-ranges and negative limits are `Err`; zero maximum returns zero. `writeAll` retries
-partial writes until complete or `Err`; an error can follow a written prefix and
-does not undo it. `flush` uses `fsync`; it does not promise hardware durability
-beyond the OS contract. File I/O is synchronous and blocking. Drop closes but does
-not implicitly flush.
+`File.create`, `openAppend`, and `openReadWrite` (when creating) use POSIX
+permission modes subject to the process umask. `openReadWrite` opens without
+truncation; `create` controls whether a missing file is created.
+`readSome` appends at most `maxBytes`, returns the count,
+`0` at EOF, or `Err`; a zero maximum performs no read. `writeSome` writes at most
+the selected `[offset, offset + maxBytes)` source range and returns one partial
+count. Invalid ranges and negative limits are `Err`; zero maximum returns zero.
+`writeAll` retries partial writes until complete or `Err`; an error can follow a
+written prefix and does not undo it. `flush` uses `fsync`; it does not promise
+hardware durability beyond the OS contract. File I/O is synchronous and blocking.
+Drop closes but does not implicitly flush.
+
+`read` and `write` implement `ByteSource` and `ByteSink` for streams. `position`
+returns the current cursor. `seek` uses origin `0` for start, `1` for current
+position, and `2` for end; invalid origins, negative resulting positions, and
+offset overflow are errors. `truncate` changes file length but does not move the
+cursor. `readAt` appends bytes to the destination buffer; `writeAt` uses the
+specified source-buffer range. Both return one partial count and leave the cursor unchanged.
+Offset or buffer-range overflow is an error. `writeAt` is rejected for append-mode
+files because Linux may force `pwrite` to append on those descriptors.
 
 `Directory.nextName` skips `.` and `..`, returns one owned UTF-8 entry component
 per `Some`, `None` at end, and `Err` for I/O or invalid UTF-8. It does not return a
@@ -921,6 +940,10 @@ readonly long FileInfo.size()
 readonly boolean FileInfo.isFile()
 readonly boolean FileInfo.isDirectory()
 readonly boolean FileInfo.isSymlink()
+readonly long FileInfo.modifiedMillis()
+readonly long FileInfo.accessedMillis()
+readonly long FileInfo.changedMillis()
+readonly int FileInfo.mode()
 
 static Result<Text, Text> Files.readText(borrow Text path)
 static Result<Unit, Text> Files.writeText(borrow Text path, borrow Text content)
@@ -930,6 +953,13 @@ static Result<Unit, Text> Files.createDirectory(borrow Path path, int mode)
 static Result<Unit, Text> Files.removeFile(borrow Path path)
 static Result<Unit, Text> Files.removeDirectory(borrow Path path)
 static Result<Unit, Text> Files.rename(borrow Path from, borrow Path to)
+static Result<Unit, Text> Files.copy(borrow Path source, borrow Path target, boolean replace)
+static Result<Unit, Text> Files.createDirectories(borrow Path path, int mode)
+static Result<Path, Text> Files.readLink(borrow Path path)
+static Result<Unit, Text> Files.symlink(borrow Path target, borrow Path link)
+static Result<Unit, Text> Files.chmod(borrow Path path, int mode)
+static Result<List<Text>, Text> Files.list(borrow Path path)
+static Result<Path, Text> Files.canonical(borrow Path path)
 ```
 
 `readText` reads the complete file, preserves embedded NUL, and rejects invalid
@@ -942,10 +972,118 @@ promised). Before commit, failure preserves the destination and attempts to remo
 the temporary file. The replacement uses temporary-file permissions, subject to
 the umask, and replacing a symlink replaces its directory entry.
 
-`metadata` returns a `FileInfo` snapshot; `size()` is in bytes. Filesystem paths
-are passed through the operating-system boundary and reject embedded NUL. `mode`
-arguments are POSIX permission bits, subject to umask. Filesystem commands report
-success as `Result<Unit, Text>`, not a boolean.
+`metadata` returns a `FileInfo` snapshot; `size()` is in bytes, the three time
+getters are Unix-epoch milliseconds, and `mode()` returns the POSIX `st_mode`
+bits. `Files.copy` copies one regular file with a fixed-size buffer; it rejects
+symlinks at the source and target and does not recurse or promise `fsync`
+durability. `replace` controls whether an existing target can be truncated;
+errors after copying starts may leave a partial target. `createDirectories`
+creates missing path components and can leave earlier components created on
+error. `readLink` returns the symlink target as a UTF-8
+`Path`; `symlink` stores the target path as supplied, while `chmod` changes mode
+bits. `list` returns unsorted, nonrecursive UTF-8 entry names (excluding `.` and
+`..`), with limits of 65,536 names and 16 MiB total name bytes. `canonical`
+resolves an existing path to its canonical absolute path.
+
+Filesystem paths are passed through the operating-system boundary and reject
+embedded NUL. Creation `mode` arguments are POSIX permission bits, subject to
+umask. Filesystem commands report success as `Result<Unit, Text>`, not a boolean.
+
+### `Watcher` and `WatchEvent`
+
+```java
+enum WatchKind {
+    Created; Modified; AttributesChanged; ClosedForWrite; Deleted;
+    MovedFrom; MovedTo; MovedSelf; DeletedSelf; Ignored; Overflow;
+}
+static Result<Watcher, Text> Watcher.open(borrow Path directory)
+Result<Option<WatchEvent>, Text> Watcher.next(long timeoutMillis)
+Result<Unit, Text> Watcher.close()
+readonly borrow Text WatchEvent.name()
+readonly WatchKind WatchEvent.kind()
+readonly long WatchEvent.cookie()
+readonly boolean WatchEvent.isDirectory()
+readonly boolean WatchEvent.overflow()
+```
+
+`Watcher` uses Linux inotify and observes only immediate children of a real
+directory; it does not recurse or follow a symlink at the watched path. `next`
+waits against a monotonic deadline, returns `Ok(None)` on timeout, and treats
+`timeoutMillis == 0` as one nonblocking poll. Negative timeouts are errors.
+Events are separate records and need not represent one high-level filesystem
+operation. Move-from/move-to events can be correlated by their nonzero cookie.
+`name()` is the UTF-8 entry name and is empty for self, ignored, and overflow
+events. Queue overflow is returned as `WatchKind.Overflow` with `overflow() ==
+true`, not silently discarded. A `DeletedSelf` or `Ignored` event invalidates the
+watch; queued events remain readable, then later `next` calls return `Err`.
+`close()` is idempotent, including after invalidation.
+
+## Byte streams and binary encoding
+
+```java
+interface ByteSource {
+    Result<long, Text> read(borrow mut ByteBuffer destination, long maxBytes);
+}
+interface ByteSink {
+    Result<long, Text> write(borrow ByteBuffer source, long offset, long maxBytes);
+    Result<Unit, Text> flush();
+}
+class BinaryReader {
+    BinaryReader(ByteBuffer bytes, boolean littleEndian)
+    readonly long position()
+    readonly long remaining()
+    Result<Unit, Text> seek(long position)
+    Result<byte, Text> readByte()
+    Result<int, Text> readInt16()
+    Result<int, Text> readInt32()
+    Result<long, Text> readInt64()
+    Result<double, Text> readDouble()
+    Result<ByteBuffer, Text> readBytes(long length)
+    Result<Text, Text> readUtf8(long length)
+}
+class BinaryWriter {
+    BinaryWriter(long capacity, boolean littleEndian)
+    readonly long position()
+    Result<Unit, Text> writeByte(byte value)
+    Result<Unit, Text> writeInt16(int value)
+    Result<Unit, Text> writeInt32(int value)
+    Result<Unit, Text> writeInt64(long value)
+    Result<Unit, Text> writeDouble(double value)
+    Result<Unit, Text> writeBytes(borrow ByteBuffer source)
+    Result<Unit, Text> writeUtf8(borrow Text value)
+    readonly borrow ByteBuffer bytes()
+    static ByteBuffer finish(BinaryWriter writer)
+}
+static Result<long, Text> Streams.copy(borrow mut ByteSource source, borrow mut ByteSink sink, long maxBytes, long bufferSize)
+static Result<ByteBuffer, Text> Streams.readAll(borrow mut ByteSource source, long maxBytes, long bufferSize)
+static Result<Unit, Text> Streams.writeAll(borrow mut ByteSink sink, borrow ByteBuffer source)
+```
+
+`ByteSource` and `ByteSink` are allocation-free interfaces implemented by
+`File` and `TcpStream`; each operation may transfer a partial count. `Streams`
+loops over partial writes, rejects invalid counts and zero-progress writes, and
+uses positive `bufferSize` to bound each transfer chunk. `copy` consumes at most
+`maxBytes`, stops at EOF, and flushes the sink (including when the bound is zero).
+`readAll` consumes at most `maxBytes` and returns the prefix if it reaches that
+limit without probing or consuming an extra byte. `writeAll` loops until the
+complete buffer is sent, then flushes. These utilities do not roll back source
+consumption or already-written output when an error occurs.
+
+`BinaryReader` uniquely owns its input buffer; `BinaryWriter` uniquely owns the
+buffer it builds. Both constructors require an explicit byte order. Reads of
+fixed-width values and `readBytes` leave the cursor unchanged if the requested
+data is insufficient; `readUtf8` is strict UTF-8 and likewise preserves the
+cursor on insufficient input or invalid encoding. `readInt16` returns a signed
+`int`. Binary doubles use IEEE-754 binary64 bits copied with `memcpy`.
+`writeInt16` accepts only the signed 16-bit range and leaves the writer unchanged
+when out of range. `bytes()` is a borrow tied to the writer; `finish` consumes the
+writer and transfers its exact buffer without copying.
+
+The `File` stream adapters use the descriptor cursor and may return partial
+counts. `File.flush` calls `fsync`. `TcpStream.read` and `write` use timeout `0`
+(unbounded wait); its `flush` is a no-op and gives no guarantee of network
+delivery. `Streams.copy` and `writeAll` flush their sink according to that sink's
+contract, not a peer-acknowledgement guarantee.
 
 ## POSIX regular expressions
 

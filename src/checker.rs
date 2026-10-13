@@ -133,6 +133,8 @@ impl Tables {
                         t::NativeClass::Crypto |
                         t::NativeClass::Path | t::NativeClass::File |
                         t::NativeClass::Directory | t::NativeClass::FileInfo |
+                        t::NativeClass::Watcher | t::NativeClass::WatchEvent |
+                        t::NativeClass::BinaryReader | t::NativeClass::BinaryWriter |
                         t::NativeClass::Console | t::NativeClass::Files |
                         t::NativeClass::Args | t::NativeClass::Math |
                         t::NativeClass::Random | t::NativeClass::Time | t::NativeClass::DateTime |
@@ -280,6 +282,10 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
             Some(a::NativeClass::File) => Some(t::NativeClass::File),
             Some(a::NativeClass::Directory) => Some(t::NativeClass::Directory),
             Some(a::NativeClass::FileInfo) => Some(t::NativeClass::FileInfo),
+            Some(a::NativeClass::Watcher) => Some(t::NativeClass::Watcher),
+            Some(a::NativeClass::WatchEvent) => Some(t::NativeClass::WatchEvent),
+            Some(a::NativeClass::BinaryReader) => Some(t::NativeClass::BinaryReader),
+            Some(a::NativeClass::BinaryWriter) => Some(t::NativeClass::BinaryWriter),
             Some(a::NativeClass::Console) => Some(t::NativeClass::Console),
             Some(a::NativeClass::Files) => Some(t::NativeClass::Files),
             Some(a::NativeClass::Args) => Some(t::NativeClass::Args),
