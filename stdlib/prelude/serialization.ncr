@@ -160,10 +160,8 @@ class ListCodec<T> implements Codec<List<T>> {
             return new Result<Unit, Text>.Err(new Text("ListCodec.encode: element count exceeds maxElements"));
         }
         writer.writeInt32(count)?;
-        int index = 0;
-        while (index < count) {
-            this.elementCodec.encode(value.getRef(index), writer)?;
-            index = index + 1;
+        for (borrow T element : value) {
+            this.elementCodec.encode(element, writer)?;
         }
         return new Result<Unit, Text>.Ok(());
     }
@@ -185,7 +183,6 @@ class ListCodec<T> implements Codec<List<T>> {
             match (this.elementCodec.decode(reader)) {
                 Ok(value) { values.add(value); }
                 Err(error) {
-                    values.clear();
                     return new Result<List<T>, Text>.Err(error);
                 }
             }
@@ -263,12 +260,12 @@ class UuidCodec implements Codec<Uuid> {
         long least = value.leastSignificantBits();
         int index = 7;
         while (index >= 0) {
-            writer.writeByte((byte)(most >> (index * 8)))?;
+            writer.writeByte((byte)((most >> (index * 8)) & 255L))?;
             index = index - 1;
         }
         index = 7;
         while (index >= 0) {
-            writer.writeByte((byte)(least >> (index * 8)))?;
+            writer.writeByte((byte)((least >> (index * 8)) & 255L))?;
             index = index - 1;
         }
         return new Result<Unit, Text>.Ok(());
