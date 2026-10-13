@@ -9,6 +9,10 @@ jobs:
         cc: [gcc, clang]
     steps:
       - uses: actions/checkout@v7.0.1
+      - name: Install native library headers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libssl-dev zlib1g-dev libgmp-dev libcurl4-openssl-dev libicu-dev libarchive-dev libxml2-dev
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust }}

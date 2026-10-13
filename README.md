@@ -22,6 +22,14 @@ and [standard-library reference](docs/STDLIB.md).
 Linux is the supported native target. Install Rust/Cargo and GCC or Clang with
 C11 headers and a linker; Windows and macOS are not supported targets.
 
+Optional native library APIs require their development headers and libraries:
+OpenSSL 3 for `Crypto`, zlib for `Compression`/`Checksums`, GMP for arbitrary
+precision, ICU for Unicode/calendar APIs, libcurl for HTTP, libarchive for ZIP,
+and libxml2 for XML. Generated programs
+link only the libraries requested by their emitted native templates; ordinary
+programs retain their existing C11/POSIX dependencies. The compiler accepts only
+a fixed dependency allowlist, never linker flags supplied by Nacre source.
+
 ```sh
 cargo fetch --locked
 cargo test --offline --locked --features fuzzing
@@ -304,6 +312,24 @@ are evidence, not a general fuzz-safety proof.
 See [VALIDATION.md](docs/VALIDATION.md) for the compiler, native backend, and
 editor-facing evidence and its unverified platform boundaries. This README makes
 no desktop-acceptance or remote-CI claim.
+
+## Contribution workflow
+
+- Keep `main` aligned with the accepted private remote; no direct feature pushes
+  to `main`, force pushes, or history rewrites.
+- Develop on focused feature branches. Parallel contributors use isolated
+  worktrees; the integration owner reviews and integrates their commits into the
+  feature branch. Contributor branches are not published.
+- Stage explicit owned paths. Keep generated bundles, caches, workstation data,
+  credentials, and private runtime evidence outside curated source.
+- Open a pull request for the integration branch. Review the actual changes and
+  exercise affected native consumers; require all CI jobs to pass before merge.
+- Refresh the source manifest for the final source set. Preserve unrelated local
+  files and existing contributor history; remove owned temporary worktrees only
+  after their changes have been accepted.
+
+The private repository's current GitHub plan does not permit protected branches;
+these merge gates are procedural, not server-enforced.
 
 ## Boundaries and design notes
 

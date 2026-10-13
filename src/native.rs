@@ -77,6 +77,38 @@ pub fn compile_c(source: &str) -> Result<NativeProgram, String> {
 pub fn compile_c_with_flags(source: &str, flags: &[&str]) -> Result<NativeProgram, String> {
     compile_c_optimized(source, "-O2", flags)
 }
+// Emitted native templates declare dependencies with exact standalone comments.
+// The fixed allowlist supplies linker arguments, never source-controlled flags.
+fn native_dependencies(source: &str) -> u16 {
+    source.lines().fold(0_u16, |mask, line| {
+        mask | match line {
+            "/* nacre-link: crypto */" => 1,
+            "/* nacre-link: z */" => 2,
+            "/* nacre-link: gmp */" => 4,
+            "/* nacre-link: curl */" => 8,
+            "/* nacre-link: icu */" => 16,
+            "/* nacre-link: archive */" => 32,
+            "/* nacre-link: xml */" => 64,
+            "/* nacre-link: sqlite */" => 128,
+            "/* nacre-link: ssl */" => 256 | 1,
+            "/* nacre-link: xslt */" => 512 | 64,
+            _ => 0,
+        }
+    })
+}
+
+fn native_link_flags(libraries: u16) -> impl Iterator<Item = &'static str> {
+    [(256, "-lssl"), (1, "-lcrypto"), (2, "-lz"), (4, "-lgmp"), (8, "-lcurl"),
+     (16, "-licuuc"), (16, "-licui18n"), (32, "-larchive"), (512, "-lxslt"),
+     (64, "-lxml2"), (128, "-lsqlite3")]
+        .into_iter()
+        .filter_map(move |(bit, flag)| (libraries & bit != 0).then_some(flag))
+}
+
+fn native_header_flags(libraries: u16) -> Option<&'static str> {
+    (libraries & 64 != 0).then_some("-I/usr/include/libxml2")
+}
+
 /// Compile at an explicitly selected level; flags are trusted separate arguments.
 pub fn compile_c_optimized(source: &str, optimization: &str, flags: &[&str]) -> Result<NativeProgram, String> {
     check_optimization(optimization)?;
@@ -85,12 +117,15 @@ pub fn compile_c_optimized(source: &str, optimization: &str, flags: &[&str]) -> 
     let c_path = directory.0.join("program.c");
     let executable = directory.0.join(if cfg!(windows) { "program.exe" } else { "program" });
     fs::write(&c_path, source).map_err(|e| format!("failed to write temporary C source: {e}"))?;
+    let libraries = native_dependencies(source);
     let output = Command::new(&compiler)
         .arg(optimization)
         .args(["-std=c11", "-pthread", "-Wall", "-Wextra", "-pedantic", "-Wno-unused-function", "-Wno-unused-variable", "-Wno-unused-parameter", "-Wno-unused-but-set-variable"])
+        .args(native_header_flags(libraries))
         .args(flags)
         .arg(&c_path).arg("-o").arg(&executable)
         .args(if cfg!(unix) { &["-lm"][..] } else { &[][..] })
+        .args(native_link_flags(libraries))
         .output().map_err(|e| format!("failed to start {compiler:?}: {e}"))?;
     if !output.status.success() {
         return Err(format!("C compiler {compiler:?} failed:\n{}\nTo inspect the generated code: nacre emit-c source.ncr -o debug.c", String::from_utf8_lossy(&output.stderr)));
@@ -115,6 +150,7 @@ pub fn emit_llvm(source: &str, optimization: &str) -> Result<String, String> {
     fs::write(&c_path, source).map_err(|e| e.to_string())?;
     let output = Command::new(&compiler)
         .args(["-std=c11", optimization, "-pthread", "-S", "-emit-llvm", "-fno-ident"])
+        .args(native_header_flags(native_dependencies(source)))
         .arg(&c_path).args(["-o", "-"])
         .output().map_err(|e| format!("emit-llvm requires Clang (NACRE_CLANG={compiler:?}): {e}"))?;
     if !output.status.success() {
