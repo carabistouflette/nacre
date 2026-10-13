@@ -138,10 +138,10 @@ pub(super) fn implementation(program: &t::Program, class_id: usize, element: Typ
         ("@OPTION_TYPE@", ctype(program, try_pop.return_type)),
         ("@NONE_TAG@", none_tag.to_string()),
         ("@SOME_TAG@", some_tag.to_string()),
-        ("@PEEK_METHOD@", &peek_method(program, class_id, element)),
-        ("@GET_REF_METHOD@", &borrowed_getter(program, class_id, element)),
-        ("@TRY_PEEK_METHOD@", &try_peek_method(program, class_id, element)),
-        ("@VALUE_AT_METHOD@", &value_at_method(program, class_id, element)),
+        ("@PEEK_METHOD@", peek_method(program, class_id, element)),
+        ("@GET_REF_METHOD@", borrowed_getter(program, class_id, element)),
+        ("@TRY_PEEK_METHOD@", try_peek_method(program, class_id, element)),
+        ("@VALUE_AT_METHOD@", value_at_method(program, class_id, element)),
         ("@DROP_AT_INDEX@", collections::drop_element(element, "p->items[index]")),
     ];
     body = replace_placeholders(body, &substitutions);

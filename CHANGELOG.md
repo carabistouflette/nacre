@@ -13,6 +13,11 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 - XSLT adds independent serialized XML, HTML, and text results through
   `transformBytes`, honoring output encodings with direct `ByteBuffer` writes
   and the same per-transform resource restrictions as document results.
+- Collection drains destroy unreturned map entry owners on the calling thread
+  before publishing their iterator, including custom-key and ordered-map drains.
+  Sendable iterators cannot retain discarded thread-affine guards. Direct ordered
+  traversal preserves readonly keys and mutable value loans; iterator break
+  releases the loop loan without consuming the remaining input.
 
 - Adds reusable affine `Codec<T>` and `Serialization<T>` APIs with a canonical
   big-endian `NCRS`/version-1 frame, primitive, length-prefixed UTF-8 and byte

@@ -307,6 +307,9 @@ impl Expander {
                 }, env, class.span, 0)?;
                 if element.is_copy() {
                     rewrite_borrowed_return_to_value(&mut class.methods, "valueAt", "T");
+                    class.methods.retain(|method| method.name != "getRef");
+                } else {
+                    class.methods.retain(|method| !matches!(method.name.as_str(), "peek" | "tryPeek"));
                 }
             }
             Some(a::NativeClass::ListIterator(element))

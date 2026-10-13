@@ -278,7 +278,8 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
             Some(a::NativeClass::Set { .. }) => Some(t::NativeClass::Set {
                 key: Type::Void, hasher: None,
             }),
-            Some(a::NativeClass::Comparator(_) | a::NativeClass::Hasher(_)) => None,
+            Some(a::NativeClass::Comparator(_) | a::NativeClass::Hasher(_)
+                | a::NativeClass::Iterator(_)) => None,
             Some(a::NativeClass::OrderedMap { .. }) =>
                 Some(t::NativeClass::OrderedMap(Type::Void, Type::Void)),
             Some(a::NativeClass::OrderedSet(_)) => Some(t::NativeClass::OrderedSet(Type::Void)),

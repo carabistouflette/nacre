@@ -50,9 +50,9 @@ pub(super) fn map_slot_expression(
     kind: t::MapSlotKind, value_type: Type,
 ) -> String {
     let stored = match (program.classes[map_class].native, kind) {
-        (Some(t::NativeClass::Map { .. }), t::MapSlotKind::Occupied) =>
+        (Some(t::NativeClass::Map { .. } | t::NativeClass::Set { .. }), t::MapSlotKind::Occupied) =>
             format!("{map}->table.entries[{index}].occupied"),
-        (Some(t::NativeClass::Map { .. }), t::MapSlotKind::Key) =>
+        (Some(t::NativeClass::Map { .. } | t::NativeClass::Set { .. }), t::MapSlotKind::Key) =>
             format!("{map}->table.entries[{index}].key"),
         (Some(t::NativeClass::Map { .. }), t::MapSlotKind::Value) =>
             format!("{map}->table.entries[{index}].value"),
@@ -371,24 +371,32 @@ fn map_drain_implementation(
     let element = if drain_keys { key } else { value };
     let (next_name, drop_name) = iterators::callback_names(drain.id);
     let entry = format!("struct ncr_map_entry_{map_class}");
-    let next_body = if drain_keys {
+    let (field, unused_field, unused) = if drain_keys {
+        ("key", "value", value)
+    } else {
+        ("value", "key", key)
+    };
+    let next_body = format!(
+        "    {entry} *entries = raw;\n    while (*cursor < length) {{\n        int32_t index = (*cursor)++;\n        if (!entries[index].occupied) {{ continue; }}\n        *value = entries[index].{field};\n        entries[index].{field} = {};\n        entries[index].occupied = false;\n        *available = true;\n        return;\n    }}\n    *available = false;",
+        zero(program, element),
+    );
+    let drop_body = format!(
+        "    {entry} *entries = raw;\n    for (int32_t index = cursor; index < length; ++index) {{\n        if (entries[index].occupied) {{\n            {}\n        }}\n    }}\n    ncr_deallocate(entries);",
+        drop_element(element, &format!("entries[index].{field}")),
+    );
+    // The iterator owns only its yielded type; discard hidden owners on the calling thread.
+    let discard_unused = if matches!(unused, Type::Object(_)) {
+        let slot = format!("p->table.entries[index].{unused_field}");
         format!(
-            "    {entry} *entries = raw;\n    while (*cursor < length) {{\n        int32_t index = (*cursor)++;\n        if (!entries[index].occupied) {{ continue; }}\n        *value = entries[index].key;\n        entries[index].key = {};\n        {}\n        entries[index].value = {};\n        entries[index].occupied = false;\n        *available = true;\n        return;\n    }}\n    *available = false;",
-            zero(program, key), drop_element(value, "entries[index].value"), zero(program, value),
+            "for (int32_t index = 0; index < p->table.capacity; ++index) {{\n    if (p->table.entries[index].occupied) {{\n        {}\n        {slot} = {};\n    }}\n}}\n",
+            drop_element(unused, &slot), zero(program, unused),
         )
     } else {
-        format!(
-            "    {entry} *entries = raw;\n    while (*cursor < length) {{\n        int32_t index = (*cursor)++;\n        if (!entries[index].occupied) {{ continue; }}\n        *value = entries[index].value;\n        entries[index].value = {};\n        {}\n        entries[index].key = {};\n        entries[index].occupied = false;\n        *available = true;\n        return;\n    }}\n    *available = false;",
-            zero(program, value), drop_map_key(key, "entries[index].key"), zero(program, key),
-        )
+        String::new()
     };
-    let drop_body = format!(
-        "    {entry} *entries = raw;\n    for (int32_t index = cursor; index < length; ++index) {{\n        if (entries[index].occupied) {{\n            {}\n            {}\n        }}\n    }}\n    ncr_deallocate(entries);",
-        drop_map_key(key, "entries[index].key"), drop_element(value, "entries[index].value"),
-    );
     let callbacks = iterators::drain_callbacks(program, drain.id, element, &next_body, &drop_body);
     let setup = format!(
-        "iterator->state = p->table.entries;\niterator->length = p->table.capacity;\niterator->ncr_next_fn = {next_name};\niterator->ncr_drop_fn = {drop_name};\np->table.entries = NULL;\np->table.length = 0;\np->table.capacity = 0;"
+        "{discard_unused}iterator->state = p->table.entries;\niterator->length = p->table.capacity;\niterator->ncr_next_fn = {next_name};\niterator->ncr_drop_fn = {drop_name};\np->table.entries = NULL;\np->table.length = 0;\np->table.capacity = 0;"
     );
     format!("{callbacks}{}", iterators::drain_function(program, map_class, method, element, &setup))
 }

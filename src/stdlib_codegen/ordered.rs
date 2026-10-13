@@ -75,29 +75,32 @@ fn ordered_map_drain(
     let element = if drain_keys { key } else { value };
     let (next_name, drop_name) = iterators::callback_names(drain.id);
     let entry = format!("struct ncr_ordered_entry_{class_id}");
-    let next_body = if drain_keys {
+    let (field, unused_field, unused) = if drain_keys {
+        ("key", "value", value)
+    } else {
+        ("value", "key", key)
+    };
+    let next_body = format!(
+        "    {entry} *entries = raw;\n    if (*cursor >= length) {{ *available = false; return; }}\n    int32_t index = (*cursor)++;\n    *value = entries[index].{field};\n    entries[index].{field} = {};\n    *available = true;",
+        collections::zero(program, element),
+    );
+    let drop_body = format!(
+        "    {entry} *entries = raw;\n    for (int32_t index = cursor; index < length; ++index) {{\n        {}\n    }}\n    ncr_deallocate(entries);",
+        collections::drop_element(element, &format!("entries[index].{field}")),
+    );
+    // Erased entry halves must not carry thread-affine owners into a sendable iterator.
+    let discard_unused = if matches!(unused, Type::Object(_)) {
+        let slot = format!("p->table.items[index].{unused_field}");
         format!(
-            "    {entry} *entries = raw;\n    if (*cursor >= length) {{ *available = false; return; }}\n    int32_t index = (*cursor)++;\n    *value = entries[index].key;\n    entries[index].key = {};\n    {}\n    entries[index].value = {};\n    *available = true;",
-            collections::zero(program, key),
-            collections::drop_element(value, "entries[index].value"),
-            collections::zero(program, value),
+            "for (int32_t index = 0; index < p->table.length; ++index) {{\n    {}\n    {slot} = {};\n}}\n",
+            collections::drop_element(unused, &slot), collections::zero(program, unused),
         )
     } else {
-        format!(
-            "    {entry} *entries = raw;\n    if (*cursor >= length) {{ *available = false; return; }}\n    int32_t index = (*cursor)++;\n    *value = entries[index].value;\n    entries[index].value = {};\n    {}\n    entries[index].key = {};\n    *available = true;",
-            collections::zero(program, value),
-            collections::drop_element(key, "entries[index].key"),
-            collections::zero(program, key),
-        )
+        String::new()
     };
-    let drop_body = format!(
-        "    {entry} *entries = raw;\n    for (int32_t index = cursor; index < length; ++index) {{\n        {}\n        {}\n    }}\n    ncr_deallocate(entries);",
-        collections::drop_element(key, "entries[index].key"),
-        collections::drop_element(value, "entries[index].value"),
-    );
     let callbacks = iterators::drain_callbacks(program, drain.id, element, &next_body, &drop_body);
     let setup = format!(
-        "iterator->state = p->table.items;\niterator->length = p->table.length;\niterator->ncr_next_fn = {next_name};\niterator->ncr_drop_fn = {drop_name};\np->table.items = NULL;\np->table.length = 0;\np->table.capacity = 0;"
+        "{discard_unused}iterator->state = p->table.items;\niterator->length = p->table.length;\niterator->ncr_next_fn = {next_name};\niterator->ncr_drop_fn = {drop_name};\np->table.items = NULL;\np->table.length = 0;\np->table.capacity = 0;"
     );
     format!("{callbacks}{}", iterators::drain_function(program, class_id, method, element, &setup))
 }
@@ -269,7 +272,7 @@ pub(super) fn map_implementation(program: &t::Program, class_id: usize, key: Typ
         ("@KEY_AT_EXPR@", key_at_expr),
         ("@VALUE_AT_TYPE@", ctype(program, value_at.return_type)),
         ("@VALUE_AT_EXPR@", value_at_expr),
-        ("@VALUE_AT_MUT_METHOD@", &value_at_mut_method(program, class_id, value)),
+        ("@VALUE_AT_MUT_METHOD@", value_at_mut_method(program, class_id, value)),
         ("@OPTION_INDEX_TYPE@", ctype(program, floor.return_type)),
         ("@INDEX_NONE_TAG@", index_none_tag.to_string()),
         ("@INDEX_SOME_TAG@", index_some_tag.to_string()),
@@ -296,7 +299,7 @@ pub(super) fn set_implementation(program: &t::Program, class_id: usize, key: Typ
         ("@QUERY_TYPE@", ctype(program, query)),
         ("@KEY_QUERY_EXPR@", key_query),
         ("@DROP_DUPLICATE_KEY@", collections::drop_element(key, "key")),
-        ("@ORDERED_SET_KEY_AT@", &ordered_set_key_at(program, class_id, key)),
+        ("@ORDERED_SET_KEY_AT@", ordered_set_key_at(program, class_id, key)),
     ]);
     body = replace_method_ids(body, program, Some(class_id));
     debug_assert!(!body.contains('@'), "unexpanded OrderedSet template placeholder");

@@ -322,6 +322,133 @@ void main() {
 }
 
 #[test]
+fn direct_ordered_traversal_borrows_entries_and_iterator_break_preserves_the_input() {
+    assert_native(r#"
+class Item {
+    private int id;
+    private int count;
+    private Text payload;
+    Item(int id) { this.id = id; this.count = 0; this.payload = new Text("owned"); }
+    public readonly int idValue() { return this.id; }
+    public readonly int countValue() { return this.count; }
+    public void add(int amount) { this.count = this.count + amount; }
+}
+class ItemOrder implements Comparator<Item> {
+    public readonly int compare(borrow Item left, borrow Item right) {
+        if (left.idValue() < right.idValue()) { return -1; }
+        if (left.idValue() > right.idValue()) { return 1; }
+        return 0;
+    }
+}
+void main() {
+    OrderedMap<Item, Item> map = new OrderedMap<Item, Item>(new ItemOrder());
+    map.put(new Item(3), new Item(30));
+    map.put(new Item(1), new Item(10));
+    map.put(new Item(2), new Item(20));
+    for (borrow Item key, borrow mut Item value : map) {
+        value.add(key.idValue());
+        if (key.idValue() == 2) { continue; }
+    }
+    for (borrow Item key, borrow Item value : map) {
+        println(key.idValue()); println(value.countValue());
+    }
+    map.put(new Item(4), new Item(40));
+    println(map.size());
+
+    OrderedSet<Item> set = new OrderedSet<Item>(new ItemOrder());
+    set.add(new Item(3)); set.add(new Item(1)); set.add(new Item(2));
+    for (borrow Item value : set) { println(value.idValue()); }
+
+    PriorityQueue<Item> queue = new PriorityQueue<Item>(new ItemOrder());
+    queue.add(new Item(3)); queue.add(new Item(1)); queue.add(new Item(2));
+    int sum = 0;
+    for (borrow Item value : queue) { sum = sum + value.idValue(); }
+    println(sum);
+    println(queue.size());
+
+    List<Item> values = new List<Item>();
+    values.add(new Item(7)); values.add(new Item(8)); values.add(new Item(9));
+    Iterator<Item> input = values.drain();
+    for (Item value : input) { println(value.idValue()); break; }
+    match (input.next()) { Some(value) { println(value.idValue()); } None {} }
+    for (borrow Item value : input) { println(value.idValue()); continue; }
+    match (input.next()) { Some(value) { println(value.idValue()); } None { println("exhausted"); } }
+}
+"#, b"1\n1\n2\n2\n3\n3\n4\n1\n2\n3\n6\n3\n7\n8\n9\nexhausted\n");
+}
+
+#[test]
+fn map_drains_release_unreturned_guards_before_sending_iterators() {
+    assert_native(r#"
+class IntOrder implements Comparator<int> {
+    public readonly int compare(int left, int right) {
+        if (left < right) { return -1; }
+        if (left > right) { return 1; }
+        return 0;
+    }
+}
+class GuardKey {
+    private int id;
+    private Guard<int> guard;
+    GuardKey(int id, Guard<int> guard) { this.id = id; this.guard = guard; }
+    public readonly int idValue() { return this.id; }
+}
+class KeyHasher implements Hasher<GuardKey> {
+    public readonly long hash(borrow GuardKey key) { return 1L; }
+    public readonly boolean equals(borrow GuardKey left, borrow GuardKey right) {
+        return left.idValue() == right.idValue();
+    }
+}
+class KeyOrder implements Comparator<GuardKey> {
+    public readonly int compare(borrow GuardKey left, borrow GuardKey right) {
+        if (left.idValue() < right.idValue()) { return -1; }
+        if (left.idValue() > right.idValue()) { return 1; }
+        return 0;
+    }
+}
+class IteratorTask implements Task<int> {
+    private Iterator<int> input;
+    IteratorTask(Iterator<int> input) { this.input = input; }
+    public int run() {
+        int sum = 0;
+        for (int value : this.input) { sum = sum + value; }
+        return sum;
+    }
+}
+Result<Unit, Text> checkDrain(borrow mut Mutex<int> mutex, Iterator<int> input) {
+    boolean released = false;
+    match (mutex.lock()) {
+        Ok(guard) { released = true; drop(guard); }
+        Err(error) {}
+    }
+    println(released);
+    // Keep the failing-before case on its owning thread rather than unlocking a foreign guard.
+    if (!released) { drop(input); return new Result<Unit, Text>.Ok(()); }
+    Thread<int> worker = Thread<int>.spawn(new IteratorTask(input))?;
+    println(worker.join()?);
+    return new Result<Unit, Text>.Ok(());
+}
+Result<Unit, Text> exercise() {
+    Mutex<int> mutex = Mutex<int>.create(0)?;
+    Map<int, Guard<int>> hashKeys = new Map<int, Guard<int>>();
+    hashKeys.put(7, mutex.lock()?);
+    checkDrain(mutex, hashKeys.drainKeys())?;
+    OrderedMap<int, Guard<int>> orderedKeys = new OrderedMap<int, Guard<int>>(new IntOrder());
+    orderedKeys.put(11, mutex.lock()?);
+    checkDrain(mutex, orderedKeys.drainKeys())?;
+    Map<GuardKey, int> hashValues = Map<GuardKey, int>.withHasher(new KeyHasher());
+    hashValues.put(new GuardKey(1, mutex.lock()?), 13);
+    checkDrain(mutex, hashValues.drainValues())?;
+    OrderedMap<GuardKey, int> orderedValues = new OrderedMap<GuardKey, int>(new KeyOrder());
+    orderedValues.put(new GuardKey(1, mutex.lock()?), 17);
+    checkDrain(mutex, orderedValues.drainValues())?;
+    return new Result<Unit, Text>.Ok(());
+}
+void main() { match (exercise()) { Ok(done) {} Err(error) { error.print(); } } }
+"#, b"true\n7\ntrue\n11\ntrue\n13\ntrue\n17\n");
+}
+
+#[test]
 fn affine_drains_drop_unreturned_map_halves_and_iterator_remainders() {
     assert_native(r#"
 class Item {

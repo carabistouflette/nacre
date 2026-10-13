@@ -982,9 +982,10 @@ Insertion or growth can allocate; allocation failure is fatal. Map and set
 iteration order is unspecified.
 
 `Set.drain()` transfers its keys in unspecified hash-table order. `Map.drainKeys()`
-transfers keys and destroys every value; `drainValues()` transfers values and
-destroys every key. Both empty the map and yield entries in unspecified hash-table
-order.
+transfers keys and destroys every value on the calling thread before returning;
+`drainValues()` transfers values and destroys every key before returning. Both empty
+the map and yield entries in unspecified hash-table order. The resulting iterator
+retains only the yielded owners, not the discarded entry halves.
 
 Generic query declarations borrow keys; scalar and static `String` specializations
 copy the value without an implicit clone, while object, interface, enum, and
@@ -1121,9 +1122,11 @@ temporary iterators are dropped on every exit.
 `drain()` transfers collection elements without cloning. Lists and arrays yield in
 index order, deques front to back, ordered maps and sets in comparator order, and
 priority queues in heap-array order. Hash maps and sets yield in unspecified order.
-`Map.drainKeys()` destroys unused values and `drainValues()` destroys unused keys;
-the ordered-map forms do the same in comparator order. Each drain leaves its
-collection empty. Dropping an iterator early destroys all remaining owned values.
+`Map.drainKeys()` destroys unused values and `drainValues()` destroys unused keys
+on the calling thread before returning; the ordered-map forms do the same in
+comparator order. Each drain leaves its collection empty. Iterator sendability
+therefore depends on its yielded owners, not discarded entry halves. Dropping an
+iterator early destroys all remaining owned values.
 `List.collect` consumes its input iterator and builds a new list.
 
 `MapIterator<T, U>` owns an input iterator and a `Mapper<T, U>` callback;

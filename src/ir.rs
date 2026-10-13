@@ -193,6 +193,7 @@ pub enum NativeMethod {
     OrderedMapFloorIndex, OrderedMapCeilingIndex, OrderedMapLowerIndex, OrderedMapHigherIndex,
     OrderedSetNew, OrderedSetAdd, OrderedSetContains, OrderedSetRemove,
     OrderedSetKeyAt, OrderedSetDrain,
+    OrderedSetSize, OrderedSetIsEmpty, OrderedSetClear,
     PriorityQueueNew, PriorityQueueAdd, PriorityQueuePop, PriorityQueueTryPop,
     PriorityQueuePeek, PriorityQueueGetRef, PriorityQueueTryPeek, PriorityQueueValueAt,
     PriorityQueueDrain, PriorityQueueSize, PriorityQueueIsEmpty, PriorityQueueClear,
