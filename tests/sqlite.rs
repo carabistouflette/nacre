@@ -208,13 +208,33 @@ Result<Unit, Text> exercise() {
     database.execute(parentSchema)?;
     Text childSchema = new Text("CREATE TABLE child (parent_id INTEGER NOT NULL REFERENCES parent(id))");
     database.execute(childSchema)?;
-    Text rejectedPragmaTail = new Text("SELECT 1; PRAGMA foreign_keys=OFF");
-    println(unitFailed(database.prepare(rejectedPragmaTail)));
-    Text invalidChild98 = new Text("INSERT INTO child VALUES(98)");
-    println(longFailed(database.execute(invalidChild98)));
-    println(longFailed(database.execute(rejectedPragmaTail)));
-    Text invalidChild97 = new Text("INSERT INTO child VALUES(97)");
-    println(longFailed(database.execute(invalidChild97)));
+    Text primaryPragma = new Text("PRAGMA foreign_keys=OFF; SELECT 1");
+    Text tailPragma = new Text("SELECT 1; PRAGMA foreign_keys=OFF");
+    Text invalidChild = new Text("INSERT INTO child VALUES(98)");
+    println(unitFailed(database.prepare(primaryPragma)));
+    println(longFailed(database.execute(invalidChild)));
+    println(unitFailed(database.prepare(tailPragma)));
+    println(longFailed(database.execute(invalidChild)));
+    println(longFailed(database.execute(primaryPragma)));
+    println(longFailed(database.execute(invalidChild)));
+    println(longFailed(database.execute(tailPragma)));
+    println(longFailed(database.execute(invalidChild)));
+    Text eventSourceTable = new Text("CREATE TABLE event_source (payload TEXT)");
+    Text eventLogTable = new Text("CREATE TABLE event_log (payload TEXT)");
+    database.execute(eventSourceTable)?;
+    database.execute(eventLogTable)?;
+    Text eventTrigger = new Text("CREATE TRIGGER capture_event AFTER INSERT ON event_source BEGIN INSERT INTO event_log(payload) VALUES(CASE WHEN NEW.payload = 'source;value' THEN 'trigger;case' ELSE NEW.payload END); INSERT INTO event_log(payload) VALUES('second;trigger'); END;");
+    database.execute(eventTrigger)?;
+    Text addEvent = new Text("INSERT INTO event_source(payload) VALUES('source;value')");
+    database.execute(addEvent)?;
+    Text eventCount = new Text("SELECT COUNT(*) FROM event_log");
+    database.prepare(eventCount)?;
+    println(database.step()?);
+    println(optionLongEquals(database.columnLong(0)?, 2L));
+    Text disableForeignKeys = new Text("PRAGMA foreign_keys=OFF");
+    Text enableForeignKeys = new Text("PRAGMA foreign_keys=ON");
+    database.prepare(disableForeignKeys)?;
+    database.prepare(enableForeignKeys)?;
     database.begin()?;
     Text insertParent1 = new Text("INSERT INTO parent VALUES(1)");
     database.execute(insertParent1)?;
@@ -350,7 +370,7 @@ fn sqlite_bindings_types_transactions_and_owned_rows() {
 #[test]
 fn sqlite_transactions_foreign_keys_single_commands_and_errors() {
     let output = run_memory(TRANSACTIONS_AND_ERRORS);
-    assert_eq!(output.stdout, "true\n".repeat(30).as_bytes());
+    assert_eq!(output.stdout, "true\n".repeat(36).as_bytes());
 }
 
 #[test]

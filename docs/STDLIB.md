@@ -571,13 +571,14 @@ Result<Unit, Text> close()
 `open` accepts nonempty strict UTF-8 paths without embedded NUL; `:memory:` opens
 an in-memory database. Connections use SQLite `SQLITE_OPEN_FULLMUTEX` and enable
 foreign-key enforcement. SQL text is also strict UTF-8 and NUL-free. `prepare`
-accepts exactly one statement (with optional trailing whitespace/comments);
-executable tails are rejected without preparing or executing them. It replaces
-the previous prepared statement only after the new SQL parses. Failed SQL/tail
-validation keeps the previous statement; a failure while finalizing that
-previous statement is reported after SQLite has finalized it, so no statement
-remains installed. SQLite failures use generic Text diagnostics and do not echo SQL
-or expose SQLite's diagnostic message.
+accepts exactly one statement (with optional trailing whitespace/comments). A
+bounded lexical preflight rejects multi-statement SQL before preparing any
+command on the live connection, while respecting quoted semicolons and trigger
+bodies. It replaces the previous prepared statement only after the new SQL parses.
+Failed SQL/tail validation keeps the previous statement; a failure while
+finalizing that previous statement is reported after SQLite has finalized it, so
+no statement remains installed. SQLite failures use generic Text diagnostics and
+do not echo SQL or expose SQLite's diagnostic message.
 
 Binding indices are one-based SQLite parameter indices; invalid indices return
 `Err`. Text and ByteBuffer inputs are copied using SQLite's transient-binding

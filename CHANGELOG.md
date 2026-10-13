@@ -59,7 +59,8 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 - Adds affine SQLite `Database` with one explicitly owned internal prepared
   statement, copied length-delimited bindings/rows, strict type accessors,
   transactions, foreign-key enforcement, and bounded busy timeouts. `prepare`
-  rejects executable tails without preparing them; `step` completion is terminal
+  and `execute` reject multi-statement SQL before preparing any part, while
+  preserving trigger bodies and quoted semicolons. `step` completion is terminal
   until reset/replacement, and failed steps require reset before retry. Empty
   blobs remain distinct from allocation failures. This native SQL API documents
   its single-cursor limit and does not claim JDBC parity.

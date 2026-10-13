@@ -16,24 +16,18 @@ static bool ncr_database_text_valid_@DATABASE_CLASS_ID@(const ncr_obj_@TEXT_CLAS
     return !reject_nul || length == 0 || memchr(text->bytes, 0, length) == NULL;
 }
 
-/* Parse one prepared statement and reject any executable tail. Inspect the
-   bounded tail directly: preparing it on the live connection can have effects. */
-static bool ncr_database_sql_tail_is_trivia_@DATABASE_CLASS_ID@(
-    const char *sql, size_t length
+/* Skip only SQLite's lexical whitespace and comments, bounded by length. */
+static size_t ncr_database_sql_skip_trivia_@DATABASE_CLASS_ID@(
+    const char *sql, size_t length, size_t offset
 ) {
-    size_t offset = 0;
     while (offset < length) {
         unsigned char byte = (unsigned char)sql[offset];
-        if (byte == ' ' || (byte >= '\t' && byte <= '\r')) {
+        if (byte == ' ' || byte == '\t' || byte == '\n' || byte == '\f' || byte == '\r') {
             offset++;
-            continue;
-        }
-        if (byte == '-' && offset + 1 < length && sql[offset + 1] == '-') {
+        } else if (byte == '-' && offset + 1 < length && sql[offset + 1] == '-') {
             offset += 2;
             while (offset < length && sql[offset] != '\n') { offset++; }
-            continue;
-        }
-        if (byte == '/' && offset + 1 < length && sql[offset + 1] == '*') {
+        } else if (byte == '/' && offset + 1 < length && sql[offset + 1] == '*') {
             offset += 2;
             while (offset + 1 < length &&
                     !(sql[offset] == '*' && sql[offset + 1] == '/')) {
@@ -41,11 +35,152 @@ static bool ncr_database_sql_tail_is_trivia_@DATABASE_CLASS_ID@(
             }
             if (offset + 1 < length) { offset += 2; }
             else { offset = length; }
-            continue;
+        } else {
+            break;
         }
-        return false;
     }
-    return true;
+    return offset;
+}
+
+static bool ncr_database_sql_word_is_@DATABASE_CLASS_ID@(
+    const char *sql, size_t start, size_t end, const char *keyword
+) {
+    size_t index = 0;
+    while (start < end && keyword[index] != '\0') {
+        unsigned char byte = (unsigned char)sql[start++];
+        if (byte >= 'a' && byte <= 'z') { byte = (unsigned char)(byte - ('a' - 'A')); }
+        if (byte != (unsigned char)keyword[index++]) { return false; }
+    }
+    return start == end && keyword[index] == '\0';
+}
+
+static bool ncr_database_sql_id_char_@DATABASE_CLASS_ID@(unsigned char byte) {
+    return (byte >= 'A' && byte <= 'Z') || (byte >= 'a' && byte <= 'z') ||
+        (byte >= '0' && byte <= '9') || byte == '_' || byte == '$' || byte >= 0x80;
+}
+
+/* Mirror SQLite's linear statement-completion states. In a CREATE TRIGGER,
+   body semicolons are internal; only the following END and final semicolon
+   close the outer command. */
+static bool ncr_database_sql_is_single_statement_@DATABASE_CLASS_ID@(
+    const char *sql, size_t length
+) {
+    enum {
+        SQL_NOTHING, SQL_START, SQL_NORMAL, SQL_EXPLAIN,
+        SQL_CREATE, SQL_TRIGGER, SQL_TRIGGER_SEMI, SQL_TRIGGER_END
+    };
+    enum {
+        SQL_SEMICOLON, SQL_WHITESPACE, SQL_OTHER, SQL_EXPLAIN_TOKEN,
+        SQL_CREATE_TOKEN, SQL_TEMP_TOKEN, SQL_TRIGGER_TOKEN, SQL_END_TOKEN
+    };
+    static const unsigned char transitions[8][8] = {
+        {1, 0, 2, 3, 4, 2, 2, 2},
+        {1, 1, 2, 3, 4, 2, 2, 2},
+        {1, 2, 2, 2, 2, 2, 2, 2},
+        {1, 3, 3, 2, 4, 2, 2, 2},
+        {1, 4, 2, 2, 2, 4, 5, 2},
+        {6, 5, 5, 5, 5, 5, 5, 5},
+        {6, 6, 5, 5, 5, 5, 5, 7},
+        {1, 7, 5, 5, 5, 5, 5, 5}
+    };
+    unsigned char state = SQL_NOTHING;
+    bool complete = false;
+    size_t offset = 0;
+
+    while ((offset = ncr_database_sql_skip_trivia_@DATABASE_CLASS_ID@(
+            sql, length, offset)) < length) {
+        if (complete) { return false; }
+
+        unsigned char byte = (unsigned char)sql[offset];
+        unsigned char token = SQL_OTHER;
+        if (byte == ';') {
+            token = SQL_SEMICOLON;
+            if (state == SQL_NOTHING || state == SQL_START) { return false; }
+            if (state != SQL_TRIGGER && state != SQL_TRIGGER_SEMI) { complete = true; }
+            offset++;
+        } else if (byte == '\'' || byte == '"' || byte == '`') {
+            offset++;
+            while (offset < length) {
+                if (sql[offset] == (char)byte) {
+                    if (offset + 1 < length && sql[offset + 1] == (char)byte) {
+                        offset += 2;
+                    } else {
+                        offset++;
+                        break;
+                    }
+                } else {
+                    offset++;
+                }
+            }
+        } else if (byte == '[') {
+            offset++;
+            while (offset < length && sql[offset] != ']') { offset++; }
+            if (offset < length) { offset++; }
+        } else if (byte == '?' ) {
+            offset++;
+            while (offset < length && sql[offset] >= '0' && sql[offset] <= '9') { offset++; }
+        } else if (byte == ':' || byte == '@' || byte == '#' || byte == '$') {
+            size_t name_length = 0;
+            offset++;
+            while (offset < length) {
+                byte = (unsigned char)sql[offset];
+                if (ncr_database_sql_id_char_@DATABASE_CLASS_ID@(byte)) {
+                    name_length++;
+                    offset++;
+                } else if (byte == ':' && offset + 1 < length && sql[offset + 1] == ':') {
+                    offset += 2;
+                } else if (byte == '(' && name_length > 0) {
+                    offset++;
+                    while (offset < length &&
+                            sql[offset] != ')' && sql[offset] != ' ' && sql[offset] != '\t' &&
+                            sql[offset] != '\n' && sql[offset] != '\f' && sql[offset] != '\r') {
+                        offset++;
+                    }
+                    if (offset < length && sql[offset] == ')') { offset++; }
+                    break;
+                } else {
+                    break;
+                }
+            }
+        } else if (byte >= '0' && byte <= '9') {
+            offset++;
+            while (offset < length &&
+                    ncr_database_sql_id_char_@DATABASE_CLASS_ID@((unsigned char)sql[offset])) {
+                offset++;
+            }
+        } else if ((byte >= 'A' && byte <= 'Z') ||
+                (byte >= 'a' && byte <= 'z') || byte == '_' || byte >= 0x80) {
+            size_t start = offset++;
+            while (offset < length &&
+                    ncr_database_sql_id_char_@DATABASE_CLASS_ID@((unsigned char)sql[offset])) {
+                offset++;
+            }
+            if (ncr_database_sql_word_is_@DATABASE_CLASS_ID@(sql, start, offset, "EXPLAIN")) {
+                token = SQL_EXPLAIN_TOKEN;
+            } else if (ncr_database_sql_word_is_@DATABASE_CLASS_ID@(sql, start, offset, "CREATE")) {
+                token = SQL_CREATE_TOKEN;
+            } else if (ncr_database_sql_word_is_@DATABASE_CLASS_ID@(sql, start, offset, "TEMP") ||
+                    ncr_database_sql_word_is_@DATABASE_CLASS_ID@(sql, start, offset, "TEMPORARY")) {
+                token = SQL_TEMP_TOKEN;
+            } else if (ncr_database_sql_word_is_@DATABASE_CLASS_ID@(sql, start, offset, "TRIGGER")) {
+                token = SQL_TRIGGER_TOKEN;
+            } else if (ncr_database_sql_word_is_@DATABASE_CLASS_ID@(sql, start, offset, "END")) {
+                token = SQL_END_TOKEN;
+            }
+        } else {
+            offset++;
+        }
+
+        if (token == SQL_SEMICOLON && state == SQL_TRIGGER_END) { complete = true; }
+        state = transitions[state][token];
+    }
+    return state != SQL_TRIGGER && state != SQL_TRIGGER_SEMI;
+}
+
+static bool ncr_database_sql_tail_is_trivia_@DATABASE_CLASS_ID@(
+    const char *sql, size_t length
+) {
+    return ncr_database_sql_skip_trivia_@DATABASE_CLASS_ID@(sql, length, 0) == length;
 }
 
 static int ncr_database_prepare_one_@DATABASE_CLASS_ID@(
@@ -53,6 +188,9 @@ static int ncr_database_prepare_one_@DATABASE_CLASS_ID@(
 ) {
     *output = NULL;
     if (length > (size_t)INT_MAX) { return SQLITE_TOOBIG; }
+    if (!ncr_database_sql_is_single_statement_@DATABASE_CLASS_ID@(sql, length)) {
+        return SQLITE_ERROR;
+    }
     const char *tail = NULL;
     int result = sqlite3_prepare_v2(database, sql, (int)length, output, &tail);
     if (result != SQLITE_OK) {
@@ -78,6 +216,7 @@ static int ncr_database_prepare_one_@DATABASE_CLASS_ID@(
     }
     return SQLITE_OK;
 }
+
 
 static sqlite3 *ncr_database_handle_@DATABASE_CLASS_ID@(ncr_obj_@DATABASE_CLASS_ID@ *database) {
     return database == NULL ? NULL : (sqlite3 *)database->database;
