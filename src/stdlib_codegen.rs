@@ -142,6 +142,13 @@ pub fn implementations(program: &t::Program) -> String {
     if let Some(text) = support::text_class(program) {
         out.push_str(&support::text_helpers(program, text));
     }
+    // Native consumers use ByteBuffer's authoritative reserve helpers.
+    // Emit that storage core before wrappers, independently of class numbering.
+    for class in &program.classes {
+        if let Some(native @ C::ByteBuffer) = class.native {
+            append_body(program, &mut out, class, native);
+        }
+    }
     // Set invokes these specialized table-core functions directly; emit the
     // authoritative Map instantiations before their composing Set wrappers.
     for class in &program.classes {
@@ -151,7 +158,7 @@ pub fn implementations(program: &t::Program) -> String {
     }
     for class in &program.classes {
         if let Some(native) = class.native {
-            if !matches!(native, C::Map(_, _)) {
+            if !matches!(native, C::Map(_, _) | C::ByteBuffer) {
                 append_body(program, &mut out, class, native);
             }
         }

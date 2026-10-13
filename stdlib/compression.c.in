@@ -1,5 +1,8 @@
+/* COMPRESSION_GROUP common */
 /* nacre-link: z */
 #include <zlib.h>
+/* COMPRESSION_GROUP_END common */
+/* COMPRESSION_GROUP compression */
 
 static @RESULT_TYPE@ ncr_compression_deflate_run_@BUFFER_CLASS_ID@(
     @BUFFER_TYPE@ input, int32_t level, int window_bits, size_t line, size_t column
@@ -235,6 +238,8 @@ static @RESULT_TYPE@ @COMPRESSION_GUNZIP@(
         ncr_v_@GUNZIP_INPUT_ID@, ncr_v_@GUNZIP_MAX_ID@, MAX_WBITS + 16, true, line, column
     );
 }
+/* COMPRESSION_GROUP_END compression */
+/* COMPRESSION_GROUP checksums */
 
 static int64_t @CHECKSUMS_CRC32@(@BUFFER_TYPE@ ncr_v_@CRC32_INPUT_ID@, size_t line, size_t column) {
     (void)line; (void)column;
@@ -261,3 +266,4 @@ static int64_t @CHECKSUMS_ADLER32@(@BUFFER_TYPE@ ncr_v_@ADLER32_INPUT_ID@, size_
     }
     return (int64_t)(uint32_t)checksum;
 }
+/* COMPRESSION_GROUP_END checksums */

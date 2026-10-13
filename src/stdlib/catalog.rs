@@ -14,6 +14,7 @@ enum NativeBuiltin {
     Encoding,
     Crypto,
     Regex,
+    RegexMatch,
     Path,
     File,
     Directory,

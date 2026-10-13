@@ -103,28 +103,24 @@ boolean intResultIs(Result<int, Text> result, int expected) {
         Ok(value) { return value == expected; }
         Err(error) { return false; }
     }
-    return false;
 }
 boolean longResultIs(Result<long, Text> result, long expected) {
     match (result) {
         Ok(value) { return value == expected; }
         Err(error) { return false; }
     }
-    return false;
 }
 boolean intResultIsError(Result<int, Text> result) {
     match (result) {
         Ok(value) { return false; }
         Err(error) { return true; }
     }
-    return false;
 }
 boolean longResultIsError(Result<long, Text> result) {
     match (result) {
         Ok(value) { return false; }
         Err(error) { return true; }
     }
-    return false;
 }
 void main() {
     println(
@@ -208,7 +204,7 @@ void main() {
         Math.isNaN(Math.log1p(-2.0)) &&
         Math.expm1(0.0) == 0.0 &&
         Math.expm1(-0.0) == 0.0 && 1.0 / Math.expm1(-0.0) < 0.0 &&
-        Math.expm1(1.0) > 1.718281828459045 &&
+        Math.expm1(1.0) >= 1.718281828459045 && Math.expm1(1.0) <= 1.7182818284590453 &&
         Math.expm1(negativeInfinity) == -1.0 &&
         Math.asin(-1.0) < -1.5 &&
         Math.asin(-0.0) == 0.0 && 1.0 / Math.asin(-0.0) < 0.0 &&

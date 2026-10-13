@@ -83,8 +83,7 @@ pub(super) fn drop_fields(program: &t::Program, native: C) -> String {
 fn group(source: &str, name: &str) -> String {
     let start = format!("/* PROCESS_GROUP {name} */");
     let end = format!("/* PROCESS_GROUP_END {name} */");
-    source.split_once(&start).expect("process template group opener").1
-        .split_once(&end).expect("process template group closer").0.to_owned()
+    super::support::template_section(source, &start, &end).to_owned()
 }
 
 fn has_any(program: &t::Program, methods: &[M]) -> bool {

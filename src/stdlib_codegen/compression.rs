@@ -1,6 +1,7 @@
 use crate::ir::{self as t, NativeMethod as M, Type};
 use super::support::{
-    native_function, replace_method_ids, replace_placeholders, result_id, text_class, variant,
+    native_function, native_function_if, replace_method_ids, replace_placeholders, result_id,
+    template_section, text_class, variant,
 };
 
 fn input_id(function: &t::Function, buffer: usize) -> usize {
@@ -17,70 +18,36 @@ fn second_id(function: &t::Function, expected: Type) -> usize {
     }
 }
 
-fn expression_calls(expr: &t::Expr, methods: &[usize]) -> bool {
-    use t::ExprKind as E;
-    match &expr.kind {
-        E::MapSlot { index, .. } => expression_calls(index, methods),
-        E::Drop(value) | E::Upcast { value, .. } | E::Unary { expr: value, .. } |
-        E::Try { value, .. } | E::Cast { value } => expression_calls(value, methods),
-        E::New { args, .. } | E::Variant { args, .. } =>
-            args.iter().any(|arg| expression_calls(arg, methods)),
-        E::Call { target, args, .. } => {
-            matches!(target, t::CallTarget::Function(id) if methods.contains(id))
-                || args.iter().any(|arg| expression_calls(arg, methods))
-        }
-        E::Binary { left, right, .. } =>
-            expression_calls(left, methods) || expression_calls(right, methods),
-        E::Char(_) | E::Int(_) | E::Long(_) | E::Double(_) | E::Unit | E::Boolean(_) |
-        E::String(_) | E::Read(_) | E::Move(_) | E::Borrow { .. } | E::MapCapacity(_) => false,
-    }
-}
 
-fn block_calls(block: &t::Block, methods: &[usize]) -> bool {
-    use t::Stmt as S;
-    block.iter().any(|stmt| match stmt {
-        S::Let { value, .. } => value.as_ref().is_some_and(|value| expression_calls(value, methods)),
-        S::Assign { value, .. } | S::Expr(value) => expression_calls(value, methods),
-        S::If { condition, then_block, else_block } =>
-            expression_calls(condition, methods)
-                || block_calls(then_block, methods)
-                || else_block.as_ref().is_some_and(|block| block_calls(block, methods)),
-        S::While { condition, body } =>
-            expression_calls(condition, methods) || block_calls(body, methods),
-        S::Match { value, arms } =>
-            expression_calls(value, methods) || arms.iter().any(|arm| block_calls(&arm.body, methods)),
-        S::Return(value) =>
-            value.as_ref().is_some_and(|value| expression_calls(value, methods)),
-        S::Block(body) => block_calls(body, methods),
-        S::Break | S::Continue => false,
-    })
-}
+const TEMPLATE: &str = include_str!("../../stdlib/compression.c.in");
 
 pub(super) fn implementation(program: &t::Program) -> String {
-    let methods = [
-        M::CompressionDeflate, M::CompressionInflate,
-        M::CompressionGzip, M::CompressionGunzip,
-        M::ChecksumsCrc32, M::ChecksumsAdler32,
-    ];
-    let method_ids: Vec<_> = program.functions.iter().filter_map(|function| {
-        function.native.filter(|method| methods.contains(method)).map(|_| function.id)
-    }).collect();
-    if method_ids.is_empty() || !program.functions.iter()
-        .filter(|function| function.native.is_none())
-        .any(|function| block_calls(&function.body, &method_ids)) {
+    let compression = native_function_if(program, |method| method == M::CompressionDeflate).is_some();
+    let checksums = native_function_if(program, |method| method == M::ChecksumsCrc32).is_some();
+    if !compression && !checksums {
         return String::new();
     }
-
-
     let buffer = program.classes.iter()
         .find(|class| matches!(class.native, Some(t::NativeClass::ByteBuffer)))
         .expect("Compression requires the native ByteBuffer class").id;
-    let deflate = native_function(program, |method| matches!(method, M::CompressionDeflate));
-    let inflate = native_function(program, |method| matches!(method, M::CompressionInflate));
-    let gzip = native_function(program, |method| matches!(method, M::CompressionGzip));
-    let gunzip = native_function(program, |method| matches!(method, M::CompressionGunzip));
-    let crc32 = native_function(program, |method| matches!(method, M::ChecksumsCrc32));
-    let adler32 = native_function(program, |method| matches!(method, M::ChecksumsAdler32));
+    let mut body = template_section(TEMPLATE,
+        "/* COMPRESSION_GROUP common */", "/* COMPRESSION_GROUP_END common */").to_owned();
+    if compression {
+        body.push_str(&compression_body(program, buffer));
+    }
+    if checksums {
+        body.push_str(&checksum_body(program, buffer));
+    }
+    let body = replace_method_ids(body, program, None);
+    debug_assert!(!body.contains('@'), "unexpanded Compression placeholder");
+    body
+}
+
+fn compression_body(program: &t::Program, buffer: usize) -> String {
+    let deflate = native_function(program, |method| method == M::CompressionDeflate);
+    let inflate = native_function(program, |method| method == M::CompressionInflate);
+    let gzip = native_function(program, |method| method == M::CompressionGzip);
+    let gunzip = native_function(program, |method| method == M::CompressionGunzip);
 
     assert_eq!(deflate.return_type, inflate.return_type);
     assert_eq!(deflate.return_type, gzip.return_type);
@@ -98,10 +65,6 @@ pub(super) fn implementation(program: &t::Program) -> String {
     assert_eq!(gzip.params.len(), 2);
     assert_eq!(inflate.params.len(), 2);
     assert_eq!(gunzip.params.len(), 2);
-    assert_eq!(crc32.params.len(), 1);
-    assert_eq!(adler32.params.len(), 1);
-    assert_eq!(crc32.return_type, Type::Long);
-    assert_eq!(adler32.return_type, Type::Long);
     let deflate_input = input_id(deflate, buffer);
     let deflate_level = second_id(deflate, Type::Int);
     let inflate_input = input_id(inflate, buffer);
@@ -110,10 +73,9 @@ pub(super) fn implementation(program: &t::Program) -> String {
     let gzip_level = second_id(gzip, Type::Int);
     let gunzip_input = input_id(gunzip, buffer);
     let gunzip_max = second_id(gunzip, Type::Long);
-    let crc32_input = input_id(crc32, buffer);
-    let adler32_input = input_id(adler32, buffer);
 
-    let mut body = replace_placeholders(include_str!("../../stdlib/compression.c.in").to_owned(), &[
+    replace_placeholders(template_section(TEMPLATE,
+        "/* COMPRESSION_GROUP compression */", "/* COMPRESSION_GROUP_END compression */").to_owned(), &[
         ("@BUFFER_TYPE@", crate::codegen::ctype(program, Type::Object(buffer))),
         ("@RESULT_TYPE@", crate::codegen::ctype(program, deflate.return_type)),
         ("@RESULT_CLASS@", result.to_string()),
@@ -127,10 +89,20 @@ pub(super) fn implementation(program: &t::Program) -> String {
         ("@GZIP_LEVEL_ID@", gzip_level.to_string()),
         ("@GUNZIP_INPUT_ID@", gunzip_input.to_string()),
         ("@GUNZIP_MAX_ID@", gunzip_max.to_string()),
-        ("@CRC32_INPUT_ID@", crc32_input.to_string()),
-        ("@ADLER32_INPUT_ID@", adler32_input.to_string()),
-    ]);
-    body = replace_method_ids(body, program, None);
-    debug_assert!(!body.contains('@'), "unexpanded Compression placeholder");
-    body
+    ])
+}
+
+fn checksum_body(program: &t::Program, buffer: usize) -> String {
+    let crc32 = native_function(program, |method| method == M::ChecksumsCrc32);
+    let adler32 = native_function(program, |method| method == M::ChecksumsAdler32);
+    assert_eq!(crc32.params.len(), 1);
+    assert_eq!(adler32.params.len(), 1);
+    assert_eq!(crc32.return_type, Type::Long);
+    assert_eq!(adler32.return_type, Type::Long);
+    replace_placeholders(template_section(TEMPLATE,
+        "/* COMPRESSION_GROUP checksums */", "/* COMPRESSION_GROUP_END checksums */").to_owned(), &[
+        ("@BUFFER_TYPE@", crate::codegen::ctype(program, Type::Object(buffer))),
+        ("@CRC32_INPUT_ID@", input_id(crc32, buffer).to_string()),
+        ("@ADLER32_INPUT_ID@", input_id(adler32, buffer).to_string()),
+    ])
 }

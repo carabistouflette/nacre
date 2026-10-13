@@ -31,7 +31,7 @@ int hexDigit(char value) {
     return -1;
 }
 
-Result<ByteBuffer, Text> fromHex(borrow Text encoded) {
+Result<ByteBuffer, Text> fromHex(Text encoded) {
     if (encoded.byteLength() % 2 != 0) {
         return new Result<ByteBuffer, Text>.Err(new Text("odd hexadecimal length"));
     }
@@ -46,7 +46,7 @@ Result<ByteBuffer, Text> fromHex(borrow Text encoded) {
         output.append((byte)(high * 16 + low));
         index = index + 2;
     }
-    return new Result<ByteBuffer, Text>.Ok(move output);
+    return new Result<ByteBuffer, Text>.Ok(output);
 }
 
 Text toHex(borrow ByteBuffer bytes) {
@@ -125,7 +125,7 @@ Result<Unit, Text> runVectors() {
     println(Crypto.constantTimeEquals(plaintext, decrypted));
     ByteBuffer gcmKey = fromHex(new Text("feffe9928665731c6d6a8f9467308308"))?;
     ByteBuffer gcmNonce = fromHex(new Text("cafebabefacedbaddecaf888"))?;
-    ByteBuffer gcmPlaintext = fromHex(new Text("d9313225f88406e5a55909c5aff5269a86a7a9531534f7da2e4c303d8a318a728c3c0c95156809539fcf0e2429a6b525b16aedf5aa0de657ba637b39"))?;
+    ByteBuffer gcmPlaintext = fromHex(new Text("d9313225f88406e5a55909c5aff5269a86a7a9531534f7da2e4c303d8a318a721c3c0c95956809532fcf0e2449a6b525b16aedf5aa0de657ba637b39"))?;
     ByteBuffer gcmAad = fromHex(new Text("feedfacedeadbeeffeedfacedeadbeefabaddad2"))?;
     ByteBuffer gcmCiphertextAndTag = Crypto.aesGcmEncrypt(gcmKey, gcmNonce, gcmPlaintext, gcmAad)?;
     printHex(gcmCiphertextAndTag);
@@ -158,7 +158,7 @@ int hexDigit(char value) {
     return -1;
 }
 
-Result<ByteBuffer, Text> fromHex(borrow Text encoded) {
+Result<ByteBuffer, Text> fromHex(Text encoded) {
     ByteBuffer output = ByteBuffer.withCapacity((long)(encoded.byteLength() / 2))?;
     int index = 0;
     while (index < encoded.charCount()) {
@@ -167,7 +167,7 @@ Result<ByteBuffer, Text> fromHex(borrow Text encoded) {
         output.append((byte)(high * 16 + low));
         index = index + 2;
     }
-    return new Result<ByteBuffer, Text>.Ok(move output);
+    return new Result<ByteBuffer, Text>.Ok(output);
 }
 
 boolean isError(Result<ByteBuffer, Text> result) {
@@ -234,7 +234,7 @@ fn crypto_known_answers_and_owned_outputs() {
         "00000000000000000000000000000000\n",
         "true\n",
         "42831ec2217774244b7221b784d0d49ce3aa212f2c02a4e035c17e2329aca12e21d514b25466931c7d8f6a5aac84aa051ba30b396a0aac973d58e0915bc94fbc3221a5db94fae95ae7121a47\n",
-        "d9313225f88406e5a55909c5aff5269a86a7a9531534f7da2e4c303d8a318a728c3c0c95156809539fcf0e2429a6b525b16aedf5aa0de657ba637b39\n",
+        "d9313225f88406e5a55909c5aff5269a86a7a9531534f7da2e4c303d8a318a721c3c0c95956809532fcf0e2449a6b525b16aedf5aa0de657ba637b39\n",
         "true\nfalse\ntrue\ntrue\nfalse\n"
     ).as_bytes());
     assert_memory_balanced(&output);

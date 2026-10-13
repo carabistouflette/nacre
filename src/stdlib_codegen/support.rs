@@ -188,6 +188,10 @@ pub(super) fn marker(method: M) -> &'static str {
         M::ProcessOutputTimedOut => "@PROCESS_OUTPUT_TIMED_OUT@",
     }
 }
+pub(super) fn template_section<'a>(source: &'a str, begin: &str, end: &str) -> &'a str {
+    source.split_once(begin).expect("native template section opener").1
+        .split_once(end).expect("native template section closer").0
+}
 pub(super) fn native_function_if(program: &t::Program, is: impl Fn(M) -> bool) -> Option<&t::Function> {
     program.functions.iter().find(|function| {
         function.native.is_some_and(&is)

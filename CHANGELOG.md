@@ -5,6 +5,13 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 
 - Math adds fused multiply-add, directed adjacent-value stepping, and binary64
   pi/e constants alongside checked arithmetic and IEEE floating utilities.
+- Type checking dispatches recursive expression kinds to focused helpers instead
+  of retaining one oversized match frame at every level. The existing 128-level
+  expression limit is unchanged; deep valid expressions compile on normal test
+  threads without a larger stack or additional heap storage.
+- Native emission shares borrowed template sections and places ByteBuffer
+  helpers before binary consumers. Compression and checksum emission is
+  independent, so either API works without constructing the other class.
 - Native `Encoding` converts affine byte buffers to lowercase hex, canonical
   padded RFC 4648 Base64, canonical unpadded Base64URL, and strict UTF-8 `Text`.
   Decoders reject malformed alphabets, padding, discarded bits, and invalid

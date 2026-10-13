@@ -1330,205 +1330,212 @@ impl Checker<'_> {
             E::Unit => (t::ExprKind::Unit, Type::Unit),
             E::Boolean(b) => (t::ExprKind::Boolean(*b), Type::Boolean),
             E::String(s) => (t::ExprKind::String(s.clone()), Type::String),
-            E::Cast { ty, expr: value } => {
-                let target = self.tables.resolve_type(ty, expr.span)?;
-                let value = self.expression(value)?;
-                if !target.is_numeric() || !value.ty.is_numeric() {
-                    return Err(Diagnostic::new(expr.span, "[E6102] numeric casts require numeric source and target types"));
-                }
-                (t::ExprKind::Cast { value: Box::new(value) }, target)
-            }
-            E::Borrow { expr: inner, mutable } => {
-                let place = self.place(inner, false)?;
-                let class = place.ty.object_class()
-                    .ok_or_else(|| Diagnostic::new(expr.span, "[E3004] borrow requires a named nominal value"))?;
-                let value = self.expected_expression(Type::Borrow { class, mutable: *mutable }, inner)?;
-                (value.kind, value.ty)
-            }
+            E::Cast { ty, expr: value } => self.cast_expression(ty, value, expr.span)?,
+            E::Borrow { expr: inner, mutable } => self.borrow_expression(inner, *mutable, expr.span)?,
             E::Var(_) | E::This | E::Field { .. } => {
                 let place = self.place(expr, false)?;
                 let ty = place.ty;
                 (self.take_place(place, expr.span)?, ty)
             }
-            E::New { class, args, .. } => {
-                let class = *self.tables.names.get(class).ok_or_else(|| Diagnostic::new(expr.span, format!("class `{class}` is unknown")))?;
-                if self.tables.is_static_native(class) {
-                    return Err(Diagnostic::new(expr.span, format!("`{}` is static and cannot be constructed", self.tables.classes[class].name)));
-                }
-                if matches!(self.tables.classes[class].native, Some(t::NativeClass::ByteBuffer)) {
-                    return Err(Diagnostic::new(expr.span, "ByteBuffer values are created with ByteBuffer.withCapacity"));
-                }
-                if self.tables.classes[class].is_interface {
-                    return Err(Diagnostic::new(expr.span, "[E4004] an interface cannot be instantiated with `new`"));
-                }
-                if self.tables.classes[class].variants.is_some() {
-                    return Err(Diagnostic::new(expr.span, "construct an enum with `new Enum.Variant(...)`, not `new Enum(...)`"));
-                }
-                let constructor = self.tables.classes[class].constructor
-                    .ok_or_else(|| Diagnostic::new(expr.span, "this class has no constructor"))?;
-                let sig = self.tables.signatures[constructor].clone();
-                self.accessible(sig.visibility, class, expr.span, "constructor")?;
-                let args = self.check_args(&sig, args, expr.span)?;
-                (t::ExprKind::New { class, constructor, args }, Type::Object(class))
-            }
-            E::Variant { class, variant, args, .. } => {
-                let class = *self.tables.names.get(class).ok_or_else(|| Diagnostic::new(expr.span, format!("enum `{class}` is unknown")))?;
-                let variants = self.tables.classes[class].variants.as_ref()
-                    .ok_or_else(|| Diagnostic::new(expr.span, format!("`{}` is not an enum; variant construction is not allowed", self.tables.classes[class].name)))?;
-                let variant_id = variants.iter().position(|v| v.name == *variant)
-                    .ok_or_else(|| Diagnostic::new(expr.span, format!("variant `{variant}` is unknown in `{}`", self.tables.classes[class].name)))?;
-                let fields = variants[variant_id].fields.clone();
-                if args.len() != fields.len() {
-                    return Err(Diagnostic::new(expr.span, format!("variant `{variant}` expects {} payload(s), {} provided", fields.len(), args.len())));
-                }
-                let values = args.iter().zip(fields).map(|(arg, expected)| self.expected_expression(expected, arg))
-                    .collect::<Result<Vec<_>, _>>()?;
-                (t::ExprKind::Variant { class, variant: variant_id, args: values }, Type::Object(class))
-            }
-            E::Call { name, args } => {
-                if name == "println" { self.builtin(args, expr.span)? }
-                else if name == "move" || name == "drop" {
-                    if args.len() != 1 { return Err(Diagnostic::new(expr.span, format!("{name} expects exactly one argument"))); }
-                    let value = self.expression(&args[0])?;
-                    if !value.ty.is_object() { return Err(Diagnostic::new(expr.span, format!("{name} requires an owned object, not a primitive or void"))); }
-                    if name == "move" { (value.kind, value.ty) }
-                    else { (t::ExprKind::Drop(Box::new(value)), Type::Void) }
-                }
-                else if let Some(id) = self.owner.and_then(|c| self.tables.classes[c].methods.get(name)).copied() {
-                    let receiver = if self.tables.signatures[id].kind == Kind::Instance { Some(self.this_place(expr.span)?) } else { None };
-                    self.call(id, receiver, args, expr.span)?
-                } else {
-                    let id = *self.tables.globals.get(name).ok_or_else(|| Diagnostic::new(expr.span, format!("function `{name}` is unknown")))?;
-                    self.call(id, None, args, expr.span)?
-                }
-            }
+            E::New { class, args, .. } => self.new_expression(class, args, expr.span)?,
+            E::Variant { class, variant, args, .. } => self.variant_expression(class, variant, args, expr.span)?,
+            E::Call { name, args } => self.call_expression(name, args, expr.span)?,
             E::StaticCall { .. } => unreachable!("generic static calls expand before type checking"),
-            E::MethodCall { receiver, name, args } => {
-                let system_println = name == "println" && matches!(&receiver.kind,
-                    E::Field { base, name } if name == "out" && matches!(&base.kind, E::Var(s) if s == "System"));
-                if system_println { self.builtin(args, expr.span)? }
-                else {
-                    let static_class = match &receiver.kind {
-                        E::Var(n) if self.lookup(n).is_none() && !self.owner.is_some_and(|c| self.tables.classes[c].fields.iter().any(|f| &f.name == n)) => self.tables.names.get(n).copied(),
-                        _ => None,
-                    };
-                    if let Some(class) = static_class {
-                        if name == "get" && matches!(self.tables.classes[class].native,
-                            Some(t::NativeClass::List(Type::Object(_)) | t::NativeClass::Array(Type::Object(_)) | t::NativeClass::Deque(Type::Object(_)))) {
-                            return Err(Diagnostic::new(expr.span, "[E5002] get does not copy affine collection elements; use a borrow accessor"));
-                        }
-                        let id = *self.tables.classes[class].methods.get(name).ok_or_else(|| Diagnostic::new(expr.span, format!("method `{name}` is unknown")))?;
-                        if self.tables.signatures[id].kind != Kind::Static {
-                            return Err(Diagnostic::new(expr.span, "an instance method requires an object, not a class name"));
-                        }
-                        self.call(id, None, args, expr.span)?
-                    } else {
-                        let receiver = self.place(receiver, false)?;
-                        let Some(class) = receiver.ty.object_class() else { return Err(Diagnostic::new(expr.span, "cannot call a method on a value that is not an object")); };
-                        if name == "get" && matches!(self.tables.classes[class].native,
-                            Some(t::NativeClass::List(Type::Object(_)) | t::NativeClass::Array(Type::Object(_)) | t::NativeClass::Deque(Type::Object(_)))) {
-                            return Err(Diagnostic::new(expr.span, "[E5002] get does not copy affine collection elements; use a borrow accessor"));
-                        }
-                        let id = *self.tables.classes[class].methods.get(name).ok_or_else(|| Diagnostic::new(expr.span, format!("method `{name}` is unknown")))?;
-                        if self.tables.signatures[id].kind == Kind::Static {
-                            return Err(Diagnostic::new(expr.span, "call a static method with the class name, not an object"));
-                        }
-                        self.call(id, Some(receiver), args, expr.span)?
-                    }
-                }
-            }
-            E::Unary { op, expr: inner } => {
-                let inner = self.expression(inner)?;
-                let target = match op {
-                    UnaryOp::Not if inner.ty == Type::Boolean => Type::Boolean,
-                    UnaryOp::Neg | UnaryOp::Plus => inner.ty.promoted_numeric()
-                        .ok_or_else(|| Diagnostic::new(expr.span, "[E6105] unary arithmetic requires a numeric operand"))?,
-                    UnaryOp::BitNot => inner.ty.promoted_numeric().filter(|ty| ty.is_integer())
-                        .ok_or_else(|| Diagnostic::new(expr.span, "[E6105] bitwise not requires an integer operand"))?,
-                    UnaryOp::Not => return Err(Diagnostic::new(expr.span, "[E6105] logical not requires a boolean operand")),
-                };
-                let inner = if target.is_numeric() { coerce_numeric(inner, target) } else { inner };
-                (t::ExprKind::Unary { op: *op, expr: Box::new(inner) }, target)
-            }
-            E::Try(inner) => {
-                let value = self.expression(inner)?;
-                let Type::Object(source_class) = value.ty else {
-                    return Err(Diagnostic::new(expr.span,
-                        "postfix `?` requires an owned built-in Result<T, E> value"));
-                };
-                if self.tables.is_view(value.ty) {
-                    return Err(Diagnostic::new(expr.span,
-                        "postfix `?` cannot extract a borrowed or view value"));
-                }
-                let Some(source) = self.tables.classes[source_class].result else {
-                    return Err(Diagnostic::new(expr.span,
-                        "postfix `?` requires the built-in Result<T, E> type"));
-                };
-                let Type::Object(return_result) = self.return_type else {
-                    return Err(Diagnostic::new(expr.span,
-                        "postfix `?` is only valid inside a function returning built-in Result<U, E>"));
-                };
-                let Some(target) = self.tables.classes[return_result].result else {
-                    return Err(Diagnostic::new(expr.span,
-                        "postfix `?` is only valid inside a function returning built-in Result<U, E>"));
-                };
-                if source.err_type != target.err_type {
-                    return Err(Diagnostic::new(expr.span, format!(
-                        "postfix `?` cannot propagate error type `{}` into `{}`",
-                        self.tables.type_name(source.err_type), self.tables.type_name(target.err_type))));
-                }
-                if matches!(source.ok_type, Type::Void | Type::Borrow { .. })
-                    || self.tables.is_view(source.ok_type)
-                    || matches!(source.err_type, Type::Void | Type::Borrow { .. })
-                    || self.tables.is_view(source.err_type) {
-                    return Err(Diagnostic::new(expr.span,
-                        "postfix `?` cannot extract borrowed or view values"));
-                }
-                (t::ExprKind::Try { value: Box::new(value), return_result }, source.ok_type)
-            }
-            E::Binary { op, left, right } => {
-                let left = self.expression(left)?;
-                let right = self.expression(right)?;
-                let (left, right, ty) = match op {
-                    B::Add | B::Sub | B::Mul | B::Div | B::Rem |
-                    B::Lt | B::Le | B::Gt | B::Ge => {
-                        let common = numeric_common(left.ty, right.ty)
-                            .ok_or_else(|| Diagnostic::new(expr.span, "[E6105] numeric operator requires numeric operands"))?;
-                        let result = if matches!(op, B::Lt | B::Le | B::Gt | B::Ge) { Type::Boolean } else { common };
-                        (coerce_numeric(left, common), coerce_numeric(right, common), result)
-                    }
-                    B::BitAnd | B::BitOr | B::BitXor => {
-                        let common = numeric_common(left.ty, right.ty).filter(|ty| ty.is_integer())
-                            .ok_or_else(|| Diagnostic::new(expr.span, "[E6105] bitwise operators require integer operands"))?;
-                        (coerce_numeric(left, common), coerce_numeric(right, common), common)
-                    }
-                    B::ShiftLeft | B::ShiftRight => {
-                        let left_type = left.ty.promoted_numeric().filter(|ty| ty.is_integer())
-                            .ok_or_else(|| Diagnostic::new(expr.span, "[E6105] shift operators require an integer left operand"))?;
-                        let count_type = right.ty.promoted_numeric();
-                        if count_type != Some(Type::Int) {
-                            return Err(Diagnostic::new(expr.span, "[E6105] shift count must be a byte, char, or int"));
-                        }
-                        (coerce_numeric(left, left_type), coerce_numeric(right, Type::Int), left_type)
-                    }
-                    B::And | B::Or => {
-                        self.require(Type::Boolean, left.ty, left.span)?;
-                        self.require(Type::Boolean, right.ty, right.span)?;
-                        (left, right, Type::Boolean)
-                    }
-                    B::Eq | B::Ne => {
-                        if let Some(common) = numeric_common(left.ty, right.ty) {
-                            (coerce_numeric(left, common), coerce_numeric(right, common), Type::Boolean)
-                        } else if left.ty == Type::Boolean && right.ty == Type::Boolean {
-                            (left, right, Type::Boolean)
-                        } else {
-                            return Err(Diagnostic::new(expr.span, "[E6105] equality requires matching numeric or boolean operands"));
-                        }
-                    }
-                };
-                (t::ExprKind::Binary { op: *op, left: Box::new(left), right: Box::new(right) }, ty)
-            }
+            E::MethodCall { receiver, name, args } => self.method_expression(receiver, name, args, expr.span)?,
+            E::Unary { op, expr: inner } => self.unary_expression(*op, inner, expr.span)?,
+            E::Try(inner) => self.try_expression(inner, expr.span)?,
+            E::Binary { op, left, right } => self.binary_expression(*op, left, right, expr.span)?,
         };
         Ok(t::Expr { kind, ty, span: expr.span })
+    }
+
+    fn cast_expression(&mut self, ty: &a::Type, value: &a::Expr, span: Span) -> Result<(t::ExprKind, Type), Diagnostic> {
+        let target = self.tables.resolve_type(ty, span)?;
+        let value = self.expression(value)?;
+        if !target.is_numeric() || !value.ty.is_numeric() {
+            return Err(Diagnostic::new(span, "[E6102] numeric casts require numeric source and target types"));
+        }
+        Ok((t::ExprKind::Cast { value: Box::new(value) }, target))
+    }
+
+    fn borrow_expression(&mut self, inner: &a::Expr, mutable: bool, span: Span) -> Result<(t::ExprKind, Type), Diagnostic> {
+        let place = self.place(inner, false)?;
+        let class = place.ty.object_class()
+            .ok_or_else(|| Diagnostic::new(span, "[E3004] borrow requires a named nominal value"))?;
+        let value = self.expected_expression(Type::Borrow { class, mutable }, inner)?;
+        Ok((value.kind, value.ty))
+    }
+
+    fn new_expression(&mut self, name: &str, args: &[a::Expr], span: Span) -> Result<(t::ExprKind, Type), Diagnostic> {
+        let class = *self.tables.names.get(name).ok_or_else(|| Diagnostic::new(span, format!("class `{name}` is unknown")))?;
+        if self.tables.is_static_native(class) {
+            return Err(Diagnostic::new(span, format!("`{}` is static and cannot be constructed", self.tables.classes[class].name)));
+        }
+        if matches!(self.tables.classes[class].native, Some(t::NativeClass::ByteBuffer)) {
+            return Err(Diagnostic::new(span, "ByteBuffer values are created with ByteBuffer.withCapacity"));
+        }
+        if self.tables.classes[class].is_interface {
+            return Err(Diagnostic::new(span, "[E4004] an interface cannot be instantiated with `new`"));
+        }
+        if self.tables.classes[class].variants.is_some() {
+            return Err(Diagnostic::new(span, "construct an enum with `new Enum.Variant(...)`, not `new Enum(...)`"));
+        }
+        let constructor = self.tables.classes[class].constructor
+            .ok_or_else(|| Diagnostic::new(span, "this class has no constructor"))?;
+        let sig = self.tables.signatures[constructor].clone();
+        self.accessible(sig.visibility, class, span, "constructor")?;
+        let args = self.check_args(&sig, args, span)?;
+        Ok((t::ExprKind::New { class, constructor, args }, Type::Object(class)))
+    }
+
+    fn variant_expression(&mut self, name: &str, variant: &str, args: &[a::Expr], span: Span) -> Result<(t::ExprKind, Type), Diagnostic> {
+        let class = *self.tables.names.get(name).ok_or_else(|| Diagnostic::new(span, format!("enum `{name}` is unknown")))?;
+        let variants = self.tables.classes[class].variants.as_ref()
+            .ok_or_else(|| Diagnostic::new(span, format!("`{}` is not an enum; variant construction is not allowed", self.tables.classes[class].name)))?;
+        let variant_id = variants.iter().position(|v| v.name == variant)
+            .ok_or_else(|| Diagnostic::new(span, format!("variant `{variant}` is unknown in `{}`", self.tables.classes[class].name)))?;
+        let fields = variants[variant_id].fields.clone();
+        if args.len() != fields.len() {
+            return Err(Diagnostic::new(span, format!("variant `{variant}` expects {} payload(s), {} provided", fields.len(), args.len())));
+        }
+        let values = args.iter().zip(fields).map(|(arg, expected)| self.expected_expression(expected, arg))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok((t::ExprKind::Variant { class, variant: variant_id, args: values }, Type::Object(class)))
+    }
+
+    fn call_expression(&mut self, name: &str, args: &[a::Expr], span: Span) -> Result<(t::ExprKind, Type), Diagnostic> {
+        if name == "println" { self.builtin(args, span) }
+        else if name == "move" || name == "drop" {
+            if args.len() != 1 { return Err(Diagnostic::new(span, format!("{name} expects exactly one argument"))); }
+            let value = self.expression(&args[0])?;
+            if !value.ty.is_object() { return Err(Diagnostic::new(span, format!("{name} requires an owned object, not a primitive or void"))); }
+            if name == "move" { Ok((value.kind, value.ty)) }
+            else { Ok((t::ExprKind::Drop(Box::new(value)), Type::Void)) }
+        }
+        else if let Some(id) = self.owner.and_then(|c| self.tables.classes[c].methods.get(name)).copied() {
+            let receiver = if self.tables.signatures[id].kind == Kind::Instance { Some(self.this_place(span)?) } else { None };
+            self.call(id, receiver, args, span)
+        } else {
+            let id = *self.tables.globals.get(name).ok_or_else(|| Diagnostic::new(span, format!("function `{name}` is unknown")))?;
+            self.call(id, None, args, span)
+        }
+    }
+
+    fn method_expression(&mut self, receiver: &a::Expr, name: &str, args: &[a::Expr], span: Span) -> Result<(t::ExprKind, Type), Diagnostic> {
+        use a::ExprKind as E;
+        let system_println = name == "println" && matches!(&receiver.kind,
+            E::Field { base, name } if name == "out" && matches!(&base.kind, E::Var(s) if s == "System"));
+        if system_println { return self.builtin(args, span); }
+        let static_class = match &receiver.kind {
+            E::Var(n) if self.lookup(n).is_none() && !self.owner.is_some_and(|c| self.tables.classes[c].fields.iter().any(|f| &f.name == n)) => self.tables.names.get(n).copied(),
+            _ => None,
+        };
+        let (class, receiver) = if let Some(class) = static_class {
+            (class, None)
+        } else {
+            let receiver = self.place(receiver, false)?;
+            let Some(class) = receiver.ty.object_class() else { return Err(Diagnostic::new(span, "cannot call a method on a value that is not an object")); };
+            (class, Some(receiver))
+        };
+        if name == "get" && matches!(self.tables.classes[class].native,
+            Some(t::NativeClass::List(Type::Object(_)) | t::NativeClass::Array(Type::Object(_)) | t::NativeClass::Deque(Type::Object(_)))) {
+            return Err(Diagnostic::new(span, "[E5002] get does not copy affine collection elements; use a borrow accessor"));
+        }
+        let id = *self.tables.classes[class].methods.get(name).ok_or_else(|| Diagnostic::new(span, format!("method `{name}` is unknown")))?;
+        if receiver.is_none() && self.tables.signatures[id].kind != Kind::Static {
+            return Err(Diagnostic::new(span, "an instance method requires an object, not a class name"));
+        }
+        if receiver.is_some() && self.tables.signatures[id].kind == Kind::Static {
+            return Err(Diagnostic::new(span, "call a static method with the class name, not an object"));
+        }
+        self.call(id, receiver, args, span)
+    }
+
+    fn unary_expression(&mut self, op: UnaryOp, inner: &a::Expr, span: Span) -> Result<(t::ExprKind, Type), Diagnostic> {
+        let inner = self.expression(inner)?;
+        let target = match op {
+            UnaryOp::Not if inner.ty == Type::Boolean => Type::Boolean,
+            UnaryOp::Neg | UnaryOp::Plus => inner.ty.promoted_numeric()
+                .ok_or_else(|| Diagnostic::new(span, "[E6105] unary arithmetic requires a numeric operand"))?,
+            UnaryOp::BitNot => inner.ty.promoted_numeric().filter(|ty| ty.is_integer())
+                .ok_or_else(|| Diagnostic::new(span, "[E6105] bitwise not requires an integer operand"))?,
+            UnaryOp::Not => return Err(Diagnostic::new(span, "[E6105] logical not requires a boolean operand")),
+        };
+        let inner = if target.is_numeric() { coerce_numeric(inner, target) } else { inner };
+        Ok((t::ExprKind::Unary { op, expr: Box::new(inner) }, target))
+    }
+
+    fn try_expression(&mut self, inner: &a::Expr, span: Span) -> Result<(t::ExprKind, Type), Diagnostic> {
+        let value = self.expression(inner)?;
+        let Type::Object(source_class) = value.ty else {
+            return Err(Diagnostic::new(span, "postfix `?` requires an owned built-in Result<T, E> value"));
+        };
+        if self.tables.is_view(value.ty) {
+            return Err(Diagnostic::new(span, "postfix `?` cannot extract a borrowed or view value"));
+        }
+        let Some(source) = self.tables.classes[source_class].result else {
+            return Err(Diagnostic::new(span, "postfix `?` requires the built-in Result<T, E> type"));
+        };
+        let Type::Object(return_result) = self.return_type else {
+            return Err(Diagnostic::new(span, "postfix `?` is only valid inside a function returning built-in Result<U, E>"));
+        };
+        let Some(target) = self.tables.classes[return_result].result else {
+            return Err(Diagnostic::new(span, "postfix `?` is only valid inside a function returning built-in Result<U, E>"));
+        };
+        if source.err_type != target.err_type {
+            return Err(Diagnostic::new(span, format!(
+                "postfix `?` cannot propagate error type `{}` into `{}`",
+                self.tables.type_name(source.err_type), self.tables.type_name(target.err_type))));
+        }
+        if matches!(source.ok_type, Type::Void | Type::Borrow { .. })
+            || self.tables.is_view(source.ok_type)
+            || matches!(source.err_type, Type::Void | Type::Borrow { .. })
+            || self.tables.is_view(source.err_type) {
+            return Err(Diagnostic::new(span, "postfix `?` cannot extract borrowed or view values"));
+        }
+        Ok((t::ExprKind::Try { value: Box::new(value), return_result }, source.ok_type))
+    }
+
+    fn binary_expression(&mut self, op: B, left: &a::Expr, right: &a::Expr, span: Span) -> Result<(t::ExprKind, Type), Diagnostic> {
+        let left = self.expression(left)?;
+        let right = self.expression(right)?;
+        let (left, right, ty) = match op {
+            B::Add | B::Sub | B::Mul | B::Div | B::Rem |
+            B::Lt | B::Le | B::Gt | B::Ge => {
+                let common = numeric_common(left.ty, right.ty)
+                    .ok_or_else(|| Diagnostic::new(span, "[E6105] numeric operator requires numeric operands"))?;
+                let result = if matches!(op, B::Lt | B::Le | B::Gt | B::Ge) { Type::Boolean } else { common };
+                (coerce_numeric(left, common), coerce_numeric(right, common), result)
+            }
+            B::BitAnd | B::BitOr | B::BitXor => {
+                let common = numeric_common(left.ty, right.ty).filter(|ty| ty.is_integer())
+                    .ok_or_else(|| Diagnostic::new(span, "[E6105] bitwise operators require integer operands"))?;
+                (coerce_numeric(left, common), coerce_numeric(right, common), common)
+            }
+            B::ShiftLeft | B::ShiftRight => {
+                let left_type = left.ty.promoted_numeric().filter(|ty| ty.is_integer())
+                    .ok_or_else(|| Diagnostic::new(span, "[E6105] shift operators require an integer left operand"))?;
+                let count_type = right.ty.promoted_numeric();
+                if count_type != Some(Type::Int) {
+                    return Err(Diagnostic::new(span, "[E6105] shift count must be a byte, char, or int"));
+                }
+                (coerce_numeric(left, left_type), coerce_numeric(right, Type::Int), left_type)
+            }
+            B::And | B::Or => {
+                self.require(Type::Boolean, left.ty, left.span)?;
+                self.require(Type::Boolean, right.ty, right.span)?;
+                (left, right, Type::Boolean)
+            }
+            B::Eq | B::Ne => {
+                if let Some(common) = numeric_common(left.ty, right.ty) {
+                    (coerce_numeric(left, common), coerce_numeric(right, common), Type::Boolean)
+                } else if left.ty == Type::Boolean && right.ty == Type::Boolean {
+                    (left, right, Type::Boolean)
+                } else {
+                    return Err(Diagnostic::new(span, "[E6105] equality requires matching numeric or boolean operands"));
+                }
+            }
+        };
+        Ok((t::ExprKind::Binary { op, left: Box::new(left), right: Box::new(right) }, ty))
     }
 }
