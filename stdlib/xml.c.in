@@ -230,6 +230,28 @@ static ncr_obj_@TEXT_ID@ *ncr_xml_make_text(const unsigned char *bytes, size_t l
     return ncr_text_from_bytes_@TEXT_ID@(bytes, length, line, column);
 }
 /* XML_COMMON_TEXT_END */
+/* XML_COMMON_BUFFER_BEGIN */
+static int ncr_xml_buffer_output(void *context, const char *bytes, int length) {
+    ncr_obj_@BUFFER_ID@ *buffer = (ncr_obj_@BUFFER_ID@ *)context;
+    if (length < 0 || buffer == NULL ||
+        (uint64_t)length > (uint64_t)INT64_MAX - (uint64_t)buffer->length ||
+        (size_t)length > SIZE_MAX - buffer->length) {
+        return -1;
+    }
+    size_t required = buffer->length + (size_t)length;
+    if (length > 0) {
+        ncr_byte_buffer_reserve_@BUFFER_ID@(buffer, required, 0, 0);
+        memcpy(buffer->bytes + buffer->length, bytes, (size_t)length);
+        buffer->length = required;
+    }
+    return length;
+}
+
+static int ncr_xml_buffer_output_close(void *context) {
+    (void)context;
+    return 0;
+}
+/* XML_COMMON_BUFFER_END */
 /* XML_DOM_METHODS_BEGIN */
 
 static void ncr_xml_document_drop_@XML_DOCUMENT_ID@(void *document, void *xpath_context) {

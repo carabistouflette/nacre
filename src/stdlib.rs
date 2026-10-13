@@ -802,6 +802,7 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
         (C::XmlWriter, "finish") => M::XmlWriterFinish,
         (C::XsltStylesheet, "compile") => M::XsltStylesheetCompile,
         (C::XsltStylesheet, "transform") => M::XsltStylesheetTransform,
+        (C::XsltStylesheet, "transformBytes") => M::XsltStylesheetTransformBytes,
         _ => unreachable!("compiler-owned native method"),
     }
 }

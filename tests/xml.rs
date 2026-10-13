@@ -867,3 +867,88 @@ void nacre_invalid_probe_init(void) {
     assert!(!marker.exists(), "element availability initialized an external plugin");
     assert_memory_balanced(&output);
 }
+
+#[test]
+fn xslt_serialized_results_preserve_output_method_encoding_and_owned_lifetimes() {
+    let source = r#"
+Result<ByteBuffer, Text> render(borrow XmlDocument document, String method, String encoding, String body) {
+    Text source = new Text("<xsl:stylesheet xmlns:xsl='http://www.w3.org/1999/XSL/Transform' version='1.0'><xsl:strip-space elements='*'/><xsl:output indent='no' method='");
+    source.append(method);
+    source.append("' encoding='");
+    source.append(encoding);
+    source.append("'/><xsl:template match='/'>");
+    source.append(body);
+    source.append("</xsl:template></xsl:stylesheet>");
+    XsltStylesheet stylesheet = XsltStylesheet.compile(source)?;
+    return stylesheet.transformBytes(document);
+}
+Result<Unit, Text> exercise() {
+    Text input = new Text("<root>  <value>café 🦀</value>  </root>");
+    XmlDocument document = XmlDocument.parse(input)?;
+    ByteBuffer plain = render(document, "text", "UTF-8", "<xsl:value-of select='root/value'/>")?;
+    ByteBuffer wide = render(document, "text", "UTF-16LE", "<xsl:value-of select='root/value'/>")?;
+    ByteBuffer html = render(document, "html", "UTF-8", "<html><body><br/><xsl:value-of select='root/value'/></body></html>")?;
+    ByteBuffer xml = render(document, "xml", "UTF-8", "<out><xsl:value-of select='root/value'/></out>")?;
+    ByteBuffer empty = render(document, "text", "UTF-8", "")?;
+    boolean unsupported = false;
+    match (render(document, "text", "nacre-invalid-encoding", "<xsl:value-of select='root/value'/>")) {
+        Err(error) { unsupported = true; }
+        Ok(bytes) { }
+    }
+    println(unsupported);
+    boolean externalDenied = false;
+    match (render(document, "text", "UTF-8", "<xsl:value-of select=\"document('file:///nacre-must-not-be-read')\"/>")) {
+        Err(error) { externalDenied = true; }
+        Ok(bytes) { }
+    }
+    println(externalDenied);
+    Text whitespacePath = new Text("/root/text()");
+    List<Text> whitespace = document.queryText(whitespacePath)?;
+    println(whitespace.size() == 2);
+    drop(document);
+    drop(input);
+    Text utf8 = new Text("UTF-8");
+    Text utf16le = new Text("UTF-16LE");
+    Text plainText = Charset.decode(plain, utf8)?;
+    Text wideText = Charset.decode(wide, utf16le)?;
+    println(plainText.equalsString("café 🦀"));
+    println(wideText.equalsString("café 🦀") && wide.length() == 14L
+        && wide.get(0L) == (byte)99 && wide.get(1L) == (byte)0
+        && wide.get(12L) == (byte)128 && wide.get(13L) == (byte)221);
+    Text htmlText = Charset.decode(html, utf8)?;
+    Text breakElement = new Text("<br>");
+    Text value = new Text("café 🦀");
+    println(htmlText.indexOf(breakElement) >= 0 && htmlText.indexOf(value) >= 0);
+    Text xmlText = Charset.decode(xml, utf8)?;
+    XmlDocument result = XmlDocument.parse(xmlText)?;
+    Text valuePath = new Text("/out/text()");
+    List<Text> values = result.queryText(valuePath)?;
+    borrow Text resultValue = values.getRef(0);
+    println(resultValue.equalsString("café 🦀"));
+    println(empty.length() == 0L);
+    Text repeated = new Text("");
+    int index = 0;
+    while (index < 4500) { repeated.appendChar('🦀'); index = index + 1; }
+    Text largeSource = new Text("<root>");
+    largeSource.appendText(repeated);
+    largeSource.append("</root>");
+    XmlDocument largeDocument = XmlDocument.parse(largeSource)?;
+    ByteBuffer largeWide = render(largeDocument, "text", "UTF-16LE", "<xsl:value-of select='root'/>")?;
+    drop(largeDocument);
+    drop(largeSource);
+    Text largeText = Charset.decode(largeWide, utf16le)?;
+    println(largeWide.length() == 18000L && largeText.equals(repeated));
+    return new Result<Unit, Text>.Ok(());
+}
+void main() {
+    match (exercise()) {
+        Ok(unit) { }
+        Err(error) { error.print(); }
+    }
+}
+"#;
+    let output = execute(source);
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert_eq!(output.stdout, b"true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n");
+    assert_memory_balanced(&output);
+}

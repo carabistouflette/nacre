@@ -59,11 +59,11 @@
     "tests/unicode_native.rs": 9,
     "tests/uri_dns.rs": 3,
     "tests/uuid.rs": 6,
-    "tests/xml.rs": 11,
+    "tests/xml.rs": 12,
     "tests/zip_native.rs": 5,
     "src/lsp.rs": 5,
     "src/ownership.rs": 4,
     "src/project.rs": 2
   },
-  "total": 1233
+  "total": 1234
 }

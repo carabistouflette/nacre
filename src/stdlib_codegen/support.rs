@@ -538,6 +538,7 @@ pub(super) fn marker(method: M) -> &'static str {
         M::XmlWriterFinish => "@XML_WRITER_FINISH@",
         M::XsltStylesheetCompile => "@XSLT_STYLESHEET_COMPILE@",
         M::XsltStylesheetTransform => "@XSLT_STYLESHEET_TRANSFORM@",
+        M::XsltStylesheetTransformBytes => "@XSLT_STYLESHEET_TRANSFORM_BYTES@",
     }
 }
 pub(super) fn template_section<'a>(source: &'a str, begin: &str, end: &str) -> &'a str {

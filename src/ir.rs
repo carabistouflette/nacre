@@ -322,5 +322,5 @@ pub enum NativeMethod {
     XmlWriterStartElementNs, XmlWriterWriteAttribute, XmlWriterWriteAttributeNs,
     XmlWriterWriteText, XmlWriterWriteCData, XmlWriterWriteComment,
     XmlWriterWriteProcessingInstruction, XmlWriterEndElement, XmlWriterFinish,
-    XsltStylesheetCompile, XsltStylesheetTransform,
+    XsltStylesheetCompile, XsltStylesheetTransform, XsltStylesheetTransformBytes,
 }

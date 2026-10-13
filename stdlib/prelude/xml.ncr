@@ -63,4 +63,6 @@ class XmlWriter {
 class XsltStylesheet {
     public static Result<XsltStylesheet, Text> compile(borrow Text stylesheet) {}
     public readonly Result<XmlDocument, Text> transform(borrow XmlDocument document) {}
+    // Honors xsl:output method and encoding; returns independent serialized bytes.
+    public readonly Result<ByteBuffer, Text> transformBytes(borrow XmlDocument document) {}
 }

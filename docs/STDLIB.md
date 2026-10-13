@@ -764,12 +764,20 @@ in-memory `Text` containing an XML stylesheet; `transform` borrows an
 `XmlDocument` and returns an independent owned result document without mutating
 the source. Each transform makes a private deep source-tree copy because libxslt
 may remove whitespace nodes; this costs time and storage linear in the source tree.
-Results must have one root and no non-whitespace text outside it; text-only,
-multiple-root, and non-XML document results return `Err`.
+The document-returning `transform` requires one root and no non-whitespace text
+outside it; text-only, multiple-root, and non-XML document results return `Err`.
+`transformBytes` instead returns independent serialized bytes, honoring the
+stylesheet's `xsl:output` method and encoding. It supports XML result fragments,
+HTML, and text, including empty text output. Bytes are written directly into the
+returned `ByteBuffer`, without an intermediate full-output copy. Unsupported
+encodings and serialization failures return `Err`; use `Charset.decode` with the
+declared encoding when owned text is needed. Both result forms outlive the source
+document and stylesheet.
 
 ```java
 static Result<XsltStylesheet, Text> compile(borrow Text stylesheet)
 readonly Result<XmlDocument, Text> transform(borrow XmlDocument document)
+readonly Result<ByteBuffer, Text> transformBytes(borrow XmlDocument document)
 ```
 
 Only per-context built-in XPath/XSLT functions are available. Element availability
@@ -779,8 +787,8 @@ are rejected.
 
 Each transformation gets its own libxslt security policy forbidding file/network reads,
 file/network writes, and directory creation. A prohibited resource request (including
-the XSLT `document()` function) is denied and makes `transform` return `Err`, even if
-libxslt otherwise recovers from it. There are no process-global loaders or default
+the XSLT `document()` function) is denied and makes either transform method return
+`Err`, even if libxslt otherwise recovers from it. There are no process-global loaders or default
 security-policy changes. DTDs/entities are also disabled by the XML parser used to
 compile the stylesheet and parse the source document.
 

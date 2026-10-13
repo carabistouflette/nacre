@@ -15,6 +15,14 @@ pub(super) fn shared_implementation(program: &t::Program) -> String {
     let source = include_str!("../../stdlib/xml.c.in");
     let mut body = template_section(source, "/* XML_COMMON_BEGIN */", "/* XML_COMMON_END */").to_owned();
     body.push_str(template_section(source, "/* XML_COMMON_TEXT_BEGIN */", "/* XML_COMMON_TEXT_END */"));
+    if program.classes.iter().any(|class| matches!(class.native,
+        Some(C::XmlWriter | C::XsltStylesheet))) {
+        let buffer = program.classes.iter()
+            .find(|class| matches!(class.native, Some(C::ByteBuffer)))
+            .expect("XML output requires ByteBuffer").id;
+        body.push_str(template_section(source, "/* XML_COMMON_BUFFER_BEGIN */", "/* XML_COMMON_BUFFER_END */"));
+        body = replace_placeholders(body, &[("@BUFFER_ID@", buffer.to_string())]);
+    }
     let body = replace_placeholders(body, &[("@TEXT_ID@", text.to_string())]);
     debug_assert!(!has_placeholder(&body), "unexpanded shared XML placeholder");
     body
