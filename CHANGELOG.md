@@ -57,6 +57,11 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 - Math exposes defined IEEE behavior and fallible signed-minimum absolute values.
   Unique-owned SplitMix64 Random supports deterministic reseeding, unbiased bounds
   and real OS entropy. Time clocks and sleeps return structured errors with checked units.
+- Math adds C11 libm functions for inverse/hyperbolic trig, logarithmic and
+  exponential refinements, angle conversion, adjacent-double stepping, scaling,
+  exponent/ULP queries, sign handling and IEEE remainder. Checked int/long
+  arithmetic and floor division/modulus return `Result` errors on overflow or
+  zero divisors; consumer regressions cover both integer widths and IEEE edges.
 - Fixed Arrays transfer List storage and preserve affine element ownership;
   ByteBuffer supports checked long-sized binary storage and shared native I/O reservation.
 - Text supports scalar operations, slicing, search, replacement and splitting.

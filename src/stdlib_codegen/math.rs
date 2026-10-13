@@ -13,6 +13,10 @@ pub(super) fn implementation(program: &t::Program) -> String {
         ("@ABS_INT_VALUE@", abs_int_value),
         ("@ABS_LONG_RESULT@", result_id(abs_long).to_string()),
         ("@ABS_LONG_OK_TAG@", variant_id(program, result_id(abs_long), "Ok").to_string()),
+        ("@MATH_INT_RESULT@", result_id(abs_int).to_string()),
+        ("@MATH_INT_OK_TAG@", variant_id(program, result_id(abs_int), "Ok").to_string()),
+        ("@MATH_LONG_RESULT@", result_id(abs_long).to_string()),
+        ("@MATH_LONG_OK_TAG@", variant_id(program, result_id(abs_long), "Ok").to_string()),
         ("@ABS_LONG_VALUE@", abs_long_value),
     ]);
     let body = replace_method_ids(body, program, None);

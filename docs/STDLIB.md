@@ -464,16 +464,69 @@ static double round(double value)
 static double hypot(double x, double y)
 static boolean isNaN(double value)
 static boolean isFinite(double value)
+static double cbrt(double value)
+static double log10(double value)
+static double log1p(double value)
+static double expm1(double value)
+static double asin(double value)
+static double acos(double value)
+static double atan(double value)
+static double atan2(double y, double x)
+static double sinh(double value)
+static double cosh(double value)
+static double tanh(double value)
+static double toRadians(double degrees)
+static double toDegrees(double radians)
+static double signum(double value)
+static double copySign(double magnitude, double sign)
+static double nextUp(double value)
+static double nextDown(double value)
+static double ulp(double value)
+static int getExponent(double value)
+static double scalb(double value, int scaleFactor)
+static double ieeeRemainder(double dividend, double divisor)
+static Result<int, Text> addExactInt(int left, int right)
+static Result<long, Text> addExactLong(long left, long right)
+static Result<int, Text> subtractExactInt(int left, int right)
+static Result<long, Text> subtractExactLong(long left, long right)
+static Result<int, Text> multiplyExactInt(int left, int right)
+static Result<long, Text> multiplyExactLong(long left, long right)
+static Result<int, Text> negateExactInt(int value)
+static Result<long, Text> negateExactLong(long value)
+static Result<int, Text> incrementExactInt(int value)
+static Result<long, Text> incrementExactLong(long value)
+static Result<int, Text> decrementExactInt(int value)
+static Result<long, Text> decrementExactLong(long value)
+static Result<int, Text> floorDivInt(int dividend, int divisor)
+static Result<long, Text> floorDivLong(long dividend, long divisor)
+static Result<int, Text> floorModInt(int dividend, int divisor)
+static Result<long, Text> floorModLong(long dividend, long divisor)
 ```
 
 `absInt` and `absLong` return `Err` for the respective signed minimum, whose
-positive absolute value is not representable. Floating-point methods follow the
-host C math library and IEEE values: domain/range cases may produce NaN or
-infinity; these methods do not turn every floating-point domain case into `Err`.
-`round` uses ties away from zero. `minDouble`/`maxDouble` ignore one NaN and
-return NaN for two NaNs. For zero ties, min chooses negative zero if either
-operand is negative zero; max chooses positive zero if either is positive zero.
-This sign contract is explicit rather than dependent on libm's zero-tie choice.
+positive absolute value is not representable. The `*ExactInt` and `*ExactLong`
+operations return `Err` when the mathematical result is outside that width;
+successful scalar operations do not allocate. `floorDivInt`/`floorDivLong` use
+mathematical floor rather than C's truncation toward zero.
+`floorModInt`/`floorModLong` satisfy `a = floorDiv(a, b) * b + floorMod(a, b)`;
+for nonzero remainders the result has the divisor's sign. Both floor operations
+return `Err` for a zero divisor and for `MIN_VALUE / -1`, avoiding C undefined
+behavior and reporting an unrepresentable quotient.
+
+Floating operations use the C11 math library and retain its documented IEEE
+domain/range results, including NaN and infinity rather than converting every
+domain case into `Err`. `round` uses ties away from zero. `minDouble`/`maxDouble`
+ignore one NaN and return NaN for two NaNs. For zero ties, min chooses negative
+zero if either operand is negative zero; max chooses positive zero if either is
+positive zero. `signum` preserves NaN and signed zero; `copySign` copies the
+second operand's sign. `nextUp`/`nextDown` step to the adjacent representable
+double and keep NaN or the infinity at the respective outward endpoint.
+`ulp` returns a positive spacing (the smallest subnormal for zero/subnormal
+inputs, positive infinity for either infinity, and NaN for NaN). `getExponent`
+returns the normal binary exponent, `-1023` for zero or subnormals, and `1024`
+for infinities or NaN. `scalb` scales by a power of two with libm overflow and
+underflow behavior. `ieeeRemainder` uses the nearest-integer quotient with ties
+to even. `toRadians` and `toDegrees` use fixed approximate conversion factors.
 
 ### `Random`
 

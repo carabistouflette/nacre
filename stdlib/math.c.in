@@ -2,7 +2,9 @@
    of infinity produce NaN, log(0) is -infinity, and exp overflow is +infinity.
    min/max ignore one NaN and return NaN for two NaNs. Zero ties explicitly
    choose -0/+0; libm does not portably promise that choice. round ties away
-   from zero and fabs(-0) is +0. */
+   from zero and fabs(-0) is +0. C11 libm functions keep their standard
+   domain/range behavior; nextafter steps to an adjacent value, and remainder
+   uses a nearest-integer quotient with ties to even. */
 ncr_obj_@ABS_INT_RESULT@ @MATH_ABS_INT@(int32_t @ABS_INT_VALUE@, size_t ncr_line, size_t ncr_column) {
     if (@ABS_INT_VALUE@ == INT32_MIN) {
         return ncr_result_error_@ABS_INT_RESULT@("Math.absInt: INT32_MIN has no positive int value", sizeof("Math.absInt: INT32_MIN has no positive int value") - 1, ncr_line, ncr_column);
@@ -91,4 +93,233 @@ bool @MATH_IS_NAN@(double ncr_v_0, size_t ncr_line, size_t ncr_column) {
 }
 bool @MATH_IS_FINITE@(double ncr_v_0, size_t ncr_line, size_t ncr_column) {
     (void)ncr_line; (void)ncr_column; return isfinite(ncr_v_0);
+}
+double @MATH_CBRT@(double ncr_v_0, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column; return cbrt(ncr_v_0);
+}
+double @MATH_LOG10@(double ncr_v_0, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column; return log10(ncr_v_0);
+}
+double @MATH_LOG1P@(double ncr_v_0, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column; return log1p(ncr_v_0);
+}
+double @MATH_EXPM1@(double ncr_v_0, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column; return expm1(ncr_v_0);
+}
+double @MATH_ASIN@(double ncr_v_0, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column; return asin(ncr_v_0);
+}
+double @MATH_ACOS@(double ncr_v_0, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column; return acos(ncr_v_0);
+}
+double @MATH_ATAN@(double ncr_v_0, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column; return atan(ncr_v_0);
+}
+double @MATH_ATAN2@(double ncr_v_0, double ncr_v_1, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column; return atan2(ncr_v_0, ncr_v_1);
+}
+double @MATH_SINH@(double ncr_v_0, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column; return sinh(ncr_v_0);
+}
+double @MATH_COSH@(double ncr_v_0, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column; return cosh(ncr_v_0);
+}
+double @MATH_TANH@(double ncr_v_0, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column; return tanh(ncr_v_0);
+}
+double @MATH_TO_RADIANS@(double ncr_v_0, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column; return ncr_v_0 * 0.0174532925199432957692369076848861271344287188854172545609719;
+}
+double @MATH_TO_DEGREES@(double ncr_v_0, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column; return ncr_v_0 * 57.295779513082320876798154814105;
+}
+double @MATH_SIGNUM@(double ncr_v_0, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column;
+    if (isnan(ncr_v_0) || ncr_v_0 == 0.0) return ncr_v_0;
+    return copysign(1.0, ncr_v_0);
+}
+double @MATH_COPY_SIGN@(double ncr_v_0, double ncr_v_1, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column; return copysign(ncr_v_0, ncr_v_1);
+}
+double @MATH_NEXT_UP@(double ncr_v_0, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column;
+    if (isnan(ncr_v_0) || ncr_v_0 == INFINITY) return ncr_v_0;
+    if (ncr_v_0 == 0.0) return nextafter(0.0, INFINITY);
+    return nextafter(ncr_v_0, INFINITY);
+}
+double @MATH_NEXT_DOWN@(double ncr_v_0, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column;
+    if (isnan(ncr_v_0) || ncr_v_0 == -INFINITY) return ncr_v_0;
+    if (ncr_v_0 == 0.0) return nextafter(0.0, -INFINITY);
+    return nextafter(ncr_v_0, -INFINITY);
+}
+double @MATH_ULP@(double ncr_v_0, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column;
+    if (isnan(ncr_v_0)) return ncr_v_0;
+    if (isinf(ncr_v_0)) return INFINITY;
+    double magnitude = fabs(ncr_v_0);
+    double next = nextafter(magnitude, INFINITY);
+    if (isinf(next)) return magnitude - nextafter(magnitude, -INFINITY);
+    return next - magnitude;
+}
+int32_t @MATH_GET_EXPONENT@(double ncr_v_0, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column;
+    if (!isfinite(ncr_v_0)) return DBL_MAX_EXP;
+    if (ncr_v_0 == 0.0 || fpclassify(ncr_v_0) == FP_SUBNORMAL) return DBL_MIN_EXP - 2;
+    return (int32_t)ilogb(ncr_v_0);
+}
+double @MATH_SCALB@(double ncr_v_0, int32_t ncr_v_1, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column;
+    if (!isfinite(ncr_v_0) || ncr_v_0 == 0.0) return ncr_v_0;
+    return scalbn(ncr_v_0, ncr_v_1);
+}
+double @MATH_IEEE_REMAINDER@(double ncr_v_0, double ncr_v_1, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column; return remainder(ncr_v_0, ncr_v_1);
+}
+
+ncr_obj_@MATH_INT_RESULT@ @MATH_ADD_EXACT_INT@(int32_t ncr_v_0, int32_t ncr_v_1, size_t ncr_line, size_t ncr_column) {
+    if ((ncr_v_1 > 0 && ncr_v_0 > INT32_MAX - ncr_v_1) || (ncr_v_1 < 0 && ncr_v_0 < INT32_MIN - ncr_v_1)) {
+        return ncr_result_error_@MATH_INT_RESULT@("Math.addExactInt: integer overflow", sizeof("Math.addExactInt: integer overflow") - 1, ncr_line, ncr_column);
+    }
+    int32_t value = ncr_v_0 + ncr_v_1;
+    return (ncr_obj_@MATH_INT_RESULT@){.tag = @MATH_INT_OK_TAG@, .data.v@MATH_INT_OK_TAG@.f0 = value};
+}
+ncr_obj_@MATH_LONG_RESULT@ @MATH_ADD_EXACT_LONG@(int64_t ncr_v_0, int64_t ncr_v_1, size_t ncr_line, size_t ncr_column) {
+    if ((ncr_v_1 > 0 && ncr_v_0 > INT64_MAX - ncr_v_1) || (ncr_v_1 < 0 && ncr_v_0 < INT64_MIN - ncr_v_1)) {
+        return ncr_result_error_@MATH_LONG_RESULT@("Math.addExactLong: integer overflow", sizeof("Math.addExactLong: integer overflow") - 1, ncr_line, ncr_column);
+    }
+    int64_t value = ncr_v_0 + ncr_v_1;
+    return (ncr_obj_@MATH_LONG_RESULT@){.tag = @MATH_LONG_OK_TAG@, .data.v@MATH_LONG_OK_TAG@.f0 = value};
+}
+ncr_obj_@MATH_INT_RESULT@ @MATH_SUBTRACT_EXACT_INT@(int32_t ncr_v_0, int32_t ncr_v_1, size_t ncr_line, size_t ncr_column) {
+    if ((ncr_v_1 > 0 && ncr_v_0 < INT32_MIN + ncr_v_1) || (ncr_v_1 < 0 && ncr_v_0 > INT32_MAX + ncr_v_1)) {
+        return ncr_result_error_@MATH_INT_RESULT@("Math.subtractExactInt: integer overflow", sizeof("Math.subtractExactInt: integer overflow") - 1, ncr_line, ncr_column);
+    }
+    int32_t value = ncr_v_0 - ncr_v_1;
+    return (ncr_obj_@MATH_INT_RESULT@){.tag = @MATH_INT_OK_TAG@, .data.v@MATH_INT_OK_TAG@.f0 = value};
+}
+ncr_obj_@MATH_LONG_RESULT@ @MATH_SUBTRACT_EXACT_LONG@(int64_t ncr_v_0, int64_t ncr_v_1, size_t ncr_line, size_t ncr_column) {
+    if ((ncr_v_1 > 0 && ncr_v_0 < INT64_MIN + ncr_v_1) || (ncr_v_1 < 0 && ncr_v_0 > INT64_MAX + ncr_v_1)) {
+        return ncr_result_error_@MATH_LONG_RESULT@("Math.subtractExactLong: integer overflow", sizeof("Math.subtractExactLong: integer overflow") - 1, ncr_line, ncr_column);
+    }
+    int64_t value = ncr_v_0 - ncr_v_1;
+    return (ncr_obj_@MATH_LONG_RESULT@){.tag = @MATH_LONG_OK_TAG@, .data.v@MATH_LONG_OK_TAG@.f0 = value};
+}
+ncr_obj_@MATH_INT_RESULT@ @MATH_MULTIPLY_EXACT_INT@(int32_t ncr_v_0, int32_t ncr_v_1, size_t ncr_line, size_t ncr_column) {
+    bool overflow = false;
+    if (ncr_v_0 > 0) {
+        if (ncr_v_1 > 0) overflow = ncr_v_0 > INT32_MAX / ncr_v_1;
+        else if (ncr_v_1 < 0) overflow = ncr_v_1 < INT32_MIN / ncr_v_0;
+    } else if (ncr_v_0 < 0) {
+        if (ncr_v_1 > 0) overflow = ncr_v_0 < INT32_MIN / ncr_v_1;
+        else if (ncr_v_1 < 0) overflow = ncr_v_0 < INT32_MAX / ncr_v_1;
+    }
+    if (overflow) {
+        return ncr_result_error_@MATH_INT_RESULT@("Math.multiplyExactInt: integer overflow", sizeof("Math.multiplyExactInt: integer overflow") - 1, ncr_line, ncr_column);
+    }
+    int32_t value = ncr_v_0 * ncr_v_1;
+    return (ncr_obj_@MATH_INT_RESULT@){.tag = @MATH_INT_OK_TAG@, .data.v@MATH_INT_OK_TAG@.f0 = value};
+}
+ncr_obj_@MATH_LONG_RESULT@ @MATH_MULTIPLY_EXACT_LONG@(int64_t ncr_v_0, int64_t ncr_v_1, size_t ncr_line, size_t ncr_column) {
+    bool overflow = false;
+    if (ncr_v_0 > 0) {
+        if (ncr_v_1 > 0) overflow = ncr_v_0 > INT64_MAX / ncr_v_1;
+        else if (ncr_v_1 < 0) overflow = ncr_v_1 < INT64_MIN / ncr_v_0;
+    } else if (ncr_v_0 < 0) {
+        if (ncr_v_1 > 0) overflow = ncr_v_0 < INT64_MIN / ncr_v_1;
+        else if (ncr_v_1 < 0) overflow = ncr_v_0 < INT64_MAX / ncr_v_1;
+    }
+    if (overflow) {
+        return ncr_result_error_@MATH_LONG_RESULT@("Math.multiplyExactLong: integer overflow", sizeof("Math.multiplyExactLong: integer overflow") - 1, ncr_line, ncr_column);
+    }
+    int64_t value = ncr_v_0 * ncr_v_1;
+    return (ncr_obj_@MATH_LONG_RESULT@){.tag = @MATH_LONG_OK_TAG@, .data.v@MATH_LONG_OK_TAG@.f0 = value};
+}
+ncr_obj_@MATH_INT_RESULT@ @MATH_NEGATE_EXACT_INT@(int32_t ncr_v_0, size_t ncr_line, size_t ncr_column) {
+    if (ncr_v_0 == INT32_MIN) {
+        return ncr_result_error_@MATH_INT_RESULT@("Math.negateExactInt: integer overflow", sizeof("Math.negateExactInt: integer overflow") - 1, ncr_line, ncr_column);
+    }
+    int32_t value = -ncr_v_0;
+    return (ncr_obj_@MATH_INT_RESULT@){.tag = @MATH_INT_OK_TAG@, .data.v@MATH_INT_OK_TAG@.f0 = value};
+}
+ncr_obj_@MATH_LONG_RESULT@ @MATH_NEGATE_EXACT_LONG@(int64_t ncr_v_0, size_t ncr_line, size_t ncr_column) {
+    if (ncr_v_0 == INT64_MIN) {
+        return ncr_result_error_@MATH_LONG_RESULT@("Math.negateExactLong: integer overflow", sizeof("Math.negateExactLong: integer overflow") - 1, ncr_line, ncr_column);
+    }
+    int64_t value = -ncr_v_0;
+    return (ncr_obj_@MATH_LONG_RESULT@){.tag = @MATH_LONG_OK_TAG@, .data.v@MATH_LONG_OK_TAG@.f0 = value};
+}
+ncr_obj_@MATH_INT_RESULT@ @MATH_INCREMENT_EXACT_INT@(int32_t ncr_v_0, size_t ncr_line, size_t ncr_column) {
+    if (ncr_v_0 == INT32_MAX) {
+        return ncr_result_error_@MATH_INT_RESULT@("Math.incrementExactInt: integer overflow", sizeof("Math.incrementExactInt: integer overflow") - 1, ncr_line, ncr_column);
+    }
+    int32_t value = ncr_v_0 + 1;
+    return (ncr_obj_@MATH_INT_RESULT@){.tag = @MATH_INT_OK_TAG@, .data.v@MATH_INT_OK_TAG@.f0 = value};
+}
+ncr_obj_@MATH_LONG_RESULT@ @MATH_INCREMENT_EXACT_LONG@(int64_t ncr_v_0, size_t ncr_line, size_t ncr_column) {
+    if (ncr_v_0 == INT64_MAX) {
+        return ncr_result_error_@MATH_LONG_RESULT@("Math.incrementExactLong: integer overflow", sizeof("Math.incrementExactLong: integer overflow") - 1, ncr_line, ncr_column);
+    }
+    int64_t value = ncr_v_0 + 1;
+    return (ncr_obj_@MATH_LONG_RESULT@){.tag = @MATH_LONG_OK_TAG@, .data.v@MATH_LONG_OK_TAG@.f0 = value};
+}
+ncr_obj_@MATH_INT_RESULT@ @MATH_DECREMENT_EXACT_INT@(int32_t ncr_v_0, size_t ncr_line, size_t ncr_column) {
+    if (ncr_v_0 == INT32_MIN) {
+        return ncr_result_error_@MATH_INT_RESULT@("Math.decrementExactInt: integer overflow", sizeof("Math.decrementExactInt: integer overflow") - 1, ncr_line, ncr_column);
+    }
+    int32_t value = ncr_v_0 - 1;
+    return (ncr_obj_@MATH_INT_RESULT@){.tag = @MATH_INT_OK_TAG@, .data.v@MATH_INT_OK_TAG@.f0 = value};
+}
+ncr_obj_@MATH_LONG_RESULT@ @MATH_DECREMENT_EXACT_LONG@(int64_t ncr_v_0, size_t ncr_line, size_t ncr_column) {
+    if (ncr_v_0 == INT64_MIN) {
+        return ncr_result_error_@MATH_LONG_RESULT@("Math.decrementExactLong: integer overflow", sizeof("Math.decrementExactLong: integer overflow") - 1, ncr_line, ncr_column);
+    }
+    int64_t value = ncr_v_0 - 1;
+    return (ncr_obj_@MATH_LONG_RESULT@){.tag = @MATH_LONG_OK_TAG@, .data.v@MATH_LONG_OK_TAG@.f0 = value};
+}
+ncr_obj_@MATH_INT_RESULT@ @MATH_FLOOR_DIV_INT@(int32_t ncr_v_0, int32_t ncr_v_1, size_t ncr_line, size_t ncr_column) {
+    if (ncr_v_1 == 0) {
+        return ncr_result_error_@MATH_INT_RESULT@("Math.floorDivInt: division by zero", sizeof("Math.floorDivInt: division by zero") - 1, ncr_line, ncr_column);
+    }
+    if (ncr_v_0 == INT32_MIN && ncr_v_1 == -1) {
+        return ncr_result_error_@MATH_INT_RESULT@("Math.floorDivInt: integer overflow", sizeof("Math.floorDivInt: integer overflow") - 1, ncr_line, ncr_column);
+    }
+    int32_t quotient = ncr_v_0 / ncr_v_1;
+    int32_t remainder = ncr_v_0 % ncr_v_1;
+    if (remainder != 0 && ((remainder < 0) != (ncr_v_1 < 0))) --quotient;
+    return (ncr_obj_@MATH_INT_RESULT@){.tag = @MATH_INT_OK_TAG@, .data.v@MATH_INT_OK_TAG@.f0 = quotient};
+}
+ncr_obj_@MATH_LONG_RESULT@ @MATH_FLOOR_DIV_LONG@(int64_t ncr_v_0, int64_t ncr_v_1, size_t ncr_line, size_t ncr_column) {
+    if (ncr_v_1 == 0) {
+        return ncr_result_error_@MATH_LONG_RESULT@("Math.floorDivLong: division by zero", sizeof("Math.floorDivLong: division by zero") - 1, ncr_line, ncr_column);
+    }
+    if (ncr_v_0 == INT64_MIN && ncr_v_1 == -1) {
+        return ncr_result_error_@MATH_LONG_RESULT@("Math.floorDivLong: integer overflow", sizeof("Math.floorDivLong: integer overflow") - 1, ncr_line, ncr_column);
+    }
+    int64_t quotient = ncr_v_0 / ncr_v_1;
+    int64_t remainder = ncr_v_0 % ncr_v_1;
+    if (remainder != 0 && ((remainder < 0) != (ncr_v_1 < 0))) --quotient;
+    return (ncr_obj_@MATH_LONG_RESULT@){.tag = @MATH_LONG_OK_TAG@, .data.v@MATH_LONG_OK_TAG@.f0 = quotient};
+}
+ncr_obj_@MATH_INT_RESULT@ @MATH_FLOOR_MOD_INT@(int32_t ncr_v_0, int32_t ncr_v_1, size_t ncr_line, size_t ncr_column) {
+    if (ncr_v_1 == 0) {
+        return ncr_result_error_@MATH_INT_RESULT@("Math.floorModInt: division by zero", sizeof("Math.floorModInt: division by zero") - 1, ncr_line, ncr_column);
+    }
+    if (ncr_v_0 == INT32_MIN && ncr_v_1 == -1) {
+        return ncr_result_error_@MATH_INT_RESULT@("Math.floorModInt: integer overflow", sizeof("Math.floorModInt: integer overflow") - 1, ncr_line, ncr_column);
+    }
+    int32_t remainder = ncr_v_0 % ncr_v_1;
+    if (remainder != 0 && ((remainder < 0) != (ncr_v_1 < 0))) remainder += ncr_v_1;
+    return (ncr_obj_@MATH_INT_RESULT@){.tag = @MATH_INT_OK_TAG@, .data.v@MATH_INT_OK_TAG@.f0 = remainder};
+}
+ncr_obj_@MATH_LONG_RESULT@ @MATH_FLOOR_MOD_LONG@(int64_t ncr_v_0, int64_t ncr_v_1, size_t ncr_line, size_t ncr_column) {
+    if (ncr_v_1 == 0) {
+        return ncr_result_error_@MATH_LONG_RESULT@("Math.floorModLong: division by zero", sizeof("Math.floorModLong: division by zero") - 1, ncr_line, ncr_column);
+    }
+    if (ncr_v_0 == INT64_MIN && ncr_v_1 == -1) {
+        return ncr_result_error_@MATH_LONG_RESULT@("Math.floorModLong: integer overflow", sizeof("Math.floorModLong: integer overflow") - 1, ncr_line, ncr_column);
+    }
+    int64_t remainder = ncr_v_0 % ncr_v_1;
+    if (remainder != 0 && ((remainder < 0) != (ncr_v_1 < 0))) remainder += ncr_v_1;
+    return (ncr_obj_@MATH_LONG_RESULT@){.tag = @MATH_LONG_OK_TAG@, .data.v@MATH_LONG_OK_TAG@.f0 = remainder};
 }

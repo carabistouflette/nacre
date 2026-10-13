@@ -96,6 +96,191 @@ void main() {
 }
 
 #[test]
+fn math_checked_integer_operations_cover_boundaries_and_floor_signs() {
+    let source = r#"
+boolean intResultIs(Result<int, Text> result, int expected) {
+    match (result) {
+        Ok(value) { return value == expected; }
+        Err(error) { return false; }
+    }
+    return false;
+}
+boolean longResultIs(Result<long, Text> result, long expected) {
+    match (result) {
+        Ok(value) { return value == expected; }
+        Err(error) { return false; }
+    }
+    return false;
+}
+boolean intResultIsError(Result<int, Text> result) {
+    match (result) {
+        Ok(value) { return false; }
+        Err(error) { return true; }
+    }
+    return false;
+}
+boolean longResultIsError(Result<long, Text> result) {
+    match (result) {
+        Ok(value) { return false; }
+        Err(error) { return true; }
+    }
+    return false;
+}
+void main() {
+    println(
+        intResultIs(Math.addExactInt(20, 22), 42) &&
+        longResultIs(Math.addExactLong(20L, 22L), 42L) &&
+        intResultIs(Math.subtractExactInt(64, 22), 42) &&
+        longResultIs(Math.subtractExactLong(64L, 22L), 42L) &&
+        intResultIs(Math.multiplyExactInt(-7, -6), 42) &&
+        longResultIs(Math.multiplyExactLong(-7L, -6L), 42L) &&
+        intResultIs(Math.negateExactInt(-42), 42) &&
+        longResultIs(Math.negateExactLong(-42L), 42L) &&
+        intResultIs(Math.incrementExactInt(41), 42) &&
+        longResultIs(Math.incrementExactLong(41L), 42L) &&
+        intResultIs(Math.decrementExactInt(43), 42) &&
+        longResultIs(Math.decrementExactLong(43L), 42L) &&
+        intResultIsError(Math.addExactInt(2147483647, 1)) &&
+        intResultIsError(Math.addExactInt(-2147483648, -1)) &&
+        longResultIsError(Math.addExactLong(9223372036854775807L, 1L)) &&
+        longResultIsError(Math.addExactLong(-9223372036854775808L, -1L)) &&
+        intResultIsError(Math.subtractExactInt(-2147483648, 1)) &&
+        intResultIsError(Math.subtractExactInt(2147483647, -1)) &&
+        longResultIsError(Math.subtractExactLong(-9223372036854775808L, 1L)) &&
+        longResultIsError(Math.subtractExactLong(9223372036854775807L, -1L)) &&
+        intResultIsError(Math.multiplyExactInt(2147483647, 2)) &&
+        intResultIsError(Math.multiplyExactInt(-2147483648, -1)) &&
+        longResultIsError(Math.multiplyExactLong(9223372036854775807L, 2L)) &&
+        longResultIsError(Math.multiplyExactLong(-9223372036854775808L, -1L)) &&
+        intResultIsError(Math.negateExactInt(-2147483648)) &&
+        longResultIsError(Math.negateExactLong(-9223372036854775808L)) &&
+        intResultIsError(Math.incrementExactInt(2147483647)) &&
+        longResultIsError(Math.incrementExactLong(9223372036854775807L)) &&
+        intResultIsError(Math.decrementExactInt(-2147483648)) &&
+        longResultIsError(Math.decrementExactLong(-9223372036854775808L)) &&
+        intResultIs(Math.floorDivInt(7, -3), -3) &&
+        intResultIs(Math.floorDivInt(-7, 3), -3) &&
+        intResultIs(Math.floorDivInt(-7, -3), 2) &&
+        intResultIs(Math.floorModInt(7, -3), -2) &&
+        intResultIs(Math.floorModInt(-7, 3), 2) &&
+        intResultIs(Math.floorModInt(-7, -3), -1) &&
+        longResultIs(Math.floorDivLong(7L, -3L), -3L) &&
+        longResultIs(Math.floorDivLong(-7L, 3L), -3L) &&
+        longResultIs(Math.floorDivLong(-7L, -3L), 2L) &&
+        longResultIs(Math.floorModLong(7L, -3L), -2L) &&
+        longResultIs(Math.floorModLong(-7L, 3L), 2L) &&
+        longResultIs(Math.floorModLong(-7L, -3L), -1L) &&
+        intResultIsError(Math.floorDivInt(1, 0)) &&
+        intResultIsError(Math.floorDivInt(-2147483648, -1)) &&
+        intResultIsError(Math.floorModInt(1, 0)) &&
+        intResultIsError(Math.floorModInt(-2147483648, -1)) &&
+        longResultIsError(Math.floorDivLong(1L, 0L)) &&
+        longResultIsError(Math.floorDivLong(-9223372036854775808L, -1L)) &&
+        longResultIsError(Math.floorModLong(1L, 0L)) &&
+        longResultIsError(Math.floorModLong(-9223372036854775808L, -1L))
+    );
+}
+"#;
+    let output = execute(source, &["-DNACRE_MEMORY_STATS", "-fsanitize=address,undefined", "-fno-omit-frame-pointer"]);
+    assert_native_success(&output);
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "true\n");
+    assert_live_zero(&output);
+}
+
+#[test]
+fn math_floating_extensions_preserve_ieee_endpoints_and_signed_zero() {
+    let source = r#"
+void main() {
+    double nan = Math.sqrt(-1.0);
+    double positiveInfinity = Math.exp(10000.0);
+    double negativeInfinity = -positiveInfinity;
+    println(
+        Math.cbrt(-8.0) == -2.0 &&
+        Math.cbrt(-0.0) == 0.0 && 1.0 / Math.cbrt(-0.0) < 0.0 &&
+        Math.cbrt(positiveInfinity) == positiveInfinity &&
+        Math.isNaN(Math.cbrt(nan)) &&
+        Math.log10(1000.0) == 3.0 &&
+        Math.log10(0.0) < -1.0e300 &&
+        Math.isNaN(Math.log10(-1.0)) &&
+        Math.log1p(0.0) == 0.0 &&
+        Math.log1p(-0.0) == 0.0 && 1.0 / Math.log1p(-0.0) < 0.0 &&
+        Math.log1p(-1.0) < -1.0e300 &&
+        Math.isNaN(Math.log1p(-2.0)) &&
+        Math.expm1(0.0) == 0.0 &&
+        Math.expm1(-0.0) == 0.0 && 1.0 / Math.expm1(-0.0) < 0.0 &&
+        Math.expm1(1.0) > 1.718281828459045 &&
+        Math.expm1(negativeInfinity) == -1.0 &&
+        Math.asin(-1.0) < -1.5 &&
+        Math.asin(-0.0) == 0.0 && 1.0 / Math.asin(-0.0) < 0.0 &&
+        Math.isNaN(Math.asin(2.0)) &&
+        Math.acos(1.0) == 0.0 &&
+        Math.acos(-1.0) > 3.0 &&
+        Math.isNaN(Math.acos(positiveInfinity)) &&
+        Math.atan(1.0) > 0.78 && Math.atan(1.0) < 0.79 &&
+        Math.atan(-0.0) == 0.0 && 1.0 / Math.atan(-0.0) < 0.0 &&
+        Math.atan2(0.0, -0.0) > 3.0 &&
+        Math.atan2(-0.0, -0.0) < -3.0 &&
+        Math.atan2(positiveInfinity, negativeInfinity) > 2.3 &&
+        Math.atan2(negativeInfinity, positiveInfinity) < -0.7 &&
+        Math.sinh(-0.0) == 0.0 && 1.0 / Math.sinh(-0.0) < 0.0 &&
+        Math.sinh(positiveInfinity) == positiveInfinity &&
+        Math.cosh(0.0) == 1.0 &&
+        Math.cosh(negativeInfinity) == positiveInfinity &&
+        Math.tanh(-0.0) == 0.0 && 1.0 / Math.tanh(-0.0) < 0.0 &&
+        Math.tanh(positiveInfinity) == 1.0 &&
+        Math.tanh(negativeInfinity) == -1.0 &&
+        Math.toRadians(180.0) > 3.141592653589792 &&
+        Math.toRadians(180.0) < 3.141592653589794 &&
+        Math.toRadians(negativeInfinity) == negativeInfinity &&
+        Math.toDegrees(3.141592653589793) > 179.999999999 &&
+        Math.toDegrees(3.141592653589793) < 180.000000001 &&
+        Math.toDegrees(negativeInfinity) < -1.0e300 &&
+        Math.signum(-3.0) == -1.0 &&
+        Math.signum(positiveInfinity) == 1.0 &&
+        Math.signum(-0.0) == 0.0 && 1.0 / Math.signum(-0.0) < 0.0 &&
+        Math.isNaN(Math.signum(nan)) &&
+        Math.copySign(3.0, -0.0) == -3.0 &&
+        Math.copySign(-3.0, 0.0) == 3.0 &&
+        Math.nextUp(-0.0) > 0.0 &&
+        Math.nextDown(0.0) < 0.0 &&
+        Math.nextUp(positiveInfinity) == positiveInfinity &&
+        Math.nextDown(negativeInfinity) == negativeInfinity &&
+        Math.isFinite(Math.nextDown(positiveInfinity)) &&
+        Math.isFinite(Math.nextUp(negativeInfinity)) &&
+        Math.isNaN(Math.nextUp(nan)) &&
+        Math.ulp(0.0) > 0.0 && Math.ulp(0.0) < 1.0e-300 &&
+        Math.ulp(1.0) > 2.0e-16 && Math.ulp(1.0) < 3.0e-16 &&
+        Math.ulp(1.7976931348623157e308) > 1.0e292 &&
+        Math.ulp(1.7976931348623157e308) < 1.0e293 &&
+        Math.ulp(positiveInfinity) == positiveInfinity &&
+        Math.isNaN(Math.ulp(nan)) &&
+        Math.getExponent(1.0) == 0 &&
+        Math.getExponent(8.0) == 3 &&
+        Math.getExponent(0.0) == -1023 &&
+        Math.getExponent(Math.nextUp(0.0)) == -1023 &&
+        Math.getExponent(positiveInfinity) == 1024 &&
+        Math.getExponent(nan) == 1024 &&
+        Math.scalb(1.5, 3) == 12.0 &&
+        Math.scalb(1.0, 1024) == positiveInfinity &&
+        Math.scalb(-1.0, -1075) == 0.0 && 1.0 / Math.scalb(-1.0, -1075) < 0.0 &&
+        Math.scalb(-0.0, 12) == 0.0 && 1.0 / Math.scalb(-0.0, 12) < 0.0 &&
+        Math.ieeeRemainder(5.0, 2.0) == 1.0 &&
+        Math.ieeeRemainder(7.0, 2.0) == -1.0 &&
+        Math.ieeeRemainder(-7.0, 2.0) == 1.0 &&
+        Math.ieeeRemainder(-0.0, 3.0) == 0.0 && 1.0 / Math.ieeeRemainder(-0.0, 3.0) < 0.0 &&
+        Math.ieeeRemainder(5.0, positiveInfinity) == 5.0 &&
+        Math.isNaN(Math.ieeeRemainder(positiveInfinity, 2.0)) &&
+        Math.isNaN(Math.ieeeRemainder(5.0, 0.0))
+    );
+}
+"#;
+    let output = execute(source, &["-DNACRE_MEMORY_STATS", "-fsanitize=address,undefined", "-fno-omit-frame-pointer"]);
+    assert_native_success(&output);
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "true\n");
+    assert_live_zero(&output);
+}
+
+#[test]
 fn deterministic_random_reseeds_and_bounds_are_reproducible() {
     let source = r#"
 void main() {
