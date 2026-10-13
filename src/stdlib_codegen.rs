@@ -35,6 +35,8 @@ mod cryptokeys;
 mod zip;
 mod concurrency_extra;
 mod xml;
+mod xml_stream;
+mod xslt;
 mod process;
 mod crypto;
 mod big_numbers;
@@ -89,6 +91,8 @@ pub fn fields(program: &t::Program, class: C, class_id: usize) -> String {
         C::Random => random::fields(),
         C::Math | C::Time | C::DateTime | C::Console | C::Args => io::fields(),
         C::Crypto => io::fields(),
+        C::XmlReader | C::XmlEvent | C::XmlWriter => xml_stream::fields(class),
+        C::XsltStylesheet => xslt::fields(),
         C::Regex | C::RegexMatch => regex::fields(program, class),
         C::XmlDocument => xml::fields(),
         C::SocketAddress | C::TcpListener | C::TcpStream | C::Datagram | C::UdpSocket =>
@@ -139,8 +143,10 @@ pub fn drop_fields(program: &t::Program, class: C, class_id: usize) -> String {
         C::Random => random::drop_fields(),
         C::Math | C::Time | C::DateTime | C::Console | C::Args => io::drop_fields(),
         C::Crypto => String::new(),
+        C::XmlReader | C::XmlEvent | C::XmlWriter => xml_stream::drop_fields(class_id, class),
+        C::XsltStylesheet => xslt::drop_fields(class_id),
         C::Regex | C::RegexMatch => regex::drop_fields(program, class),
-        C::XmlDocument => xml::drop_fields(program, class_id),
+        C::XmlDocument => xml::drop_fields(class_id),
         C::SocketAddress | C::TcpListener | C::TcpStream | C::Datagram | C::UdpSocket =>
             network::drop_fields(program, class),
         C::HttpRequest | C::HttpResponse => http::drop_fields(program, class),
@@ -167,6 +173,8 @@ pub(crate) fn drop_helper_prototypes(program: &t::Program) -> String {
     out.push_str(&cryptokeys::drop_helper_prototypes(program));
     out.push_str(&tls::drop_helper_prototypes(program));
     out.push_str(&xml::drop_helper_prototypes(program));
+    out.push_str(&xml_stream::drop_helper_prototypes(program));
+    out.push_str(&xslt::drop_helper_prototypes(program));
     out
 }
 
@@ -229,7 +237,7 @@ fn append_body(program: &t::Program, out: &mut String, class: &t::Class, native:
         C::Uri | C::Dns => return,
         C::Path | C::File | C::Directory | C::FileInfo | C::Watcher | C::WatchEvent => return,
         C::ZipReader | C::ZipWriter | C::ZipEntry => return,
-        C::XmlDocument => return,
+        C::XmlDocument | C::XmlReader | C::XmlEvent | C::XmlWriter | C::XsltStylesheet => return,
         C::Thread(_) | C::Mutex(_) | C::Guard(_) | C::Channel(_) |
         C::Sender(_) | C::Receiver(_) | C::Condition(_) | C::Future(_) | C::ThreadPool(_) |
         C::AtomicInt | C::AtomicLong | C::AtomicBoolean | C::Semaphore | C::CountDownLatch |
@@ -327,10 +335,13 @@ pub fn implementations(program: &t::Program) -> String {
     out.push_str(&cryptokeys::implementation(program));
     out.push_str(&tls::implementation(program));
     out.push_str(&websocket::implementation(program));
+    out.push_str(&xml::shared_implementation(program));
     if let Some(xml) = xml::implementation(program) {
         out.push_str(&xml);
         out.push('\n');
     }
+    out.push_str(&xml_stream::implementation(program));
+    out.push_str(&xslt::implementation(program));
     out
 }
 

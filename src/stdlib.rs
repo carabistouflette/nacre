@@ -70,7 +70,7 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
             C::CryptoKey | C::CryptoDigest | C::CryptoMac | C::Certificate |
             C::TlsConfig | C::TlsStream | C::WebSocket | C::WebSocketMessage |
             C::ZipReader | C::ZipWriter | C::ZipEntry |
-            C::XmlDocument |
+            C::XmlDocument | C::XmlReader | C::XmlEvent | C::XmlWriter | C::XsltStylesheet |
             C::Thread(_) | C::Mutex(_) | C::Guard(_) | C::Channel(_) |
             C::Sender(_) | C::Receiver(_) | C::Condition(_) | C::Future(_) | C::ThreadPool(_) |
             C::AtomicInt | C::AtomicLong | C::AtomicBoolean | C::Semaphore |
@@ -753,6 +753,35 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
         (C::XmlDocument, "validate") => M::XmlDocumentValidate,
         (C::XmlDocument, "registerNamespace") => M::XmlDocumentRegisterNamespace,
         (C::XmlDocument, "escape") => M::XmlDocumentEscape,
+        (C::XmlReader, "fromText") => M::XmlReaderFromText,
+        (C::XmlReader, "fromBuffer") => M::XmlReaderFromBuffer,
+        (C::XmlReader, "read") => M::XmlReaderRead,
+        (C::XmlReader, "close") => M::XmlReaderClose,
+        (C::XmlEvent, "nodeType") => M::XmlEventNodeType,
+        (C::XmlEvent, "depth") => M::XmlEventDepth,
+        (C::XmlEvent, "isEmptyElement") => M::XmlEventIsEmptyElement,
+        (C::XmlEvent, "name") => M::XmlEventName,
+        (C::XmlEvent, "localName") => M::XmlEventLocalName,
+        (C::XmlEvent, "namespaceUri") => M::XmlEventNamespaceUri,
+        (C::XmlEvent, "value") => M::XmlEventValue,
+        (C::XmlEvent, "attributeCount") => M::XmlEventAttributeCount,
+        (C::XmlEvent, "attributeName") => M::XmlEventAttributeName,
+        (C::XmlEvent, "attributeNamespaceUri") => M::XmlEventAttributeNamespaceUri,
+        (C::XmlEvent, "attributeValue") => M::XmlEventAttributeValue,
+        (C::XmlWriter, "create") => M::XmlWriterCreate,
+        (C::XmlWriter, "startDocument") => M::XmlWriterStartDocument,
+        (C::XmlWriter, "startElement") => M::XmlWriterStartElement,
+        (C::XmlWriter, "startElementNs") => M::XmlWriterStartElementNs,
+        (C::XmlWriter, "writeAttribute") => M::XmlWriterWriteAttribute,
+        (C::XmlWriter, "writeAttributeNs") => M::XmlWriterWriteAttributeNs,
+        (C::XmlWriter, "writeText") => M::XmlWriterWriteText,
+        (C::XmlWriter, "writeCData") => M::XmlWriterWriteCData,
+        (C::XmlWriter, "writeComment") => M::XmlWriterWriteComment,
+        (C::XmlWriter, "writeProcessingInstruction") => M::XmlWriterWriteProcessingInstruction,
+        (C::XmlWriter, "endElement") => M::XmlWriterEndElement,
+        (C::XmlWriter, "finish") => M::XmlWriterFinish,
+        (C::XsltStylesheet, "compile") => M::XsltStylesheetCompile,
+        (C::XsltStylesheet, "transform") => M::XsltStylesheetTransform,
         _ => unreachable!("compiler-owned native method"),
     }
 }

@@ -1,3 +1,4 @@
+/* XML_COMMON_BEGIN */
 /* nacre-link: xml */
 #include <libxml/parser.h>
 #include <libxml/tree.h>
@@ -134,6 +135,8 @@ static xmlDocPtr ncr_xml_parse_memory(const unsigned char *bytes, size_t length)
     }
     return document;
 }
+/* XML_COMMON_END */
+/* XML_DOM_SELECTION_BEGIN */
 
 static xmlXPathObjectPtr ncr_xml_evaluate(ncr_obj_@XML_DOCUMENT_ID@ *self,
         const ncr_obj_@TEXT_ID@ *expression, size_t line, size_t column,
@@ -219,11 +222,15 @@ static xmlNodePtr *ncr_xml_snapshot_nodes(xmlXPathObjectPtr selection, bool coll
     return snapshot;
 }
 
+/* XML_DOM_SELECTION_END */
+/* XML_COMMON_TEXT_BEGIN */
 static ncr_obj_@TEXT_ID@ *ncr_xml_make_text(const unsigned char *bytes, size_t length,
         size_t line, size_t column) {
     if (length > (size_t)INT32_MAX || !ncr_xml_text_scalars_valid(bytes, length)) { return NULL; }
     return ncr_text_from_bytes_@TEXT_ID@(bytes, length, line, column);
 }
+/* XML_COMMON_TEXT_END */
+/* XML_DOM_METHODS_BEGIN */
 
 static void ncr_xml_document_drop_@XML_DOCUMENT_ID@(void *document, void *xpath_context) {
     if (xpath_context != NULL) { xmlXPathFreeContext((xmlXPathContextPtr)xpath_context); }
@@ -925,3 +932,4 @@ static ncr_obj_@TEXT_ID@ *@XML_DOCUMENT_ESCAPE@(ncr_obj_@TEXT_ID@ *ncr_v_@ESCAPE
     }
     return ncr_text_take_bytes_@TEXT_ID@(output, output_length, capacity, ncr_line, ncr_column);
 }
+/* XML_DOM_METHODS_END */

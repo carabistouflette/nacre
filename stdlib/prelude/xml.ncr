@@ -1,4 +1,4 @@
-// In-memory DOM, XPath, and XSD validation. Streaming XML and XSLT are not provided.
+// In-memory XML DOM, pull-reader, streaming writer, and restricted XSLT.
 class XmlDocument {
     public static Result<XmlDocument, Text> parse(borrow Text xml) {}
     public static Text escape(borrow Text text) {}
@@ -13,4 +13,54 @@ class XmlDocument {
     public Result<long, Text> appendXml(borrow Text parentXpath, borrow Text fragment) {}
     public readonly Result<Unit, Text> validate(borrow Text xsd) {}
     public Result<Unit, Text> registerNamespace(borrow Text prefix, borrow Text uri) {}
+}
+
+// Copies its input; each read advances once. Malformed/namespace-invalid input is
+// a sticky Err; None is EOF only. close is idempotent and disables subsequent reads.
+class XmlReader {
+    public static Result<XmlReader, Text> fromText(borrow Text xml) {}
+    public static Result<XmlReader, Text> fromBuffer(borrow ByteBuffer bytes) {}
+
+    public Result<Option<XmlEvent>, Text> read() {}
+    public Result<Unit, Text> close() {}
+}
+
+// Owned snapshots survive reader advancement and close. Text accessors return owners.
+class XmlEvent {
+    public readonly int nodeType() {}
+    public readonly int depth() {}
+    public readonly boolean isEmptyElement() {}
+    public readonly Text name() {}
+    public readonly Text localName() {}
+    public readonly Text namespaceUri() {}
+    public readonly Text value() {}
+    public readonly int attributeCount() {}
+    public readonly Result<Text, Text> attributeName(int index) {}
+    public readonly Result<Text, Text> attributeNamespaceUri(int index) {}
+    public readonly Result<Text, Text> attributeValue(int index) {}
+}
+
+// Commands require balanced structure. Rejected arguments preserve a usable writer;
+// finish transfers its buffer only after one root and all elements are closed.
+class XmlWriter {
+    public static Result<XmlWriter, Text> create() {}
+
+    public Result<Unit, Text> startDocument() {}
+    public Result<Unit, Text> startElement(borrow Text name) {}
+    public Result<Unit, Text> startElementNs(borrow Text prefix, borrow Text localName, borrow Text namespaceUri) {}
+    public Result<Unit, Text> writeAttribute(borrow Text name, borrow Text value) {}
+    public Result<Unit, Text> writeAttributeNs(borrow Text prefix, borrow Text localName, borrow Text namespaceUri, borrow Text value) {}
+    public Result<Unit, Text> writeText(borrow Text value) {}
+    public Result<Unit, Text> writeCData(borrow Text value) {}
+    public Result<Unit, Text> writeComment(borrow Text value) {}
+    public Result<Unit, Text> writeProcessingInstruction(borrow Text target, borrow Text value) {}
+    public Result<Unit, Text> endElement() {}
+    public Result<ByteBuffer, Text> finish() {}
+}
+
+// No includes/imports, extensions, plugins, or external transform reads/writes.
+// transform copies the source tree to preserve its borrow and returns an XML owner.
+class XsltStylesheet {
+    public static Result<XsltStylesheet, Text> compile(borrow Text stylesheet) {}
+    public readonly Result<XmlDocument, Text> transform(borrow XmlDocument document) {}
 }

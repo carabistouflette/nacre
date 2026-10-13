@@ -91,13 +91,23 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   with its upstream zero-entry bidder correction; strict central-directory
   validation is preserved rather than falling back to streaming format detection.
 
-- Affine XmlDocument uses libxml2 for in-memory UTF-8 parsing, namespace-aware
-  XPath queries and mutation, serialization, XML escaping and actual XSD
-  validation. DTDs, external entities, XInclude processing, and external XSD
-  composition are denied; streaming XML and XSLT remain unsupported, so this is
-  not complete XML parity.
-  Namespace-invalid documents and fragments are rejected before mutation; setText
-  preserves literal character data, and appended fragments are parsed as UTF-8.
+- Affine XML uses libxml2 for namespace-aware DOM/XPath, mutation, serialization,
+  XSD validation, incremental pull events with stable owned snapshots, and
+  balanced streaming output written directly to ByteBuffer. Compiled libxslt
+  stylesheets transform into independent XmlDocument owners. DTD/entity loading,
+  XInclude, external schema composition, stylesheet include/import and extensions,
+  and external transform reads/writes are denied without process-global loader or
+  security settings. Native XML builds require libxml2/libxslt development packages.
+  Namespace-invalid documents/fragments are rejected before mutation; setText
+  preserves literal character data and appended fragments parse as UTF-8.
+  Reader/event/writer clients emit their required helpers independently. Namespace
+  errors remain sticky; rejected prefix conflicts preserve writer state. Snapshot
+  local names share their owned qualified-name storage, and writer metadata transfers
+  existing string owners rather than allocating duplicate attribute keys. XSLT
+  preserves borrowed sources with private tree copies, rejects non-document results,
+  frees failed compilations, and initializes global library state under one once
+  callback. Availability checks never discover external plugins, verified against
+  a module-enabled libxslt build and a harmless initializer sentinel.
 - Floating min/max normalize signed-zero ties explicitly rather than relying on
   host libm's unspecified tie sign; both operand orders and same-sign zeros are
   covered by generated-program sanitizer regressions.

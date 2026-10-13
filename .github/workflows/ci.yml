@@ -16,7 +16,7 @@ jobs:
       - name: Install native library headers
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake patch libssl-dev zlib1g-dev libgmp-dev libcurl4-openssl-dev libicu-dev libarchive-dev libxml2-dev libsqlite3-dev liburiparser-dev libpcre2-dev
+          sudo apt-get install -y cmake patch libssl-dev zlib1g-dev libgmp-dev libcurl4-openssl-dev libicu-dev libarchive-dev libxml2-dev libxslt1-dev libsqlite3-dev liburiparser-dev libpcre2-dev
       - name: Build corrected seekable ZIP dependency
         run: python3 scripts/build_libarchive.py --prefix "$RUNNER_TEMP/nacre-native-deps"
       - uses: dtolnay/rust-toolchain@master

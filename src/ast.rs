@@ -34,7 +34,7 @@ pub enum NativeClass {
     Watcher, WatchEvent, BinaryReader, BinaryWriter, Uri, Dns,
     TlsConfig, TlsStream, WebSocket, WebSocketMessage,
     ZipReader, ZipWriter, ZipEntry,
-    XmlDocument,
+    XmlDocument, XmlReader, XmlEvent, XmlWriter, XsltStylesheet,
     Thread(Type), Mutex(Type), Guard(Type), Channel(Type), Sender(Type), Receiver(Type),
     Condition(Type), Future(Type), ThreadPool(Type),
     AtomicInt, AtomicLong, AtomicBoolean, Semaphore, CountDownLatch, Barrier, CancellationToken,

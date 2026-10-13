@@ -1,0 +1,249 @@
+/* nacre-link: xslt */
+#include <libxslt/extensions.h>
+#include <libxslt/functions.h>
+#include <libxslt/security.h>
+#include <libxslt/transform.h>
+#include <libxslt/xslt.h>
+#include <libxslt/xsltutils.h>
+
+static pthread_once_t ncr_xslt_once = PTHREAD_ONCE_INIT;
+
+static void ncr_xslt_initialize(void) {
+    xsltInitGlobals();
+    xsltInit();
+}
+
+static bool ncr_xslt_document_shape(xmlDocPtr document) {
+    if (document == NULL || document->type != XML_DOCUMENT_NODE ||
+        document->intSubset != NULL || document->extSubset != NULL) {
+        return false;
+    }
+    size_t roots = 0;
+    for (xmlNodePtr node = document->children; node != NULL; node = node->next) {
+        if (node->type == XML_ELEMENT_NODE) {
+            if (++roots > 1) { return false; }
+        } else if (node->type != XML_COMMENT_NODE && node->type != XML_PI_NODE &&
+            !(node->type == XML_TEXT_NODE && xmlIsBlankNode(node))) {
+            return false;
+        }
+    }
+    return roots == 1;
+}
+
+static void ncr_xslt_stylesheet_drop_@STYLESHEET_ID@(ncr_obj_@STYLESHEET_ID@ *stylesheet) {
+    if (stylesheet->stylesheet != NULL) {
+        xsltFreeStylesheet((xsltStylesheetPtr)stylesheet->stylesheet);
+    }
+    stylesheet->stylesheet = NULL;
+}
+
+static bool ncr_xslt_forbidden_stylesheet_node(xmlNodePtr node) {
+    static const xmlChar xslt_namespace[] = "http://www.w3.org/1999/XSL/Transform";
+    for (; node != NULL; node = node->next) {
+        if (node->type == XML_ELEMENT_NODE && node->ns != NULL && node->ns->href != NULL &&
+            xmlStrEqual(node->ns->href, xslt_namespace) &&
+            (xmlStrEqual(node->name, (const xmlChar *)"include") ||
+             xmlStrEqual(node->name, (const xmlChar *)"import"))) {
+            return true;
+        }
+        if (node->type == XML_ELEMENT_NODE) {
+            for (xmlAttrPtr attribute = node->properties; attribute != NULL; attribute = attribute->next) {
+                if (xmlStrEqual(attribute->name, (const xmlChar *)"extension-element-prefixes")) {
+                    return true;
+                }
+            }
+        }
+        if (node->children != NULL && ncr_xslt_forbidden_stylesheet_node(node->children)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static void ncr_xslt_silent_error(void *context, const char *message, ...) {
+    (void)context;
+    (void)message;
+}
+
+typedef struct {
+    bool resource_denied;
+} ncr_xslt_security_state;
+
+static int ncr_xslt_deny_resource(xsltSecurityPrefsPtr security,
+        xsltTransformContextPtr context, const char *value) {
+    (void)security;
+    (void)value;
+    if (context != NULL && context->_private != NULL) {
+        ncr_xslt_security_state *state = (ncr_xslt_security_state *)context->_private;
+        state->resource_denied = true;
+    }
+    return 0;
+}
+
+// This is the restricted XSLT 1.0 instruction policy, not an extension registry.
+static bool ncr_xslt_instruction_allowed(const xmlChar *name) {
+    static const char *const instructions[] = {
+        "apply-imports", "apply-templates", "attribute", "call-template", "choose",
+        "comment", "copy", "copy-of", "element", "fallback", "for-each", "if",
+        "message", "number", "otherwise", "param", "processing-instruction",
+        "sort", "text", "value-of", "variable", "when", "with-param"
+    };
+    for (size_t index = 0; index < sizeof(instructions) / sizeof(instructions[0]); ++index) {
+        if (xmlStrEqual(name, (const xmlChar *)instructions[index])) { return true; }
+    }
+    return false;
+}
+
+static void ncr_xslt_element_available(xmlXPathParserContextPtr context, int arguments) {
+    if (arguments != 1) { context->error = XPATH_INVALID_ARITY; return; }
+    xmlXPathStringFunction(context, 1);
+    if (context->value == NULL || context->value->type != XPATH_STRING) {
+        context->error = XPATH_INVALID_TYPE;
+        return;
+    }
+    xmlXPathObjectPtr value = valuePop(context);
+    xsltTransformContextPtr transform = xsltXPathGetTransformContext(context);
+    bool available = false;
+    if (transform != NULL && transform->inst != NULL &&
+        xmlValidateQName(value->stringval, 0) == 0) {
+        xmlChar *qualified = value->stringval;
+        xmlChar *colon = (xmlChar *)xmlStrchr(qualified, ':');
+        const xmlChar *local = colon == NULL ? qualified : colon + 1;
+        xmlNsPtr binding = NULL;
+        if (colon == NULL) {
+            binding = xmlSearchNs(transform->inst->doc, transform->inst, NULL);
+        } else {
+            // The popped XPath argument owns this string; restore its QName immediately.
+            *colon = 0;
+            binding = xmlSearchNs(transform->inst->doc, transform->inst, qualified);
+            *colon = ':';
+        }
+        available = binding != NULL &&
+            xmlStrEqual(binding->href, (const xmlChar *)"http://www.w3.org/1999/XSL/Transform") &&
+            ncr_xslt_instruction_allowed(local);
+    }
+    xmlXPathFreeObject(value);
+    if (context->error == XPATH_EXPRESSION_OK) {
+        valuePush(context, xmlXPathNewBoolean(available));
+    }
+}
+
+static xmlXPathFunction ncr_xslt_function_lookup(void *context,
+        const xmlChar *name, const xmlChar *namespace_uri) {
+    if (context == NULL || name == NULL ||
+        (namespace_uri != NULL && namespace_uri[0] != 0)) { return NULL; }
+    xmlXPathContextPtr xpath = (xmlXPathContextPtr)context;
+    // Consult only the per-context built-ins; the fallback can discover plugins.
+    void *stored = xmlHashLookup2(xpath->funcHash, name, NULL);
+    xmlXPathFunction function = NULL;
+    _Static_assert(sizeof(function) == sizeof(stored), "Linux function pointer ABI");
+    memcpy(&function, &stored, sizeof(function));
+    return function;
+}
+
+static ncr_obj_@COMPILE_RESULT@ @XSLT_STYLESHEET_COMPILE@(ncr_obj_@TEXT_ID@ *ncr_v_@COMPILE_SOURCE_ID@,
+        size_t ncr_line, size_t ncr_column) {
+    if (ncr_xml_text_has_nul(ncr_v_@COMPILE_SOURCE_ID@)) {
+        return @COMPILE_ERROR@("XsltStylesheet.compile: stylesheet must be NUL-free", sizeof("XsltStylesheet.compile: stylesheet must be NUL-free") - 1, ncr_line, ncr_column);
+    }
+    xmlDocPtr document = ncr_xml_parse_memory(ncr_v_@COMPILE_SOURCE_ID@->bytes,
+        (size_t)ncr_v_@COMPILE_SOURCE_ID@->length);
+    if (document == NULL) {
+        return @COMPILE_ERROR@("XsltStylesheet.compile: malformed XML, DTDs, and external entities are rejected", sizeof("XsltStylesheet.compile: malformed XML, DTDs, and external entities are rejected") - 1, ncr_line, ncr_column);
+    }
+    if (ncr_xslt_forbidden_stylesheet_node(document->children)) {
+        xmlFreeDoc(document);
+        return @COMPILE_ERROR@("XsltStylesheet.compile: xsl:include, xsl:import, and extension elements are forbidden", sizeof("XsltStylesheet.compile: xsl:include, xsl:import, and extension elements are forbidden") - 1, ncr_line, ncr_column);
+    }
+    if (pthread_once(&ncr_xslt_once, ncr_xslt_initialize) != 0) {
+        xmlFreeDoc(document);
+        return @COMPILE_ERROR@("XsltStylesheet.compile: initialization failed", sizeof("XsltStylesheet.compile: initialization failed") - 1, ncr_line, ncr_column);
+    }
+    xsltStylesheetPtr stylesheet = xsltParseStylesheetDoc(document);
+    if (stylesheet == NULL) {
+        xmlFreeDoc(document);
+        return @COMPILE_ERROR@("XsltStylesheet.compile: invalid or unsupported XSLT stylesheet", sizeof("XsltStylesheet.compile: invalid or unsupported XSLT stylesheet") - 1, ncr_line, ncr_column);
+    }
+    ncr_obj_@STYLESHEET_ID@ *owner = ncr_allocate(sizeof(*owner), ncr_line, ncr_column);
+    owner->stylesheet = stylesheet;
+    return (ncr_obj_@COMPILE_RESULT@){ .tag = @COMPILE_OK_TAG@,
+        .data.v@COMPILE_OK_TAG@.f0 = owner };
+}
+
+static ncr_obj_@TRANSFORM_RESULT@ @XSLT_STYLESHEET_TRANSFORM@(ncr_obj_@STYLESHEET_ID@ *ncr_self,
+        ncr_obj_@DOCUMENT_ID@ *ncr_v_@TRANSFORM_DOCUMENT_ID@,
+        size_t ncr_line, size_t ncr_column) {
+    if (ncr_self == NULL || ncr_self->stylesheet == NULL ||
+        ncr_v_@TRANSFORM_DOCUMENT_ID@ == NULL || ncr_v_@TRANSFORM_DOCUMENT_ID@->document == NULL) {
+        return @TRANSFORM_ERROR@("XsltStylesheet.transform: stylesheet and source document are required", sizeof("XsltStylesheet.transform: stylesheet and source document are required") - 1, ncr_line, ncr_column);
+    }
+    xsltStylesheetPtr stylesheet = (xsltStylesheetPtr)ncr_self->stylesheet;
+    xmlDocPtr source = (xmlDocPtr)ncr_v_@TRANSFORM_DOCUMENT_ID@->document;
+    xsltSecurityPrefsPtr security = xsltNewSecurityPrefs();
+    if (security == NULL) {
+        return @TRANSFORM_ERROR@("XsltStylesheet.transform: failed to allocate per-transform security policy", sizeof("XsltStylesheet.transform: failed to allocate per-transform security policy") - 1, ncr_line, ncr_column);
+    }
+    const xsltSecurityOption forbidden[] = {
+        XSLT_SECPREF_READ_FILE, XSLT_SECPREF_WRITE_FILE,
+        XSLT_SECPREF_CREATE_DIRECTORY, XSLT_SECPREF_READ_NETWORK,
+        XSLT_SECPREF_WRITE_NETWORK
+    };
+    for (size_t index = 0; index < sizeof(forbidden) / sizeof(forbidden[0]); ++index) {
+        if (xsltSetSecurityPrefs(security, forbidden[index], ncr_xslt_deny_resource) < 0) {
+            xsltFreeSecurityPrefs(security);
+            return @TRANSFORM_ERROR@("XsltStylesheet.transform: failed to configure per-transform resource restrictions", sizeof("XsltStylesheet.transform: failed to configure per-transform resource restrictions") - 1, ncr_line, ncr_column);
+        }
+    }
+    // libxslt may strip nodes from its input; a shared source borrow stays unchanged.
+    xmlDocPtr private_source = xmlCopyDoc(source, 1);
+    if (private_source == NULL) {
+        xsltFreeSecurityPrefs(security);
+        return @TRANSFORM_ERROR@("XsltStylesheet.transform: failed to copy source document", sizeof("XsltStylesheet.transform: failed to copy source document") - 1, ncr_line, ncr_column);
+    }
+    xsltTransformContextPtr context = xsltNewTransformContext(stylesheet, private_source);
+    if (context == NULL) {
+        xmlFreeDoc(private_source);
+        xsltFreeSecurityPrefs(security);
+        return @TRANSFORM_ERROR@("XsltStylesheet.transform: failed to create transform context", sizeof("XsltStylesheet.transform: failed to create transform context") - 1, ncr_line, ncr_column);
+    }
+    ncr_xslt_security_state security_state = { .resource_denied = false };
+    context->_private = &security_state;
+    if (xsltSetCtxtSecurityPrefs(security, context) < 0 || context->xpathCtxt == NULL) {
+        xsltFreeTransformContext(context);
+        xmlFreeDoc(private_source);
+        xsltFreeSecurityPrefs(security);
+        return @TRANSFORM_ERROR@("XsltStylesheet.transform: failed to apply per-context resource restrictions", sizeof("XsltStylesheet.transform: failed to apply per-context resource restrictions") - 1, ncr_line, ncr_column);
+    }
+    context->error = ncr_xslt_silent_error;
+    context->errctx = NULL;
+    context->xpathCtxt->error = ncr_xml_silent_error;
+    xmlXPathRegisterFuncLookup(context->xpathCtxt, ncr_xslt_function_lookup,
+        context->xpathCtxt);
+    static const xmlChar availability_name[] = "element-available";
+    if (xmlXPathRegisterFunc(context->xpathCtxt, availability_name, NULL) != 0 ||
+        xmlXPathRegisterFunc(context->xpathCtxt, availability_name, ncr_xslt_element_available) != 0) {
+        xsltFreeTransformContext(context);
+        xmlFreeDoc(private_source);
+        xsltFreeSecurityPrefs(security);
+        return @TRANSFORM_ERROR@("XsltStylesheet.transform: failed to restrict element availability", sizeof("XsltStylesheet.transform: failed to restrict element availability") - 1, ncr_line, ncr_column);
+    }
+    xmlDocPtr result = xsltApplyStylesheetUser(stylesheet, private_source, NULL, NULL, NULL, context);
+    xsltFreeTransformContext(context);
+    xmlFreeDoc(private_source);
+    xsltFreeSecurityPrefs(security);
+    if (security_state.resource_denied || !ncr_xslt_document_shape(result)) {
+        if (result != NULL) { xmlFreeDoc(result); }
+        return @TRANSFORM_ERROR@("XsltStylesheet.transform: transformation failed, produced an invalid XML document, or attempted a forbidden resource", sizeof("XsltStylesheet.transform: transformation failed, produced an invalid XML document, or attempted a forbidden resource") - 1, ncr_line, ncr_column);
+    }
+    xmlXPathContextPtr xpath = xmlXPathNewContext(result);
+    if (xpath == NULL) {
+        xmlFreeDoc(result);
+        return @TRANSFORM_ERROR@("XsltStylesheet.transform: failed to create result XPath context", sizeof("XsltStylesheet.transform: failed to create result XPath context") - 1, ncr_line, ncr_column);
+    }
+    xpath->error = ncr_xml_silent_error;
+    ncr_obj_@DOCUMENT_ID@ *owner = ncr_allocate(sizeof(*owner), ncr_line, ncr_column);
+    owner->document = result;
+    owner->xpath_context = xpath;
+    return (ncr_obj_@TRANSFORM_RESULT@){ .tag = @TRANSFORM_OK_TAG@,
+        .data.v@TRANSFORM_OK_TAG@.f0 = owner };
+}

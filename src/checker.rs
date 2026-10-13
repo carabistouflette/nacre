@@ -149,7 +149,9 @@ impl Tables {
                         t::NativeClass::Unicode | t::NativeClass::Character |
                         t::NativeClass::Charset | t::NativeClass::Locale |
                         t::NativeClass::SocketAddress | t::NativeClass::TcpListener |
-                        t::NativeClass::XmlDocument |
+                        t::NativeClass::XmlDocument | t::NativeClass::XmlReader |
+                        t::NativeClass::XmlEvent | t::NativeClass::XmlWriter |
+                        t::NativeClass::XsltStylesheet |
                         t::NativeClass::TcpStream | t::NativeClass::Datagram |
                         t::NativeClass::UdpSocket | t::NativeClass::HttpRequest |
                         t::NativeClass::HttpResponse | t::NativeClass::CryptoKey |
@@ -356,6 +358,10 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
             Some(a::NativeClass::ZipWriter) => Some(t::NativeClass::ZipWriter),
             Some(a::NativeClass::ZipEntry) => Some(t::NativeClass::ZipEntry),
             Some(a::NativeClass::XmlDocument) => Some(t::NativeClass::XmlDocument),
+            Some(a::NativeClass::XmlReader) => Some(t::NativeClass::XmlReader),
+            Some(a::NativeClass::XmlEvent) => Some(t::NativeClass::XmlEvent),
+            Some(a::NativeClass::XmlWriter) => Some(t::NativeClass::XmlWriter),
+            Some(a::NativeClass::XsltStylesheet) => Some(t::NativeClass::XsltStylesheet),
             None => None,
         };
     }

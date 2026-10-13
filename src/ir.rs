@@ -144,7 +144,7 @@ pub enum NativeClass {
     Sender(Type), Receiver(Type), Env, Command, Process, ProcessOutput, Database,
     Condition(Type), Future(Type), ThreadPool(Type),
     AtomicInt, AtomicLong, AtomicBoolean, Semaphore, CountDownLatch, Barrier, CancellationToken,
-    XmlDocument,
+    XmlDocument, XmlReader, XmlEvent, XmlWriter, XsltStylesheet,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NativeMethod {
@@ -304,4 +304,14 @@ pub enum NativeMethod {
     XmlDocumentQueryText, XmlDocumentQueryXml, XmlDocumentSetText,
     XmlDocumentSetAttribute, XmlDocumentRemove, XmlDocumentAppendXml,
     XmlDocumentValidate, XmlDocumentRegisterNamespace, XmlDocumentEscape,
+    XmlReaderFromText, XmlReaderFromBuffer, XmlReaderRead, XmlReaderClose,
+    XmlEventNodeType, XmlEventDepth, XmlEventIsEmptyElement, XmlEventName,
+    XmlEventLocalName, XmlEventNamespaceUri, XmlEventValue,
+    XmlEventAttributeCount, XmlEventAttributeName, XmlEventAttributeNamespaceUri,
+    XmlEventAttributeValue,
+    XmlWriterCreate, XmlWriterStartDocument, XmlWriterStartElement,
+    XmlWriterStartElementNs, XmlWriterWriteAttribute, XmlWriterWriteAttributeNs,
+    XmlWriterWriteText, XmlWriterWriteCData, XmlWriterWriteComment,
+    XmlWriterWriteProcessingInstruction, XmlWriterEndElement, XmlWriterFinish,
+    XsltStylesheetCompile, XsltStylesheetTransform,
 }

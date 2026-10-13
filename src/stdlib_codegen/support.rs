@@ -473,6 +473,35 @@ pub(super) fn marker(method: M) -> &'static str {
         M::WebSocketMessageIsText => "@WEBSOCKET_MESSAGE_IS_TEXT@",
         M::WebSocketMessageBody => "@WEBSOCKET_MESSAGE_BODY@",
         M::WebSocketMessageAsText => "@WEBSOCKET_MESSAGE_AS_TEXT@",
+        M::XmlReaderFromText => "@XML_READER_FROM_TEXT@",
+        M::XmlReaderFromBuffer => "@XML_READER_FROM_BUFFER@",
+        M::XmlReaderRead => "@XML_READER_READ@",
+        M::XmlReaderClose => "@XML_READER_CLOSE@",
+        M::XmlEventNodeType => "@XML_EVENT_NODE_TYPE@",
+        M::XmlEventDepth => "@XML_EVENT_DEPTH@",
+        M::XmlEventIsEmptyElement => "@XML_EVENT_IS_EMPTY_ELEMENT@",
+        M::XmlEventName => "@XML_EVENT_NAME@",
+        M::XmlEventLocalName => "@XML_EVENT_LOCAL_NAME@",
+        M::XmlEventNamespaceUri => "@XML_EVENT_NAMESPACE_URI@",
+        M::XmlEventValue => "@XML_EVENT_VALUE@",
+        M::XmlEventAttributeCount => "@XML_EVENT_ATTRIBUTE_COUNT@",
+        M::XmlEventAttributeName => "@XML_EVENT_ATTRIBUTE_NAME@",
+        M::XmlEventAttributeNamespaceUri => "@XML_EVENT_ATTRIBUTE_NAMESPACE_URI@",
+        M::XmlEventAttributeValue => "@XML_EVENT_ATTRIBUTE_VALUE@",
+        M::XmlWriterCreate => "@XML_WRITER_CREATE@",
+        M::XmlWriterStartDocument => "@XML_WRITER_START_DOCUMENT@",
+        M::XmlWriterStartElement => "@XML_WRITER_START_ELEMENT@",
+        M::XmlWriterStartElementNs => "@XML_WRITER_START_ELEMENT_NS@",
+        M::XmlWriterWriteAttribute => "@XML_WRITER_WRITE_ATTRIBUTE@",
+        M::XmlWriterWriteAttributeNs => "@XML_WRITER_WRITE_ATTRIBUTE_NS@",
+        M::XmlWriterWriteText => "@XML_WRITER_WRITE_TEXT@",
+        M::XmlWriterWriteCData => "@XML_WRITER_WRITE_CDATA@",
+        M::XmlWriterWriteComment => "@XML_WRITER_WRITE_COMMENT@",
+        M::XmlWriterWriteProcessingInstruction => "@XML_WRITER_WRITE_PI@",
+        M::XmlWriterEndElement => "@XML_WRITER_END_ELEMENT@",
+        M::XmlWriterFinish => "@XML_WRITER_FINISH@",
+        M::XsltStylesheetCompile => "@XSLT_STYLESHEET_COMPILE@",
+        M::XsltStylesheetTransform => "@XSLT_STYLESHEET_TRANSFORM@",
     }
 }
 pub(super) fn template_section<'a>(source: &'a str, begin: &str, end: &str) -> &'a str {
@@ -557,9 +586,9 @@ pub(super) fn replace_method_ids(
     body
 }
 
-pub(super) fn replace_placeholders(mut body: String, substitutions: &[(&str, String)]) -> String {
+pub(super) fn replace_placeholders(mut body: String, substitutions: &[(impl AsRef<str>, String)]) -> String {
     for (placeholder, replacement) in substitutions {
-        body = body.replace(*placeholder, replacement.as_str());
+        body = body.replace(placeholder.as_ref(), replacement.as_str());
     }
     body
 }

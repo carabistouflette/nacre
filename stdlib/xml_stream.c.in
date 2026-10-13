@@ -1,0 +1,920 @@
+/* XML_STREAM_HEADERS_BEGIN */
+/* nacre-link: xml */
+#include <libxml/xmlIO.h>
+#include <libxml/xmlreader.h>
+#include <libxml/xmlwriter.h>
+/* XML_STREAM_HEADERS_END */
+/* XML_EVENT_TYPES_BEGIN */
+
+typedef struct {
+    unsigned char *name;
+    size_t name_length;
+    unsigned char *namespace_uri;
+    size_t namespace_uri_length;
+    unsigned char *value;
+    size_t value_length;
+} ncr_xml_event_attribute;
+
+typedef struct {
+    int32_t node_type;
+    int32_t depth;
+    bool empty_element;
+    unsigned char *name;
+    size_t name_length;
+    unsigned char *local_name; // View into this snapshot's owned qualified name.
+    size_t local_name_length;
+    unsigned char *namespace_uri;
+    size_t namespace_uri_length;
+    unsigned char *value;
+    size_t value_length;
+    ncr_xml_event_attribute *attributes;
+    size_t attribute_count;
+} ncr_xml_event_snapshot;
+/* XML_EVENT_TYPES_END */
+/* XML_WRITER_TYPES_BEGIN */
+
+typedef struct ncr_xml_writer_attribute {
+    char *local;
+    char *namespace_uri;
+    char *prefix;
+} ncr_xml_writer_attribute;
+
+typedef struct ncr_xml_writer_frame {
+    struct ncr_xml_writer_frame *parent;
+    bool attributes_open;
+    bool default_namespace;
+    char *element_prefix;
+    char *element_namespace;
+    ncr_xml_writer_attribute *attributes;
+    size_t attribute_count;
+    size_t attribute_capacity;
+} ncr_xml_writer_frame;
+/* XML_WRITER_TYPES_END */
+/* XML_EVENT_FREE_BEGIN */
+
+static void ncr_xml_event_snapshot_free(ncr_xml_event_snapshot *snapshot) {
+    if (snapshot == NULL) { return; }
+    ncr_deallocate(snapshot->name);
+    ncr_deallocate(snapshot->namespace_uri);
+    ncr_deallocate(snapshot->value);
+    for (size_t index = 0; index < snapshot->attribute_count; ++index) {
+        ncr_xml_event_attribute *attribute = &snapshot->attributes[index];
+        ncr_deallocate(attribute->name);
+        ncr_deallocate(attribute->namespace_uri);
+        ncr_deallocate(attribute->value);
+    }
+    ncr_deallocate(snapshot->attributes);
+    ncr_deallocate(snapshot);
+}
+/* XML_EVENT_FREE_END */
+/* XML_READER_SNAPSHOT_BEGIN */
+
+static void ncr_xml_reader_copy_field(const xmlChar *source,
+        unsigned char **target, size_t *target_length, size_t line, size_t column) {
+    *target = NULL;
+    *target_length = 0;
+    if (source == NULL) { return; }
+    int length = xmlStrlen(source);
+    if (length == 0) { return; }
+    unsigned char *copy = ncr_allocate((size_t)length, line, column);
+    memcpy(copy, source, (size_t)length);
+    *target = copy;
+    *target_length = (size_t)length;
+}
+
+static void ncr_xml_reader_copy_attribute(xmlTextReaderPtr reader,
+        ncr_xml_event_attribute *attribute, size_t line, size_t column) {
+    ncr_xml_reader_copy_field(xmlTextReaderConstName(reader), &attribute->name,
+        &attribute->name_length, line, column);
+    ncr_xml_reader_copy_field(xmlTextReaderConstNamespaceUri(reader), &attribute->namespace_uri,
+        &attribute->namespace_uri_length, line, column);
+    ncr_xml_reader_copy_field(xmlTextReaderConstValue(reader), &attribute->value,
+        &attribute->value_length, line, column);
+}
+
+static ncr_xml_event_snapshot *ncr_xml_reader_snapshot(xmlTextReaderPtr reader,
+        size_t line, size_t column) {
+    ncr_xml_event_snapshot *snapshot = ncr_allocate(sizeof(*snapshot), line, column);
+    memset(snapshot, 0, sizeof(*snapshot));
+    int node_type = xmlTextReaderNodeType(reader);
+    int depth = xmlTextReaderDepth(reader);
+    int attribute_count = xmlTextReaderAttributeCount(reader);
+    if (node_type < 0 || depth < 0 || attribute_count < 0) {
+        ncr_xml_event_snapshot_free(snapshot);
+        return NULL;
+    }
+    snapshot->node_type = (int32_t)node_type;
+    snapshot->depth = (int32_t)depth;
+    snapshot->empty_element = xmlTextReaderIsEmptyElement(reader) == 1;
+    ncr_xml_reader_copy_field(xmlTextReaderConstName(reader), &snapshot->name,
+        &snapshot->name_length, line, column);
+    const xmlChar *local = xmlTextReaderConstLocalName(reader);
+    size_t local_length = local == NULL ? 0 : (size_t)xmlStrlen(local);
+    if (local_length > snapshot->name_length ||
+        (local_length > 0 && memcmp(snapshot->name + snapshot->name_length - local_length,
+            local, local_length) != 0)) {
+        ncr_xml_event_snapshot_free(snapshot);
+        return NULL;
+    }
+    snapshot->local_name_length = local_length;
+    snapshot->local_name = local_length == 0 ? NULL :
+        snapshot->name + snapshot->name_length - local_length;
+    ncr_xml_reader_copy_field(xmlTextReaderConstNamespaceUri(reader), &snapshot->namespace_uri,
+        &snapshot->namespace_uri_length, line, column);
+    ncr_xml_reader_copy_field(xmlTextReaderConstValue(reader), &snapshot->value,
+        &snapshot->value_length, line, column);
+    if (attribute_count == 0) { return snapshot; }
+    if ((size_t)attribute_count > SIZE_MAX / sizeof(*snapshot->attributes)) {
+        ncr_xml_event_snapshot_free(snapshot);
+        return NULL;
+    }
+    snapshot->attributes = ncr_allocate((size_t)attribute_count * sizeof(*snapshot->attributes), line, column);
+    memset(snapshot->attributes, 0, (size_t)attribute_count * sizeof(*snapshot->attributes));
+    int moved = xmlTextReaderMoveToFirstAttribute(reader);
+    if (moved != 1) {
+        ncr_xml_event_snapshot_free(snapshot);
+        return NULL;
+    }
+    do {
+        if (snapshot->attribute_count >= (size_t)attribute_count) {
+            (void)xmlTextReaderMoveToElement(reader);
+            ncr_xml_event_snapshot_free(snapshot);
+            return NULL;
+        }
+        ncr_xml_event_attribute *attribute =
+            &snapshot->attributes[snapshot->attribute_count++];
+        ncr_xml_reader_copy_attribute(reader, attribute, line, column);
+        moved = xmlTextReaderMoveToNextAttribute(reader);
+    } while (moved == 1);
+    if (moved < 0 || snapshot->attribute_count != (size_t)attribute_count ||
+        xmlTextReaderMoveToElement(reader) != 1) {
+        ncr_xml_event_snapshot_free(snapshot);
+        return NULL;
+    }
+    return snapshot;
+}
+
+static void ncr_xml_reader_drop_@READER_ID@(ncr_obj_@READER_ID@ *reader) {
+    if (reader->reader != NULL) {
+        (void)xmlTextReaderClose((xmlTextReaderPtr)reader->reader);
+        xmlFreeTextReader((xmlTextReaderPtr)reader->reader);
+    }
+    ncr_deallocate(reader->input);
+    reader->reader = NULL;
+    reader->input = NULL;
+}
+/* XML_READER_SNAPSHOT_END */
+/* XML_EVENT_DROP_BEGIN */
+
+static void ncr_xml_event_drop_@EVENT_ID@(ncr_obj_@EVENT_ID@ *event) {
+    ncr_xml_event_snapshot_free((ncr_xml_event_snapshot *)event->snapshot);
+    event->snapshot = NULL;
+}
+/* XML_EVENT_DROP_END */
+/* XML_WRITER_DROP_BEGIN */
+
+static void ncr_xml_writer_clear_start_tag(ncr_xml_writer_frame *frame) {
+    for (size_t index = 0; index < frame->attribute_count; ++index) {
+        ncr_deallocate(frame->attributes[index].local);
+        ncr_deallocate(frame->attributes[index].namespace_uri);
+        ncr_deallocate(frame->attributes[index].prefix);
+    }
+    ncr_deallocate(frame->attributes);
+    ncr_deallocate(frame->element_prefix);
+    ncr_deallocate(frame->element_namespace);
+    frame->attributes = NULL;
+    frame->attribute_count = 0;
+    frame->attribute_capacity = 0;
+    frame->element_prefix = NULL;
+    frame->element_namespace = NULL;
+}
+
+static void ncr_xml_writer_frame_free(ncr_xml_writer_frame *frame) {
+    while (frame != NULL) {
+        ncr_xml_writer_frame *parent = frame->parent;
+        ncr_xml_writer_clear_start_tag(frame);
+        ncr_deallocate(frame);
+        frame = parent;
+    }
+}
+
+static void ncr_xml_writer_drop_@WRITER_ID@(ncr_obj_@WRITER_ID@ *writer) {
+    if (writer->writer != NULL) { xmlFreeTextWriter((xmlTextWriterPtr)writer->writer); }
+    ncr_xml_writer_frame_free((ncr_xml_writer_frame *)writer->frames);
+    if (writer->buffer != NULL) { ncr_drop_@BUFFER_ID@((ncr_obj_@BUFFER_ID@ *)writer->buffer); }
+    writer->writer = NULL;
+    writer->frames = NULL;
+    writer->buffer = NULL;
+}
+
+/* XML_WRITER_DROP_END */
+/* XML_READER_METHODS_BEGIN */
+#if LIBXML_VERSION >= 21200
+static void ncr_xml_reader_error(void *data, const xmlError *error) {
+#else
+static void ncr_xml_reader_error(void *data, xmlErrorPtr error) {
+#endif
+    if (data != NULL && error != NULL && error->level >= XML_ERR_ERROR) {
+        *(uint8_t *)data = 2;
+    }
+}
+
+static xmlTextReaderPtr ncr_xml_reader_create(const unsigned char *bytes, size_t length,
+        unsigned char **owned_input, const char **failure) {
+    *owned_input = NULL;
+    if (length > (size_t)INT_MAX || (length > 0 && bytes == NULL)) {
+        *failure = "XML input exceeds libxml2 limits or is unavailable";
+        return NULL;
+    }
+    size_t allocation = length == 0 ? 1 : length;
+    unsigned char *copy = ncr_allocate(allocation, 0, 0);
+    if (length > 0) { memcpy(copy, bytes, length); }
+    xmlTextReaderPtr reader = xmlReaderForMemory((const char *)copy, (int)length,
+        NULL, NULL, XML_PARSE_NONET);
+    if (reader == NULL) {
+        ncr_deallocate(copy);
+        *failure = "libxml2 could not create an XML pull reader";
+        return NULL;
+    }
+    xmlTextReaderSetStructuredErrorHandler(reader, ncr_xml_silent_error, NULL);
+    if (xmlTextReaderSetParserProp(reader, XML_PARSER_LOADDTD, 0) < 0 ||
+        xmlTextReaderSetParserProp(reader, XML_PARSER_DEFAULTATTRS, 0) < 0 ||
+        xmlTextReaderSetParserProp(reader, XML_PARSER_VALIDATE, 0) < 0 ||
+        xmlTextReaderSetParserProp(reader, XML_PARSER_SUBST_ENTITIES, 0) < 0) {
+        xmlFreeTextReader(reader);
+        ncr_deallocate(copy);
+        *failure = "libxml2 could not disable DTD loading and entity substitution";
+        return NULL;
+    }
+    *owned_input = copy;
+    *failure = NULL;
+    return reader;
+}
+
+static ncr_obj_@CONSTRUCT_RESULT@ @XML_READER_FROM_TEXT@(ncr_obj_@TEXT_ID@ *ncr_v_@FROM_TEXT_XML_ID@,
+        size_t ncr_line, size_t ncr_column) {
+    if (ncr_xml_text_has_nul(ncr_v_@FROM_TEXT_XML_ID@)) {
+        return @CONSTRUCT_ERROR@("XmlReader.fromText: input must be NUL-free", sizeof("XmlReader.fromText: input must be NUL-free") - 1, ncr_line, ncr_column);
+    }
+    unsigned char *owned_input = NULL;
+    const char *failure = NULL;
+    xmlTextReaderPtr native_reader = ncr_xml_reader_create(ncr_v_@FROM_TEXT_XML_ID@->bytes,
+        (size_t)ncr_v_@FROM_TEXT_XML_ID@->length, &owned_input, &failure);
+    if (native_reader == NULL) {
+        return @CONSTRUCT_ERROR@(failure, strlen(failure), ncr_line, ncr_column);
+    }
+    ncr_obj_@READER_ID@ *reader = ncr_allocate(sizeof(*reader), ncr_line, ncr_column);
+    reader->reader = native_reader;
+    reader->input = owned_input;
+    reader->state = 0;
+    xmlTextReaderSetStructuredErrorHandler(native_reader, ncr_xml_reader_error, &reader->state);
+    return (ncr_obj_@CONSTRUCT_RESULT@){ .tag = @CONSTRUCT_OK_TAG@,
+        .data.v@CONSTRUCT_OK_TAG@.f0 = reader };
+}
+
+static ncr_obj_@CONSTRUCT_RESULT@ @XML_READER_FROM_BUFFER@(ncr_obj_@BUFFER_ID@ *ncr_v_@FROM_BUFFER_BYTES_ID@,
+        size_t ncr_line, size_t ncr_column) {
+    if (ncr_v_@FROM_BUFFER_BYTES_ID@ == NULL ||
+        (uint64_t)ncr_v_@FROM_BUFFER_BYTES_ID@->length > (uint64_t)INT_MAX) {
+        return @CONSTRUCT_ERROR@("XmlReader.fromBuffer: input exceeds libxml2 limits", sizeof("XmlReader.fromBuffer: input exceeds libxml2 limits") - 1, ncr_line, ncr_column);
+    }
+    unsigned char *owned_input = NULL;
+    const char *failure = NULL;
+    xmlTextReaderPtr native_reader = ncr_xml_reader_create(ncr_v_@FROM_BUFFER_BYTES_ID@->bytes,
+        ncr_v_@FROM_BUFFER_BYTES_ID@->length, &owned_input, &failure);
+    if (native_reader == NULL) {
+        return @CONSTRUCT_ERROR@(failure, strlen(failure), ncr_line, ncr_column);
+    }
+    ncr_obj_@READER_ID@ *reader = ncr_allocate(sizeof(*reader), ncr_line, ncr_column);
+    reader->reader = native_reader;
+    reader->input = owned_input;
+    reader->state = 0;
+    xmlTextReaderSetStructuredErrorHandler(native_reader, ncr_xml_reader_error, &reader->state);
+    return (ncr_obj_@CONSTRUCT_RESULT@){ .tag = @CONSTRUCT_OK_TAG@,
+        .data.v@CONSTRUCT_OK_TAG@.f0 = reader };
+}
+
+static ncr_obj_@READ_RESULT@ @XML_READER_READ@(ncr_obj_@READER_ID@ *ncr_self,
+        size_t ncr_line, size_t ncr_column) {
+    if (ncr_self == NULL || ncr_self->reader == NULL || ncr_self->state == 3) {
+        return @READ_ERROR@("XmlReader.read: reader is closed", sizeof("XmlReader.read: reader is closed") - 1, ncr_line, ncr_column);
+    }
+    if (ncr_self->state == 2) {
+        return @READ_ERROR@("XmlReader.read: reader previously failed on malformed or forbidden XML", sizeof("XmlReader.read: reader previously failed on malformed or forbidden XML") - 1, ncr_line, ncr_column);
+    }
+    if (ncr_self->state == 1) {
+        ncr_obj_@OPTION_TYPE@ none = { .tag = @READ_NONE_TAG@ };
+        return (ncr_obj_@READ_RESULT@){ .tag = @READ_OK_TAG@,
+            .data.v@READ_OK_TAG@.f0 = none };
+    }
+    xmlTextReaderPtr reader = (xmlTextReaderPtr)ncr_self->reader;
+    int status = xmlTextReaderRead(reader);
+    if (status < 0 || ncr_self->state == 2) {
+        ncr_self->state = 2;
+        return @READ_ERROR@("XmlReader.read: malformed, truncated, or namespace-invalid XML", sizeof("XmlReader.read: malformed, truncated, or namespace-invalid XML") - 1, ncr_line, ncr_column);
+    }
+    if (status == 0) {
+        ncr_self->state = 1;
+        ncr_obj_@OPTION_TYPE@ none = { .tag = @READ_NONE_TAG@ };
+        return (ncr_obj_@READ_RESULT@){ .tag = @READ_OK_TAG@,
+            .data.v@READ_OK_TAG@.f0 = none };
+    }
+    int node_type = xmlTextReaderNodeType(reader);
+    if (node_type == XML_READER_TYPE_DOCUMENT_TYPE || node_type == XML_READER_TYPE_ENTITY_REFERENCE ||
+        node_type == XML_READER_TYPE_ENTITY || node_type == XML_READER_TYPE_END_ENTITY) {
+        ncr_self->state = 2;
+        return @READ_ERROR@("XmlReader.read: DTDs and entity references are forbidden", sizeof("XmlReader.read: DTDs and entity references are forbidden") - 1, ncr_line, ncr_column);
+    }
+    ncr_xml_event_snapshot *snapshot = ncr_xml_reader_snapshot(reader, ncr_line, ncr_column);
+    if (snapshot == NULL) {
+        ncr_self->state = 2;
+        return @READ_ERROR@("XmlReader.read: failed to snapshot the current event", sizeof("XmlReader.read: failed to snapshot the current event") - 1, ncr_line, ncr_column);
+    }
+    ncr_obj_@EVENT_ID@ *event = ncr_allocate(sizeof(*event), ncr_line, ncr_column);
+    event->snapshot = snapshot;
+    ncr_obj_@OPTION_TYPE@ some = { .tag = @READ_SOME_TAG@,
+        .data.v@READ_SOME_TAG@.f0 = event };
+    return (ncr_obj_@READ_RESULT@){ .tag = @READ_OK_TAG@,
+        .data.v@READ_OK_TAG@.f0 = some };
+}
+
+static ncr_obj_@UNIT_RESULT@ @XML_READER_CLOSE@(ncr_obj_@READER_ID@ *ncr_self,
+        size_t ncr_line, size_t ncr_column) {
+    if (ncr_self == NULL) {
+        return @UNIT_ERROR@("XmlReader.close: reader is unavailable", sizeof("XmlReader.close: reader is unavailable") - 1, ncr_line, ncr_column);
+    }
+    if (ncr_self->reader != NULL) {
+        int status = xmlTextReaderClose((xmlTextReaderPtr)ncr_self->reader);
+        xmlFreeTextReader((xmlTextReaderPtr)ncr_self->reader);
+        ncr_self->reader = NULL;
+        ncr_deallocate(ncr_self->input);
+        ncr_self->input = NULL;
+        ncr_self->state = 3;
+        if (status < 0) {
+            return @UNIT_ERROR@("XmlReader.close: libxml2 failed to close the reader", sizeof("XmlReader.close: libxml2 failed to close the reader") - 1, ncr_line, ncr_column);
+        }
+    }
+    return (ncr_obj_@UNIT_RESULT@){ .tag = @UNIT_OK_TAG@,
+        .data.v@UNIT_OK_TAG@.f0 = UINT8_C(0) };
+}
+
+/* XML_READER_METHODS_END */
+/* XML_EVENT_METHODS_BEGIN */
+static ncr_xml_event_snapshot *ncr_xml_event_data(ncr_obj_@EVENT_ID@ *event,
+        size_t line, size_t column) {
+    if (event == NULL || event->snapshot == NULL) {
+        ncr_fail("XmlEvent: event snapshot is unavailable", line, column);
+    }
+    return (ncr_xml_event_snapshot *)event->snapshot;
+}
+
+static ncr_obj_@TEXT_ID@ *ncr_xml_event_text(const unsigned char *bytes, size_t length,
+        size_t line, size_t column) {
+    static const unsigned char empty[] = "";
+    ncr_obj_@TEXT_ID@ *text = ncr_xml_make_text(length == 0 ? empty : bytes, length, line, column);
+    if (text == NULL) { ncr_fail("XmlEvent: event text is invalid or too large", line, column); }
+    return text;
+}
+
+static int32_t @XML_EVENT_NODE_TYPE@(ncr_obj_@EVENT_ID@ *ncr_self,
+        size_t ncr_line, size_t ncr_column) {
+    return ncr_xml_event_data(ncr_self, ncr_line, ncr_column)->node_type;
+}
+static int32_t @XML_EVENT_DEPTH@(ncr_obj_@EVENT_ID@ *ncr_self,
+        size_t ncr_line, size_t ncr_column) {
+    return ncr_xml_event_data(ncr_self, ncr_line, ncr_column)->depth;
+}
+static bool @XML_EVENT_IS_EMPTY_ELEMENT@(ncr_obj_@EVENT_ID@ *ncr_self,
+        size_t ncr_line, size_t ncr_column) {
+    return ncr_xml_event_data(ncr_self, ncr_line, ncr_column)->empty_element;
+}
+static ncr_obj_@TEXT_ID@ *@XML_EVENT_NAME@(ncr_obj_@EVENT_ID@ *ncr_self,
+        size_t ncr_line, size_t ncr_column) {
+    ncr_xml_event_snapshot *event = ncr_xml_event_data(ncr_self, ncr_line, ncr_column);
+    return ncr_xml_event_text(event->name, event->name_length, ncr_line, ncr_column);
+}
+static ncr_obj_@TEXT_ID@ *@XML_EVENT_LOCAL_NAME@(ncr_obj_@EVENT_ID@ *ncr_self,
+        size_t ncr_line, size_t ncr_column) {
+    ncr_xml_event_snapshot *event = ncr_xml_event_data(ncr_self, ncr_line, ncr_column);
+    return ncr_xml_event_text(event->local_name, event->local_name_length, ncr_line, ncr_column);
+}
+static ncr_obj_@TEXT_ID@ *@XML_EVENT_NAMESPACE_URI@(ncr_obj_@EVENT_ID@ *ncr_self,
+        size_t ncr_line, size_t ncr_column) {
+    ncr_xml_event_snapshot *event = ncr_xml_event_data(ncr_self, ncr_line, ncr_column);
+    return ncr_xml_event_text(event->namespace_uri, event->namespace_uri_length, ncr_line, ncr_column);
+}
+static ncr_obj_@TEXT_ID@ *@XML_EVENT_VALUE@(ncr_obj_@EVENT_ID@ *ncr_self,
+        size_t ncr_line, size_t ncr_column) {
+    ncr_xml_event_snapshot *event = ncr_xml_event_data(ncr_self, ncr_line, ncr_column);
+    return ncr_xml_event_text(event->value, event->value_length, ncr_line, ncr_column);
+}
+static int32_t @XML_EVENT_ATTRIBUTE_COUNT@(ncr_obj_@EVENT_ID@ *ncr_self,
+        size_t ncr_line, size_t ncr_column) {
+    return (int32_t)ncr_xml_event_data(ncr_self, ncr_line, ncr_column)->attribute_count;
+}
+
+static ncr_obj_@ATTRIBUTE_RESULT@ ncr_xml_event_attribute_text(ncr_obj_@EVENT_ID@ *event,
+        int32_t index, int field, size_t line, size_t column) {
+    ncr_xml_event_snapshot *snapshot = ncr_xml_event_data(event, line, column);
+    if (index < 0 || (size_t)index >= snapshot->attribute_count) {
+        return @ATTRIBUTE_ERROR@("XmlEvent attribute index is out of range", sizeof("XmlEvent attribute index is out of range") - 1, line, column);
+    }
+    ncr_xml_event_attribute *attribute = &snapshot->attributes[(size_t)index];
+    const unsigned char *bytes = field == 0 ? attribute->name :
+        field == 1 ? attribute->namespace_uri : attribute->value;
+    size_t length = field == 0 ? attribute->name_length :
+        field == 1 ? attribute->namespace_uri_length : attribute->value_length;
+    ncr_obj_@TEXT_ID@ *text = ncr_xml_event_text(bytes, length, line, column);
+    return (ncr_obj_@ATTRIBUTE_RESULT@){ .tag = @ATTRIBUTE_OK_TAG@,
+        .data.v@ATTRIBUTE_OK_TAG@.f0 = text };
+}
+static ncr_obj_@ATTRIBUTE_RESULT@ @XML_EVENT_ATTRIBUTE_NAME@(ncr_obj_@EVENT_ID@ *ncr_self,
+        int32_t ncr_v_@EVENT_ATTRIBUTE_NAME_INDEX_ID@, size_t ncr_line, size_t ncr_column) {
+    return ncr_xml_event_attribute_text(ncr_self, ncr_v_@EVENT_ATTRIBUTE_NAME_INDEX_ID@, 0, ncr_line, ncr_column);
+}
+static ncr_obj_@ATTRIBUTE_RESULT@ @XML_EVENT_ATTRIBUTE_NAMESPACE_URI@(ncr_obj_@EVENT_ID@ *ncr_self,
+        int32_t ncr_v_@EVENT_ATTRIBUTE_NAMESPACE_INDEX_ID@, size_t ncr_line, size_t ncr_column) {
+    return ncr_xml_event_attribute_text(ncr_self, ncr_v_@EVENT_ATTRIBUTE_NAMESPACE_INDEX_ID@, 1, ncr_line, ncr_column);
+}
+static ncr_obj_@ATTRIBUTE_RESULT@ @XML_EVENT_ATTRIBUTE_VALUE@(ncr_obj_@EVENT_ID@ *ncr_self,
+        int32_t ncr_v_@EVENT_ATTRIBUTE_VALUE_INDEX_ID@, size_t ncr_line, size_t ncr_column) {
+    return ncr_xml_event_attribute_text(ncr_self, ncr_v_@EVENT_ATTRIBUTE_VALUE_INDEX_ID@, 2, ncr_line, ncr_column);
+}
+
+/* XML_EVENT_METHODS_END */
+/* XML_WRITER_METHODS_BEGIN */
+static int ncr_xml_writer_output(void *context, const char *bytes, int length) {
+    ncr_obj_@BUFFER_ID@ *buffer = (ncr_obj_@BUFFER_ID@ *)context;
+    if (length < 0 || buffer == NULL ||
+        (uint64_t)length > (uint64_t)INT64_MAX - (uint64_t)buffer->length ||
+        (size_t)length > SIZE_MAX - buffer->length) {
+        return -1;
+    }
+    size_t required = buffer->length + (size_t)length;
+    if (length > 0) {
+        ncr_byte_buffer_reserve_@BUFFER_ID@(buffer, required, 0, 0);
+        memcpy(buffer->bytes + buffer->length, bytes, (size_t)length);
+        buffer->length = required;
+    }
+    return length;
+}
+
+static int ncr_xml_writer_output_close(void *context) {
+    (void)context;
+    return 0;
+}
+
+static bool ncr_xml_writer_text(ncr_obj_@TEXT_ID@ *text, char **output,
+        size_t line, size_t column) {
+    *output = NULL;
+    if (text == NULL || text->length < 0 ||
+        !ncr_xml_text_scalars_valid(text->bytes, (size_t)text->length)) {
+        return false;
+    }
+    *output = ncr_xml_cstring(text, line, column);
+    return *output != NULL;
+}
+
+static bool ncr_xml_writer_namespace_valid(const char *prefix, const char *uri) {
+    static const char xml_namespace[] = "http://www.w3.org/XML/1998/namespace";
+    static const char xmlns_namespace[] = "http://www.w3.org/2000/xmlns/";
+    bool xml_prefix = strcmp(prefix, "xml") == 0;
+    bool xml_uri = strcmp(uri, xml_namespace) == 0;
+    if (strcmp(prefix, "xmlns") == 0 || strcmp(uri, xmlns_namespace) == 0 ||
+        xml_prefix != xml_uri) {
+        return false;
+    }
+    if (prefix[0] != '\0' && uri[0] == '\0') { return false; }
+    return true;
+}
+
+static ncr_xml_writer_frame *ncr_xml_writer_frame_new(ncr_xml_writer_frame *parent,
+        bool default_namespace, char *element_prefix, char *element_namespace,
+        size_t line, size_t column) {
+    ncr_xml_writer_frame *frame = ncr_allocate(sizeof(*frame), line, column);
+    memset(frame, 0, sizeof(*frame));
+    frame->parent = parent;
+    frame->attributes_open = true;
+    frame->default_namespace = default_namespace;
+    frame->element_prefix = element_prefix;
+    frame->element_namespace = element_namespace;
+    return frame;
+}
+
+static void ncr_xml_writer_close_start_tag(ncr_xml_writer_frame *frame) {
+    if (frame != NULL && frame->attributes_open) {
+        ncr_xml_writer_clear_start_tag(frame);
+        frame->attributes_open = false;
+    }
+}
+
+static bool ncr_xml_writer_attribute_reserve(ncr_xml_writer_frame *frame) {
+    if (frame->attribute_count < frame->attribute_capacity) { return true; }
+    size_t capacity = frame->attribute_capacity == 0 ? 4 : frame->attribute_capacity * 2;
+    if (capacity < frame->attribute_capacity || capacity > SIZE_MAX / sizeof(*frame->attributes)) {
+        return false;
+    }
+    ncr_xml_writer_attribute *attributes = ncr_allocate(capacity * sizeof(*attributes), 0, 0);
+    if (frame->attribute_count > 0) {
+        memcpy(attributes, frame->attributes, frame->attribute_count * sizeof(*attributes));
+    }
+    ncr_deallocate(frame->attributes);
+    frame->attributes = attributes;
+    frame->attribute_capacity = capacity;
+    return true;
+}
+
+static bool ncr_xml_writer_attribute_seen(ncr_xml_writer_frame *frame,
+        const char *uri, const char *local) {
+    for (size_t index = 0; index < frame->attribute_count; ++index) {
+        ncr_xml_writer_attribute *attribute = &frame->attributes[index];
+        if (strcmp(attribute->local, local) == 0 &&
+            strcmp(attribute->namespace_uri == NULL ? "" : attribute->namespace_uri,
+                uri == NULL ? "" : uri) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static ncr_obj_@WRITER_CREATE_RESULT@ @XML_WRITER_CREATE@(size_t ncr_line, size_t ncr_column) {
+    ncr_obj_@BUFFER_ID@ *buffer = ncr_allocate(sizeof(*buffer), ncr_line, ncr_column);
+    buffer->bytes = NULL;
+    buffer->length = 0;
+    buffer->capacity = 0;
+    xmlOutputBufferPtr output = xmlOutputBufferCreateIO(ncr_xml_writer_output,
+        ncr_xml_writer_output_close, buffer, NULL);
+    if (output == NULL) {
+        ncr_drop_@BUFFER_ID@(buffer);
+        return @WRITER_CREATE_ERROR@("XmlWriter.create: libxml2 could not create an output buffer", sizeof("XmlWriter.create: libxml2 could not create an output buffer") - 1, ncr_line, ncr_column);
+    }
+    xmlTextWriterPtr native_writer = xmlNewTextWriter(output);
+    if (native_writer == NULL) {
+        (void)xmlOutputBufferClose(output);
+        ncr_drop_@BUFFER_ID@(buffer);
+        return @WRITER_CREATE_ERROR@("XmlWriter.create: libxml2 could not create a writer", sizeof("XmlWriter.create: libxml2 could not create a writer") - 1, ncr_line, ncr_column);
+    }
+    ncr_obj_@WRITER_ID@ *writer = ncr_allocate(sizeof(*writer), ncr_line, ncr_column);
+    writer->writer = native_writer;
+    writer->buffer = buffer;
+    writer->frames = NULL;
+    writer->root_count = 0;
+    writer->state = 0;
+    return (ncr_obj_@WRITER_CREATE_RESULT@){ .tag = @WRITER_CREATE_OK_TAG@,
+        .data.v@WRITER_CREATE_OK_TAG@.f0 = writer };
+}
+
+static ncr_obj_@UNIT_RESULT@ @XML_WRITER_START_DOCUMENT@(ncr_obj_@WRITER_ID@ *ncr_self,
+        size_t ncr_line, size_t ncr_column) {
+    if (ncr_self == NULL || ncr_self->writer == NULL || ncr_self->state != 0) {
+        return @UNIT_ERROR@("XmlWriter.startDocument: document has already started or writer is closed", sizeof("XmlWriter.startDocument: document has already started or writer is closed") - 1, ncr_line, ncr_column);
+    }
+    if (xmlTextWriterStartDocument((xmlTextWriterPtr)ncr_self->writer,
+            "1.0", "UTF-8", NULL) < 0) {
+        ncr_self->state = 3;
+        return @UNIT_ERROR@("XmlWriter.startDocument: libxml2 failed to write the declaration", sizeof("XmlWriter.startDocument: libxml2 failed to write the declaration") - 1, ncr_line, ncr_column);
+    }
+    ncr_self->state = 1;
+    return (ncr_obj_@UNIT_RESULT@){ .tag = @UNIT_OK_TAG@,
+        .data.v@UNIT_OK_TAG@.f0 = UINT8_C(0) };
+}
+
+static ncr_obj_@UNIT_RESULT@ @XML_WRITER_START_ELEMENT@(ncr_obj_@WRITER_ID@ *ncr_self,
+        ncr_obj_@TEXT_ID@ *ncr_v_@START_ELEMENT_NAME_ID@, size_t ncr_line, size_t ncr_column) {
+    if (ncr_self == NULL || ncr_self->writer == NULL || ncr_self->state != 1) {
+        return @UNIT_ERROR@("XmlWriter.startElement: startDocument must be active", sizeof("XmlWriter.startElement: startDocument must be active") - 1, ncr_line, ncr_column);
+    }
+    char *name = NULL;
+    if (!ncr_xml_writer_text(ncr_v_@START_ELEMENT_NAME_ID@, &name, ncr_line, ncr_column) ||
+        xmlValidateNCName((const xmlChar *)name, 0) != 0) {
+        ncr_deallocate(name);
+        return @UNIT_ERROR@("XmlWriter.startElement: name must be a valid NUL-free XML NCName", sizeof("XmlWriter.startElement: name must be a valid NUL-free XML NCName") - 1, ncr_line, ncr_column);
+    }
+    ncr_xml_writer_frame *parent = (ncr_xml_writer_frame *)ncr_self->frames;
+    if (parent == NULL && ncr_self->root_count != 0) {
+        ncr_deallocate(name);
+        return @UNIT_ERROR@("XmlWriter.startElement: an XML document has exactly one root element", sizeof("XmlWriter.startElement: an XML document has exactly one root element") - 1, ncr_line, ncr_column);
+    }
+    if (xmlTextWriterStartElement((xmlTextWriterPtr)ncr_self->writer,
+            (const xmlChar *)name) < 0) {
+        ncr_deallocate(name);
+        ncr_self->state = 3;
+        return @UNIT_ERROR@("XmlWriter.startElement: libxml2 failed to write the element", sizeof("XmlWriter.startElement: libxml2 failed to write the element") - 1, ncr_line, ncr_column);
+    }
+    if (parent != NULL) { ncr_xml_writer_close_start_tag(parent); }
+    bool reset_default = parent != NULL && parent->default_namespace;
+    ncr_xml_writer_frame *frame = ncr_xml_writer_frame_new(parent,
+        false, NULL, NULL, ncr_line, ncr_column);
+    ncr_self->frames = frame;
+    if (parent == NULL) { ++ncr_self->root_count; }
+    ncr_deallocate(name);
+    if (reset_default && xmlTextWriterWriteAttribute((xmlTextWriterPtr)ncr_self->writer,
+            (const xmlChar *)"xmlns", (const xmlChar *)"") < 0) {
+        ncr_self->state = 3;
+        return @UNIT_ERROR@("XmlWriter.startElement: failed to reset the default namespace", sizeof("XmlWriter.startElement: failed to reset the default namespace") - 1, ncr_line, ncr_column);
+    }
+    return (ncr_obj_@UNIT_RESULT@){ .tag = @UNIT_OK_TAG@,
+        .data.v@UNIT_OK_TAG@.f0 = UINT8_C(0) };
+}
+
+static ncr_obj_@UNIT_RESULT@ @XML_WRITER_START_ELEMENT_NS@(ncr_obj_@WRITER_ID@ *ncr_self,
+        ncr_obj_@TEXT_ID@ *ncr_v_@START_ELEMENT_NS_PREFIX_ID@,
+        ncr_obj_@TEXT_ID@ *ncr_v_@START_ELEMENT_NS_LOCAL_ID@,
+        ncr_obj_@TEXT_ID@ *ncr_v_@START_ELEMENT_NS_URI_ID@,
+        size_t ncr_line, size_t ncr_column) {
+    if (ncr_self == NULL || ncr_self->writer == NULL || ncr_self->state != 1) {
+        return @UNIT_ERROR@("XmlWriter.startElementNs: startDocument must be active", sizeof("XmlWriter.startElementNs: startDocument must be active") - 1, ncr_line, ncr_column);
+    }
+    char *prefix = NULL;
+    char *local = NULL;
+    char *uri = NULL;
+    if (!ncr_xml_writer_text(ncr_v_@START_ELEMENT_NS_PREFIX_ID@, &prefix, ncr_line, ncr_column) ||
+        !ncr_xml_writer_text(ncr_v_@START_ELEMENT_NS_LOCAL_ID@, &local, ncr_line, ncr_column) ||
+        !ncr_xml_writer_text(ncr_v_@START_ELEMENT_NS_URI_ID@, &uri, ncr_line, ncr_column) ||
+        xmlValidateNCName((const xmlChar *)local, 0) != 0 ||
+        (prefix[0] != '\0' && xmlValidateNCName((const xmlChar *)prefix, 0) != 0) ||
+        !ncr_xml_writer_namespace_valid(prefix, uri)) {
+        ncr_deallocate(prefix); ncr_deallocate(local); ncr_deallocate(uri);
+        return @UNIT_ERROR@("XmlWriter.startElementNs: invalid local name, prefix, or namespace mapping", sizeof("XmlWriter.startElementNs: invalid local name, prefix, or namespace mapping") - 1, ncr_line, ncr_column);
+    }
+    ncr_xml_writer_frame *parent = (ncr_xml_writer_frame *)ncr_self->frames;
+    if (parent == NULL && ncr_self->root_count != 0) {
+        ncr_deallocate(prefix); ncr_deallocate(local); ncr_deallocate(uri);
+        return @UNIT_ERROR@("XmlWriter.startElementNs: an XML document has exactly one root element", sizeof("XmlWriter.startElementNs: an XML document has exactly one root element") - 1, ncr_line, ncr_column);
+    }
+    if (xmlTextWriterStartElementNS((xmlTextWriterPtr)ncr_self->writer,
+            prefix[0] == '\0' ? NULL : (const xmlChar *)prefix,
+            (const xmlChar *)local,
+            uri[0] == '\0' ? NULL : (const xmlChar *)uri) < 0) {
+        ncr_deallocate(prefix); ncr_deallocate(local); ncr_deallocate(uri);
+        ncr_self->state = 3;
+        return @UNIT_ERROR@("XmlWriter.startElementNs: libxml2 failed to write the element", sizeof("XmlWriter.startElementNs: libxml2 failed to write the element") - 1, ncr_line, ncr_column);
+    }
+    if (parent != NULL) { ncr_xml_writer_close_start_tag(parent); }
+    bool default_namespace = prefix[0] == '\0' ? uri[0] != '\0' :
+        parent != NULL && parent->default_namespace;
+    bool reset_default = prefix[0] == '\0' && !default_namespace &&
+        parent != NULL && parent->default_namespace;
+    char *element_prefix = NULL;
+    char *element_namespace = NULL;
+    if (prefix[0] != '\0') {
+        element_prefix = prefix;
+        element_namespace = uri;
+        prefix = NULL;
+        uri = NULL;
+    }
+    ncr_xml_writer_frame *frame = ncr_xml_writer_frame_new(parent,
+        default_namespace, element_prefix, element_namespace, ncr_line, ncr_column);
+    ncr_self->frames = frame;
+    if (parent == NULL) { ++ncr_self->root_count; }
+    ncr_deallocate(prefix); ncr_deallocate(local); ncr_deallocate(uri);
+    if (reset_default && xmlTextWriterWriteAttribute((xmlTextWriterPtr)ncr_self->writer,
+            (const xmlChar *)"xmlns", (const xmlChar *)"") < 0) {
+        ncr_self->state = 3;
+        return @UNIT_ERROR@("XmlWriter.startElementNs: failed to reset the default namespace", sizeof("XmlWriter.startElementNs: failed to reset the default namespace") - 1, ncr_line, ncr_column);
+    }
+    return (ncr_obj_@UNIT_RESULT@){ .tag = @UNIT_OK_TAG@,
+        .data.v@UNIT_OK_TAG@.f0 = UINT8_C(0) };
+}
+
+static ncr_obj_@UNIT_RESULT@ ncr_xml_writer_write_attribute(ncr_obj_@WRITER_ID@ *writer,
+        char *prefix, char *local, char *uri, const char *value,
+        size_t line, size_t column) {
+    if (writer == NULL || writer->writer == NULL || writer->state != 1) {
+        return @UNIT_ERROR@("XmlWriter.writeAttribute: writer is not active", sizeof("XmlWriter.writeAttribute: writer is not active") - 1, line, column);
+    }
+    ncr_xml_writer_frame *frame = (ncr_xml_writer_frame *)writer->frames;
+    if (frame == NULL || !frame->attributes_open) {
+        return @UNIT_ERROR@("XmlWriter.writeAttribute: attributes must precede child content", sizeof("XmlWriter.writeAttribute: attributes must precede child content") - 1, line, column);
+    }
+    if (prefix != NULL && prefix[0] != '\0') {
+        bool conflicting = frame->element_prefix != NULL &&
+            strcmp(frame->element_prefix, prefix) == 0 &&
+            strcmp(frame->element_namespace, uri) != 0;
+        for (size_t index = 0; index < frame->attribute_count && !conflicting; ++index) {
+            ncr_xml_writer_attribute *attribute = &frame->attributes[index];
+            conflicting = attribute->prefix != NULL &&
+                strcmp(attribute->prefix, prefix) == 0 &&
+                strcmp(attribute->namespace_uri, uri) != 0;
+        }
+        if (conflicting) {
+            return @UNIT_ERROR@("XmlWriter.writeAttribute: conflicting namespace prefix", sizeof("XmlWriter.writeAttribute: conflicting namespace prefix") - 1, line, column);
+        }
+    }
+    if (ncr_xml_writer_attribute_seen(frame, uri, local) ||
+        !ncr_xml_writer_attribute_reserve(frame)) {
+        return @UNIT_ERROR@("XmlWriter.writeAttribute: duplicate attribute or too many attributes", sizeof("XmlWriter.writeAttribute: duplicate attribute or too many attributes") - 1, line, column);
+    }
+    int status = prefix == NULL ?
+        xmlTextWriterWriteAttribute((xmlTextWriterPtr)writer->writer,
+            (const xmlChar *)local, (const xmlChar *)value) :
+        xmlTextWriterWriteAttributeNS((xmlTextWriterPtr)writer->writer,
+            prefix[0] == '\0' ? NULL : (const xmlChar *)prefix,
+            (const xmlChar *)local,
+            uri[0] == '\0' ? NULL : (const xmlChar *)uri,
+            (const xmlChar *)value);
+    if (status < 0) {
+        writer->state = 3;
+        return @UNIT_ERROR@("XmlWriter.writeAttribute: libxml2 failed to write the attribute", sizeof("XmlWriter.writeAttribute: libxml2 failed to write the attribute") - 1, line, column);
+    }
+    frame->attributes[frame->attribute_count++] = (ncr_xml_writer_attribute){
+        .local = local, .namespace_uri = uri != NULL && uri[0] != '\0' ? uri : NULL,
+        .prefix = prefix != NULL && prefix[0] != '\0' ? prefix : NULL };
+    return (ncr_obj_@UNIT_RESULT@){ .tag = @UNIT_OK_TAG@,
+        .data.v@UNIT_OK_TAG@.f0 = UINT8_C(0) };
+}
+
+static ncr_obj_@UNIT_RESULT@ @XML_WRITER_WRITE_ATTRIBUTE@(ncr_obj_@WRITER_ID@ *ncr_self,
+        ncr_obj_@TEXT_ID@ *ncr_v_@WRITE_ATTRIBUTE_NAME_ID@,
+        ncr_obj_@TEXT_ID@ *ncr_v_@WRITE_ATTRIBUTE_VALUE_ID@,
+        size_t ncr_line, size_t ncr_column) {
+    char *name = NULL;
+    char *value = NULL;
+    if (!ncr_xml_writer_text(ncr_v_@WRITE_ATTRIBUTE_NAME_ID@, &name, ncr_line, ncr_column) ||
+        !ncr_xml_writer_text(ncr_v_@WRITE_ATTRIBUTE_VALUE_ID@, &value, ncr_line, ncr_column) ||
+        xmlValidateNCName((const xmlChar *)name, 0) != 0 || strcmp(name, "xmlns") == 0) {
+        ncr_deallocate(name); ncr_deallocate(value);
+        return @UNIT_ERROR@("XmlWriter.writeAttribute: name must be an unqualified XML NCName and value must be XML text", sizeof("XmlWriter.writeAttribute: name must be an unqualified XML NCName and value must be XML text") - 1, ncr_line, ncr_column);
+    }
+    ncr_obj_@UNIT_RESULT@ result = ncr_xml_writer_write_attribute(ncr_self,
+        NULL, name, NULL, value, ncr_line, ncr_column);
+    if (result.tag == @UNIT_OK_TAG@) { name = NULL; }
+    ncr_deallocate(name); ncr_deallocate(value);
+    return result;
+}
+
+static ncr_obj_@UNIT_RESULT@ @XML_WRITER_WRITE_ATTRIBUTE_NS@(ncr_obj_@WRITER_ID@ *ncr_self,
+        ncr_obj_@TEXT_ID@ *ncr_v_@WRITE_ATTRIBUTE_NS_PREFIX_ID@,
+        ncr_obj_@TEXT_ID@ *ncr_v_@WRITE_ATTRIBUTE_NS_LOCAL_ID@,
+        ncr_obj_@TEXT_ID@ *ncr_v_@WRITE_ATTRIBUTE_NS_URI_ID@,
+        ncr_obj_@TEXT_ID@ *ncr_v_@WRITE_ATTRIBUTE_NS_VALUE_ID@,
+        size_t ncr_line, size_t ncr_column) {
+    char *prefix = NULL;
+    char *local = NULL;
+    char *uri = NULL;
+    char *value = NULL;
+    if (!ncr_xml_writer_text(ncr_v_@WRITE_ATTRIBUTE_NS_PREFIX_ID@, &prefix, ncr_line, ncr_column) ||
+        !ncr_xml_writer_text(ncr_v_@WRITE_ATTRIBUTE_NS_LOCAL_ID@, &local, ncr_line, ncr_column) ||
+        !ncr_xml_writer_text(ncr_v_@WRITE_ATTRIBUTE_NS_URI_ID@, &uri, ncr_line, ncr_column) ||
+        !ncr_xml_writer_text(ncr_v_@WRITE_ATTRIBUTE_NS_VALUE_ID@, &value, ncr_line, ncr_column) ||
+        xmlValidateNCName((const xmlChar *)local, 0) != 0 ||
+        (prefix[0] != '\0' && xmlValidateNCName((const xmlChar *)prefix, 0) != 0) ||
+        !ncr_xml_writer_namespace_valid(prefix, uri) ||
+        (uri[0] != '\0' && prefix[0] == '\0') ||
+        (prefix[0] == '\0' && uri[0] == '\0' && strcmp(local, "xmlns") == 0)) {
+        ncr_deallocate(prefix); ncr_deallocate(local); ncr_deallocate(uri); ncr_deallocate(value);
+        return @UNIT_ERROR@("XmlWriter.writeAttributeNs: invalid local name, prefix, namespace mapping, or value", sizeof("XmlWriter.writeAttributeNs: invalid local name, prefix, namespace mapping, or value") - 1, ncr_line, ncr_column);
+    }
+    ncr_obj_@UNIT_RESULT@ result = ncr_xml_writer_write_attribute(ncr_self,
+        prefix, local, uri, value, ncr_line, ncr_column);
+    if (result.tag == @UNIT_OK_TAG@) {
+        local = NULL;
+        if (prefix[0] != '\0') { prefix = NULL; }
+        if (uri[0] != '\0') { uri = NULL; }
+    }
+    ncr_deallocate(prefix); ncr_deallocate(local); ncr_deallocate(uri); ncr_deallocate(value);
+    return result;
+}
+
+static ncr_obj_@UNIT_RESULT@ ncr_xml_writer_write_content(ncr_obj_@WRITER_ID@ *writer,
+        const char *content, int kind, size_t line, size_t column) {
+    if (writer == NULL || writer->writer == NULL || writer->state != 1) {
+        return @UNIT_ERROR@("XmlWriter: writer is not active", sizeof("XmlWriter: writer is not active") - 1, line, column);
+    }
+    ncr_xml_writer_frame *frame = (ncr_xml_writer_frame *)writer->frames;
+    if ((kind == 0 || kind == 1) && frame == NULL) {
+        return @UNIT_ERROR@("XmlWriter: text and CDATA require an open element", sizeof("XmlWriter: text and CDATA require an open element") - 1, line, column);
+    }
+    int status = kind == 0 ?
+        xmlTextWriterWriteString((xmlTextWriterPtr)writer->writer, (const xmlChar *)content) :
+        xmlTextWriterWriteCDATA((xmlTextWriterPtr)writer->writer, (const xmlChar *)content);
+    if (status < 0) {
+        writer->state = 3;
+        return @UNIT_ERROR@("XmlWriter: libxml2 failed to write content", sizeof("XmlWriter: libxml2 failed to write content") - 1, line, column);
+    }
+    ncr_xml_writer_close_start_tag(frame);
+    return (ncr_obj_@UNIT_RESULT@){ .tag = @UNIT_OK_TAG@,
+        .data.v@UNIT_OK_TAG@.f0 = UINT8_C(0) };
+}
+
+static ncr_obj_@UNIT_RESULT@ @XML_WRITER_WRITE_TEXT@(ncr_obj_@WRITER_ID@ *ncr_self,
+        ncr_obj_@TEXT_ID@ *ncr_v_@WRITE_TEXT_VALUE_ID@, size_t ncr_line, size_t ncr_column) {
+    char *value = NULL;
+    if (!ncr_xml_writer_text(ncr_v_@WRITE_TEXT_VALUE_ID@, &value, ncr_line, ncr_column)) {
+        return @UNIT_ERROR@("XmlWriter.writeText: value contains NUL or characters forbidden by XML 1.0", sizeof("XmlWriter.writeText: value contains NUL or characters forbidden by XML 1.0") - 1, ncr_line, ncr_column);
+    }
+    ncr_obj_@UNIT_RESULT@ result = ncr_xml_writer_write_content(ncr_self, value, 0, ncr_line, ncr_column);
+    ncr_deallocate(value);
+    return result;
+}
+
+static ncr_obj_@UNIT_RESULT@ @XML_WRITER_WRITE_CDATA@(ncr_obj_@WRITER_ID@ *ncr_self,
+        ncr_obj_@TEXT_ID@ *ncr_v_@WRITE_CDATA_VALUE_ID@, size_t ncr_line, size_t ncr_column) {
+    char *value = NULL;
+    if (!ncr_xml_writer_text(ncr_v_@WRITE_CDATA_VALUE_ID@, &value, ncr_line, ncr_column) ||
+        strstr(value, "]]>") != NULL) {
+        ncr_deallocate(value);
+        return @UNIT_ERROR@("XmlWriter.writeCData: value is invalid XML text or contains ]]>", sizeof("XmlWriter.writeCData: value is invalid XML text or contains ]]>") - 1, ncr_line, ncr_column);
+    }
+    ncr_obj_@UNIT_RESULT@ result = ncr_xml_writer_write_content(ncr_self, value, 1, ncr_line, ncr_column);
+    ncr_deallocate(value);
+    return result;
+}
+
+static ncr_obj_@UNIT_RESULT@ @XML_WRITER_WRITE_COMMENT@(ncr_obj_@WRITER_ID@ *ncr_self,
+        ncr_obj_@TEXT_ID@ *ncr_v_@WRITE_COMMENT_VALUE_ID@, size_t ncr_line, size_t ncr_column) {
+    if (ncr_self == NULL || ncr_self->writer == NULL || ncr_self->state != 1) {
+        return @UNIT_ERROR@("XmlWriter.writeComment: writer is not active", sizeof("XmlWriter.writeComment: writer is not active") - 1, ncr_line, ncr_column);
+    }
+    char *value = NULL;
+    if (!ncr_xml_writer_text(ncr_v_@WRITE_COMMENT_VALUE_ID@, &value, ncr_line, ncr_column) ||
+        strstr(value, "--") != NULL || (value[0] != '\0' && value[strlen(value) - 1] == '-')) {
+        ncr_deallocate(value);
+        return @UNIT_ERROR@("XmlWriter.writeComment: XML comments cannot contain -- or end in -", sizeof("XmlWriter.writeComment: XML comments cannot contain -- or end in -") - 1, ncr_line, ncr_column);
+    }
+    int status = xmlTextWriterWriteComment((xmlTextWriterPtr)ncr_self->writer, (const xmlChar *)value);
+    ncr_deallocate(value);
+    if (status < 0) {
+        ncr_self->state = 3;
+        return @UNIT_ERROR@("XmlWriter.writeComment: libxml2 failed to write the comment", sizeof("XmlWriter.writeComment: libxml2 failed to write the comment") - 1, ncr_line, ncr_column);
+    }
+    ncr_xml_writer_close_start_tag((ncr_xml_writer_frame *)ncr_self->frames);
+    return (ncr_obj_@UNIT_RESULT@){ .tag = @UNIT_OK_TAG@,
+        .data.v@UNIT_OK_TAG@.f0 = UINT8_C(0) };
+}
+
+static ncr_obj_@UNIT_RESULT@ @XML_WRITER_WRITE_PI@(ncr_obj_@WRITER_ID@ *ncr_self,
+        ncr_obj_@TEXT_ID@ *ncr_v_@WRITE_PI_TARGET_ID@,
+        ncr_obj_@TEXT_ID@ *ncr_v_@WRITE_PI_VALUE_ID@,
+        size_t ncr_line, size_t ncr_column) {
+    if (ncr_self == NULL || ncr_self->writer == NULL || ncr_self->state != 1) {
+        return @UNIT_ERROR@("XmlWriter.writeProcessingInstruction: writer is not active", sizeof("XmlWriter.writeProcessingInstruction: writer is not active") - 1, ncr_line, ncr_column);
+    }
+    char *target = NULL;
+    char *value = NULL;
+    if (!ncr_xml_writer_text(ncr_v_@WRITE_PI_TARGET_ID@, &target, ncr_line, ncr_column) ||
+        !ncr_xml_writer_text(ncr_v_@WRITE_PI_VALUE_ID@, &value, ncr_line, ncr_column) ||
+        xmlValidateName((const xmlChar *)target, 0) != 0 ||
+        xmlStrcasecmp((const xmlChar *)target, (const xmlChar *)"xml") == 0 ||
+        strstr(value, "?>") != NULL) {
+        ncr_deallocate(target); ncr_deallocate(value);
+        return @UNIT_ERROR@("XmlWriter.writeProcessingInstruction: target or data is invalid", sizeof("XmlWriter.writeProcessingInstruction: target or data is invalid") - 1, ncr_line, ncr_column);
+    }
+    int status = xmlTextWriterWritePI((xmlTextWriterPtr)ncr_self->writer,
+        (const xmlChar *)target, (const xmlChar *)value);
+    ncr_deallocate(target); ncr_deallocate(value);
+    if (status < 0) {
+        ncr_self->state = 3;
+        return @UNIT_ERROR@("XmlWriter.writeProcessingInstruction: libxml2 failed to write the instruction", sizeof("XmlWriter.writeProcessingInstruction: libxml2 failed to write the instruction") - 1, ncr_line, ncr_column);
+    }
+    ncr_xml_writer_close_start_tag((ncr_xml_writer_frame *)ncr_self->frames);
+    return (ncr_obj_@UNIT_RESULT@){ .tag = @UNIT_OK_TAG@,
+        .data.v@UNIT_OK_TAG@.f0 = UINT8_C(0) };
+}
+
+static ncr_obj_@UNIT_RESULT@ @XML_WRITER_END_ELEMENT@(ncr_obj_@WRITER_ID@ *ncr_self,
+        size_t ncr_line, size_t ncr_column) {
+    if (ncr_self == NULL || ncr_self->writer == NULL || ncr_self->state != 1 || ncr_self->frames == NULL) {
+        return @UNIT_ERROR@("XmlWriter.endElement: no open element", sizeof("XmlWriter.endElement: no open element") - 1, ncr_line, ncr_column);
+    }
+    if (xmlTextWriterEndElement((xmlTextWriterPtr)ncr_self->writer) < 0) {
+        ncr_self->state = 3;
+        return @UNIT_ERROR@("XmlWriter.endElement: libxml2 failed to close the element", sizeof("XmlWriter.endElement: libxml2 failed to close the element") - 1, ncr_line, ncr_column);
+    }
+    ncr_xml_writer_frame *frame = (ncr_xml_writer_frame *)ncr_self->frames;
+    ncr_self->frames = frame->parent;
+    frame->parent = NULL;
+    ncr_xml_writer_frame_free(frame);
+    return (ncr_obj_@UNIT_RESULT@){ .tag = @UNIT_OK_TAG@,
+        .data.v@UNIT_OK_TAG@.f0 = UINT8_C(0) };
+}
+
+static ncr_obj_@FINISH_RESULT@ @XML_WRITER_FINISH@(ncr_obj_@WRITER_ID@ *ncr_self,
+        size_t ncr_line, size_t ncr_column) {
+    if (ncr_self == NULL || ncr_self->writer == NULL || ncr_self->state != 1) {
+        return @FINISH_ERROR@("XmlWriter.finish: writer is not active", sizeof("XmlWriter.finish: writer is not active") - 1, ncr_line, ncr_column);
+    }
+    if (ncr_self->frames != NULL) {
+        return @FINISH_ERROR@("XmlWriter.finish: every started element must be ended", sizeof("XmlWriter.finish: every started element must be ended") - 1, ncr_line, ncr_column);
+    }
+    if (ncr_self->root_count != 1) {
+        return @FINISH_ERROR@("XmlWriter.finish: document must contain exactly one root element", sizeof("XmlWriter.finish: document must contain exactly one root element") - 1, ncr_line, ncr_column);
+    }
+    xmlTextWriterPtr writer = (xmlTextWriterPtr)ncr_self->writer;
+    if (xmlTextWriterEndDocument(writer) < 0 || xmlTextWriterFlush(writer) < 0) {
+        ncr_self->state = 3;
+        xmlFreeTextWriter(writer);
+        ncr_self->writer = NULL;
+        ncr_drop_@BUFFER_ID@((ncr_obj_@BUFFER_ID@ *)ncr_self->buffer);
+        ncr_self->buffer = NULL;
+        return @FINISH_ERROR@("XmlWriter.finish: libxml2 failed to finalize or flush the document", sizeof("XmlWriter.finish: libxml2 failed to finalize or flush the document") - 1, ncr_line, ncr_column);
+    }
+    xmlFreeTextWriter(writer);
+    ncr_self->writer = NULL;
+    ncr_self->state = 2;
+    ncr_obj_@BUFFER_ID@ *buffer = (ncr_obj_@BUFFER_ID@ *)ncr_self->buffer;
+    ncr_self->buffer = NULL;
+    return (ncr_obj_@FINISH_RESULT@){ .tag = @FINISH_OK_TAG@,
+        .data.v@FINISH_OK_TAG@.f0 = buffer };
+}
+/* XML_WRITER_METHODS_END */

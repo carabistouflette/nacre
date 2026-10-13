@@ -1,25 +1,31 @@
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
-use super::support::{native_function, replace_method_ids, replace_placeholders, result_id, variant_id};
+use super::support::{has_placeholder, native_function, replace_method_ids, replace_placeholders, result_id, template_section, variant_id};
 
 fn xml_class(program: &t::Program) -> Option<usize> {
     program.classes.iter().find_map(|class|
         matches!(class.native, Some(C::XmlDocument)).then_some(class.id))
 }
 
-fn used(program: &t::Program) -> bool {
-    xml_class(program).is_some()
+pub(super) fn shared_implementation(program: &t::Program) -> String {
+    if !program.classes.iter().any(|class| matches!(class.native,
+        Some(C::XmlDocument | C::XmlReader | C::XmlEvent | C::XmlWriter | C::XsltStylesheet))) {
+        return String::new();
+    }
+    let text = super::support::text_class(program).expect("XML requires Text");
+    let source = include_str!("../../stdlib/xml.c.in");
+    let mut body = template_section(source, "/* XML_COMMON_BEGIN */", "/* XML_COMMON_END */").to_owned();
+    body.push_str(template_section(source, "/* XML_COMMON_TEXT_BEGIN */", "/* XML_COMMON_TEXT_END */"));
+    let body = replace_placeholders(body, &[("@TEXT_ID@", text.to_string())]);
+    debug_assert!(!has_placeholder(&body), "unexpanded shared XML placeholder");
+    body
 }
 
 pub(super) fn fields() -> String {
     "    void *document;\n    void *xpath_context;\n".to_owned()
 }
 
-pub(super) fn drop_fields(program: &t::Program, class_id: usize) -> String {
-    if used(program) {
-        format!("    ncr_xml_document_drop_{class_id}(p->document, p->xpath_context);\n")
-    } else {
-        String::new()
-    }
+pub(super) fn drop_fields(class_id: usize) -> String {
+    format!("    ncr_xml_document_drop_{class_id}(p->document, p->xpath_context);\n")
 }
 
 pub(super) fn drop_helper_prototypes(program: &t::Program) -> String {
@@ -40,10 +46,8 @@ fn parameter(function: &t::Function, index: usize) -> String {
 }
 
 pub(super) fn implementation(program: &t::Program) -> Option<String> {
-    if !used(program) { return None; }
-    let xml = xml_class(program).expect("XmlDocument native class");
-    let text = program.classes.iter().find(|class| matches!(class.native, Some(C::Text)))
-        .expect("Text native class").id;
+    let xml = xml_class(program)?;
+    let text = super::support::text_class(program).expect("Text native class");
     let parse = method(program, M::XmlDocumentParse);
     let serialize = method(program, M::XmlDocumentSerialize);
     let query_text = method(program, M::XmlDocumentQueryText);
@@ -82,7 +86,10 @@ pub(super) fn implementation(program: &t::Program) -> Option<String> {
     let unit_result = result_id(validate);
     assert_eq!(result_id(register_namespace), unit_result);
 
-    let template = replace_placeholders(include_str!("../../stdlib/xml.c.in").to_owned(), &[
+    let source = include_str!("../../stdlib/xml.c.in");
+    let mut selected = template_section(source, "/* XML_DOM_SELECTION_BEGIN */", "/* XML_DOM_SELECTION_END */").to_owned();
+    selected.push_str(template_section(source, "/* XML_DOM_METHODS_BEGIN */", "/* XML_DOM_METHODS_END */"));
+    let template = replace_placeholders(selected, &[
         ("@LIST_NEW@", format!("ncr_fn_{}", list_new.id)),
         ("@LIST_ADD@", format!("ncr_fn_{}", list_add.id)),
     ]);
@@ -122,6 +129,6 @@ pub(super) fn implementation(program: &t::Program) -> Option<String> {
         ("@NAMESPACE_URI@", parameter(register_namespace, 1)),
         ("@ESCAPE_TEXT@", parameter(escape, 0)),
     ]);
-    debug_assert!(!body.contains('@'), "unexpanded XML template placeholder");
+    debug_assert!(!has_placeholder(&body), "unexpanded XML template placeholder");
     Some(body)
 }

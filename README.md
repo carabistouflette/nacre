@@ -25,8 +25,8 @@ C11 headers and a linker; Windows and macOS are not supported targets.
 Optional native library APIs require their development headers and libraries:
 OpenSSL 3 for `Crypto`, zlib for `Compression`/`Checksums`, GMP for arbitrary
 precision, ICU for Unicode/calendar APIs, PCRE2 10.30+ 8-bit for Regex,
-libcurl for HTTP, libarchive for ZIP, libxml2 for XML, SQLite for SQL, and
-uriparser for URI operations. Generated programs link only the libraries
+libcurl for HTTP, libarchive for ZIP, libxml2 for XML, libxslt for XSLT, SQLite
+for SQL, and uriparser for URI operations. Generated programs link only the libraries
 requested by their emitted native templates; ordinary programs retain their
 existing C11/POSIX dependencies. The compiler accepts only a fixed dependency
 allowlist, never linker flags supplied by Nacre source.
@@ -233,6 +233,7 @@ complete API reference.
 | `List<T>`, `Deque<T>`, `Array<T>`, `Set<T>` | Affine collections with specialized traversal, ownership, and borrowing operations. |
 | `Map<int,V>`, `Map<Text,V>` | Signed integer or owned UTF-8 text keys; value access specializes for copyable scalars or affine nominal types. |
 | `Text`, `ByteBuffer` | Owned UTF-8 text and binary bytes; `Text` is distinct from static `String`. |
+| XML | Affine DOM/XPath/XSD, incremental pull events, balanced streaming output, and restricted local-only XSLT using libxml2/libxslt. |
 | `Option<T>`, `Result<T,E>` | Inline affine enum values; exhaustive owning or borrowed matching. |
 | Console, arguments, files | UTF-8 console input/output, arguments, text and byte files, directories, paths, and metadata. |
 | Processes, threads, synchronization | Literal-argv processes, owned threads, and explicit shared mutex/channel handles. |

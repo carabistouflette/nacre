@@ -48,6 +48,10 @@ enum NativeBuiltin {
     Checksums,
     DateTime,
     XmlDocument,
+    XmlReader,
+    XmlEvent,
+    XmlWriter,
+    XsltStylesheet,
     SocketAddress,
     TcpListener,
     TcpStream,
@@ -202,6 +206,10 @@ impl NativeBuiltin {
             Self::ZipWriter => NativeClass::ZipWriter,
             Self::ZipEntry => NativeClass::ZipEntry,
             Self::XmlDocument => NativeClass::XmlDocument,
+            Self::XmlReader => NativeClass::XmlReader,
+            Self::XmlEvent => NativeClass::XmlEvent,
+            Self::XmlWriter => NativeClass::XmlWriter,
+            Self::XsltStylesheet => NativeClass::XsltStylesheet,
         }
     }
 }
@@ -377,7 +385,13 @@ pub(super) const PRELUDE_UNITS: &[PreludeUnit] = &[
     },
     PreludeUnit {
         source: include_str!("../../stdlib/prelude/xml.ncr"),
-        builtins: &[Builtin { name: "XmlDocument", native: Some(NativeBuiltin::XmlDocument) }],
+        builtins: &[
+            Builtin { name: "XmlDocument", native: Some(NativeBuiltin::XmlDocument) },
+            Builtin { name: "XmlReader", native: Some(NativeBuiltin::XmlReader) },
+            Builtin { name: "XmlEvent", native: Some(NativeBuiltin::XmlEvent) },
+            Builtin { name: "XmlWriter", native: Some(NativeBuiltin::XmlWriter) },
+            Builtin { name: "XsltStylesheet", native: Some(NativeBuiltin::XsltStylesheet) },
+        ],
     },
     PreludeUnit {
         source: include_str!("../../stdlib/prelude/network.ncr"),
