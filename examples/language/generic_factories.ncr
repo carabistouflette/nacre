@@ -1,0 +1,17 @@
+// Generic static methods specialize their owner before type checking.
+class Factory<T> {
+    public static T identity(T value) { return value; }
+}
+
+void main() {
+    long answer = Factory<long>.identity(42L);
+    println(answer);
+    Text message = Factory<Text>.identity(new Text("Transferred once"));
+    message.print();
+    List<int> values = Factory<List<int>>.identity(new List<int>());
+    values.add((int)answer);
+    println(values.get(0));
+    int upper = 8;
+    int shift = 1;
+    println(answer < upper >> shift);
+}

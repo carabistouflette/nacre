@@ -549,6 +549,35 @@ impl Parser {
         }
         Ok(expr)
     }
+    fn generic_static_call(&mut self, first: &str, start: Span) -> Result<Option<Expr>, Diagnostic> {
+        let mut probe = self.pos;
+        while self.tokens.get(probe).is_some_and(|token| token.kind == K::Dot)
+            && self.tokens.get(probe + 1).is_some_and(|token| matches!(token.kind, K::Ident(_))) {
+            probe += 2;
+        }
+        if !self.tokens.get(probe).is_some_and(|token| token.kind == K::Less) {
+            return Ok(None);
+        }
+        let saved = (self.pos, self.pending_greater.clone());
+        let mut class = first.to_owned();
+        while self.eat(&K::Dot) {
+            let (part, _) = self.ident()?;
+            class.push('.');
+            class.push_str(&part);
+        }
+        let candidate = self.type_arguments().ok().and_then(|type_args| {
+            if !self.eat(&K::Dot) { return None; }
+            let (name, _) = self.ident().ok()?;
+            self.at(&K::LParen).then_some((type_args, name))
+        });
+        let Some((type_args, name)) = candidate else {
+            self.pos = saved.0;
+            self.pending_greater = saved.1;
+            return Ok(None);
+        };
+        let (args, end) = self.arguments()?;
+        make_expr(ExprKind::StaticCall { class, type_args, name, args }, start.join(end)).map(Some)
+    }
     fn primary(&mut self) -> Result<Expr, Diagnostic> {
         let token = self.bump();
         let mut span = token.span;
@@ -571,6 +600,7 @@ impl Parser {
                 }
             }
             K::Ident(name) => {
+                if let Some(call) = self.generic_static_call(&name, span)? { return Ok(call); }
                 if self.at(&K::LParen) {
                     let (args, end) = self.arguments()?;
                     span = span.join(end);
@@ -630,7 +660,8 @@ fn make_expr(kind: ExprKind, span: Span) -> Result<Expr, Diagnostic> {
         ExprKind::Binary { left, right, .. } => left.depth.max(right.depth),
         ExprKind::Unary { expr, .. } | ExprKind::Borrow { expr, .. } |
         ExprKind::Cast { expr, .. } | ExprKind::Try(expr) => expr.depth,
-        ExprKind::Call { args, .. } | ExprKind::New { args, .. } | ExprKind::Variant { args, .. } =>
+        ExprKind::Call { args, .. } | ExprKind::StaticCall { args, .. } |
+        ExprKind::New { args, .. } | ExprKind::Variant { args, .. } =>
             args.iter().map(|arg| arg.depth).max().unwrap_or(0),
         ExprKind::MethodCall { receiver, args, .. } =>
             receiver.depth.max(args.iter().map(|arg| arg.depth).max().unwrap_or(0)),

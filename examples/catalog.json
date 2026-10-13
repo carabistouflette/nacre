@@ -2,6 +2,14 @@
   "examples": [
     {
       "category": "language",
+      "source": "examples/language/generic_factories.ncr",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["42", "Transferred once", "false"]
+    },
+    {
+      "category": "language",
       "source": "examples/language/modules",
       "stdin": "",
       "args": [],

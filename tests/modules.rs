@@ -200,3 +200,30 @@ fn numeric_casts_resolve_imported_calls_and_nested_generic_closers() {
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     assert_eq!(output.stdout, b"42\n42\n4\n");
 }
+
+#[test]
+fn generic_static_factories_resolve_types_transfer_owners_and_preserve_shift_lookahead() {
+    let source = bundle(&[
+        ("factory.ncr", "module library.factory; public class Factory<T> { public static T identity(T value) { return value; } }"),
+        ("main.ncr", "module client.main; import library.factory.Factory; void main() { long value = Factory<long>.identity(42L); println(value); Text text = library.factory.Factory<Text>.identity(new Text(\"owned\")); text.print(); List<int> values = Factory<List<int>>.identity(new List<int>()); values.add((int)value); println(values.get(0)); int upper = 8; int shift = 1; println(value < upper >> shift); }"),
+    ]);
+    let c_source = source.compile_to_c().unwrap_or_else(|diagnostic| panic!("{}", source.render(&diagnostic)));
+    let output = native::compile_c(&c_source).unwrap().output().unwrap();
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert_eq!(output.stdout, b"42\nowned\n42\nfalse\n");
+}
+
+#[test]
+fn generic_static_factories_reject_wrong_arity_instance_methods_and_private_types() {
+    for source in [
+        "class Factory<T> { public static T identity(T value) { return value; } } void main() { Factory<int, long>.identity(1); }",
+        "class Factory<T> { public T identity(T value) { return value; } } void main() { Factory<int>.identity(1); }",
+    ] {
+        assert!(nacre::validate(source).is_err());
+    }
+    let source = bundle(&[
+        ("factory.ncr", "module library.factory; private class Factory<T> { public static T identity(T value) { return value; } }"),
+        ("main.ncr", "module client.main; void main() { library.factory.Factory<int>.identity(1); }"),
+    ]);
+    assert!(source.validate().is_err());
+}

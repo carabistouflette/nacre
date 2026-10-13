@@ -460,7 +460,8 @@ fn synthetic_expr(kind: a::ExprKind, span: Span) -> a::Expr {
         a::ExprKind::Binary { left, right, .. } => left.depth.max(right.depth),
         a::ExprKind::Unary { expr, .. } | a::ExprKind::Borrow { expr, .. } |
         a::ExprKind::Cast { expr, .. } | a::ExprKind::Try(expr) => expr.depth,
-        a::ExprKind::Call { args, .. } | a::ExprKind::New { args, .. } | a::ExprKind::Variant { args, .. } =>
+        a::ExprKind::Call { args, .. } | a::ExprKind::StaticCall { args, .. } |
+        a::ExprKind::New { args, .. } | a::ExprKind::Variant { args, .. } =>
             args.iter().map(|arg| arg.depth).max().unwrap_or(0),
         a::ExprKind::MethodCall { receiver, args, .. } =>
             receiver.depth.max(args.iter().map(|arg| arg.depth).max().unwrap_or(0)),
@@ -1140,6 +1141,7 @@ impl Checker<'_> {
                     self.call(id, None, args, expr.span)?
                 }
             }
+            E::StaticCall { .. } => unreachable!("generic static calls expand before type checking"),
             E::MethodCall { receiver, name, args } => {
                 let system_println = name == "println" && matches!(&receiver.kind,
                     E::Field { base, name } if name == "out" && matches!(&base.kind, E::Var(s) if s == "System"));

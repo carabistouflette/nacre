@@ -92,6 +92,7 @@ pub enum ExprKind {
     Field { base: Box<Expr>, name: String },
     Call { name: String, args: Vec<Expr> },
     MethodCall { receiver: Box<Expr>, name: String, args: Vec<Expr> },
+    StaticCall { class: String, type_args: Vec<Type>, name: String, args: Vec<Expr> },
     New { class: String, type_args: Vec<Type>, args: Vec<Expr> },
     Variant { class: String, type_args: Vec<Type>, variant: String, args: Vec<Expr> },
     Borrow { expr: Box<Expr>, mutable: bool },

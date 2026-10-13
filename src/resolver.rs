@@ -435,6 +435,12 @@ impl Resolver {
             }
         }
         match &mut expression.kind {
+            E::StaticCall { class, type_args, args, .. } => {
+                *class = self.try_class_name(context.unit, class, &context.type_params, expression.span)?
+                    .ok_or_else(|| Diagnostic::new(expression.span, format!("type `{class}` is not declared or imported")))?;
+                for argument in type_args { self.resolve_type(context.unit, &context.type_params, argument, expression.span)?; }
+                for argument in args { self.expression(argument, context)?; }
+            }
             E::Call { name, args } => {
                 if !matches!(name.as_str(), "println" | "move" | "drop")
                     && !context.owner_methods.contains(name.as_str()) {

@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Per-file modules and imports resolve public/private type and function names
+  before generic expansion, preserving file-local diagnostics and editor overlays.
+- Byte, Unicode-scalar Char, Long, Double and Unit values work through native
+  expressions and collections. Int/Long arithmetic wraps explicitly; casts and
+  shift counts are checked. Text supports numeric append and parse operations.
+- Generic static calls such as `Factory<List<int>>.identity(value)` specialize
+  the owner before checking, without confusing generic closers and shift operators.
+- Native library lowering and trusted prelude declarations use focused units and
+  one builtin catalog. Runnable examples are organized by domain and cataloged.
+
 - Postfix `?` unwraps trusted built-in `Result` values or returns the exact
   error payload after cleaning live locals and pending owned C temporaries.
   Typed IR preserves the carrier layouts; calls, stores, enum wrapping and

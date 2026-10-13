@@ -251,6 +251,17 @@ impl Expander {
     fn expression(&mut self, expr: &mut a::Expr, env: &Environment) -> Result<(), Diagnostic> {
         use a::ExprKind as E;
         match &mut expr.kind {
+            E::StaticCall { class, type_args, name, args } => {
+                let ty = Type::Applied { name: class.clone(), args: std::mem::take(type_args) };
+                let Type::Named(concrete) = self.ty(&ty, env, expr.span, 0)? else {
+                    unreachable!("generic static receiver expands to a nominal type");
+                };
+                for argument in args.iter_mut() { self.expression(argument, env)?; }
+                expr.kind = E::MethodCall {
+                    receiver: Box::new(a::Expr { kind: E::Var(concrete), span: expr.span, depth: 1 }),
+                    name: std::mem::take(name), args: std::mem::take(args),
+                };
+            }
             E::New { class, type_args, args } | E::Variant { class, type_args, args, .. } => {
                 let ty = if type_args.is_empty() { Type::Named(class.clone()) }
                     else { Type::Applied { name: class.clone(), args: type_args.clone() } };
@@ -265,8 +276,8 @@ impl Expander {
             E::Call { args, .. } => { for arg in args { self.expression(arg, env)?; } }
             E::MethodCall { receiver, args, .. } => {
                 if let E::Var(name) = &receiver.kind {
-                    if self.definitions.get(name).is_some_and(|c|
-                        matches!(c.native.as_ref(), Some(a::NativeClass::Console | a::NativeClass::Files | a::NativeClass::Args))) {
+                    if self.definitions.get(name).is_some_and(|class|
+                        class.native.is_some() && class.type_params.is_empty()) {
                         self.ty(&Type::Named(name.clone()), env, receiver.span, 0)?;
                     }
                 }
