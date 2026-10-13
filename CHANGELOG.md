@@ -3,6 +3,9 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- XML consumer regressions use named borrowed inputs and retain their process
+  output for allocation checks. Native CLI checks validate XSD, preserve query
+  values after the document is dropped, and reject external-entity declarations.
 - Empty thread pools no longer require a concrete task implementation merely to
   instantiate their error types. Finite-construction analysis distinguishes an
   opaque abstract interface from a recursive concrete ownership cycle. Concurrency
