@@ -1,4 +1,5 @@
 /* nacre-link: sqlite */
+#include <sqlite3.h>
 #include <stdatomic.h>
 #include <limits.h>
 

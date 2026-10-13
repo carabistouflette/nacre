@@ -495,7 +495,7 @@ Result<Unit, Text> exercise() {
         Err(error) { println(false); println(false); }
         Ok(orphan) {
             println(boolFailed(orphan.step()));
-            println(unitFailed(orphan.close()));
+            println(!unitFailed(orphan.close()));
         }
     }
     return new Result<Unit, Text>.Ok(());
@@ -511,7 +511,7 @@ void main() {
 #[test]
 fn sqlite_prepared_statements_are_independent_and_close_v2_defers_connections() {
     let output = run_memory(INDEPENDENT_STATEMENTS);
-    assert_eq!(output.stdout, "true\n".repeat(27).as_bytes());
+    assert_eq!(output.stdout, "true\n".repeat(28).as_bytes());
 }
 
 #[test]
@@ -649,5 +649,15 @@ void main() {
 }
 "#;
     let output = run_memory(source);
-    assert_eq!(output.stdout, "true\n".repeat(21).as_bytes());
+    assert_eq!(output.stdout, "true\n".repeat(22).as_bytes());
+}
+
+#[test]
+fn sqlite_bindings_types_transactions_and_owned_rows() {
+    let output = run_memory(AFFINE_BINDING_AND_ROWS);
+    assert_eq!(output.stdout, concat!(
+        "true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n1\n3\n4\n5\n2\n",
+        "true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n",
+        "true\n3\n0\n255\n65\ntrue\ntrue\ntrue\n"
+    ).as_bytes());
 }
