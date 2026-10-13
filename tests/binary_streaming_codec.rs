@@ -412,3 +412,49 @@ fn generic_codecs_compose_over_source_and_sink_binary_streams_in_both_orders() {
     );
     assert_eq!(output.stdout, b"true\ntrue\n");
 }
+
+#[test]
+fn invalid_list_codec_configuration_preserves_buffer_and_source_input() {
+    let source = r#"
+class HeaderSource implements ByteSource {
+    public Result<long, Text> read(borrow mut ByteBuffer destination, long maximum) {
+        println("unexpected source read");
+        if (maximum != 4L) {
+            return new Result<long, Text>.Err(new Text("unexpected header request"));
+        }
+        destination.append((byte)0);
+        destination.append((byte)0);
+        destination.append((byte)0);
+        destination.append((byte)0);
+        return new Result<long, Text>.Ok(4L);
+    }
+}
+boolean rejectsWithoutReading(borrow mut BinaryReader reader) {
+    ListCodec<int> codec = new ListCodec<int>(new IntCodec(), -1);
+    boolean rejected = false;
+    match (codec.decode(reader)) {
+        Err(error) { rejected = true; }
+        Ok(items) { drop(items); }
+    }
+    return rejected && reader.position() == 0L && reader.remaining() == 4L;
+}
+Result<Unit, Text> exercise() {
+    ByteBuffer bytes = ByteBuffer.withCapacity(4L)?;
+    bytes.append((byte)0);
+    bytes.append((byte)0);
+    bytes.append((byte)0);
+    bytes.append((byte)0);
+    BinaryReader buffered = new BinaryReader(bytes, false);
+    println(rejectsWithoutReading(buffered));
+    BinaryReader streamed = BinaryReader.fromSource(new HeaderSource(), false, 4L)?;
+    println(rejectsWithoutReading(streamed));
+    return new Result<Unit, Text>.Ok(());
+}
+void main() {
+    match (exercise()) { Ok(unit) {} Err(error) { error.print(); } }
+}
+"#;
+    let program = compile(source);
+    let output = run(&program, &[]);
+    assert_eq!(output.stdout, b"true\ntrue\n");
+}

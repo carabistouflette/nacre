@@ -46,6 +46,7 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   list element limits, canonical Option/Result tags, UUID network-byte encoding,
   nested domain schemas, and owned decode results that reject malformed data,
   truncated fields, and trailing input.
+  Invalid list limits are rejected before binary input consumption or transport I/O.
 - XML consumer regressions use named borrowed inputs and retain their process
   output for allocation checks. Native CLI checks validate XSD, preserve query
   values after the document is dropped, and reject external-entity declarations.
@@ -165,9 +166,11 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   before preparing any part, while preserving trigger bodies, quoted
   semicolons, token-leading UTF-8 BOMs, and leading empty commands. `execute`
   uses a transient statement; statement completion is terminal until reset, and
-  failed steps require reset before retry. `sqlite3_close_v2` defers connection
-  deallocation until all independently owned statements are finalized. Empty
-  blobs remain distinct from allocation failures.
+  failed steps require reset before retry. Connection close/drop rolls back open
+  transactions before `sqlite3_close_v2` defers backend deallocation, releasing
+  transaction locks while independently owned statements remain alive. Explicit
+  close preserves the connection when rollback fails. Empty blobs remain distinct
+  from allocation failures.
 - Affine ZipReader and ZipWriter use libarchive for sequential ZIP/Zip64 reads and
   store/DEFLATE writes with thread-scoped C.UTF-8 pathname conversion. File and
   memory readers require a complete seekable ZIP directory; bounded reads check

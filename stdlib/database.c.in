@@ -304,6 +304,12 @@ static void ncr_sql_statement_destroy_@STATEMENT_CLASS_ID@(void *opaque) {
     if (handle != NULL) { (void)sqlite3_finalize(handle); }
 }
 
+static int ncr_database_rollback_pending_@DATABASE_CLASS_ID@(sqlite3 *database) {
+    return sqlite3_get_autocommit(database) != 0
+        ? SQLITE_OK
+        : sqlite3_exec(database, "ROLLBACK", NULL, NULL, NULL);
+}
+
 /* close_v2 keeps SQLite's zombie connection alive until every owned statement
    is finalized; the lifetime marker is owned by SQLite's function registry. */
 static void ncr_database_destroy_@DATABASE_CLASS_ID@(void *opaque) {
@@ -317,6 +323,7 @@ static void ncr_database_destroy_@DATABASE_CLASS_ID@(void *opaque) {
     if (handle != NULL) {
         sqlite3_mutex *mutex = sqlite3_db_mutex(handle);
         if (mutex != NULL) { sqlite3_mutex_enter(mutex); }
+        (void)ncr_database_rollback_pending_@DATABASE_CLASS_ID@(handle);
         if (lifetime != NULL) {
             atomic_store_explicit(&lifetime->closed, true, memory_order_release);
         }
@@ -981,6 +988,10 @@ static ncr_obj_@DB_UNIT_RESULT@ @DATABASE_CLOSE@(
         (ncr_database_lifetime_@DATABASE_CLASS_ID@ *)ncr_self->lifetime;
     sqlite3_mutex *mutex = sqlite3_db_mutex(database);
     if (mutex != NULL) { sqlite3_mutex_enter(mutex); }
+    if (ncr_database_rollback_pending_@DATABASE_CLASS_ID@(database) != SQLITE_OK) {
+        if (mutex != NULL) { sqlite3_mutex_leave(mutex); }
+        return NCR_DB_ERROR(@DB_UNIT_RESULT@, "Database.close failed to roll back", ncr_line, ncr_column);
+    }
     if (lifetime != NULL) {
         atomic_store_explicit(&lifetime->closed, true, memory_order_release);
     }

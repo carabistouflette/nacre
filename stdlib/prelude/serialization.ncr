@@ -166,10 +166,10 @@ class ListCodec<T> implements Codec<List<T>> {
         return new Result<Unit, Text>.Ok(());
     }
     public Result<List<T>, Text> decode(borrow mut BinaryReader reader) {
-        int count = reader.readInt32()?;
         if (this.maxElements < 0) {
             return new Result<List<T>, Text>.Err(new Text("ListCodec.decode: maxElements must be nonnegative"));
         }
+        int count = reader.readInt32()?;
         if (count < 0) {
             return new Result<List<T>, Text>.Err(new Text("ListCodec.decode: negative element count"));
         }

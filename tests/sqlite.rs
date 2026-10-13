@@ -661,3 +661,56 @@ fn sqlite_bindings_types_transactions_and_owned_rows() {
         "true\n3\n0\n255\n65\ntrue\ntrue\ntrue\n"
     ).as_bytes());
 }
+
+#[test]
+fn sqlite_close_and_drop_roll_back_before_retained_statements_are_finalized() {
+    let source = r#"
+boolean insertSucceeds(borrow mut Database database, borrow Text command) {
+    match (database.execute(command)) {
+        Ok(changes) { return changes == 1L; }
+        Err(error) { return false; }
+    }
+}
+boolean longEquals(Option<long> value, long expected) {
+    match (value) { Some(actual) { return actual == expected; } None { return false; } }
+}
+Result<Unit, Text> exercise() {
+    Text path = Args.get(0)?;
+    Database first = Database.open(path)?;
+    Text schema = new Text("CREATE TABLE items(value INTEGER)");
+    first.execute(schema)?;
+    Database second = Database.open(path)?;
+    second.setBusyTimeoutMillis(0L)?;
+    Text query = new Text("SELECT value FROM items");
+    Text pendingInsert = new Text("INSERT INTO items VALUES(10)");
+    Text committedInsert = new Text("INSERT INTO items VALUES(20)");
+    first.begin()?;
+    first.execute(pendingInsert)?;
+    SqlStatement retained = first.prepare(query)?;
+    first.close()?;
+    println(insertSucceeds(second, committedInsert));
+    retained.close()?;
+    Database abandoned = Database.open(path)?;
+    abandoned.begin()?;
+    abandoned.execute(pendingInsert)?;
+    SqlStatement orphan = abandoned.prepare(query)?;
+    drop(abandoned);
+    println(insertSucceeds(second, committedInsert));
+    orphan.close()?;
+    Text aggregate = new Text("SELECT COUNT(*), SUM(value) FROM items");
+    SqlStatement rows = second.prepare(aggregate)?;
+    println(rows.step()? && longEquals(rows.columnLong(0)?, 2L)
+        && longEquals(rows.columnLong(1)?, 40L));
+    return new Result<Unit, Text>.Ok(());
+}
+void main() {
+    match (exercise()) { Ok(unit) {} Err(error) { error.print(); } }
+}
+"#;
+    let database = TemporaryDatabase::new();
+    let program = compile(source);
+    let output = Command::new(program.path()).arg(&database.0).output().unwrap();
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert_eq!(output.stdout, b"true\ntrue\ntrue\n");
+    assert_memory_balanced(&output);
+}

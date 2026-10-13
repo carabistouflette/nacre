@@ -695,8 +695,11 @@ must be in `0..=INT_MAX`; an expired lock wait returns `Err`.
 `Database.close` is idempotent and closes the connection with SQLite's
 `sqlite3_close_v2`: the connection becomes unusable immediately, and SQLite
 defers backend deallocation until all outstanding statements have been finalized.
-Closing or dropping the Database automatically rolls back an uncommitted
-transaction. After the connection is closed or dropped, every operational
+Closing or dropping the Database rolls back an uncommitted transaction before
+deferring backend deallocation, releasing transaction locks even while statements
+remain owned. Explicit close returns `Err` and leaves the connection open if
+rollback fails; drop attempts rollback without returning an error.
+After the connection is closed or dropped, every operational
 `SqlStatement` method returns `Err`. `SqlStatement.close` remains safe and
 idempotent and finalizes only its handle; after closing a statement, its
 operational methods return `Err`. Dropping a statement finalizes only its own
@@ -1504,8 +1507,9 @@ its domain value and explicitly writes every dependent field. `ListCodec<T>`,
 `OptionCodec<T>`, and `ResultCodec<T, E>` compose caller-supplied codecs for
 their nested values; they do not use reflection or implicit cloning. The caller
 must pass an explicit nonnegative `maxElements` to `ListCodec`, so decoding has
-no hidden collection-size default. The mutable reader or writer is borrowed
-only for each call. `Serialization<T>` provides the framed entry points:
+no hidden collection-size default. A negative limit is rejected before reading
+input or writing output, including source-backed transport I/O. The mutable
+reader or writer is borrowed only for each call. `Serialization<T>` provides the framed entry points:
 
 ```java
 interface Codec<T> {
