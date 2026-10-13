@@ -11,6 +11,9 @@
   the owner before checking, without confusing generic closers and shift operators.
 - Native library lowering and trusted prelude declarations use focused units and
   one builtin catalog. Runnable examples are organized by domain and cataloged.
+- Equivalent Nacre/Rust collection benchmarks validate checksums, separate
+  allocation instrumentation from timing, and isolate measured child RSS from
+  the Python launcher through a native supervisor.
 
 - Postfix `?` unwraps trusted built-in `Result` values or returns the exact
   error payload after cleaning live locals and pending owned C temporaries.
