@@ -212,6 +212,90 @@ optional exponent, or a signed `NaN`/`Inf` spelling, and returns `Err` on invali
 syntax or range errors. `print()` writes the text followed by a newline. Static
 `String` and owned `Text` are not implicitly convertible.
 
+## Unicode properties and text operations
+
+`Text` remains dependency-free UTF-8 storage and does not perform implicit
+normalization or case conversion. ICU-backed whole-text operations are explicit
+static calls on `Unicode`; programs using them require ICU.
+
+```java
+static Result<Text, Text> toUpperCase(borrow Text text, borrow Text locale)
+static Result<Text, Text> toLowerCase(borrow Text text, borrow Text locale)
+static Result<Text, Text> caseFold(borrow Text text)
+static Result<Text, Text> normalize(borrow Text text, borrow Text form)
+static Result<int, Text> graphemeCount(borrow Text text)
+static Result<Text, Text> graphemeAt(borrow Text text, int index)
+static Result<int, Text> compareLocale(borrow Text left, borrow Text right, borrow Text locale)
+```
+
+Text transformations preserve embedded NUL and return newly owned `Text` values.
+`toUpperCase` and `toLowerCase` use full Unicode string mappings, including
+expanding mappings such as German `ß` to `SS`. `caseFold` uses default full Unicode
+case folding. `normalize` accepts exactly `NFC`, `NFD`, `NFKC`, or `NFKD`.
+Grapheme counts and indexes use ICU character-break boundaries (extended
+grapheme clusters), not UTF-8 bytes or scalar counts; indexes are zero-based and
+out-of-range indexes return `Err`. `compareLocale` returns -1, 0, or 1 from ICU
+collation.
+
+Locale arguments accept canonical BCP-47 tags supported by ICU. The empty locale
+selects ICU root explicitly. Malformed, noncanonical, or unavailable locales
+return `Err`; they never use the process default or silently fall back.
+
+`Character` exposes ICU Unicode scalar properties and simple, non-expanding
+single-character mappings:
+
+```java
+static boolean isLetter(char value)
+static boolean isDigit(char value)
+static boolean isWhitespace(char value)
+static boolean isUpperCase(char value)
+static boolean isLowerCase(char value)
+static char toUpperCase(char value)
+static char toLowerCase(char value)
+static int category(char value)
+static double numericValue(char value)
+```
+
+`isLetter` tests Unicode letter categories; `isDigit` tests decimal digits;
+`isWhitespace` tests Unicode `White_Space`. The `toUpperCase` and `toLowerCase`
+methods map one scalar only and do not expand text. `numericValue` returns the
+Unicode numeric property (including fractions), or -1 when absent. `category`
+returns ICU `UCharCategory` values:
+
+| Value | ICU category | Unicode general category |
+|---:|---|---|
+| 0 | `U_UNASSIGNED` | Cn |
+| 1 | `U_UPPERCASE_LETTER` | Lu |
+| 2 | `U_LOWERCASE_LETTER` | Ll |
+| 3 | `U_TITLECASE_LETTER` | Lt |
+| 4 | `U_MODIFIER_LETTER` | Lm |
+| 5 | `U_OTHER_LETTER` | Lo |
+| 6 | `U_NON_SPACING_MARK` | Mn |
+| 7 | `U_ENCLOSING_MARK` | Me |
+| 8 | `U_COMBINING_SPACING_MARK` | Mc |
+| 9 | `U_DECIMAL_DIGIT_NUMBER` | Nd |
+| 10 | `U_LETTER_NUMBER` | Nl |
+| 11 | `U_OTHER_NUMBER` | No |
+| 12 | `U_SPACE_SEPARATOR` | Zs |
+| 13 | `U_LINE_SEPARATOR` | Zl |
+| 14 | `U_PARAGRAPH_SEPARATOR` | Zp |
+| 15 | `U_CONTROL_CHAR` | Cc |
+| 16 | `U_FORMAT_CHAR` | Cf |
+| 17 | `U_PRIVATE_USE_CHAR` | Co |
+| 18 | `U_SURROGATE` | Cs |
+| 19 | `U_DASH_PUNCTUATION` | Pd |
+| 20 | `U_START_PUNCTUATION` | Ps |
+| 21 | `U_END_PUNCTUATION` | Pe |
+| 22 | `U_CONNECTOR_PUNCTUATION` | Pc |
+| 23 | `U_OTHER_PUNCTUATION` | Po |
+| 24 | `U_MATH_SYMBOL` | Sm |
+| 25 | `U_CURRENCY_SYMBOL` | Sc |
+| 26 | `U_MODIFIER_SYMBOL` | Sk |
+| 27 | `U_OTHER_SYMBOL` | So |
+| 28 | `U_INITIAL_PUNCTUATION` | Pi |
+| 29 | `U_FINAL_PUNCTUATION` | Pf |
+
+
 ## `ByteBuffer`
 
 `ByteBuffer` is an affine binary byte owner with a private resizable allocation. It
@@ -323,6 +407,50 @@ ByteBuffer capacity and growth; zero accepts only an empty decompressed payload.
 operations preserve arbitrary binary bytes, including NUL. Checksums return the
 unsigned 32-bit zlib value as a nonnegative `long`. ZIP archive and entry
 operations remain unsupported; gzip is not a ZIP substitute.
+## `Locale`
+
+`Locale.available()` returns the ICU-installed locales as canonical BCP-47
+`Text` tags (including `und` for root). Locale arguments use the same rules as
+`Unicode`: empty selects ICU root; malformed, noncanonical, or unavailable tags
+return `Err`, with no process-default locale or fallback.
+
+```java
+static List<Text> available()
+static Result<Text, Text> formatNumber(double value, borrow Text pattern, borrow Text locale)
+static Result<Text, Text> formatDecimal(borrow Text exactDecimal, borrow Text pattern, borrow Text locale)
+static Result<double, Text> parseNumber(borrow Text value, borrow Text pattern, borrow Text locale)
+static Result<Text, Text> formatCurrency(double value, borrow Text isoCurrency, borrow Text locale)
+```
+
+Number patterns follow ICU `DecimalFormat` pattern syntax and the locale's
+numbering symbols. `formatNumber` formats a `double`; `formatDecimal` formats
+nonempty ASCII decimal text directly, without first rounding it through `double`.
+`parseNumber` uses the same pattern and locale and returns `Err` unless ICU parses
+the complete input. Invalid patterns, malformed numbers, and trailing content
+return `Err`. Embedded NUL is rejected in patterns, parse input, and currency
+codes; an empty locale is root.
+
+`formatCurrency` uses ICU's locale currency pattern with the explicit three-letter
+ISO 4217 code. The code is validated against ICU currency data; unrecognized codes
+return `Err` rather than being used as an invented currency.
+
+## `Charset`
+
+```java
+static Result<ByteBuffer, Text> encode(borrow Text text, borrow Text charset)
+static Result<Text, Text> decode(borrow ByteBuffer bytes, borrow Text charset)
+```
+
+The supported case-insensitive charset names are `UTF-8`, `UTF-16LE`,
+`UTF-16BE`, `UTF-32LE`, `UTF-32BE`, `US-ASCII`, and `ISO-8859-1`. Generic
+`UTF-16` and platform-default encodings are not supported. Charset names with
+embedded NUL and unknown names return `Err`.
+
+Conversions are strict: malformed input and text unrepresentable in the target
+charset return `Err` without replacement characters. UTF-16LE/BE encoding does
+not add a BOM; when decoding those explicit-endian encodings, a BOM is preserved
+as U+FEFF text. UTF-8 conversion preserves embedded NUL. Oversized ICU conversion
+inputs return `Err` before narrowing lengths to ICU's 32-bit API.
 
 ## `Option<T>` and `Result<T, E>`
 

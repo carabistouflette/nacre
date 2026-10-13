@@ -20,6 +20,7 @@ mod ordered;
 mod priority;
 mod support;
 mod text;
+mod unicode;
 mod time;
 mod date_time;
 mod network;
@@ -61,6 +62,8 @@ pub fn fields(program: &t::Program, class: C, class_id: usize) -> String {
         C::BigInt | C::BigDecimal => big_numbers::fields(class),
         C::Arrays => arrays::utility_fields(),
         C::Encoding => io::fields(),
+        C::Unicode | C::Character | C::Charset => arrays::utility_fields(),
+        C::Locale => arrays::utility_fields(),
         C::ByteBuffer => buffer::fields(),
         C::Compression | C::Checksums => io::fields(),
         C::Path | C::File | C::Directory | C::FileInfo | C::Files => filesystem::fields(program, class),
@@ -94,6 +97,8 @@ pub fn drop_fields(program: &t::Program, class: C, class_id: usize) -> String {
         C::Text => text::drop_fields(),
         C::Arrays => arrays::drop_utility_fields(),
         C::BigInt | C::BigDecimal => big_numbers::drop_fields(program, class),
+        C::Unicode | C::Character | C::Charset => arrays::drop_utility_fields(),
+        C::Locale => arrays::drop_utility_fields(),
         C::ByteBuffer => buffer::drop_fields(),
         C::Encoding => io::drop_fields(),
         C::Compression | C::Checksums => io::drop_fields(),
@@ -178,7 +183,7 @@ fn append_body(program: &t::Program, out: &mut String, class: &t::Class, native:
         C::Path | C::File | C::Directory | C::FileInfo => return,
         C::Thread(_) | C::Mutex(_) | C::Guard(_) | C::Channel(_) |
         C::Sender(_) | C::Receiver(_) => return,
-        C::HttpRequest | C::HttpResponse => return,
+        C::HttpRequest | C::HttpResponse | C::Unicode | C::Character | C::Charset | C::Locale => return,
         C::Compression | C::Checksums | C::Regex | C::RegexMatch | C::Console | C::Files | C::Args |
         C::Env | C::Command | C::Process | C::ProcessOutput => return,
         C::BigInt | C::BigDecimal => return,
@@ -227,6 +232,9 @@ pub fn implementations(program: &t::Program) -> String {
     }
     out.push_str(&compression::implementation(program));
     out.push_str(&big_numbers::implementation(program));
+    let icu = support::replace_method_ids(unicode::implementation(program), program, None);
+    debug_assert!(!support::has_placeholder(&icu), "unexpanded ICU template placeholder");
+    out.push_str(&icu);
     out.push_str(&regex::implementation(program));
     out.push_str(&concurrency::implementations(program));
     if let Some(console) = console::implementation(program) {

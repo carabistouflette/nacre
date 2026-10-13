@@ -36,6 +36,10 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   concatenated gzip-member handling, and unsigned CRC-32/Adler-32 checksums over
   borrowed binary ByteBuffers. ZIP archive and entry operations remain a gap;
   gzip is not presented as ZIP compatibility.
+- Optional ICU-backed Unicode text transforms, grapheme boundaries, locale collation,
+  Unicode scalar properties, strict charset conversion, and locale-aware number
+  formatting use explicit root/BCP-47 locale rules and preserve affine ownership.
+  Ordinary Text operations remain usable without ICU.
 - Floating min/max normalize signed-zero ties explicitly rather than relying on
   host libm's unspecified tie sign; both operand orders and same-sign zeros are
   covered by generated-program sanitizer regressions.

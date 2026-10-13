@@ -60,6 +60,7 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
             C::SkipIterator(_) => M::SkipIteratorNew,
             C::Text => M::TextNew,
             C::Random => M::RandomNew,
+            C::Unicode | C::Character | C::Charset | C::Locale |
             C::Regex | C::RegexMatch | C::Arrays | C::ByteBuffer | C::Encoding | C::Crypto |
             C::Path | C::File | C::Directory | C::FileInfo |
             C::Console | C::Files | C::Args | C::Math | C::Time | C::DateTime |
@@ -73,6 +74,29 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
         };
     }
     match (class, name) {
+        (C::Locale, "available") => M::LocaleAvailable,
+        (C::Locale, "formatNumber") => M::LocaleFormatNumber,
+        (C::Locale, "formatDecimal") => M::LocaleFormatDecimal,
+        (C::Locale, "parseNumber") => M::LocaleParseNumber,
+        (C::Locale, "formatCurrency") => M::LocaleFormatCurrency,
+        (C::Unicode, "toUpperCase") => M::UnicodeToUpperCase,
+        (C::Unicode, "toLowerCase") => M::UnicodeToLowerCase,
+        (C::Unicode, "caseFold") => M::UnicodeCaseFold,
+        (C::Unicode, "normalize") => M::UnicodeNormalize,
+        (C::Unicode, "graphemeCount") => M::UnicodeGraphemeCount,
+        (C::Unicode, "graphemeAt") => M::UnicodeGraphemeAt,
+        (C::Unicode, "compareLocale") => M::UnicodeCompareLocale,
+        (C::Character, "isLetter") => M::CharacterIsLetter,
+        (C::Character, "isDigit") => M::CharacterIsDigit,
+        (C::Character, "isWhitespace") => M::CharacterIsWhitespace,
+        (C::Character, "isUpperCase") => M::CharacterIsUpperCase,
+        (C::Character, "isLowerCase") => M::CharacterIsLowerCase,
+        (C::Character, "toUpperCase") => M::CharacterToUpperCase,
+        (C::Character, "toLowerCase") => M::CharacterToLowerCase,
+        (C::Character, "category") => M::CharacterCategory,
+        (C::Character, "numericValue") => M::CharacterNumericValue,
+        (C::Charset, "encode") => M::CharsetEncode,
+        (C::Charset, "decode") => M::CharsetDecode,
         (C::List(_), "add") => M::ListAdd,
         (C::List(_), "size") => M::ListSize,
         (C::List(_), "capacity") => M::ListCapacity,

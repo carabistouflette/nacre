@@ -135,6 +135,7 @@ pub enum NativeClass {
     TakeIterator(Type), SkipIterator(Type), Iterators(Type),
     Text, BigInt, BigDecimal, Regex, RegexMatch, Arrays, ByteBuffer, Encoding, Crypto, Path, File, Directory, FileInfo,
     Console, Files, Args, Math, Random, Time, DateTime, Compression, Checksums, SocketAddress, TcpListener, TcpStream,
+    Unicode, Character, Charset, Locale,
     Datagram, UdpSocket, HttpRequest, HttpResponse, Thread(Type), Mutex(Type), Guard(Type), Channel(Type),
     Sender(Type), Receiver(Type), Env, Command, Process, ProcessOutput
 }
@@ -232,4 +233,10 @@ pub enum NativeMethod {
     BigDecimalParse, BigDecimalFromLong, BigDecimalClone, BigDecimalToText, BigDecimalScale,
     BigDecimalCompareTo, BigDecimalSignum, BigDecimalAdd, BigDecimalSubtract, BigDecimalMultiply,
     BigDecimalDivide, BigDecimalRescale, BigDecimalNegate, BigDecimalAbs, BigDecimalToLong,
+    UnicodeToUpperCase, UnicodeToLowerCase, UnicodeCaseFold, UnicodeNormalize,
+    UnicodeGraphemeCount, UnicodeGraphemeAt, UnicodeCompareLocale,
+    CharacterIsLetter, CharacterIsDigit, CharacterIsWhitespace, CharacterIsUpperCase,
+    CharacterIsLowerCase, CharacterToUpperCase, CharacterToLowerCase, CharacterCategory,
+    CharacterNumericValue, CharsetEncode, CharsetDecode,
+    LocaleAvailable, LocaleFormatNumber, LocaleFormatDecimal, LocaleParseNumber, LocaleFormatCurrency,
 }

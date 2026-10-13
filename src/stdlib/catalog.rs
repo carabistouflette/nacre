@@ -59,6 +59,10 @@ enum NativeBuiltin {
     Command,
     Process,
     ProcessOutput,
+    Unicode,
+    Character,
+    Charset,
+    Locale,
 }
 
 impl NativeBuiltin {
@@ -98,6 +102,10 @@ impl NativeBuiltin {
             Self::Text => NativeClass::Text,
             Self::BigInt => NativeClass::BigInt,
             Self::BigDecimal => NativeClass::BigDecimal,
+            Self::Unicode => NativeClass::Unicode,
+            Self::Character => NativeClass::Character,
+            Self::Charset => NativeClass::Charset,
+            Self::Locale => NativeClass::Locale,
             Self::Arrays => NativeClass::Arrays,
             Self::ByteBuffer => NativeClass::ByteBuffer,
             Self::Encoding => NativeClass::Encoding,
@@ -200,6 +208,18 @@ pub(super) const PRELUDE_UNITS: &[PreludeUnit] = &[
     PreludeUnit {
         source: include_str!("../../stdlib/prelude/text.ncr"),
         builtins: &[Builtin { name: "Text", native: Some(NativeBuiltin::Text) }],
+    },
+    PreludeUnit {
+        source: include_str!("../../stdlib/prelude/unicode.ncr"),
+        builtins: &[
+            Builtin { name: "Unicode", native: Some(NativeBuiltin::Unicode) },
+            Builtin { name: "Character", native: Some(NativeBuiltin::Character) },
+            Builtin { name: "Charset", native: Some(NativeBuiltin::Charset) },
+        ],
+    },
+    PreludeUnit {
+        source: include_str!("../../stdlib/prelude/locale.ncr"),
+        builtins: &[Builtin { name: "Locale", native: Some(NativeBuiltin::Locale) }],
     },
     PreludeUnit {
         source: include_str!("../../stdlib/prelude/regex.ncr"),

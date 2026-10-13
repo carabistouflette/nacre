@@ -1,0 +1,547 @@
+/* nacre-link: icu */
+#include <float.h>
+#include <unicode/ubrk.h>
+#include <unicode/uchar.h>
+#include <unicode/ucnv.h>
+#include <unicode/ucnv_err.h>
+#include <unicode/uloc.h>
+#include <unicode/ucol.h>
+#include <unicode/unorm2.h>
+#include <unicode/ustring.h>
+#include <unicode/ucurr.h>
+#include <unicode/unum.h>
+
+static bool ncr_unicode_preflight_ok(UErrorCode status) {
+    return status == U_BUFFER_OVERFLOW_ERROR || U_SUCCESS(status);
+}
+
+static bool ncr_unicode_text_to_utf16(ncr_obj_@TEXT_ID@ *text, UChar **output, int32_t *output_length, size_t line, size_t column) {
+    *output = NULL;
+    *output_length = 0;
+    if (text == NULL || text->length < 0) { return false; }
+    int32_t required = 0;
+    UErrorCode status = U_ZERO_ERROR;
+    const char *source = (const char *)text->bytes;
+    (void)u_strFromUTF8(NULL, 0, &required, source, text->length, &status);
+    if (!ncr_unicode_preflight_ok(status) || required < 0) { return false; }
+    if (required == 0) { return true; }
+    if ((size_t)required > SIZE_MAX / sizeof(UChar)) { return false; }
+    UChar *converted = ncr_allocate((size_t)required * sizeof(UChar), line, column);
+    int32_t written = 0;
+    status = U_ZERO_ERROR;
+    if (u_strFromUTF8(converted, required, &written, source, text->length, &status) == NULL ||
+        U_FAILURE(status) || written != required) {
+        ncr_deallocate(converted);
+        return false;
+    }
+    *output = converted;
+    *output_length = written;
+    return true;
+}
+
+static bool ncr_unicode_utf16_to_utf8(const UChar *source, int32_t source_length, unsigned char **output, int32_t *output_length, size_t line, size_t column) {
+    static const UChar empty_source[1] = { 0 };
+    *output = NULL;
+    *output_length = 0;
+    if (source_length < 0) { return false; }
+    if (source == NULL) { source = empty_source; }
+    int32_t required = 0;
+    UErrorCode status = U_ZERO_ERROR;
+    (void)u_strToUTF8(NULL, 0, &required, source, source_length, &status);
+    if (!ncr_unicode_preflight_ok(status) || required < 0) { return false; }
+    if (required == 0) { return true; }
+    unsigned char *converted = ncr_allocate((size_t)required, line, column);
+    int32_t written = 0;
+    status = U_ZERO_ERROR;
+    if (u_strToUTF8((char *)converted, required, &written, source, source_length, &status) == NULL ||
+        U_FAILURE(status) || written != required) {
+        ncr_deallocate(converted);
+        return false;
+    }
+    *output = converted;
+    *output_length = written;
+    return true;
+}
+
+static bool ncr_unicode_to_uchars(UConverter *converter, const char *source, int32_t source_length, UChar **output, int32_t *output_length, size_t line, size_t column) {
+    static const char empty_source[1] = { 0 };
+    UChar empty_output[1] = { 0 };
+    *output = NULL;
+    *output_length = 0;
+    if (converter == NULL || source_length < 0) { return false; }
+    if (source == NULL) { source = empty_source; }
+    UErrorCode status = U_ZERO_ERROR;
+    int32_t required = ucnv_toUChars(converter, NULL, 0, source, source_length, &status);
+    if (!ncr_unicode_preflight_ok(status) || required < 0 || required >= INT32_MAX) { return false; }
+    if ((size_t)(required + 1) > SIZE_MAX / sizeof(UChar)) { return false; }
+    UChar *converted = required == 0 ? (UChar *)empty_output :
+        ncr_allocate((size_t)(required + 1) * sizeof(UChar), line, column);
+    status = U_ZERO_ERROR;
+    int32_t written = ucnv_toUChars(converter, converted, required + 1, source, source_length, &status);
+    if (U_FAILURE(status) || written != required) {
+        if (required != 0) { ncr_deallocate(converted); }
+        return false;
+    }
+    if (required != 0) { *output = converted; }
+    *output_length = written;
+    return true;
+}
+
+static bool ncr_unicode_from_uchars(UConverter *converter, const UChar *source, int32_t source_length, unsigned char **output, int32_t *output_length, size_t line, size_t column) {
+    static const UChar empty_source[1] = { 0 };
+    unsigned char empty_output[1] = { 0 };
+    *output = NULL;
+    *output_length = 0;
+    if (converter == NULL || source_length < 0) { return false; }
+    if (source == NULL) { source = empty_source; }
+    UErrorCode status = U_ZERO_ERROR;
+    int32_t required = ucnv_fromUChars(converter, NULL, 0, source, source_length, &status);
+    if (!ncr_unicode_preflight_ok(status) || required < 0 || required >= INT32_MAX) { return false; }
+    if ((size_t)(required + 1) > SIZE_MAX) { return false; }
+    unsigned char *converted = required == 0 ? empty_output :
+        ncr_allocate((size_t)required + 1, line, column);
+    status = U_ZERO_ERROR;
+    int32_t written = ucnv_fromUChars(converter, (char *)converted, required + 1, source, source_length, &status);
+    if (U_FAILURE(status) || written != required) {
+        if (required != 0) { ncr_deallocate(converted); }
+        return false;
+    }
+    if (required != 0) { *output = converted; }
+    *output_length = written;
+    return true;
+}
+
+static bool ncr_unicode_case_map(UChar **output, int32_t *output_length, const UChar *source, int32_t source_length, const char *locale, int32_t (*map)(UChar *, int32_t, const UChar *, int32_t, const char *, UErrorCode *), size_t line, size_t column) {
+    static const UChar empty_source[1] = { 0 };
+    UChar empty_output[1] = { 0 };
+    *output = NULL;
+    *output_length = 0;
+    if (source_length < 0 || map == NULL) { return false; }
+    if (source == NULL) { source = empty_source; }
+    UErrorCode status = U_ZERO_ERROR;
+    int32_t required = map(NULL, 0, source, source_length, locale, &status);
+    if (!ncr_unicode_preflight_ok(status) || required < 0 || (size_t)required > SIZE_MAX / sizeof(UChar)) { return false; }
+    UChar *converted = required == 0 ? empty_output :
+        ncr_allocate((size_t)required * sizeof(UChar), line, column);
+    status = U_ZERO_ERROR;
+    int32_t written = map(converted, required == 0 ? 1 : required, source, source_length, locale, &status);
+    if (U_FAILURE(status) || written != required) {
+        if (required != 0) { ncr_deallocate(converted); }
+        return false;
+    }
+    if (required != 0) { *output = converted; }
+    *output_length = written;
+    return true;
+}
+
+static bool ncr_unicode_fold(UChar **output, int32_t *output_length, const UChar *source, int32_t source_length, size_t line, size_t column) {
+    static const UChar empty_source[1] = { 0 };
+    UChar empty_output[1] = { 0 };
+    *output = NULL;
+    *output_length = 0;
+    if (source_length < 0) { return false; }
+    if (source == NULL) { source = empty_source; }
+    UErrorCode status = U_ZERO_ERROR;
+    int32_t required = u_strFoldCase(NULL, 0, source, source_length, U_FOLD_CASE_DEFAULT, &status);
+    if (!ncr_unicode_preflight_ok(status) || required < 0 || (size_t)required > SIZE_MAX / sizeof(UChar)) { return false; }
+    UChar *converted = required == 0 ? empty_output :
+        ncr_allocate((size_t)required * sizeof(UChar), line, column);
+    status = U_ZERO_ERROR;
+    int32_t written = u_strFoldCase(converted, required == 0 ? 1 : required, source, source_length, U_FOLD_CASE_DEFAULT, &status);
+    if (U_FAILURE(status) || written != required) {
+        if (required != 0) { ncr_deallocate(converted); }
+        return false;
+    }
+    if (required != 0) { *output = converted; }
+    *output_length = written;
+    return true;
+}
+
+static bool ncr_unicode_normalize(UChar **output, int32_t *output_length, const UNormalizer2 *normalizer, const UChar *source, int32_t source_length, size_t line, size_t column) {
+    static const UChar empty_source[1] = { 0 };
+    UChar empty_output[1] = { 0 };
+    *output = NULL;
+    *output_length = 0;
+    if (normalizer == NULL || source_length < 0) { return false; }
+    if (source == NULL) { source = empty_source; }
+    UErrorCode status = U_ZERO_ERROR;
+    int32_t required = unorm2_normalize(normalizer, source, source_length, NULL, 0, &status);
+    if (!ncr_unicode_preflight_ok(status) || required < 0 || (size_t)required > SIZE_MAX / sizeof(UChar)) { return false; }
+    UChar *converted = required == 0 ? empty_output :
+        ncr_allocate((size_t)required * sizeof(UChar), line, column);
+    status = U_ZERO_ERROR;
+    int32_t written = unorm2_normalize(normalizer, source, source_length, converted, required == 0 ? 1 : required, &status);
+    if (U_FAILURE(status) || written != required) {
+        if (required != 0) { ncr_deallocate(converted); }
+        return false;
+    }
+    if (required != 0) { *output = converted; }
+    *output_length = written;
+    return true;
+}
+
+static ncr_obj_@TEXT_ID@ *ncr_unicode_make_text(const UChar *source, int32_t source_length, size_t line, size_t column) {
+    unsigned char *bytes = NULL;
+    int32_t byte_length = 0;
+    if (!ncr_unicode_utf16_to_utf8(source, source_length, &bytes, &byte_length, line, column)) { return NULL; }
+    return ncr_text_take_bytes_@TEXT_ID@(bytes, (size_t)byte_length, (size_t)byte_length, line, column);
+}
+
+static bool ncr_unicode_locale(ncr_obj_@TEXT_ID@ *locale, char output[ULOC_FULLNAME_CAPACITY]) {
+    if (locale == NULL || locale->length < 0) { return false; }
+    if (locale->length == 0) {
+        memcpy(output, "root", sizeof("root"));
+        return true;
+    }
+    if (locale->length >= ULOC_FULLNAME_CAPACITY) { return false; }
+    char tag[ULOC_FULLNAME_CAPACITY];
+    for (int32_t i = 0; i < locale->length; ++i) {
+        unsigned char byte = locale->bytes[i];
+        if (byte == 0 || byte > 0x7f) { return false; }
+        tag[i] = (char)byte;
+    }
+    tag[locale->length] = '\0';
+    char locale_id[ULOC_FULLNAME_CAPACITY];
+    int32_t parsed_length = 0;
+    UErrorCode status = U_ZERO_ERROR;
+    int32_t locale_length = uloc_forLanguageTag(tag, locale_id, ULOC_FULLNAME_CAPACITY, &parsed_length, &status);
+    if (U_FAILURE(status) || locale_length < 0 || locale_length >= ULOC_FULLNAME_CAPACITY || parsed_length != locale->length) { return false; }
+    locale_id[locale_length] = '\0';
+    char canonical[ULOC_FULLNAME_CAPACITY];
+    status = U_ZERO_ERROR;
+    int32_t canonical_length = uloc_toLanguageTag(locale_id, canonical, ULOC_FULLNAME_CAPACITY, true, &status);
+    if (U_FAILURE(status) || canonical_length != locale->length || memcmp(canonical, tag, (size_t)locale->length) != 0) { return false; }
+    if (strcmp(tag, "und") == 0) {
+        memcpy(output, "root", sizeof("root"));
+        return true;
+    }
+    if (strcmp(locale_id, "root") == 0 || locale_id[0] == '\0') {
+        memcpy(output, "root", sizeof("root"));
+        return true;
+    }
+    bool available = false;
+    int32_t available_count = uloc_countAvailable();
+    for (int32_t i = 0; i < available_count; ++i) {
+        const char *candidate = uloc_getAvailable(i);
+        if (candidate != NULL && strcmp(candidate, locale_id) == 0) { available = true; break; }
+    }
+    if (!available) { return false; }
+    memcpy(output, locale_id, (size_t)locale_length + 1);
+    return true;
+}
+
+static bool ncr_unicode_ascii_equal(const ncr_obj_@TEXT_ID@ *text, const char *name) {
+    if (text == NULL || text->length < 0) { return false; }
+    size_t length = strlen(name);
+    if ((size_t)text->length != length) { return false; }
+    for (size_t i = 0; i < length; ++i) {
+        unsigned char byte = text->bytes[i];
+        if (byte == 0 || byte > 0x7f) { return false; }
+        if (byte >= 'A' && byte <= 'Z') { byte = (unsigned char)(byte + ('a' - 'A')); }
+        unsigned char expected = (unsigned char)name[i];
+        if (expected >= 'A' && expected <= 'Z') { expected = (unsigned char)(expected + ('a' - 'A')); }
+        if (byte != expected) { return false; }
+    }
+    return true;
+}
+
+static const char *ncr_unicode_charset(const ncr_obj_@TEXT_ID@ *name) {
+    if (ncr_unicode_ascii_equal(name, "UTF-8")) { return "UTF-8"; }
+    if (ncr_unicode_ascii_equal(name, "UTF-16LE")) { return "UTF-16LE"; }
+    if (ncr_unicode_ascii_equal(name, "UTF-16BE")) { return "UTF-16BE"; }
+    if (ncr_unicode_ascii_equal(name, "UTF-32LE")) { return "UTF-32LE"; }
+    if (ncr_unicode_ascii_equal(name, "UTF-32BE")) { return "UTF-32BE"; }
+    if (ncr_unicode_ascii_equal(name, "US-ASCII")) { return "US-ASCII"; }
+    if (ncr_unicode_ascii_equal(name, "ISO-8859-1")) { return "ISO-8859-1"; }
+    return NULL;
+}
+
+static UConverter *ncr_unicode_open_converter(const char *name) {
+    UErrorCode status = U_ZERO_ERROR;
+    UConverter *converter = ucnv_open(name, &status);
+    if (U_FAILURE(status) || converter == NULL) {
+        if (converter != NULL) { ucnv_close(converter); }
+        return NULL;
+    }
+    UConverterToUCallback old_to_callback = NULL;
+    const void *old_to_context = NULL;
+    status = U_ZERO_ERROR;
+    ucnv_setToUCallBack(converter, UCNV_TO_U_CALLBACK_STOP, NULL, &old_to_callback, &old_to_context, &status);
+    if (U_FAILURE(status)) { ucnv_close(converter); return NULL; }
+    UConverterFromUCallback old_from_callback = NULL;
+    const void *old_from_context = NULL;
+    status = U_ZERO_ERROR;
+    ucnv_setFromUCallBack(converter, UCNV_FROM_U_CALLBACK_STOP, NULL, &old_from_callback, &old_from_context, &status);
+    if (U_FAILURE(status)) { ucnv_close(converter); return NULL; }
+    return converter;
+}
+
+static bool @CHARACTER_IS_LETTER@(uint32_t ncr_v_@CHAR_LETTER@, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column; return u_isalpha((UChar32)ncr_v_@CHAR_LETTER@);
+}
+static bool @CHARACTER_IS_DIGIT@(uint32_t ncr_v_@CHAR_DIGIT@, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column; return u_isdigit((UChar32)ncr_v_@CHAR_DIGIT@);
+}
+static bool @CHARACTER_IS_WHITESPACE@(uint32_t ncr_v_@CHAR_WHITESPACE@, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column; return u_isUWhiteSpace((UChar32)ncr_v_@CHAR_WHITESPACE@);
+}
+static bool @CHARACTER_IS_UPPER_CASE@(uint32_t ncr_v_@CHAR_UPPER@, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column; return u_isupper((UChar32)ncr_v_@CHAR_UPPER@);
+}
+static bool @CHARACTER_IS_LOWER_CASE@(uint32_t ncr_v_@CHAR_LOWER@, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column; return u_islower((UChar32)ncr_v_@CHAR_LOWER@);
+}
+static uint32_t @CHARACTER_TO_UPPER_CASE@(uint32_t ncr_v_@CHAR_TO_UPPER@, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column; return (uint32_t)u_toupper((UChar32)ncr_v_@CHAR_TO_UPPER@);
+}
+static uint32_t @CHARACTER_TO_LOWER_CASE@(uint32_t ncr_v_@CHAR_TO_LOWER@, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column; return (uint32_t)u_tolower((UChar32)ncr_v_@CHAR_TO_LOWER@);
+}
+static int32_t @CHARACTER_CATEGORY@(uint32_t ncr_v_@CHAR_CATEGORY@, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column; return (int32_t)u_charType((UChar32)ncr_v_@CHAR_CATEGORY@);
+}
+static double @CHARACTER_NUMERIC_VALUE@(uint32_t ncr_v_@CHAR_NUMERIC@, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column;
+    double value = u_getNumericValue((UChar32)ncr_v_@CHAR_NUMERIC@);
+    return value == U_NO_NUMERIC_VALUE ? -1.0 : value;
+}
+
+static ncr_obj_@UPPER_RESULT@ @UNICODE_TO_UPPER_CASE@(ncr_obj_@TEXT_ID@ *ncr_v_@UPPER_TEXT@, ncr_obj_@TEXT_ID@ *ncr_v_@UPPER_LOCALE@, size_t ncr_line, size_t ncr_column) {
+    char locale[ULOC_FULLNAME_CAPACITY];
+    if (!ncr_unicode_locale(ncr_v_@UPPER_LOCALE@, locale)) {
+        return ncr_result_error_@UPPER_RESULT@("invalid, noncanonical, or unknown BCP-47 locale", sizeof("invalid, noncanonical, or unknown BCP-47 locale") - 1, ncr_line, ncr_column);
+    }
+    UChar *source = NULL; int32_t source_length = 0;
+    if (!ncr_unicode_text_to_utf16(ncr_v_@UPPER_TEXT@, &source, &source_length, ncr_line, ncr_column)) {
+        return ncr_result_error_@UPPER_RESULT@("Text could not be converted to UTF-16", sizeof("Text could not be converted to UTF-16") - 1, ncr_line, ncr_column);
+    }
+    UChar *mapped = NULL; int32_t mapped_length = 0;
+    bool converted = ncr_unicode_case_map(&mapped, &mapped_length, source, source_length, locale, u_strToUpper, ncr_line, ncr_column);
+    if (source != NULL) { ncr_deallocate(source); }
+    if (!converted) { return ncr_result_error_@UPPER_RESULT@("Unicode uppercase mapping failed", sizeof("Unicode uppercase mapping failed") - 1, ncr_line, ncr_column); }
+    ncr_obj_@TEXT_ID@ *result = ncr_unicode_make_text(mapped, mapped_length, ncr_line, ncr_column);
+    if (mapped != NULL) { ncr_deallocate(mapped); }
+    if (result == NULL) { return ncr_result_error_@UPPER_RESULT@("Unicode uppercase output is invalid", sizeof("Unicode uppercase output is invalid") - 1, ncr_line, ncr_column); }
+    return (ncr_obj_@UPPER_RESULT@){ .tag = @UPPER_OK@, .data.v@UPPER_OK@.f0 = result };
+}
+
+static ncr_obj_@LOWER_RESULT@ @UNICODE_TO_LOWER_CASE@(ncr_obj_@TEXT_ID@ *ncr_v_@LOWER_TEXT@, ncr_obj_@TEXT_ID@ *ncr_v_@LOWER_LOCALE@, size_t ncr_line, size_t ncr_column) {
+    char locale[ULOC_FULLNAME_CAPACITY];
+    if (!ncr_unicode_locale(ncr_v_@LOWER_LOCALE@, locale)) {
+        return ncr_result_error_@LOWER_RESULT@("invalid, noncanonical, or unknown BCP-47 locale", sizeof("invalid, noncanonical, or unknown BCP-47 locale") - 1, ncr_line, ncr_column);
+    }
+    UChar *source = NULL; int32_t source_length = 0;
+    if (!ncr_unicode_text_to_utf16(ncr_v_@LOWER_TEXT@, &source, &source_length, ncr_line, ncr_column)) {
+        return ncr_result_error_@LOWER_RESULT@("Text could not be converted to UTF-16", sizeof("Text could not be converted to UTF-16") - 1, ncr_line, ncr_column);
+    }
+    UChar *mapped = NULL; int32_t mapped_length = 0;
+    bool converted = ncr_unicode_case_map(&mapped, &mapped_length, source, source_length, locale, u_strToLower, ncr_line, ncr_column);
+    if (source != NULL) { ncr_deallocate(source); }
+    if (!converted) { return ncr_result_error_@LOWER_RESULT@("Unicode lowercase mapping failed", sizeof("Unicode lowercase mapping failed") - 1, ncr_line, ncr_column); }
+    ncr_obj_@TEXT_ID@ *result = ncr_unicode_make_text(mapped, mapped_length, ncr_line, ncr_column);
+    if (mapped != NULL) { ncr_deallocate(mapped); }
+    if (result == NULL) { return ncr_result_error_@LOWER_RESULT@("Unicode lowercase output is invalid", sizeof("Unicode lowercase output is invalid") - 1, ncr_line, ncr_column); }
+    return (ncr_obj_@LOWER_RESULT@){ .tag = @LOWER_OK@, .data.v@LOWER_OK@.f0 = result };
+}
+
+static ncr_obj_@FOLD_RESULT@ @UNICODE_CASE_FOLD@(ncr_obj_@TEXT_ID@ *ncr_v_@FOLD_TEXT@, size_t ncr_line, size_t ncr_column) {
+    UChar *source = NULL; int32_t source_length = 0;
+    if (!ncr_unicode_text_to_utf16(ncr_v_@FOLD_TEXT@, &source, &source_length, ncr_line, ncr_column)) {
+        return ncr_result_error_@FOLD_RESULT@("Text could not be converted to UTF-16", sizeof("Text could not be converted to UTF-16") - 1, ncr_line, ncr_column);
+    }
+    UChar *mapped = NULL; int32_t mapped_length = 0;
+    bool converted = ncr_unicode_fold(&mapped, &mapped_length, source, source_length, ncr_line, ncr_column);
+    if (source != NULL) { ncr_deallocate(source); }
+    if (!converted) { return ncr_result_error_@FOLD_RESULT@("Unicode case folding failed", sizeof("Unicode case folding failed") - 1, ncr_line, ncr_column); }
+    ncr_obj_@TEXT_ID@ *result = ncr_unicode_make_text(mapped, mapped_length, ncr_line, ncr_column);
+    if (mapped != NULL) { ncr_deallocate(mapped); }
+    if (result == NULL) { return ncr_result_error_@FOLD_RESULT@("Unicode case-fold output is invalid", sizeof("Unicode case-fold output is invalid") - 1, ncr_line, ncr_column); }
+    return (ncr_obj_@FOLD_RESULT@){ .tag = @FOLD_OK@, .data.v@FOLD_OK@.f0 = result };
+}
+
+static ncr_obj_@NORMALIZE_RESULT@ @UNICODE_NORMALIZE@(ncr_obj_@TEXT_ID@ *ncr_v_@NORMALIZE_TEXT@, ncr_obj_@TEXT_ID@ *ncr_v_@NORMALIZE_FORM@, size_t ncr_line, size_t ncr_column) {
+    const UNormalizer2 *normalizer = NULL;
+    UErrorCode status = U_ZERO_ERROR;
+    ncr_obj_@TEXT_ID@ *form = ncr_v_@NORMALIZE_FORM@;
+    if (form != NULL && form->length == 3 && memcmp(form->bytes, "NFC", 3) == 0) { normalizer = unorm2_getNFCInstance(&status); }
+    else if (form != NULL && form->length == 3 && memcmp(form->bytes, "NFD", 3) == 0) { normalizer = unorm2_getNFDInstance(&status); }
+    else if (form != NULL && form->length == 4 && memcmp(form->bytes, "NFKC", 4) == 0) { normalizer = unorm2_getNFKCInstance(&status); }
+    else if (form != NULL && form->length == 4 && memcmp(form->bytes, "NFKD", 4) == 0) { normalizer = unorm2_getNFKDInstance(&status); }
+    else { return ncr_result_error_@NORMALIZE_RESULT@("normalization form must be NFC, NFD, NFKC, or NFKD", sizeof("normalization form must be NFC, NFD, NFKC, or NFKD") - 1, ncr_line, ncr_column); }
+    if (U_FAILURE(status) || normalizer == NULL) {
+        return ncr_result_error_@NORMALIZE_RESULT@("ICU normalization is unavailable", sizeof("ICU normalization is unavailable") - 1, ncr_line, ncr_column);
+    }
+    UChar *source = NULL; int32_t source_length = 0;
+    if (!ncr_unicode_text_to_utf16(ncr_v_@NORMALIZE_TEXT@, &source, &source_length, ncr_line, ncr_column)) {
+        return ncr_result_error_@NORMALIZE_RESULT@("Text could not be converted to UTF-16", sizeof("Text could not be converted to UTF-16") - 1, ncr_line, ncr_column);
+    }
+    UChar *normalized = NULL; int32_t normalized_length = 0;
+    bool converted = ncr_unicode_normalize(&normalized, &normalized_length, normalizer, source, source_length, ncr_line, ncr_column);
+    if (source != NULL) { ncr_deallocate(source); }
+    if (!converted) { return ncr_result_error_@NORMALIZE_RESULT@("Unicode normalization failed", sizeof("Unicode normalization failed") - 1, ncr_line, ncr_column); }
+    ncr_obj_@TEXT_ID@ *result = ncr_unicode_make_text(normalized, normalized_length, ncr_line, ncr_column);
+    if (normalized != NULL) { ncr_deallocate(normalized); }
+    if (result == NULL) { return ncr_result_error_@NORMALIZE_RESULT@("Unicode normalization output is invalid", sizeof("Unicode normalization output is invalid") - 1, ncr_line, ncr_column); }
+    return (ncr_obj_@NORMALIZE_RESULT@){ .tag = @NORMALIZE_OK@, .data.v@NORMALIZE_OK@.f0 = result };
+}
+
+static ncr_obj_@COUNT_RESULT@ @UNICODE_GRAPHEME_COUNT@(ncr_obj_@TEXT_ID@ *ncr_v_@COUNT_TEXT@, size_t ncr_line, size_t ncr_column) {
+    UChar *source = NULL; int32_t source_length = 0;
+    if (!ncr_unicode_text_to_utf16(ncr_v_@COUNT_TEXT@, &source, &source_length, ncr_line, ncr_column)) {
+        return ncr_result_error_@COUNT_RESULT@("Text could not be converted to UTF-16", sizeof("Text could not be converted to UTF-16") - 1, ncr_line, ncr_column);
+    }
+    static const UChar empty[1] = { 0 };
+    UErrorCode status = U_ZERO_ERROR;
+    UBreakIterator *iterator = ubrk_open(UBRK_CHARACTER, "root", source == NULL ? empty : source, source_length, &status);
+    if (U_FAILURE(status) || iterator == NULL) {
+        if (iterator != NULL) { ubrk_close(iterator); }
+        if (source != NULL) { ncr_deallocate(source); }
+        return ncr_result_error_@COUNT_RESULT@("ICU grapheme segmentation failed", sizeof("ICU grapheme segmentation failed") - 1, ncr_line, ncr_column);
+    }
+    int32_t count = 0;
+    (void)ubrk_first(iterator);
+    while (ubrk_next(iterator) != UBRK_DONE) {
+        if (count == INT32_MAX) {
+            ubrk_close(iterator);
+            if (source != NULL) { ncr_deallocate(source); }
+            return ncr_result_error_@COUNT_RESULT@("grapheme count exceeds int range", sizeof("grapheme count exceeds int range") - 1, ncr_line, ncr_column);
+        }
+        ++count;
+    }
+    ubrk_close(iterator);
+    if (source != NULL) { ncr_deallocate(source); }
+    return (ncr_obj_@COUNT_RESULT@){ .tag = @COUNT_OK@, .data.v@COUNT_OK@.f0 = count };
+}
+
+static ncr_obj_@AT_RESULT@ @UNICODE_GRAPHEME_AT@(ncr_obj_@TEXT_ID@ *ncr_v_@AT_TEXT@, int32_t ncr_v_@AT_INDEX@, size_t ncr_line, size_t ncr_column) {
+    if (ncr_v_@AT_INDEX@ < 0) {
+        return ncr_result_error_@AT_RESULT@("grapheme index out of bounds", sizeof("grapheme index out of bounds") - 1, ncr_line, ncr_column);
+    }
+    UChar *source = NULL; int32_t source_length = 0;
+    if (!ncr_unicode_text_to_utf16(ncr_v_@AT_TEXT@, &source, &source_length, ncr_line, ncr_column)) {
+        return ncr_result_error_@AT_RESULT@("Text could not be converted to UTF-16", sizeof("Text could not be converted to UTF-16") - 1, ncr_line, ncr_column);
+    }
+    static const UChar empty[1] = { 0 };
+    UErrorCode status = U_ZERO_ERROR;
+    UBreakIterator *iterator = ubrk_open(UBRK_CHARACTER, "root", source == NULL ? empty : source, source_length, &status);
+    if (U_FAILURE(status) || iterator == NULL) {
+        if (iterator != NULL) { ubrk_close(iterator); }
+        if (source != NULL) { ncr_deallocate(source); }
+        return ncr_result_error_@AT_RESULT@("ICU grapheme segmentation failed", sizeof("ICU grapheme segmentation failed") - 1, ncr_line, ncr_column);
+    }
+    int32_t start = ubrk_first(iterator);
+    int32_t cluster_index = 0;
+    int32_t end = UBRK_DONE;
+    while ((end = ubrk_next(iterator)) != UBRK_DONE) {
+        if (cluster_index == ncr_v_@AT_INDEX@) { break; }
+        start = end;
+        ++cluster_index;
+    }
+    if (end == UBRK_DONE) {
+        ubrk_close(iterator);
+        if (source != NULL) { ncr_deallocate(source); }
+        return ncr_result_error_@AT_RESULT@("grapheme index out of bounds", sizeof("grapheme index out of bounds") - 1, ncr_line, ncr_column);
+    }
+    unsigned char *bytes = NULL; int32_t byte_length = 0;
+    bool converted = ncr_unicode_utf16_to_utf8(source == NULL ? empty : source + start, end - start, &bytes, &byte_length, ncr_line, ncr_column);
+    ubrk_close(iterator);
+    if (source != NULL) { ncr_deallocate(source); }
+    if (!converted) {
+        if (bytes != NULL) { ncr_deallocate(bytes); }
+        return ncr_result_error_@AT_RESULT@("grapheme could not be converted to UTF-8", sizeof("grapheme could not be converted to UTF-8") - 1, ncr_line, ncr_column);
+    }
+    ncr_obj_@TEXT_ID@ *result = ncr_text_take_bytes_@TEXT_ID@(bytes, (size_t)byte_length, (size_t)byte_length, ncr_line, ncr_column);
+    return (ncr_obj_@AT_RESULT@){ .tag = @AT_OK@, .data.v@AT_OK@.f0 = result };
+}
+
+static ncr_obj_@COMPARE_RESULT@ @UNICODE_COMPARE_LOCALE@(ncr_obj_@TEXT_ID@ *ncr_v_@COMPARE_LEFT@, ncr_obj_@TEXT_ID@ *ncr_v_@COMPARE_RIGHT@, ncr_obj_@TEXT_ID@ *ncr_v_@COMPARE_LOCALE@, size_t ncr_line, size_t ncr_column) {
+    char locale[ULOC_FULLNAME_CAPACITY];
+    if (!ncr_unicode_locale(ncr_v_@COMPARE_LOCALE@, locale)) {
+        return ncr_result_error_@COMPARE_RESULT@("invalid, noncanonical, or unknown BCP-47 locale", sizeof("invalid, noncanonical, or unknown BCP-47 locale") - 1, ncr_line, ncr_column);
+    }
+    UChar *left = NULL; int32_t left_length = 0;
+    if (!ncr_unicode_text_to_utf16(ncr_v_@COMPARE_LEFT@, &left, &left_length, ncr_line, ncr_column)) {
+        return ncr_result_error_@COMPARE_RESULT@("left Text could not be converted to UTF-16", sizeof("left Text could not be converted to UTF-16") - 1, ncr_line, ncr_column);
+    }
+    UChar *right = NULL; int32_t right_length = 0;
+    if (!ncr_unicode_text_to_utf16(ncr_v_@COMPARE_RIGHT@, &right, &right_length, ncr_line, ncr_column)) {
+        if (left != NULL) { ncr_deallocate(left); }
+        return ncr_result_error_@COMPARE_RESULT@("right Text could not be converted to UTF-16", sizeof("right Text could not be converted to UTF-16") - 1, ncr_line, ncr_column);
+    }
+    UErrorCode status = U_ZERO_ERROR;
+    UCollator *collator = ucol_open(locale, &status);
+    if (U_FAILURE(status) || collator == NULL) {
+        if (collator != NULL) { ucol_close(collator); }
+        if (left != NULL) { ncr_deallocate(left); }
+        if (right != NULL) { ncr_deallocate(right); }
+        return ncr_result_error_@COMPARE_RESULT@("ICU locale collation failed", sizeof("ICU locale collation failed") - 1, ncr_line, ncr_column);
+    }
+    static const UChar empty[1] = { 0 };
+    UCollationResult comparison = ucol_strcoll(collator, left == NULL ? empty : left, left_length,
+        right == NULL ? empty : right, right_length);
+    ucol_close(collator);
+    if (left != NULL) { ncr_deallocate(left); }
+    if (right != NULL) { ncr_deallocate(right); }
+    int32_t sign = comparison < 0 ? -1 : comparison > 0 ? 1 : 0;
+    return (ncr_obj_@COMPARE_RESULT@){ .tag = @COMPARE_OK@, .data.v@COMPARE_OK@.f0 = sign };
+}
+
+static ncr_obj_@ENCODE_RESULT@ @CHARSET_ENCODE@(ncr_obj_@TEXT_ID@ *ncr_v_@ENCODE_TEXT@, ncr_obj_@TEXT_ID@ *ncr_v_@ENCODE_CHARSET@, size_t ncr_line, size_t ncr_column) {
+    const char *name = ncr_unicode_charset(ncr_v_@ENCODE_CHARSET@);
+    if (name == NULL) {
+        return ncr_result_error_@ENCODE_RESULT@("unknown charset or charset name contains NUL", sizeof("unknown charset or charset name contains NUL") - 1, ncr_line, ncr_column);
+    }
+    UChar *source = NULL; int32_t source_length = 0;
+    if (!ncr_unicode_text_to_utf16(ncr_v_@ENCODE_TEXT@, &source, &source_length, ncr_line, ncr_column)) {
+        return ncr_result_error_@ENCODE_RESULT@("Text could not be converted to UTF-16", sizeof("Text could not be converted to UTF-16") - 1, ncr_line, ncr_column);
+    }
+    UConverter *converter = ncr_unicode_open_converter(name);
+    if (converter == NULL) {
+        if (source != NULL) { ncr_deallocate(source); }
+        return ncr_result_error_@ENCODE_RESULT@("ICU charset converter could not be opened", sizeof("ICU charset converter could not be opened") - 1, ncr_line, ncr_column);
+    }
+    unsigned char *bytes = NULL; int32_t byte_length = 0;
+    bool converted = ncr_unicode_from_uchars(converter, source, source_length, &bytes, &byte_length, ncr_line, ncr_column);
+    ucnv_close(converter);
+    if (source != NULL) { ncr_deallocate(source); }
+    if (!converted) {
+        if (bytes != NULL) { ncr_deallocate(bytes); }
+        return ncr_result_error_@ENCODE_RESULT@("Text is unrepresentable in the requested charset", sizeof("Text is unrepresentable in the requested charset") - 1, ncr_line, ncr_column);
+    }
+    ncr_obj_@BUFFER_ID@ *buffer = ncr_allocate(sizeof(*buffer), ncr_line, ncr_column);
+    buffer->bytes = bytes;
+    buffer->length = (size_t)byte_length;
+    buffer->capacity = byte_length == 0 ? 0 : (size_t)byte_length + 1;
+    return (ncr_obj_@ENCODE_RESULT@){ .tag = @ENCODE_OK@, .data.v@ENCODE_OK@.f0 = buffer };
+}
+
+static ncr_obj_@DECODE_RESULT@ @CHARSET_DECODE@(ncr_obj_@BUFFER_ID@ *ncr_v_@DECODE_BUFFER@, ncr_obj_@TEXT_ID@ *ncr_v_@DECODE_CHARSET@, size_t ncr_line, size_t ncr_column) {
+    const char *name = ncr_unicode_charset(ncr_v_@DECODE_CHARSET@);
+    if (name == NULL) {
+        return ncr_result_error_@DECODE_RESULT@("unknown charset or charset name contains NUL", sizeof("unknown charset or charset name contains NUL") - 1, ncr_line, ncr_column);
+    }
+    if (ncr_v_@DECODE_BUFFER@ == NULL || ncr_v_@DECODE_BUFFER@->length > (size_t)INT32_MAX) {
+        return ncr_result_error_@DECODE_RESULT@("ByteBuffer is too large for ICU conversion", sizeof("ByteBuffer is too large for ICU conversion") - 1, ncr_line, ncr_column);
+    }
+    UConverter *converter = ncr_unicode_open_converter(name);
+    if (converter == NULL) {
+        return ncr_result_error_@DECODE_RESULT@("ICU charset converter could not be opened", sizeof("ICU charset converter could not be opened") - 1, ncr_line, ncr_column);
+    }
+    const char *source = ncr_v_@DECODE_BUFFER@->length == 0 ? "" : (const char *)ncr_v_@DECODE_BUFFER@->bytes;
+    UChar *decoded = NULL; int32_t decoded_length = 0;
+    bool converted = ncr_unicode_to_uchars(converter, source, (int32_t)ncr_v_@DECODE_BUFFER@->length, &decoded, &decoded_length, ncr_line, ncr_column);
+    ucnv_close(converter);
+    if (!converted) {
+        if (decoded != NULL) { ncr_deallocate(decoded); }
+        return ncr_result_error_@DECODE_RESULT@("byte sequence is malformed for the requested charset", sizeof("byte sequence is malformed for the requested charset") - 1, ncr_line, ncr_column);
+    }
+    unsigned char *utf8 = NULL; int32_t utf8_length = 0;
+    converted = ncr_unicode_utf16_to_utf8(decoded, decoded_length, &utf8, &utf8_length, ncr_line, ncr_column);
+    if (decoded != NULL) { ncr_deallocate(decoded); }
+    if (!converted) {
+        if (utf8 != NULL) { ncr_deallocate(utf8); }
+        return ncr_result_error_@DECODE_RESULT@("decoded data is not valid Unicode scalar text", sizeof("decoded data is not valid Unicode scalar text") - 1, ncr_line, ncr_column);
+    }
+    ncr_obj_@TEXT_ID@ *text = ncr_text_take_bytes_@TEXT_ID@(utf8, (size_t)utf8_length, (size_t)utf8_length, ncr_line, ncr_column);
+    return (ncr_obj_@DECODE_RESULT@){ .tag = @DECODE_OK@, .data.v@DECODE_OK@.f0 = text };
+}

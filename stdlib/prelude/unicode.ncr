@@ -1,0 +1,27 @@
+// ICU-backed operations are separated from Text so ordinary UTF-8 Text stays dependency-free.
+class Unicode {
+    public static Result<Text, Text> toUpperCase(borrow Text text, borrow Text locale) {}
+    public static Result<Text, Text> toLowerCase(borrow Text text, borrow Text locale) {}
+    public static Result<Text, Text> caseFold(borrow Text text) {}
+    public static Result<Text, Text> normalize(borrow Text text, borrow Text form) {}
+    public static Result<int, Text> graphemeCount(borrow Text text) {}
+    public static Result<Text, Text> graphemeAt(borrow Text text, int index) {}
+    public static Result<int, Text> compareLocale(borrow Text left, borrow Text right, borrow Text locale) {}
+}
+
+class Character {
+    public static boolean isLetter(char value) {}
+    public static boolean isDigit(char value) {}
+    public static boolean isWhitespace(char value) {}
+    public static boolean isUpperCase(char value) {}
+    public static boolean isLowerCase(char value) {}
+    public static char toUpperCase(char value) {}
+    public static char toLowerCase(char value) {}
+    public static int category(char value) {}
+    public static double numericValue(char value) {}
+}
+
+class Charset {
+    public static Result<ByteBuffer, Text> encode(borrow Text text, borrow Text charset) {}
+    public static Result<Text, Text> decode(borrow ByteBuffer bytes, borrow Text charset) {}
+}

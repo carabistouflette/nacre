@@ -28,6 +28,7 @@ pub enum NativeClass {
     TakeIterator(Type), SkipIterator(Type), Iterators(Type),
     Text, BigInt, BigDecimal, Regex, RegexMatch, Arrays, ByteBuffer, Encoding, Crypto, Path, File, Directory, FileInfo,
     Console, Files, Args, Math, Random, Time, DateTime, Compression, Checksums,
+    Unicode, Character, Charset, Locale,
     SocketAddress, TcpListener, TcpStream, Datagram, UdpSocket, HttpRequest, HttpResponse,
     Thread(Type), Mutex(Type), Guard(Type), Channel(Type), Sender(Type), Receiver(Type),
     Env, Command, Process, ProcessOutput,
