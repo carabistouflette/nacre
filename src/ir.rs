@@ -236,7 +236,7 @@ pub enum NativeMethod {
     TemporalLocalDateTime, TemporalOffsetDateTime, TemporalZonedDateTime, TemporalParseIso,
     TemporalAvailableCalendars, TemporalKind, TemporalCalendar, TemporalZoneId,
     TemporalNanosecond, TemporalEpochSecond, TemporalOffsetSeconds, TemporalFields,
-    TemporalFormatIso, TemporalCompareTo, TemporalPlusDuration, TemporalPlusPeriod,
+    TemporalFormat, TemporalFormatIso, TemporalCompareTo, TemporalPlusDuration, TemporalPlusPeriod,
     TemporalAtZone, TemporalWithZone, TemporalWithCalendar,
     TemporalDurationSeconds, TemporalPeriodYears, TemporalPeriodMonths, TemporalPeriodDays,
     TemporalHour, TemporalMinute, TemporalSecond, TemporalWithTime, TemporalWithOffset,

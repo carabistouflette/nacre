@@ -329,6 +329,7 @@ pub(super) fn marker(method: M) -> &'static str {
         M::TemporalEpochSecond => "@TEMPORAL_EPOCH_SECOND@",
         M::TemporalOffsetSeconds => "@TEMPORAL_OFFSET_SECONDS@",
         M::TemporalFields => "@TEMPORAL_FIELDS@",
+        M::TemporalFormat => "@TEMPORAL_FORMAT@",
         M::TemporalFormatIso => "@TEMPORAL_FORMAT_ISO@",
         M::TemporalCompareTo => "@TEMPORAL_COMPARE_TO@",
         M::TemporalPlusDuration => "@TEMPORAL_PLUS_DURATION@",

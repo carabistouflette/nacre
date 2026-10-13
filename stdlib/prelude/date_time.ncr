@@ -117,6 +117,7 @@ class Temporal {
     public readonly Result<int, Text> offsetSeconds() {}
     public readonly Result<CalendarFields, Text> fields() {}
     public readonly Result<Text, Text> formatIso() {}
+    public readonly Result<Text, Text> format(borrow Text pattern, borrow Text locale) {}
     public readonly Result<int, Text> compareTo(borrow Temporal other) {}
     public readonly Result<Temporal, Text> plusDuration(borrow Temporal duration) {}
     public readonly Result<Temporal, Text> plusPeriod(borrow Temporal period,

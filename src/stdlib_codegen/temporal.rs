@@ -42,7 +42,7 @@ pub(super) fn implementation(program: &t::Program) -> String {
     let epoch_second = native_function(program, |method| matches!(method, M::TemporalEpochSecond));
     let offset_seconds = native_function(program, |method| matches!(method, M::TemporalOffsetSeconds));
     let fields = native_function(program, |method| matches!(method, M::TemporalFields));
-    let format_iso = native_function(program, |method| matches!(method, M::TemporalFormatIso));
+    let format = native_function(program, |method| matches!(method, M::TemporalFormat));
 
     let temporal = native_class_id(program, |class| matches!(class, C::Temporal));
     let text = text_class(program).expect("Temporal APIs require native Text");
@@ -62,8 +62,9 @@ pub(super) fn implementation(program: &t::Program) -> String {
     let fields_result = result_id(fields);
     let long_result = result_id(epoch_second);
     let int_result = result_id(offset_seconds);
-    let text_result = result_id(format_iso);
+    let text_result = result_id(format);
     let body = replace_placeholders(include_str!("../../stdlib/temporal.c.in").to_owned(), &[
+        ("@TEMPORAL_FORMAT@", format.to_string()),
         ("@TEMPORAL_ID@", temporal.to_string()),
         ("@TEMPORAL_TEXT_ID@", text.to_string()),
         ("@TEMPORAL_TEXT_INLINE_CAPACITY@", TEXT_INLINE_CAPACITY.to_string()),

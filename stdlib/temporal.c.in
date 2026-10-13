@@ -1435,10 +1435,8 @@ ncr_obj_@TEMPORAL_TEXT_RESULT@ @TEMPORAL_FORMAT_ISO@(
         if (negative && nanos != 0) {
             --magnitude_seconds;
             magnitude_nanos = (uint32_t)(1000000000 - nanos);
-        } else if (!negative && seconds == 0 && nanos != 0) {
-            negative = false;
         }
-        int written = snprintf(output, sizeof(output), "PT%s%llu",
+        int written = snprintf(output, sizeof(output), "%sPT%llu",
             negative ? "-" : "", (unsigned long long)magnitude_seconds);
         if (written < 0 || (size_t)written >= sizeof(output)) { goto format_error; }
         used = (size_t)written;
@@ -1505,6 +1503,307 @@ format_error:
         ncr_line, ncr_column);
 }
 
+static bool ncr_tv_pattern_applicable(const UChar *pattern, int32_t length,
+                                     int32_t kind, bool *has_fraction) {
+    bool has_date = kind != NCR_TV_LOCAL_TIME;
+    bool has_time = kind != NCR_TV_LOCAL_DATE;
+    bool has_zone = kind == NCR_TV_INSTANT || kind == NCR_TV_OFFSET_DATE_TIME
+        || kind == NCR_TV_ZONED_DATE_TIME;
+    bool quoted = false;
+    *has_fraction = false;
+    for (int32_t index = 0; index < length; ++index) {
+        UChar field = pattern[index];
+        if (field == '\'') {
+            if (index + 1 < length && pattern[index + 1] == '\'') {
+                ++index;
+            } else {
+                quoted = !quoted;
+            }
+            continue;
+        }
+        if (quoted) { continue; }
+        if (field == 'S') {
+            int32_t width = 1;
+            while (index + width < length && pattern[index + width] == 'S') {
+                ++width;
+            }
+            if (!has_time || width > 9) { return false; }
+            *has_fraction = true;
+            index += width - 1;
+        } else if (strchr("GyYuUrQqMLlwWdDFgEec", (char)field) != NULL) {
+            if (!has_date) { return false; }
+        } else if (strchr("abBhHKkmsSA", (char)field) != NULL) {
+            if (!has_time) { return false; }
+        } else if (strchr("zZOvVXx", (char)field) != NULL) {
+            if (!has_zone) { return false; }
+        }
+    }
+    return !quoted;
+}
+
+struct ncr_tv_local_digits {
+    UChar *storage;
+    int32_t offsets[10];
+    int32_t lengths[10];
+};
+
+static bool ncr_tv_localized_digits(UNumberFormat *formatter,
+                                    struct ncr_tv_local_digits *digits,
+                                    size_t line, size_t column) {
+    int32_t total = 0;
+    for (int32_t digit = 0; digit < 10; ++digit) {
+        UErrorCode status = U_ZERO_ERROR;
+        int32_t required = unum_formatInt64(formatter, digit, NULL, 0, NULL, &status);
+        if ((status != U_BUFFER_OVERFLOW_ERROR && U_FAILURE(status))
+            || required <= 0 || required > INT32_MAX - total - 1) {
+            return false;
+        }
+        digits->offsets[digit] = total;
+        digits->lengths[digit] = required;
+        total += required + 1;
+    }
+    digits->storage = ncr_allocate((size_t)total * sizeof(UChar), line, column);
+    for (int32_t digit = 0; digit < 10; ++digit) {
+        UErrorCode status = U_ZERO_ERROR;
+        int32_t offset = digits->offsets[digit];
+        int32_t capacity = digits->lengths[digit] + 1;
+        int32_t written = unum_formatInt64(formatter, digit,
+            digits->storage + offset, capacity, NULL, &status);
+        if (U_FAILURE(status) || written != digits->lengths[digit]) {
+            ncr_deallocate(digits->storage);
+            digits->storage = NULL;
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool ncr_tv_append_pattern_segment(
+    UDateFormat *formatter, const UChar *pattern, int32_t pattern_length,
+    UDate millis, UChar *output, int32_t capacity, int32_t *used
+) {
+    if (pattern_length == 0) { return true; }
+    udat_applyPattern(formatter, false, pattern, pattern_length);
+    UFieldPosition field_position;
+    memset(&field_position, 0, sizeof(field_position));
+    UErrorCode status = U_ZERO_ERROR;
+    if (output == NULL) {
+        int32_t required = udat_format(formatter, millis, NULL, 0,
+            &field_position, &status);
+        if ((status != U_BUFFER_OVERFLOW_ERROR && U_FAILURE(status))
+            || required < 0 || required > INT32_MAX - *used) {
+            return false;
+        }
+        *used += required;
+        return true;
+    }
+    if (*used < 0 || *used >= capacity) { return false; }
+    int32_t written = udat_format(formatter, millis, output + *used,
+        capacity - *used, &field_position, &status);
+    if (U_FAILURE(status) || written < 0 || written > capacity - *used) {
+        return false;
+    }
+    *used += written;
+    return true;
+}
+
+static bool ncr_tv_append_fraction_digits(
+    const struct ncr_tv_local_digits *digits, int32_t nanosecond, int32_t width,
+    UChar *output, int32_t capacity, int32_t *used
+) {
+    if (nanosecond < 0 || nanosecond >= 1000000000 || width < 1 || width > 9) {
+        return false;
+    }
+    int32_t divisor = 100000000;
+    for (int32_t index = 0; index < width; ++index, divisor /= 10) {
+        int32_t digit = (nanosecond / divisor) % 10;
+        int32_t digit_length = digits->lengths[digit];
+        if (digit_length > INT32_MAX - *used
+            || (output != NULL && (capacity - *used < digit_length))) {
+            return false;
+        }
+        if (output != NULL) {
+            memcpy(output + *used, digits->storage + digits->offsets[digit],
+                (size_t)digit_length * sizeof(UChar));
+        }
+        *used += digit_length;
+    }
+    return true;
+}
+
+static bool ncr_tv_format_pattern_parts(
+    UDateFormat *formatter, const UChar *pattern, int32_t pattern_length,
+    UDate millis, int32_t nanosecond, const struct ncr_tv_local_digits *digits,
+    UChar *output, int32_t capacity, int32_t *used
+) {
+    bool quoted = false;
+    int32_t segment_start = 0;
+    for (int32_t index = 0; index < pattern_length; ++index) {
+        UChar field = pattern[index];
+        if (field == '\'') {
+            if (index + 1 < pattern_length && pattern[index + 1] == '\'') {
+                ++index;
+            } else {
+                quoted = !quoted;
+            }
+            continue;
+        }
+        if (quoted || field != 'S') { continue; }
+        if (!ncr_tv_append_pattern_segment(formatter, pattern + segment_start,
+            index - segment_start, millis, output, capacity, used)) {
+            return false;
+        }
+        int32_t width = 1;
+        while (index + width < pattern_length && pattern[index + width] == 'S') {
+            ++width;
+        }
+        if (!ncr_tv_append_fraction_digits(digits, nanosecond, width,
+            output, capacity, used)) {
+            return false;
+        }
+        index += width - 1;
+        segment_start = index + 1;
+    }
+    return ncr_tv_append_pattern_segment(formatter, pattern + segment_start,
+        pattern_length - segment_start, millis, output, capacity, used);
+}
+
+ncr_obj_@TEMPORAL_TEXT_RESULT@ @TEMPORAL_FORMAT@(
+    ncr_obj_@TEMPORAL_ID@ *ncr_v_0,
+    ncr_obj_@TEMPORAL_TEXT_ID@ *ncr_v_1,
+    ncr_obj_@TEMPORAL_TEXT_ID@ *ncr_v_2,
+    size_t ncr_line, size_t ncr_column
+) {
+    UChar *pattern = NULL;
+    int32_t pattern_length = 0;
+    char *locale = NULL;
+    UChar *owned_zone = NULL;
+    UChar fixed_zone[20];
+    const UChar *zone = ncr_tv_utc_zone;
+    int32_t zone_length = 3;
+    UCalendar *calendar = NULL;
+    UDateFormat *formatter = NULL;
+    UNumberFormat *number_formatter = NULL;
+    struct ncr_tv_local_digits digits = { 0 };
+    UChar *output = NULL;
+    int32_t output_length = 0;
+    ncr_obj_@TEMPORAL_TEXT_ID@ *text = NULL;
+    bool has_fraction = false;
+    int64_t seconds = 0;
+    int64_t millis = 0;
+    int32_t calendar_id = ncr_v_0->calendar;
+    UErrorCode status = U_ZERO_ERROR;
+
+    if (ncr_v_0->kind == NCR_TV_DURATION || ncr_v_0->kind == NCR_TV_PERIOD
+        || (ncr_v_0->kind != NCR_TV_INSTANT && ncr_v_0->kind != NCR_TV_LOCAL_DATE
+            && ncr_v_0->kind != NCR_TV_LOCAL_TIME
+            && ncr_v_0->kind != NCR_TV_LOCAL_DATE_TIME
+            && ncr_v_0->kind != NCR_TV_OFFSET_DATE_TIME
+            && ncr_v_0->kind != NCR_TV_ZONED_DATE_TIME)
+        || calendar_id < 0 || calendar_id >= NCR_TV_CALENDAR_COUNT) {
+        goto format_error;
+    }
+    if (!ncr_dt_utf8_to_uchar(ncr_v_1, true, &pattern, &pattern_length,
+            ncr_line, ncr_column)
+        || pattern_length == 0 || !ncr_dt_pattern_valid(pattern, pattern_length)
+        || !ncr_tv_pattern_applicable(pattern, pattern_length, ncr_v_0->kind,
+            &has_fraction)) {
+        goto format_error;
+    }
+    {
+        const char *locale_failure = ncr_dt_locale_id_for_calendar(ncr_v_2,
+            ncr_tv_calendar_specs[calendar_id].keyword, &locale, ncr_line, ncr_column);
+        if (locale_failure != NULL) { goto format_error; }
+    }
+    if (ncr_v_0->kind == NCR_TV_ZONED_DATE_TIME) {
+        if (!ncr_tv_zone_to_uchar(ncr_v_0->zone, ncr_v_0->zone_length,
+                &owned_zone, &zone_length, ncr_line, ncr_column)) {
+            goto format_error;
+        }
+        zone = owned_zone;
+    } else if (ncr_v_0->kind == NCR_TV_OFFSET_DATE_TIME) {
+        if (!ncr_tv_fixed_zone(ncr_v_0->offset_seconds, fixed_zone, &zone_length)) {
+            goto format_error;
+        }
+        zone = fixed_zone;
+    }
+    seconds = ncr_v_0->kind == NCR_TV_LOCAL_DATE
+            || ncr_v_0->kind == NCR_TV_LOCAL_DATE_TIME
+            || ncr_v_0->kind == NCR_TV_LOCAL_TIME
+        ? ncr_v_0->local_second : ncr_v_0->epoch_second;
+    if (!ncr_tv_epoch_millis(seconds, ncr_v_0->nanosecond, &millis)) {
+        goto format_error;
+    }
+    calendar = ncr_tv_open_calendar(zone, zone_length, calendar_id, ncr_line, ncr_column);
+    if (calendar == NULL) { goto format_error; }
+    status = U_ZERO_ERROR;
+    ucal_setMillis(calendar, (UDate)millis, &status);
+    if (U_FAILURE(status) || !ncr_dt_calendar_epoch_exact(calendar, millis)) {
+        goto format_error;
+    }
+    status = U_ZERO_ERROR;
+    formatter = udat_open(UDAT_PATTERN, UDAT_PATTERN, locale, zone, zone_length,
+        pattern, pattern_length, &status);
+    if (U_FAILURE(status) || formatter == NULL) { goto format_error; }
+    udat_setCalendar(formatter, calendar);
+    udat_setLenient(formatter, false);
+
+    if (has_fraction) {
+        number_formatter = unum_open(UNUM_DECIMAL, NULL, 0, locale, NULL, &status);
+        if (U_FAILURE(status) || number_formatter == NULL) { goto format_error; }
+        unum_setAttribute(number_formatter, UNUM_GROUPING_USED, UNUM_FALSE);
+        if (!ncr_tv_localized_digits(number_formatter, &digits, ncr_line, ncr_column)) {
+            goto format_error;
+        }
+    }
+    {
+        int32_t measured = 0;
+        if (!ncr_tv_format_pattern_parts(formatter, pattern, pattern_length,
+                (UDate)millis, ncr_v_0->nanosecond, &digits, NULL, 0, &measured)
+            || measured < 0 || measured == INT32_MAX) {
+            goto format_error;
+        }
+        output_length = measured;
+    }
+    output = ncr_allocate(((size_t)output_length + 1) * sizeof(UChar),
+        ncr_line, ncr_column);
+    {
+        int32_t written = 0;
+        if (!ncr_tv_format_pattern_parts(formatter, pattern, pattern_length,
+                (UDate)millis, ncr_v_0->nanosecond, &digits, output,
+                output_length + 1, &written) || written != output_length) {
+            goto format_error;
+        }
+    }
+    output[output_length] = 0;
+    text = ncr_dt_text_from_uchar(output, output_length, ncr_line, ncr_column);
+    if (text == NULL) { goto format_error; }
+
+    ncr_deallocate(output);
+    ncr_deallocate(digits.storage);
+    if (number_formatter != NULL) { unum_close(number_formatter); }
+    udat_close(formatter);
+    ucal_close(calendar);
+    if (owned_zone != NULL) { ncr_deallocate(owned_zone); }
+    ncr_deallocate(locale);
+    ncr_deallocate(pattern);
+    return (ncr_obj_@TEMPORAL_TEXT_RESULT@){ .tag = @TEMPORAL_TEXT_OK_TAG@,
+        .data.v@TEMPORAL_TEXT_OK_TAG@.f0 = text };
+
+format_error:
+    if (output != NULL) { ncr_deallocate(output); }
+    if (digits.storage != NULL) { ncr_deallocate(digits.storage); }
+    if (number_formatter != NULL) { unum_close(number_formatter); }
+    if (formatter != NULL) { udat_close(formatter); }
+    if (calendar != NULL) { ucal_close(calendar); }
+    if (owned_zone != NULL) { ncr_deallocate(owned_zone); }
+    if (locale != NULL) { ncr_deallocate(locale); }
+    if (pattern != NULL) { ncr_deallocate(pattern); }
+    return NCR_TV_RESULT_ERROR(@TEMPORAL_TEXT_RESULT@,
+        "Temporal.format: invalid, unavailable, or inapplicable pattern or ICU value",
+        ncr_line, ncr_column);
+}
+
 static bool ncr_tv_parse_fraction(const unsigned char *bytes, size_t length,
                                   size_t *position, int32_t *nanosecond) {
     *nanosecond = 0;
@@ -1535,6 +1834,210 @@ static bool ncr_tv_parse_iso_year(const unsigned char *bytes, size_t length,
     return true;
 }
 
+static bool ncr_tv_parse_signed_magnitude(
+    const unsigned char *bytes, size_t length, size_t *position,
+    uint64_t limit, int32_t *sign, uint64_t *magnitude
+) {
+    if (*position >= length) { return false; }
+    *sign = 1;
+    if (bytes[*position] == '-' || bytes[*position] == '+') {
+        *sign = bytes[(*position)++] == '-' ? -1 : 1;
+    }
+    size_t first_digit = *position;
+    uint64_t value = 0;
+    while (*position < length && bytes[*position] >= '0' && bytes[*position] <= '9') {
+        uint64_t digit = (uint64_t)(bytes[(*position)++] - '0');
+        if (value > (limit - digit) / 10) { return false; }
+        value = value * 10 + digit;
+    }
+    if (*position == first_digit) { return false; }
+    *magnitude = value;
+    return true;
+}
+
+static bool ncr_tv_parse_period_component(
+    const unsigned char *bytes, size_t length, size_t *position, int32_t *value
+) {
+    int32_t sign = 1;
+    uint64_t magnitude = 0;
+    uint64_t limit = (uint64_t)INT32_MAX + 1;
+    if (!ncr_tv_parse_signed_magnitude(bytes, length, position, limit,
+            &sign, &magnitude)
+        || (sign > 0 && magnitude > (uint64_t)INT32_MAX)) {
+        return false;
+    }
+    if (sign < 0) {
+        *value = magnitude == (uint64_t)INT32_MAX + 1
+            ? INT32_MIN : -(int32_t)magnitude;
+    } else {
+        *value = (int32_t)magnitude;
+    }
+    return true;
+}
+
+static ncr_obj_@TEMPORAL_ID@ *ncr_tv_parse_iso_period(
+    const unsigned char *bytes, size_t length, size_t position, int32_t global_sign,
+    size_t line, size_t column
+) {
+    int32_t years = 0, months = 0, days = 0;
+    int32_t last_order = 0, components = 0;
+    while (position < length) {
+        int32_t component = 0;
+        if (!ncr_tv_parse_period_component(bytes, length, &position, &component)
+            || position >= length) {
+            return NULL;
+        }
+        unsigned char unit = bytes[position++];
+        int32_t order = unit == 'Y' ? 1 : unit == 'M' ? 2 : unit == 'D' ? 3 : 0;
+        if (order <= last_order) { return NULL; }
+        last_order = order;
+        ++components;
+        if (global_sign < 0) {
+            int64_t reversed = -(int64_t)component;
+            if (reversed < INT32_MIN || reversed > INT32_MAX) { return NULL; }
+            component = (int32_t)reversed;
+        }
+        if (unit == 'Y') { years = component; }
+        else if (unit == 'M') { months = component; }
+        else if (unit == 'D') { days = component; }
+        else { return NULL; }
+    }
+    if (components == 0) { return NULL; }
+    ncr_obj_@TEMPORAL_ID@ *value = ncr_tv_new(NCR_TV_PERIOD, line, column);
+    value->period_years = years;
+    value->period_months = months;
+    value->period_days = days;
+    return value;
+}
+
+static bool ncr_tv_signed_scaled_seconds(uint64_t magnitude, int64_t scale,
+                                         int32_t sign, int64_t *seconds) {
+    if (scale <= 0 || magnitude > UINT64_MAX / (uint64_t)scale) { return false; }
+    uint64_t value = magnitude * (uint64_t)scale;
+    if (sign > 0) {
+        if (value > (uint64_t)INT64_MAX) { return false; }
+        *seconds = (int64_t)value;
+    } else {
+        uint64_t minimum_magnitude = (uint64_t)INT64_MAX + 1;
+        if (value > minimum_magnitude) { return false; }
+        *seconds = value == minimum_magnitude ? INT64_MIN : -(int64_t)value;
+    }
+    return true;
+}
+
+static bool ncr_tv_signed_decimal_parts(uint64_t magnitude, int32_t fraction,
+                                        int32_t sign, int64_t *seconds,
+                                        int32_t *nanosecond) {
+    if (fraction < 0 || fraction >= 1000000000) { return false; }
+    if (sign > 0) {
+        if (magnitude > (uint64_t)INT64_MAX) { return false; }
+        *seconds = (int64_t)magnitude;
+        *nanosecond = fraction;
+        return true;
+    }
+    if (fraction == 0) {
+        uint64_t minimum_magnitude = (uint64_t)INT64_MAX + 1;
+        if (magnitude > minimum_magnitude) { return false; }
+        *seconds = magnitude == minimum_magnitude
+            ? INT64_MIN : -(int64_t)magnitude;
+        *nanosecond = 0;
+        return true;
+    }
+    if (magnitude > (uint64_t)INT64_MAX) { return false; }
+    *seconds = -(int64_t)magnitude - 1;
+    *nanosecond = 1000000000 - fraction;
+    return true;
+}
+
+static bool ncr_tv_accumulate_duration(
+    int64_t component_seconds, int32_t component_nanos, bool *has_component,
+    int32_t *duration_sign, int64_t *seconds, int32_t *nanosecond
+) {
+    int32_t sign = component_seconds < 0 ? -1
+        : component_seconds > 0 || component_nanos > 0 ? 1 : 0;
+    if (sign != 0 && *duration_sign != 0 && sign != *duration_sign) { return false; }
+    if (sign != 0) { *duration_sign = sign; }
+    int64_t combined_seconds = 0;
+    int32_t combined_nanos = 0;
+    if (!ncr_tv_add_parts(*seconds, *nanosecond, component_seconds,
+            component_nanos, &combined_seconds, &combined_nanos)) {
+        return false;
+    }
+    *seconds = combined_seconds;
+    *nanosecond = combined_nanos;
+    *has_component = true;
+    return true;
+}
+
+static ncr_obj_@TEMPORAL_ID@ *ncr_tv_parse_iso_duration(
+    const unsigned char *bytes, size_t length, size_t position, int32_t global_sign,
+    size_t line, size_t column
+) {
+    const uint64_t maximum_magnitude = (uint64_t)INT64_MAX + 1;
+    int64_t seconds = 0;
+    int32_t nanosecond = 0;
+    int32_t duration_sign = 0;
+    bool has_component = false;
+    if (position < length && bytes[position] != 'T') {
+        int32_t component_sign = 1;
+        uint64_t magnitude = 0;
+        int64_t component_seconds = 0;
+        if (!ncr_tv_parse_signed_magnitude(bytes, length, &position,
+                maximum_magnitude, &component_sign, &magnitude)
+            || position >= length || bytes[position++] != 'D'
+            || !ncr_tv_signed_scaled_seconds(magnitude, NCR_TV_SECONDS_PER_DAY,
+                component_sign * global_sign, &component_seconds)
+            || !ncr_tv_accumulate_duration(component_seconds, 0, &has_component,
+                &duration_sign, &seconds, &nanosecond)) {
+            return NULL;
+        }
+    }
+    if (position >= length || bytes[position++] != 'T') { return NULL; }
+    int32_t last_order = 0;
+    bool has_time_component = false;
+    while (position < length) {
+        int32_t component_sign = 1;
+        uint64_t magnitude = 0;
+        int32_t fraction = 0;
+        if (!ncr_tv_parse_signed_magnitude(bytes, length, &position,
+                maximum_magnitude, &component_sign, &magnitude)) {
+            return NULL;
+        }
+        bool has_fraction = position < length && bytes[position] == '.';
+        if (has_fraction
+            && !ncr_tv_parse_fraction(bytes, length, &position, &fraction)) {
+            return NULL;
+        }
+        if (position >= length) { return NULL; }
+        unsigned char unit = bytes[position++];
+        int32_t order = unit == 'H' ? 1 : unit == 'M' ? 2 : unit == 'S' ? 3 : 0;
+        if (order <= last_order || (has_fraction && unit != 'S')) { return NULL; }
+        last_order = order;
+        int32_t sign = component_sign * global_sign;
+        int64_t component_seconds = 0;
+        int32_t component_nanos = 0;
+        if (unit == 'S') {
+            if (!ncr_tv_signed_decimal_parts(magnitude, fraction, sign,
+                    &component_seconds, &component_nanos)) {
+                return NULL;
+            }
+        } else if (!ncr_tv_signed_scaled_seconds(magnitude,
+                unit == 'H' ? 3600 : 60, sign, &component_seconds)) {
+            return NULL;
+        }
+        if (!ncr_tv_accumulate_duration(component_seconds, component_nanos,
+                &has_component, &duration_sign, &seconds, &nanosecond)) {
+            return NULL;
+        }
+        has_time_component = true;
+    }
+    if (!has_time_component) { return NULL; }
+    ncr_obj_@TEMPORAL_ID@ *value = ncr_tv_new(NCR_TV_DURATION, line, column);
+    value->epoch_second = seconds;
+    value->nanosecond = nanosecond;
+    return value;
+}
+
 ncr_obj_@TEMPORAL_RESULT@ @TEMPORAL_PARSE_ISO@(
     ncr_obj_@TEMPORAL_TEXT_ID@ *ncr_v_0, size_t ncr_line, size_t ncr_column
 ) {
@@ -1545,6 +2048,29 @@ ncr_obj_@TEMPORAL_RESULT@ @TEMPORAL_PARSE_ISO@(
     if (length == 0 || memchr(bytes, 0, length) != NULL) {
         return NCR_TV_RESULT_ERROR(@TEMPORAL_RESULT@,
             "Temporal.parseIso: input must be nonempty UTF-8 without NUL", ncr_line, ncr_column);
+    }
+    size_t p_position = 0;
+    int32_t global_sign = 1;
+    if (bytes[p_position] == '-' || bytes[p_position] == '+') {
+        global_sign = bytes[p_position++] == '-' ? -1 : 1;
+    }
+    if (p_position < length && bytes[p_position] == 'P') {
+        bool has_time_designator = false;
+        for (size_t index = p_position + 1; index < length; ++index) {
+            if (bytes[index] == 'T') { has_time_designator = true; break; }
+        }
+        ncr_obj_@TEMPORAL_ID@ *value = has_time_designator
+            ? ncr_tv_parse_iso_duration(bytes, length, p_position + 1, global_sign,
+                ncr_line, ncr_column)
+            : ncr_tv_parse_iso_period(bytes, length, p_position + 1, global_sign,
+                ncr_line, ncr_column);
+        if (value == NULL) {
+            return NCR_TV_RESULT_ERROR(@TEMPORAL_RESULT@,
+                "Temporal.parseIso: invalid ISO duration or period syntax or range",
+                ncr_line, ncr_column);
+        }
+        return (ncr_obj_@TEMPORAL_RESULT@){ .tag = @TEMPORAL_OK_TAG@,
+            .data.v@TEMPORAL_OK_TAG@.f0 = value };
     }
     if (length >= 3 && bytes[2] == ':') {
         int32_t nanos = 0;

@@ -564,6 +564,7 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
         (C::Temporal, "epochSecond") => M::TemporalEpochSecond,
         (C::Temporal, "offsetSeconds") => M::TemporalOffsetSeconds,
         (C::Temporal, "fields") => M::TemporalFields,
+        (C::Temporal, "format") => M::TemporalFormat,
         (C::Temporal, "formatIso") => M::TemporalFormatIso,
         (C::Temporal, "compareTo") => M::TemporalCompareTo,
         (C::Temporal, "plusDuration") => M::TemporalPlusDuration,

@@ -708,3 +708,189 @@ void main() {
         "rounded arithmetic rejected\n59\n999\n59.999\n"
     ));
 }
+
+#[test]
+fn temporal_formats_calendar_locale_exact_nanos_and_only_applicable_fields() {
+    let output = execute(r#"
+Result<Unit, Text> check() {
+    Text gregorian = new Text("gregorian");
+    Text japaneseCalendar = new Text("japanese");
+    Text japaneseLocale = new Text("ja-JP");
+    Text eraPattern = new Text("GGGGy年M月d日");
+    Temporal gregorianDate = Temporal.localDate(1, 2019, 5, 1, gregorian)?;
+    Temporal reiwaDate = gregorianDate.withCalendar(japaneseCalendar)?;
+    CalendarFields beforeFields = reiwaDate.fields()?;
+    Text beforeKind = reiwaDate.kind();
+    Text reiwa = reiwaDate.format(eraPattern, japaneseLocale)?;
+    println(reiwa.equalsString("令和1年5月1日"));
+    println(beforeFields.year() == 1);
+    println(beforeKind.equalsString("localDate"));
+    CalendarFields afterFields = reiwaDate.fields()?;
+    println(afterFields.year() == beforeFields.year());
+
+    Temporal instant = Temporal.instant(0L, 123456789)?;
+    long epochBefore = instant.epochSecond()?;
+    int nanosBefore = instant.nanosecond();
+    Text instantKind = instant.kind();
+    Text fractionPattern = new Text("yyyy-MM-dd HH:mm:ss.SSSSSSSSS");
+    Text english = new Text("en-US");
+    Text exactFraction = instant.format(fractionPattern, english)?;
+    println(exactFraction.equalsString("1970-01-01 00:00:00.123456789"));
+    println(instant.epochSecond()? == epochBefore);
+    println(instant.nanosecond() == nanosBefore);
+    println(instantKind.equalsString("instant"));
+
+    Text localizedFractionPattern = new Text("ss.SSSSSSSSS");
+    Text arabic = new Text("ar-EG");
+    Text localizedFraction = instant.format(localizedFractionPattern, arabic)?;
+    println(localizedFraction.equalsString("٠٠.١٢٣٤٥٦٧٨٩"));
+
+    Temporal localDate = Temporal.localDate(1, 2020, 1, 2, gregorian)?;
+    Text timePattern = new Text("HH:mm");
+    match (localDate.format(timePattern, english)) {
+        Ok(value) { println("date-only time fields accepted"); }
+        Err(error) { println("date-only time fields rejected"); }
+    }
+    Temporal localTime = Temporal.localTime(12, 34, 56, 0)?;
+    Text datePattern = new Text("yyyy-MM-dd");
+    match (localTime.format(datePattern, english)) {
+        Ok(value) { println("time-only date fields accepted"); }
+        Err(error) { println("time-only date fields rejected"); }
+    }
+    Temporal localDateTime = Temporal.localDateTime(1, 2020, 1, 2,
+        12, 34, 56, 0, gregorian)?;
+    Text zonePattern = new Text("yyyy-MM-dd HH:mm z");
+    match (localDateTime.format(zonePattern, english)) {
+        Ok(value) { println("local zone fields accepted"); }
+        Err(error) { println("local zone fields rejected"); }
+    }
+    Temporal duration = Temporal.duration(3600L, 0L)?;
+    match (duration.format(timePattern, english)) {
+        Ok(value) { println("duration calendar format accepted"); }
+        Err(error) { println("duration calendar format rejected"); }
+    }
+    Temporal period = Temporal.period(1, 0, 0)?;
+    match (period.format(datePattern, english)) {
+        Ok(value) { println("period calendar format accepted"); }
+        Err(error) { println("period calendar format rejected"); }
+    }
+    return new Result<Unit, Text>.Ok(());
+}
+void main() {
+    match (check()) { Ok(unit) {} Err(error) { error.print(); } }
+}
+"#);
+    assert_native_success(&output);
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        concat!(
+            "true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n",
+            "date-only time fields rejected\ntime-only date fields rejected\n",
+            "local zone fields rejected\nduration calendar format rejected\n",
+            "period calendar format rejected\n"
+        )
+    );
+}
+
+#[test]
+fn temporal_iso_duration_and_period_roundtrips_are_exact_and_checked() {
+    let output = execute(r#"
+Result<Unit, Text> check() {
+    long minimum = -9223372036854775807L - 1L;
+    long maximum = 9223372036854775807L;
+    Temporal negativeNano = Temporal.duration(0L, -1L)?;
+    Text negativeIso = negativeNano.formatIso()?;
+    println(negativeIso.equalsString("-PT0.000000001S"));
+    Temporal parsedNegativeNano = Temporal.parseIso(negativeIso)?;
+    println(negativeNano.compareTo(parsedNegativeNano)? == 0);
+    println(parsedNegativeNano.durationSeconds()? == -1L);
+    println(parsedNegativeNano.nanosecond() == 999999999);
+
+    Temporal minimumDuration = Temporal.duration(minimum, 0L)?;
+    Text minimumIso = minimumDuration.formatIso()?;
+    Temporal parsedMinimum = Temporal.parseIso(minimumIso)?;
+    println(minimumDuration.compareTo(parsedMinimum)? == 0);
+    println(minimumIso.equalsString("-PT9223372036854775808S"));
+
+    Temporal minimumFraction = Temporal.duration(minimum + 1L, -1L)?;
+    Text minimumFractionIso = minimumFraction.formatIso()?;
+    Temporal parsedMinimumFraction = Temporal.parseIso(minimumFractionIso)?;
+    println(minimumFraction.compareTo(parsedMinimumFraction)? == 0);
+    println(parsedMinimumFraction.durationSeconds()? == minimum);
+    println(parsedMinimumFraction.nanosecond() == 999999999);
+
+    Temporal maximumFraction = Temporal.duration(maximum, 999999999L)?;
+    Text maximumFractionIso = maximumFraction.formatIso()?;
+    Temporal parsedMaximumFraction = Temporal.parseIso(maximumFractionIso)?;
+    println(maximumFraction.compareTo(parsedMaximumFraction)? == 0);
+    println(parsedMaximumFraction.durationSeconds()? == maximum);
+    println(parsedMaximumFraction.nanosecond() == 999999999);
+
+    Text elapsedInput = new Text("P1DT2H3M4.500000001S");
+    Temporal elapsed = Temporal.parseIso(elapsedInput)?;
+    println(elapsed.kind().equalsString("duration"));
+    println(elapsed.durationSeconds()? == 93784L);
+    println(elapsed.nanosecond() == 500000001);
+    Text hourInput = new Text("PT25H");
+    Temporal elapsedHours = Temporal.parseIso(hourInput)?;
+    println(elapsedHours.durationSeconds()? == 90000L);
+    Text legacyNegativeInput = new Text("PT-0.000000001S");
+    Temporal legacyNegative = Temporal.parseIso(legacyNegativeInput)?;
+    println(negativeNano.compareTo(legacyNegative)? == 0);
+
+    Temporal period = Temporal.period(-2147483648, 2147483647, -2147483648)?;
+    Text periodIso = period.formatIso()?;
+    println(periodIso.equalsString("P-2147483648Y2147483647M-2147483648D"));
+    Temporal parsedPeriod = Temporal.parseIso(periodIso)?;
+    println(parsedPeriod.kind().equalsString("period"));
+    println(parsedPeriod.periodYears()? == -2147483648);
+    println(parsedPeriod.periodMonths()? == 2147483647);
+    println(parsedPeriod.periodDays()? == -2147483648);
+
+    Text ambiguousPeriodInput = new Text("P1D");
+    Temporal ambiguousPeriod = Temporal.parseIso(ambiguousPeriodInput)?;
+    Text elapsedDayInput = new Text("P1DT0S");
+    Temporal elapsedDay = Temporal.parseIso(elapsedDayInput)?;
+    println(ambiguousPeriod.kind().equalsString("period"));
+    println(ambiguousPeriod.periodDays()? == 1);
+    println(elapsedDay.kind().equalsString("duration"));
+    println(elapsedDay.durationSeconds()? == 86400L);
+
+    Text invalidDuration = new Text("PT9223372036854775808S");
+    match (Temporal.parseIso(invalidDuration)) {
+        Ok(value) { println("duration overflow accepted"); }
+        Err(error) { println("duration overflow rejected"); }
+    }
+    Text excessFraction = new Text("PT1.0000000000S");
+    match (Temporal.parseIso(excessFraction)) {
+        Ok(value) { println("excess fraction accepted"); }
+        Err(error) { println("excess fraction rejected"); }
+    }
+    Text invalidPeriod = new Text("P2147483648Y0M0D");
+    match (Temporal.parseIso(invalidPeriod)) {
+        Ok(value) { println("period overflow accepted"); }
+        Err(error) { println("period overflow rejected"); }
+    }
+    Text invalidDurationTime = new Text("P1DT");
+    match (Temporal.parseIso(invalidDurationTime)) {
+        Ok(value) { println("empty duration time accepted"); }
+        Err(error) { println("empty duration time rejected"); }
+    }
+    return new Result<Unit, Text>.Ok(());
+}
+void main() {
+    match (check()) { Ok(unit) {} Err(error) { error.print(); } }
+}
+"#);
+    assert_native_success(&output);
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        concat!(
+            "true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n",
+            "true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n",
+            "true\ntrue\ntrue\ntrue\ntrue\ntrue\n",
+            "duration overflow rejected\nexcess fraction rejected\n",
+            "period overflow rejected\nempty duration time rejected\n"
+        )
+    );
+}

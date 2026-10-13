@@ -83,6 +83,10 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   The same guard now protects existing `DateTime` parts, formatting and calendar
   arithmetic from local-field rounding near the exact range limits. Formatting
   reuses its already-open calendar for the check instead of allocating a clone.
+- Temporal formatting uses the receiver's ICU calendar, locale digits, zone and
+  civil fields; fractional patterns retain all nine nanosecond digits. ISO
+  parsing round-trips durations and signed calendar periods with checked integer
+  carries, and date-only versus elapsed `T` duration syntax is deterministic.
 - Ordered-key queries preserve affine borrows and specialize every copied-key
   query consistently. Native iterator interface adapters include their diagnostic
   arguments, and mapper extraction uses the element representation, not the

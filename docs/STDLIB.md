@@ -1785,6 +1785,7 @@ readonly Result<long, Text> epochSecond()
 readonly Result<int, Text> offsetSeconds()
 readonly Result<CalendarFields, Text> fields()
 readonly Result<Text, Text> formatIso()
+readonly Result<Text, Text> format(borrow Text pattern, borrow Text locale)
 readonly Result<int, Text> compareTo(borrow Temporal other)
 readonly Result<Temporal, Text> plusDuration(borrow Temporal duration)
 readonly Result<Temporal, Text> plusPeriod(borrow Temporal period, boolean preferLaterOffset)
@@ -1861,8 +1862,25 @@ years use a sign and six digits outside the four-digit range. `formatIso()`
 formats the exact fraction with insignificant trailing zeros omitted. Date-bearing
 forms use the proleptic Gregorian ISO chronology even when the stored civil
 calendar is alternate. `compareTo()` returns -1, 0, or 1 only for compatible
-domains: two timeline values, two durations, matching local-date kinds with the
-same calendar, or two local times.
+domains: two timeline values, two durations, matching local-date kinds with the same calendar, or two local times.
+
+`format(pattern, locale)` uses ICU date-pattern syntax and the receiver's
+selected calendar. Instants are displayed in UTC, offset and zoned values use
+their stored offset or system zone, and local values remain local; local values
+cannot format zone fields. Date-only and time-only values reject patterns that
+request unavailable fields. Durations and periods are not calendar dates and
+return `Err` for date-pattern formatting. ICU locale digits are retained, and
+fractional-second `S` fields support one through nine exact nanosecond digits.
+The pattern and locale are borrowed and formatting does not mutate the receiver.
+
+`parseIso()` also accepts ISO-style durations and periods. Forms without `T`
+(including `P1D`) are calendar periods; forms containing `T` are elapsed
+durations, with a day component before `T` elapsed as well. Thus an elapsed day
+may be written as `PT24H` or `P1DT0S`, while `P1D` is a one-day calendar period.
+Duration parsing preserves signed nanosecond carries and checks signed 64-bit
+range; period components are independently signed and checked as signed 32-bit
+values, matching `formatIso()`.
+`formatIso()` writes negative durations with one leading minus; period components keep independent signs.
 
 ICU represents calendar instants as a double millisecond value. ICU-backed
 civil conversion is limited to exact integer milliseconds in the inclusive
