@@ -143,6 +143,6 @@ pub(super) fn implementation(program: &t::Program, class_id: usize, native: C) -
     };
     body = replace_placeholders(body, &substitutions);
     body = replace_method_ids(body, program, None);
-    debug_assert!(!body.contains('@'), "unexpanded binary template placeholder");
+    debug_assert!(!super::support::has_placeholder(&body), "unexpanded binary template placeholder");
     body
 }

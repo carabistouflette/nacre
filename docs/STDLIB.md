@@ -936,9 +936,11 @@ static Result<Text, Text> Args.get(int index)
 `readLine` returns `Ok(Some(line))`, strips LF and a preceding CR, and returns a
 final unterminated line before EOF. An empty line is `Some(empty Text)`; EOF with no
 remaining bytes is `None`. Input errors, excessive line length, and invalid UTF-8
-are `Err`. `Console.print`/`printText` write without a newline; `Text.print` does
-append one. `Args.count` excludes `argv[0]`; `Args.get` returns an owned UTF-8
-copy and reports an invalid index or non-UTF-8 argument as `Err`.
+are `Err`. `Console.print`/`printText` write without a newline and flush stdout;
+use `Console.print` for explicit cross-process readiness messages. Primitive
+`println` retains normal stdio buffering. `Text.print` appends a newline.
+`Args.count` excludes `argv[0]`; `Args.get` returns an owned UTF-8 copy and reports
+an invalid index or non-UTF-8 argument as `Err`.
 
 ## Paths and filesystem
 

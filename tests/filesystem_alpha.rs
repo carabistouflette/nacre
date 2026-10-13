@@ -1,7 +1,7 @@
 use nacre::{compile_to_c, native};
 use std::ffi::OsString;
 use std::fs;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Output, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -74,6 +74,31 @@ fn take_line(reader: &mut BufReader<std::process::ChildStdout>) -> String {
 fn send_line(child: &mut Child) {
     child.stdin.as_mut().unwrap().write_all(b"continue\n").unwrap();
     child.stdin.as_mut().unwrap().flush().unwrap();
+}
+
+fn finish_child(child: Child, mut reader: BufReader<std::process::ChildStdout>) -> Output {
+    let mut stdout = Vec::new();
+    reader.read_to_end(&mut stdout).unwrap();
+    let mut output = child.wait_with_output().unwrap();
+    output.stdout = stdout;
+    output
+}
+
+fn wait_for_fifo_readers_to_close(path: &Path) {
+    use std::os::unix::fs::OpenOptionsExt;
+    const O_NONBLOCK: i32 = 0o4000;
+    const ENXIO: i32 = 6;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    // Concurrent forks can retain a CLOEXEC reader until exec; observe the kernel state.
+    loop {
+        match fs::OpenOptions::new().write(true).custom_flags(O_NONBLOCK).open(path) {
+            Err(error) if error.raw_os_error() == Some(ENXIO) => return,
+            Err(error) => panic!("probing FIFO readers failed: {error}"),
+            Ok(probe) => drop(probe),
+        }
+        assert!(std::time::Instant::now() < deadline, "FIFO still has a reader");
+        std::thread::yield_now();
+    }
 }
 
 fn assert_proc_target(pid: u32, target: &Path, expected: bool) {
@@ -784,6 +809,7 @@ __attribute__((constructor)) static void establish_caller_signal_state(void) {
     let mut output = BufReader::new(child.stdout.take().unwrap());
     assert_eq!(take_line(&mut output), "OPEN");
     drop(read_end);
+    wait_for_fifo_readers_to_close(&fifo);
     send_line(&mut child);
     assert_eq!(take_line(&mut output), "WRITE_ERR");
     assert_eq!(take_line(&mut output), "ALIVE");
@@ -942,7 +968,6 @@ void main() {
     );
     assert_eq!(lines[13], "4");
     assert_eq!(lines[18..], ["APPEND_PWRITE_REJECTED", "NO_CREATE_REJECTED", "COMPLETE"]);
-    assert_eq!(fs::read(&file).unwrap(), b"abcd");
     assert_eq!(fs::metadata(&created).unwrap().len(), 0);
     let metadata = fs::metadata(&file).unwrap();
     let millis = |seconds: i64, nanos: i64| seconds * 1000 + nanos / 1_000_000;
@@ -950,11 +975,12 @@ void main() {
     assert_eq!(lines[15].parse::<i64>().unwrap(), millis(metadata.atime(), metadata.atime_nsec()));
     assert_eq!(lines[16].parse::<i64>().unwrap(), millis(metadata.ctime(), metadata.ctime_nsec()));
     assert_eq!(lines[17].parse::<i32>().unwrap(), metadata.mode() as i32);
+    assert_eq!(fs::read(&file).unwrap(), b"abcd");
 }
 
 #[test]
 fn files_copy_links_directories_listing_and_canonical_paths_use_real_state() {
-    use std::os::unix::fs::PermissionsExt;
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
 
     let scratch = Scratch::new();
     let source_file = scratch.0.join("source.bin");
@@ -1133,7 +1159,7 @@ Result<Unit,Text> watch(borrow Path path) {
         None { println("NONBLOCK_EMPTY"); }
         Some(event) { println("NONBLOCK_UNEXPECTED_EVENT"); }
     }
-    println("WATCH_READY");
+    Console.print("WATCH_READY\n");
     match (Console.readLine()) {
         Err(error) { return new Result<Unit,Text>.Err(error); }
         Ok(option) { drop(option); }
@@ -1187,8 +1213,7 @@ void main() {
     fs::rename(&entry, &renamed).unwrap();
     fs::remove_file(&renamed).unwrap();
     send_line(&mut child);
-    drop(output);
-    let result = child.wait_with_output().unwrap();
+    let result = finish_child(child, output);
     assert!(result.status.success(), "{}", String::from_utf8_lossy(&result.stderr));
     assert_live_zero(&result);
     let stdout = String::from_utf8(result.stdout).unwrap();
@@ -1232,7 +1257,7 @@ fn watcher_reports_real_inotify_queue_overflow() {
     let source = r#"
 Result<Unit,Text> drain(borrow Path path) {
     Watcher watcher = Watcher.open(path)?;
-    println("WATCH_READY");
+    Console.print("WATCH_READY\n");
     match (Console.readLine()) {
         Err(error) { return new Result<Unit,Text>.Err(error); }
         Ok(option) { drop(option); }
@@ -1298,15 +1323,14 @@ void main() {
     for index in 0..=queue_limit {
         let path = scratch.0.join(format!("overflow-{index:08x}"));
         let file = fs::OpenOptions::new()
-            .read(true)
+            .write(true)
             .create_new(true)
             .open(path)
             .unwrap();
         drop(file);
     }
     send_line(&mut child);
-    drop(output);
-    let result = child.wait_with_output().unwrap();
+    let result = finish_child(child, output);
     assert!(result.status.success(), "{}", String::from_utf8_lossy(&result.stderr));
     assert_live_zero(&result);
     let stdout = String::from_utf8(result.stdout).unwrap();
@@ -1324,7 +1348,7 @@ fn watcher_reports_self_deletion_invalidation_and_close_is_idempotent() {
     let source = r#"
 Result<Unit,Text> watch(borrow Path path) {
     Watcher watcher = Watcher.open(path)?;
-    println("WATCH_READY");
+    Console.print("WATCH_READY\n");
     match (Console.readLine()) {
         Err(error) { return new Result<Unit,Text>.Err(error); }
         Ok(option) { drop(option); }
@@ -1391,8 +1415,7 @@ void main() {
 
     fs::remove_dir(&watched_directory).unwrap();
     send_line(&mut child);
-    drop(output);
-    let result = child.wait_with_output().unwrap();
+    let result = finish_child(child, output);
     assert!(result.status.success(), "{}", String::from_utf8_lossy(&result.stderr));
     assert_live_zero(&result);
     let stdout = String::from_utf8(result.stdout).unwrap();

@@ -157,7 +157,7 @@ static ncr_obj_@FILES_CHMOD_RESULT@ @FILES_CHMOD@(ncr_obj_@PATH_ID@ *@FILES_CHMO
 static ncr_obj_@FILES_LIST_RESULT@ @FILES_LIST@(ncr_obj_@PATH_ID@ *@FILES_LIST_PATH@, size_t ncr_line, size_t ncr_column) {
     const size_t maximum_entries = (size_t)65536;
     const size_t maximum_bytes = (size_t)16777216;
-    @LIST_TYPE@ *names = ncr_allocate(sizeof(*names), ncr_line, ncr_column);
+    @LIST_TYPE@ names = ncr_allocate(sizeof(*names), ncr_line, ncr_column);
     @LIST_NEW@(names, ncr_line, ncr_column);
     DIR *directory = ncr_fs_opendir_@TEXT_ID@(@FILES_LIST_PATH@->text, ncr_line, ncr_column);
     if (directory == NULL) {

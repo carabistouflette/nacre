@@ -219,7 +219,8 @@ Result<Unit, Text> exercise() {
     payload.append((byte)2);
     writer.writeBytes(payload)?;
     payload.set(0L, (byte)99);
-    writer.writeUtf8(new Text("xy"))?;
+    Text suffix = new Text("xy");
+    writer.writeUtf8(suffix)?;
     {
         borrow ByteBuffer view = writer.bytes();
         println(view.length() == 27L);

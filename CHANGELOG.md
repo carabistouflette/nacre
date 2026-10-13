@@ -3,6 +3,9 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Files.list uses the owned List representation without an extra pointer level.
+  Binary and database templates share placeholder validation, and database
+  emission uses native class presence rather than a second expression traversal.
 - Math adds fused multiply-add, directed adjacent-value stepping, and binary64
   pi/e constants alongside checked arithmetic and IEEE floating utilities.
 - Type checking dispatches recursive expression kinds to focused helpers instead
