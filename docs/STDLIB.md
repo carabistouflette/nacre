@@ -385,8 +385,8 @@ narrow beyond OpenSSL's `int` lengths are rejected.
 
 Equal-length `constantTimeEquals` comparisons use OpenSSL's constant-time
 comparison primitive. Different lengths return `false` immediately, so lengths
-are not hidden. This API is not a complete cryptography library: it provides no
-signature, certificate, key-management, or protocol-composition facilities.
+are not hidden. `Crypto` supplies cryptographic primitives; `CryptoKey`,
+`CryptoDigest`, `CryptoMac`, and `Certificate` supply key and certificate operations.
 Native programs require the OpenSSL 3 development and runtime libraries.
 
 ## Compression and checksums
@@ -409,6 +409,7 @@ ByteBuffer capacity and growth; zero accepts only an empty decompressed payload.
 operations preserve arbitrary binary bytes, including NUL. Checksums return the
 unsigned 32-bit zlib value as a nonnegative `long`. ZIP archive and entry
 operations remain unsupported; gzip is not a ZIP substitute.
+
 ## `Locale`
 
 `Locale.available()` returns the ICU-installed locales as canonical BCP-47
@@ -455,6 +456,78 @@ charset return `Err` without replacement characters. UTF-16LE/BE encoding does
 not add a BOM; when decoding those explicit-endian encodings, a BOM is preserved
 as U+FEFF text. UTF-8 conversion preserves embedded NUL. Oversized ICU conversion
 inputs return `Err` before narrowing lengths to ICU's 32-bit API.
+## OpenSSL cryptography
+
+`CryptoKey`, `CryptoDigest`, `CryptoMac`, and `Certificate` are unique affine
+owners of OpenSSL objects. They have no clone operation, implicit shared handle,
+or finalizer beyond deterministic scope/ownership cleanup. The crypto APIs use
+OpenSSL 3 and are emitted only when a program uses one of these classes.
+
+### `CryptoKey`
+
+```java
+static Result<CryptoKey, Text> generate(borrow Text algorithm, int bits)
+static Result<CryptoKey, Text> parsePrivatePem(borrow Text pem)
+static Result<CryptoKey, Text> parsePublicPem(borrow Text pem)
+readonly Result<Text, Text> publicPem()
+readonly Result<Text, Text> privatePem()
+readonly Result<ByteBuffer, Text> sign(borrow Text digest, borrow ByteBuffer data)
+readonly Result<boolean, Text> verify(borrow Text digest, borrow ByteBuffer data, borrow ByteBuffer signature)
+readonly Result<ByteBuffer, Text> agree(borrow CryptoKey peer)
+```
+
+### `CryptoDigest`
+
+```java
+static Result<CryptoDigest, Text> create(borrow Text algorithm)
+Result<Unit, Text> update(borrow ByteBuffer bytes)
+Result<ByteBuffer, Text> finish()
+```
+
+### `CryptoMac`
+
+```java
+static Result<CryptoMac, Text> create(borrow Text algorithm, borrow ByteBuffer key)
+Result<Unit, Text> update(borrow ByteBuffer bytes)
+Result<ByteBuffer, Text> finish()
+```
+
+### `Certificate`
+
+```java
+static Result<Certificate, Text> parsePem(borrow Text pem)
+static Result<Certificate, Text> parsePemChain(borrow Text pem)
+readonly Result<Text, Text> subject()
+readonly Result<Text, Text> issuer()
+readonly Result<Text, Text> serialText()
+readonly Result<long, Text> notBeforeUnixSeconds()
+readonly Result<long, Text> notAfterUnixSeconds()
+readonly Result<boolean, Text> matchesHost(borrow Text host)
+readonly Result<Unit, Text> verify(borrow Text host, borrow Path caFile, long unixSeconds)
+```
+
+`generate` accepts `RSA` with 2048–8192 bits in 256-bit steps; `Ed25519`,
+`X25519`, `EC-P256`, and `EC-P384` require `bits == 0`. Names are exact and
+case-sensitive. Private-key PEM must be unencrypted; key parsers accept one PEM
+block with surrounding whitespace only. Public-key export is SubjectPublicKeyInfo
+PEM. `privatePem` and signing require private material. Signing uses RSA-PSS with
+the selected digest and an exactly digest-sized salt, standard DER ECDSA, or
+Ed25519 with an empty digest name. Verification returns `Ok(false)` for an
+invalid signature and `Err` for unsupported keys/digests or backend failure.
+Agreement is limited to X25519 and same-curve EC ECDH.
+
+Digest and HMAC names are the exact case-sensitive allowlist `SHA256`, `SHA384`,
+`SHA512`, `SHA3-256`, `SHA3-384`, and `SHA3-512`. Digest and MAC streams become
+terminal after `finish`; later updates and finishes return `Err`. No secret is
+included in backend error text.
+
+Certificates reject malformed PEM and trailing non-whitespace. `parsePem` accepts
+one certificate; `parsePemChain` owns the first certificate and its PEM
+intermediates. Subject and issuer use RFC 2253 text, and the serial is decimal.
+Hostname checks use subject alternative names without falling back to the common
+name. `verify` checks the supplied CA file trust store, chain, server purpose,
+explicit Unix time, and SAN hostname; it does not fetch certificates or use the
+network.
 
 ## `Option<T>` and `Result<T, E>`
 

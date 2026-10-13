@@ -23,6 +23,12 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   arguments, and mapper extraction uses the element representation, not the
   input-interface representation. Hidden callback and element state remains
   subject to recursive sendability checks.
+- OpenSSL 3 adds affine key generation/import/export, RSA-PSS/ECDSA/Ed25519
+  signatures, X25519/EC agreement, streaming digest/HMAC, and X.509 parsing with
+  explicit-time CA-chain and SAN-host verification. RSA generation is bounded
+  to 2048–8192 bits in 256-bit steps; Ed25519, X25519, EC-P256, and EC-P384 use
+  a zero size argument. Private PEM import rejects encryption.
+
 - Native `Encoding` converts affine byte buffers to lowercase hex, canonical
   padded RFC 4648 Base64, canonical unpadded Base64URL, and strict UTF-8 `Text`.
   Decoders reject malformed alphabets, padding, discarded bits, and invalid

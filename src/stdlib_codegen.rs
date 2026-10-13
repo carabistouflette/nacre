@@ -28,6 +28,7 @@ mod http;
 mod monotonic;
 mod regex;
 mod concurrency;
+mod cryptokeys;
 mod process;
 mod crypto;
 mod big_numbers;
@@ -76,6 +77,8 @@ pub fn fields(program: &t::Program, class: C, class_id: usize) -> String {
         C::SocketAddress | C::TcpListener | C::TcpStream | C::Datagram | C::UdpSocket =>
             network::fields(program, class, class_id),
         C::HttpRequest | C::HttpResponse => http::fields(program, class),
+        C::CryptoKey | C::CryptoDigest | C::CryptoMac | C::Certificate =>
+            cryptokeys::fields(class),
         C::Thread(_) | C::Mutex(_) | C::Guard(_) | C::Channel(_) |
         C::Sender(_) | C::Receiver(_) => concurrency::fields(program, class, class_id),
     }
@@ -112,6 +115,8 @@ pub fn drop_fields(program: &t::Program, class: C, class_id: usize) -> String {
         C::SocketAddress | C::TcpListener | C::TcpStream | C::Datagram | C::UdpSocket =>
             network::drop_fields(program, class),
         C::HttpRequest | C::HttpResponse => http::drop_fields(program, class),
+        C::CryptoKey | C::CryptoDigest | C::CryptoMac | C::Certificate =>
+            cryptokeys::drop_fields(class, class_id),
         C::Thread(_) | C::Mutex(_) | C::Guard(_) | C::Channel(_) |
         C::Sender(_) | C::Receiver(_) => concurrency::drop_fields(class_id),
     }
@@ -124,6 +129,7 @@ pub fn hash_table_definition(program: &t::Program, class_id: usize, hasher: Opti
 pub(crate) fn drop_helper_prototypes(program: &t::Program) -> String {
     let mut out = concurrency::drop_helper_prototypes(program);
     out.push_str(&http::drop_helper_prototypes(program));
+    out.push_str(&cryptokeys::drop_helper_prototypes(program));
     out
 }
 
@@ -183,7 +189,8 @@ fn append_body(program: &t::Program, out: &mut String, class: &t::Class, native:
         C::Path | C::File | C::Directory | C::FileInfo => return,
         C::Thread(_) | C::Mutex(_) | C::Guard(_) | C::Channel(_) |
         C::Sender(_) | C::Receiver(_) => return,
-        C::HttpRequest | C::HttpResponse | C::Unicode | C::Character | C::Charset | C::Locale => return,
+        C::HttpRequest | C::HttpResponse | C::Unicode | C::Character | C::Charset | C::Locale |
+        C::CryptoKey | C::CryptoDigest | C::CryptoMac | C::Certificate => return,
         C::Compression | C::Checksums | C::Regex | C::RegexMatch | C::Console | C::Files | C::Args |
         C::Env | C::Command | C::Process | C::ProcessOutput => return,
         C::BigInt | C::BigDecimal => return,
@@ -254,6 +261,7 @@ pub fn implementations(program: &t::Program) -> String {
     if let Some(processes) = process::implementations(program) {
         out.push_str(&processes);
     }
+    out.push_str(&cryptokeys::implementation(program));
     out
 }
 

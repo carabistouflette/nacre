@@ -1,0 +1,34 @@
+class CryptoKey {
+    public static Result<CryptoKey, Text> generate(borrow Text algorithm, int bits) {}
+    public static Result<CryptoKey, Text> parsePrivatePem(borrow Text pem) {}
+    public static Result<CryptoKey, Text> parsePublicPem(borrow Text pem) {}
+    public readonly Result<Text, Text> publicPem() {}
+    public readonly Result<Text, Text> privatePem() {}
+    public readonly Result<ByteBuffer, Text> sign(borrow Text digest, borrow ByteBuffer data) {}
+    public readonly Result<boolean, Text> verify(borrow Text digest, borrow ByteBuffer data, borrow ByteBuffer signature) {}
+    public readonly Result<ByteBuffer, Text> agree(borrow CryptoKey peer) {}
+}
+
+class CryptoDigest {
+    public static Result<CryptoDigest, Text> create(borrow Text algorithm) {}
+    public Result<Unit, Text> update(borrow ByteBuffer bytes) {}
+    public Result<ByteBuffer, Text> finish() {}
+}
+
+class CryptoMac {
+    public static Result<CryptoMac, Text> create(borrow Text algorithm, borrow ByteBuffer key) {}
+    public Result<Unit, Text> update(borrow ByteBuffer bytes) {}
+    public Result<ByteBuffer, Text> finish() {}
+}
+
+class Certificate {
+    public static Result<Certificate, Text> parsePem(borrow Text pem) {}
+    public static Result<Certificate, Text> parsePemChain(borrow Text pem) {}
+    public readonly Result<Text, Text> subject() {}
+    public readonly Result<Text, Text> issuer() {}
+    public readonly Result<Text, Text> serialText() {}
+    public readonly Result<long, Text> notBeforeUnixSeconds() {}
+    public readonly Result<long, Text> notAfterUnixSeconds() {}
+    public readonly Result<boolean, Text> matchesHost(borrow Text host) {}
+    public readonly Result<Unit, Text> verify(borrow Text host, borrow Path caFile, long unixSeconds) {}
+}

@@ -136,6 +136,7 @@ pub enum NativeClass {
     Text, BigInt, BigDecimal, Regex, RegexMatch, Arrays, ByteBuffer, Encoding, Crypto, Path, File, Directory, FileInfo,
     Console, Files, Args, Math, Random, Time, DateTime, Compression, Checksums, SocketAddress, TcpListener, TcpStream,
     Unicode, Character, Charset, Locale,
+    CryptoKey, CryptoDigest, CryptoMac, Certificate,
     Datagram, UdpSocket, HttpRequest, HttpResponse, Thread(Type), Mutex(Type), Guard(Type), Channel(Type),
     Sender(Type), Receiver(Type), Env, Command, Process, ProcessOutput
 }
@@ -215,6 +216,13 @@ pub enum NativeMethod {
     HttpRequestCreate, HttpRequestSetHeader, HttpRequestSetBody, HttpRequestSetTimeoutMillis,
     HttpRequestSetMaxResponseBytes, HttpRequestSetCaFile, HttpRequestSend,
     HttpResponseStatus, HttpResponseBody, HttpResponseHeader, HttpResponseFinalUrl, HttpResponseBodyText,
+    CryptoKeyGenerate, CryptoKeyParsePrivatePem, CryptoKeyParsePublicPem,
+    CryptoKeyPublicPem, CryptoKeyPrivatePem, CryptoKeySign, CryptoKeyVerify, CryptoKeyAgree,
+    CryptoDigestCreate, CryptoDigestUpdate, CryptoDigestFinish,
+    CryptoMacCreate, CryptoMacUpdate, CryptoMacFinish,
+    CertificateParsePem, CertificateParsePemChain, CertificateSubject, CertificateIssuer,
+    CertificateSerialText, CertificateNotBeforeUnixSeconds, CertificateNotAfterUnixSeconds,
+    CertificateMatchesHost, CertificateVerify,
     ThreadSpawn, ThreadJoin, MutexCreate, MutexCloneHandle, MutexLock, MutexTryLock,
     GuardGetRef, GuardGetMut, GuardRead, GuardWrite,
     ChannelBounded, ChannelTakeSender, ChannelTakeReceiver,

@@ -65,6 +65,7 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
             C::Path | C::File | C::Directory | C::FileInfo |
             C::Console | C::Files | C::Args | C::Math | C::Time | C::DateTime |
             C::Compression | C::Checksums | C::BigInt | C::BigDecimal |
+            C::CryptoKey | C::CryptoDigest | C::CryptoMac | C::Certificate |
             C::Thread(_) | C::Mutex(_) | C::Guard(_) | C::Channel(_) |
             C::Sender(_) | C::Receiver(_) | C::Env | C::Command | C::Process | C::ProcessOutput =>
                 unreachable!("static or factory-only native class has no constructor"),
@@ -492,6 +493,29 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
         (C::HttpResponse, "header") => M::HttpResponseHeader,
         (C::HttpResponse, "finalUrl") => M::HttpResponseFinalUrl,
         (C::HttpResponse, "bodyText") => M::HttpResponseBodyText,
+        (C::CryptoKey, "generate") => M::CryptoKeyGenerate,
+        (C::CryptoKey, "parsePrivatePem") => M::CryptoKeyParsePrivatePem,
+        (C::CryptoKey, "parsePublicPem") => M::CryptoKeyParsePublicPem,
+        (C::CryptoKey, "publicPem") => M::CryptoKeyPublicPem,
+        (C::CryptoKey, "privatePem") => M::CryptoKeyPrivatePem,
+        (C::CryptoKey, "sign") => M::CryptoKeySign,
+        (C::CryptoKey, "verify") => M::CryptoKeyVerify,
+        (C::CryptoKey, "agree") => M::CryptoKeyAgree,
+        (C::CryptoDigest, "create") => M::CryptoDigestCreate,
+        (C::CryptoDigest, "update") => M::CryptoDigestUpdate,
+        (C::CryptoDigest, "finish") => M::CryptoDigestFinish,
+        (C::CryptoMac, "create") => M::CryptoMacCreate,
+        (C::CryptoMac, "update") => M::CryptoMacUpdate,
+        (C::CryptoMac, "finish") => M::CryptoMacFinish,
+        (C::Certificate, "parsePem") => M::CertificateParsePem,
+        (C::Certificate, "parsePemChain") => M::CertificateParsePemChain,
+        (C::Certificate, "subject") => M::CertificateSubject,
+        (C::Certificate, "issuer") => M::CertificateIssuer,
+        (C::Certificate, "serialText") => M::CertificateSerialText,
+        (C::Certificate, "notBeforeUnixSeconds") => M::CertificateNotBeforeUnixSeconds,
+        (C::Certificate, "notAfterUnixSeconds") => M::CertificateNotAfterUnixSeconds,
+        (C::Certificate, "matchesHost") => M::CertificateMatchesHost,
+        (C::Certificate, "verify") => M::CertificateVerify,
         (C::Args, "get") => M::ArgsGet,
         (C::Env, "get") => M::EnvGet,
         (C::Env, "set") => M::EnvSet,

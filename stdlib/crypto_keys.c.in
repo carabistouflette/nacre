@@ -1,0 +1,746 @@
+/* nacre-link: crypto */
+#include <openssl/asn1.h>
+#include <openssl/bio.h>
+#include <openssl/bn.h>
+#include <openssl/buffer.h>
+#include <openssl/core_names.h>
+#include <openssl/crypto.h>
+#include <openssl/evp.h>
+#include <openssl/params.h>
+#include <openssl/pem.h>
+#include <openssl/rsa.h>
+#include <openssl/x509.h>
+#include <openssl/x509_vfy.h>
+#include <openssl/x509v3.h>
+#include <errno.h>
+#include <limits.h>
+#include <stdio.h>
+#include <string.h>
+#include <time.h>
+
+static bool ncr_cryptokeys_text_has_nul(@TEXT_TYPE@ value) {
+    return value == NULL || (value->length > 0 && memchr(value->bytes, 0, (size_t)value->length) != NULL);
+}
+
+/* CRYPTOKEYS_GROUP ALGORITHM */
+static bool ncr_cryptokeys_text_is(@TEXT_TYPE@ value, const char *expected) {
+    if (value == NULL || ncr_cryptokeys_text_has_nul(value)) { return false; }
+    size_t expected_length = strlen(expected);
+    return (size_t)value->length == expected_length && memcmp(value->bytes, expected, expected_length) == 0;
+}
+
+static const char *ncr_cryptokeys_digest_name(@TEXT_TYPE@ value) {
+    if (ncr_cryptokeys_text_is(value, "SHA256")) { return "SHA256"; }
+    if (ncr_cryptokeys_text_is(value, "SHA384")) { return "SHA384"; }
+    if (ncr_cryptokeys_text_is(value, "SHA512")) { return "SHA512"; }
+    if (ncr_cryptokeys_text_is(value, "SHA3-256")) { return "SHA3-256"; }
+    if (ncr_cryptokeys_text_is(value, "SHA3-384")) { return "SHA3-384"; }
+    if (ncr_cryptokeys_text_is(value, "SHA3-512")) { return "SHA3-512"; }
+    return NULL;
+}
+/* CRYPTOKEYS_GROUP_END ALGORITHM */
+
+/* CRYPTOKEYS_GROUP PEM */
+static bool ncr_cryptokeys_ascii_space(unsigned char value) {
+    return value == ' ' || value == '\t' || value == '\r' || value == '\n' || value == '\f' || value == '\v';
+}
+
+/* Returns 1 for a complete PEM block, 0 for whitespace-only end of input, and
+ * -1 for any non-whitespace text that is not exactly a PEM block. */
+static int ncr_cryptokeys_next_pem(const unsigned char *input, size_t input_length,
+    size_t *cursor, const unsigned char **block, size_t *block_length,
+    char *label, size_t label_capacity) {
+    while (*cursor < input_length && ncr_cryptokeys_ascii_space(input[*cursor])) { ++*cursor; }
+    if (*cursor == input_length) { return 0; }
+
+    const size_t start = *cursor;
+    const char begin_prefix[] = "-----BEGIN ";
+    const size_t begin_prefix_length = sizeof(begin_prefix) - 1;
+    size_t header_end = start;
+    while (header_end < input_length && input[header_end] != '\n' && input[header_end] != '\r') { ++header_end; }
+    if (header_end == input_length || header_end - start < begin_prefix_length + 5 ||
+        memcmp(input + start, begin_prefix, begin_prefix_length) != 0 ||
+        memcmp(input + header_end - 5, "-----", 5) != 0) {
+        return -1;
+    }
+    size_t label_length = header_end - start - begin_prefix_length - 5;
+    if (label_length == 0 || label_length >= label_capacity) { return -1; }
+    memcpy(label, input + start + begin_prefix_length, label_length);
+    label[label_length] = '\0';
+
+    size_t line_after = header_end;
+    if (input[line_after] == '\r') { ++line_after; }
+    if (line_after < input_length && input[line_after] == '\n') { ++line_after; }
+    char end_marker[256];
+    int marker_length = snprintf(end_marker, sizeof(end_marker), "-----END %s-----", label);
+    if (marker_length <= 0 || (size_t)marker_length >= sizeof(end_marker)) { return -1; }
+
+    size_t line_start = line_after;
+    while (line_start < input_length) {
+        size_t line_end = line_start;
+        while (line_end < input_length && input[line_end] != '\n' && input[line_end] != '\r') { ++line_end; }
+        size_t line_length = line_end - line_start;
+        size_t next_line = line_end;
+        if (next_line < input_length && input[next_line] == '\r') { ++next_line; }
+        if (next_line < input_length && input[next_line] == '\n') { ++next_line; }
+        if (line_length == (size_t)marker_length &&
+            memcmp(input + line_start, end_marker, line_length) == 0) {
+            *block = input + start;
+            *block_length = next_line - start;
+            *cursor = next_line;
+            return 1;
+        }
+        if (line_end == input_length) { break; }
+        line_start = next_line;
+    }
+    return -1;
+}
+/* CRYPTOKEYS_GROUP_END PEM */
+
+
+/* CRYPTOKEYS_GROUP BUFFER */
+static @BUFFER_TYPE@ ncr_cryptokeys_buffer_take(unsigned char *bytes, size_t length,
+    size_t capacity, size_t line, size_t column) {
+    if (length > (size_t)INT64_MAX || capacity > (size_t)INT64_MAX || length > capacity) {
+        ncr_deallocate(bytes);
+        ncr_fail("cryptographic output is too large", line, column);
+    }
+    @BUFFER_TYPE@ result = ncr_allocate(sizeof(*result), line, column);
+    result->bytes = bytes;
+    result->length = length;
+    result->capacity = capacity;
+    return result;
+}
+
+/* CRYPTOKEYS_GROUP_END BUFFER */
+
+/* CRYPTOKEYS_GROUP BUFFER_COPY */
+static @BUFFER_TYPE@ ncr_cryptokeys_buffer_copy(const unsigned char *bytes, size_t length,
+    size_t line, size_t column) {
+    unsigned char *owned = NULL;
+    if (length > 0) {
+        owned = ncr_allocate(length, line, column);
+        memcpy(owned, bytes, length);
+    }
+    return ncr_cryptokeys_buffer_take(owned, length, length, line, column);
+}
+/* CRYPTOKEYS_GROUP_END BUFFER_COPY */
+
+/* CRYPTOKEYS_GROUP KEY */
+static int ncr_cryptokeys_no_password(char *buffer, int size, int writing, void *user_data) {
+    (void)buffer; (void)size; (void)writing; (void)user_data;
+    return 0;
+}
+static void ncr_cryptokeys_key_destroy(void *value) {
+    if (value != NULL) { EVP_PKEY_free((EVP_PKEY *)value); }
+}
+
+static int ncr_cryptokeys_key_kind(EVP_PKEY *key) {
+    if (key == NULL) { return 0; }
+    if (EVP_PKEY_is_a(key, "RSA")) { return 1; }
+    if (EVP_PKEY_is_a(key, "ED25519")) { return 2; }
+    if (EVP_PKEY_is_a(key, "X25519")) { return 3; }
+    if (EVP_PKEY_is_a(key, "EC")) { return 4; }
+    return 0;
+}
+
+static bool ncr_cryptokeys_pem_key_label(const char *label, bool private_key) {
+    if (private_key) {
+        return strcmp(label, "PRIVATE KEY") == 0 || strcmp(label, "RSA PRIVATE KEY") == 0 ||
+            strcmp(label, "EC PRIVATE KEY") == 0;
+    }
+    return strcmp(label, "PUBLIC KEY") == 0;
+}
+
+static EVP_PKEY *ncr_cryptokeys_parse_key(@TEXT_TYPE@ pem, bool private_key) {
+    if (pem == NULL || pem->length <= 0 || ncr_cryptokeys_text_has_nul(pem)) { return NULL; }
+    const unsigned char *block = NULL;
+    size_t block_length = 0;
+    size_t cursor = 0;
+    char label[128];
+    int status = ncr_cryptokeys_next_pem(pem->bytes, (size_t)pem->length, &cursor,
+        &block, &block_length, label, sizeof(label));
+    if (status != 1 || !ncr_cryptokeys_pem_key_label(label, private_key)) { return NULL; }
+    const unsigned char *extra_block = NULL;
+    size_t extra_length = 0;
+    char extra_label[128];
+    if (ncr_cryptokeys_next_pem(pem->bytes, (size_t)pem->length, &cursor,
+        &extra_block, &extra_length, extra_label, sizeof(extra_label)) != 0) { return NULL; }
+    if (block_length > INT_MAX) { return NULL; }
+
+    BIO *bio = BIO_new_mem_buf(block, (int)block_length);
+    if (bio == NULL) { return NULL; }
+    EVP_PKEY *key = private_key
+        ? PEM_read_bio_PrivateKey(bio, NULL, ncr_cryptokeys_no_password, NULL)
+        : PEM_read_bio_PUBKEY(bio, NULL, NULL, NULL);
+    BIO_free(bio);
+    if (ncr_cryptokeys_key_kind(key) == 0) {
+        EVP_PKEY_free(key);
+        return NULL;
+    }
+    return key;
+}
+
+static bool ncr_cryptokeys_signature_context(EVP_PKEY *key, @TEXT_TYPE@ digest,
+    bool signing, EVP_MD_CTX **context, EVP_PKEY_CTX **key_context) {
+    *context = NULL;
+    *key_context = NULL;
+    int kind = ncr_cryptokeys_key_kind(key);
+    if (kind != 1 && kind != 2 && kind != 4) { return false; }
+    const EVP_MD *md = NULL;
+    if (kind == 2) {
+        if (digest == NULL || digest->length != 0 || ncr_cryptokeys_text_has_nul(digest)) { return false; }
+    } else {
+        const char *name = ncr_cryptokeys_digest_name(digest);
+        if (name == NULL) { return false; }
+        md = EVP_get_digestbyname(name);
+        if (md == NULL) { return false; }
+    }
+    EVP_MD_CTX *md_context = EVP_MD_CTX_new();
+    if (md_context == NULL) { return false; }
+    EVP_PKEY_CTX *pkey_context = NULL;
+    int initialized = signing
+        ? EVP_DigestSignInit(md_context, &pkey_context, md, NULL, key)
+        : EVP_DigestVerifyInit(md_context, &pkey_context, md, NULL, key);
+    if (initialized != 1) { EVP_MD_CTX_free(md_context); return false; }
+    if (kind == 1) {
+        int digest_size = EVP_MD_get_size(md);
+        if (digest_size <= 0 || pkey_context == NULL ||
+            EVP_PKEY_CTX_set_rsa_padding(pkey_context, RSA_PKCS1_PSS_PADDING) <= 0 ||
+            EVP_PKEY_CTX_set_rsa_mgf1_md(pkey_context, md) <= 0 ||
+            EVP_PKEY_CTX_set_rsa_pss_saltlen(pkey_context, digest_size) <= 0) {
+            EVP_MD_CTX_free(md_context);
+            return false;
+        }
+    }
+    *context = md_context;
+    *key_context = pkey_context;
+    return true;
+}
+
+static @KEY_GENERATE_RESULT@ @CRYPTO_KEY_GENERATE@(@TEXT_TYPE@ ncr_v_@KEY_GENERATE_ALGORITHM_ID@,
+    int32_t ncr_v_@KEY_GENERATE_BITS_ID@, size_t line, size_t column) {
+    const char *key_type = NULL;
+    const char *group = NULL;
+    if (ncr_cryptokeys_text_is(ncr_v_@KEY_GENERATE_ALGORITHM_ID@, "RSA")) {
+        if (ncr_v_@KEY_GENERATE_BITS_ID@ < 2048 || ncr_v_@KEY_GENERATE_BITS_ID@ > 8192 ||
+            ncr_v_@KEY_GENERATE_BITS_ID@ % 256 != 0) {
+            return ncr_result_error_@KEY_GENERATE_ERROR_RESULT@("RSA key size must be 2048 through 8192 bits in 256-bit steps", sizeof("RSA key size must be 2048 through 8192 bits in 256-bit steps") - 1, line, column);
+        }
+        key_type = "RSA";
+    } else if (ncr_cryptokeys_text_is(ncr_v_@KEY_GENERATE_ALGORITHM_ID@, "Ed25519")) {
+        if (ncr_v_@KEY_GENERATE_BITS_ID@ != 0) { return ncr_result_error_@KEY_GENERATE_ERROR_RESULT@("Ed25519 requires bits equal to zero", sizeof("Ed25519 requires bits equal to zero") - 1, line, column); }
+        key_type = "ED25519";
+    } else if (ncr_cryptokeys_text_is(ncr_v_@KEY_GENERATE_ALGORITHM_ID@, "X25519")) {
+        if (ncr_v_@KEY_GENERATE_BITS_ID@ != 0) { return ncr_result_error_@KEY_GENERATE_ERROR_RESULT@("X25519 requires bits equal to zero", sizeof("X25519 requires bits equal to zero") - 1, line, column); }
+        key_type = "X25519";
+    } else if (ncr_cryptokeys_text_is(ncr_v_@KEY_GENERATE_ALGORITHM_ID@, "EC-P256")) {
+        if (ncr_v_@KEY_GENERATE_BITS_ID@ != 0) { return ncr_result_error_@KEY_GENERATE_ERROR_RESULT@("EC-P256 requires bits equal to zero", sizeof("EC-P256 requires bits equal to zero") - 1, line, column); }
+        key_type = "EC"; group = "prime256v1";
+    } else if (ncr_cryptokeys_text_is(ncr_v_@KEY_GENERATE_ALGORITHM_ID@, "EC-P384")) {
+        if (ncr_v_@KEY_GENERATE_BITS_ID@ != 0) { return ncr_result_error_@KEY_GENERATE_ERROR_RESULT@("EC-P384 requires bits equal to zero", sizeof("EC-P384 requires bits equal to zero") - 1, line, column); }
+        key_type = "EC"; group = "secp384r1";
+    } else {
+        return ncr_result_error_@KEY_GENERATE_ERROR_RESULT@("unsupported key algorithm", sizeof("unsupported key algorithm") - 1, line, column);
+    }
+
+    EVP_PKEY_CTX *context = EVP_PKEY_CTX_new_from_name(NULL, key_type, NULL);
+    EVP_PKEY *key = NULL;
+    bool success = context != NULL && EVP_PKEY_keygen_init(context) > 0;
+    if (success && group == NULL && strcmp(key_type, "RSA") == 0) {
+        success = EVP_PKEY_CTX_set_rsa_keygen_bits(context, ncr_v_@KEY_GENERATE_BITS_ID@) > 0;
+    }
+    if (success && group != NULL) {
+        OSSL_PARAM parameters[2];
+        parameters[0] = OSSL_PARAM_construct_utf8_string(OSSL_PKEY_PARAM_GROUP_NAME, (char *)group, 0);
+        parameters[1] = OSSL_PARAM_construct_end();
+        success = EVP_PKEY_CTX_set_params(context, parameters) > 0;
+    }
+    if (success) { success = EVP_PKEY_generate(context, &key) > 0; }
+    EVP_PKEY_CTX_free(context);
+    if (!success || key == NULL) {
+        EVP_PKEY_free(key);
+        return ncr_result_error_@KEY_GENERATE_ERROR_RESULT@("key generation failed", sizeof("key generation failed") - 1, line, column);
+    }
+    @KEY_TYPE@ owner = ncr_allocate(sizeof(*owner), line, column);
+    owner->pkey = key;
+    owner->has_private = true;
+    return (@KEY_GENERATE_RESULT@){ .tag = @KEY_GENERATE_OK_TAG@, .data.v@KEY_GENERATE_OK_TAG@.f0 = owner };
+}
+
+static @KEY_PARSE_PRIVATE_RESULT@ @CRYPTO_KEY_PARSE_PRIVATE_PEM@(@TEXT_TYPE@ ncr_v_@KEY_PARSE_PRIVATE_PEM_ID@, size_t line, size_t column) {
+    EVP_PKEY *key = ncr_cryptokeys_parse_key(ncr_v_@KEY_PARSE_PRIVATE_PEM_ID@, true);
+    if (key == NULL) { return ncr_result_error_@KEY_PARSE_PRIVATE_PEM_ERROR_RESULT@("invalid or unsupported private key PEM", sizeof("invalid or unsupported private key PEM") - 1, line, column); }
+    @KEY_TYPE@ owner = ncr_allocate(sizeof(*owner), line, column);
+    owner->pkey = key;
+    owner->has_private = true;
+    return (@KEY_PARSE_PRIVATE_RESULT@){ .tag = @KEY_PARSE_PRIVATE_OK_TAG@, .data.v@KEY_PARSE_PRIVATE_OK_TAG@.f0 = owner };
+}
+
+static @KEY_PARSE_PUBLIC_RESULT@ @CRYPTO_KEY_PARSE_PUBLIC_PEM@(@TEXT_TYPE@ ncr_v_@KEY_PARSE_PUBLIC_PEM_ID@, size_t line, size_t column) {
+    EVP_PKEY *key = ncr_cryptokeys_parse_key(ncr_v_@KEY_PARSE_PUBLIC_PEM_ID@, false);
+    if (key == NULL) { return ncr_result_error_@KEY_PARSE_PUBLIC_PEM_ERROR_RESULT@("invalid or unsupported public key PEM", sizeof("invalid or unsupported public key PEM") - 1, line, column); }
+    @KEY_TYPE@ owner = ncr_allocate(sizeof(*owner), line, column);
+    owner->pkey = key;
+    owner->has_private = false;
+    return (@KEY_PARSE_PUBLIC_RESULT@){ .tag = @KEY_PARSE_PUBLIC_OK_TAG@, .data.v@KEY_PARSE_PUBLIC_OK_TAG@.f0 = owner };
+}
+
+static @KEY_PUBLIC_PEM_RESULT@ @CRYPTO_KEY_PUBLIC_PEM@(@KEY_TYPE@ ncr_self, size_t line, size_t column) {
+    BIO *bio = BIO_new(BIO_s_mem());
+    if (bio == NULL || ncr_self->pkey == NULL || PEM_write_bio_PUBKEY(bio, (EVP_PKEY *)ncr_self->pkey) != 1) {
+        BIO_free(bio);
+        return ncr_result_error_@KEY_PUBLIC_PEM_ERROR_RESULT@("public key encoding failed", sizeof("public key encoding failed") - 1, line, column);
+    }
+    BUF_MEM *memory = NULL;
+    BIO_get_mem_ptr(bio, &memory);
+    if (memory == NULL || memory->length > INT32_MAX) {
+        BIO_free(bio);
+        return ncr_result_error_@KEY_PUBLIC_PEM_ERROR_RESULT@("public key encoding failed", sizeof("public key encoding failed") - 1, line, column);
+    }
+    @TEXT_TYPE@ text = @TEXT_FROM_BYTES@( (const unsigned char *)memory->data, memory->length, line, column);
+    BIO_free(bio);
+    return (@KEY_PUBLIC_PEM_RESULT@){ .tag = @KEY_PUBLIC_PEM_OK_TAG@, .data.v@KEY_PUBLIC_PEM_OK_TAG@.f0 = text };
+}
+
+static @KEY_PRIVATE_PEM_RESULT@ @CRYPTO_KEY_PRIVATE_PEM@(@KEY_TYPE@ ncr_self, size_t line, size_t column) {
+    if (!ncr_self->has_private || ncr_self->pkey == NULL) {
+        return ncr_result_error_@KEY_PRIVATE_PEM_ERROR_RESULT@("private key material is unavailable", sizeof("private key material is unavailable") - 1, line, column);
+    }
+    BIO *bio = BIO_new(BIO_s_mem());
+    if (bio == NULL || PEM_write_bio_PrivateKey(bio, (EVP_PKEY *)ncr_self->pkey, NULL, NULL, 0, NULL, NULL) != 1) {
+        BUF_MEM *memory = NULL;
+        if (bio != NULL) { BIO_get_mem_ptr(bio, &memory); if (memory != NULL && memory->data != NULL) { OPENSSL_cleanse(memory->data, memory->length); } }
+        BIO_free(bio);
+        return ncr_result_error_@KEY_PRIVATE_PEM_ERROR_RESULT@("private key encoding failed", sizeof("private key encoding failed") - 1, line, column);
+    }
+    BUF_MEM *memory = NULL;
+    BIO_get_mem_ptr(bio, &memory);
+    if (memory == NULL || memory->length > INT32_MAX) {
+        if (memory != NULL && memory->data != NULL) { OPENSSL_cleanse(memory->data, memory->length); }
+        BIO_free(bio);
+        return ncr_result_error_@KEY_PRIVATE_PEM_ERROR_RESULT@("private key encoding failed", sizeof("private key encoding failed") - 1, line, column);
+    }
+    @TEXT_TYPE@ text = @TEXT_FROM_BYTES@( (const unsigned char *)memory->data, memory->length, line, column);
+    if (memory->data != NULL) { OPENSSL_cleanse(memory->data, memory->length); }
+    BIO_free(bio);
+    return (@KEY_PRIVATE_PEM_RESULT@){ .tag = @KEY_PRIVATE_PEM_OK_TAG@, .data.v@KEY_PRIVATE_PEM_OK_TAG@.f0 = text };
+}
+
+static @KEY_SIGN_RESULT@ @CRYPTO_KEY_SIGN@(@KEY_TYPE@ ncr_self,
+    @TEXT_TYPE@ ncr_v_@KEY_SIGN_DIGEST_ID@, @BUFFER_TYPE@ ncr_v_@KEY_SIGN_DATA_ID@,
+    size_t line, size_t column) {
+    if (!ncr_self->has_private || ncr_self->pkey == NULL) {
+        return ncr_result_error_@KEY_SIGN_ERROR_RESULT@("signing requires a private key", sizeof("signing requires a private key") - 1, line, column);
+    }
+    EVP_MD_CTX *context = NULL;
+    EVP_PKEY_CTX *key_context = NULL;
+    if (!ncr_cryptokeys_signature_context((EVP_PKEY *)ncr_self->pkey, ncr_v_@KEY_SIGN_DIGEST_ID@,
+        true, &context, &key_context)) {
+        return ncr_result_error_@KEY_SIGN_ERROR_RESULT@("unsupported key or digest for signing", sizeof("unsupported key or digest for signing") - 1, line, column);
+    }
+    (void)key_context;
+    const unsigned char *data = ncr_v_@KEY_SIGN_DATA_ID@->length == 0 ? (const unsigned char *)"" : ncr_v_@KEY_SIGN_DATA_ID@->bytes;
+    size_t signature_length = 0;
+    if (EVP_DigestSign(context, NULL, &signature_length, data, ncr_v_@KEY_SIGN_DATA_ID@->length) != 1 ||
+        signature_length == 0 || signature_length > (size_t)INT64_MAX) {
+        EVP_MD_CTX_free(context);
+        return ncr_result_error_@KEY_SIGN_ERROR_RESULT@("signature generation failed", sizeof("signature generation failed") - 1, line, column);
+    }
+    unsigned char *signature = ncr_allocate(signature_length, line, column);
+    size_t actual_length = signature_length;
+    int signed_ok = EVP_DigestSign(context, signature, &actual_length, data, ncr_v_@KEY_SIGN_DATA_ID@->length);
+    EVP_MD_CTX_free(context);
+    if (signed_ok != 1 || actual_length > signature_length) {
+        OPENSSL_cleanse(signature, signature_length);
+        ncr_deallocate(signature);
+        return ncr_result_error_@KEY_SIGN_ERROR_RESULT@("signature generation failed", sizeof("signature generation failed") - 1, line, column);
+    }
+    @BUFFER_TYPE@ output = ncr_cryptokeys_buffer_take(signature, actual_length, signature_length, line, column);
+    return (@KEY_SIGN_RESULT@){ .tag = @KEY_SIGN_OK_TAG@, .data.v@KEY_SIGN_OK_TAG@.f0 = output };
+}
+
+static @KEY_VERIFY_RESULT@ @CRYPTO_KEY_VERIFY@(@KEY_TYPE@ ncr_self,
+    @TEXT_TYPE@ ncr_v_@KEY_VERIFY_DIGEST_ID@, @BUFFER_TYPE@ ncr_v_@KEY_VERIFY_DATA_ID@,
+    @BUFFER_TYPE@ ncr_v_@KEY_VERIFY_SIGNATURE_ID@, size_t line, size_t column) {
+    if (ncr_self->pkey == NULL) { return ncr_result_error_@KEY_VERIFY_ERROR_RESULT@("key is unavailable", sizeof("key is unavailable") - 1, line, column); }
+    EVP_MD_CTX *context = NULL;
+    EVP_PKEY_CTX *key_context = NULL;
+    if (!ncr_cryptokeys_signature_context((EVP_PKEY *)ncr_self->pkey, ncr_v_@KEY_VERIFY_DIGEST_ID@,
+        false, &context, &key_context)) {
+        return ncr_result_error_@KEY_VERIFY_ERROR_RESULT@("unsupported key or digest for verification", sizeof("unsupported key or digest for verification") - 1, line, column);
+    }
+    (void)key_context;
+    const unsigned char *data = ncr_v_@KEY_VERIFY_DATA_ID@->length == 0 ? (const unsigned char *)"" : ncr_v_@KEY_VERIFY_DATA_ID@->bytes;
+    const unsigned char *signature = ncr_v_@KEY_VERIFY_SIGNATURE_ID@->length == 0 ? (const unsigned char *)"" : ncr_v_@KEY_VERIFY_SIGNATURE_ID@->bytes;
+    int verified = EVP_DigestVerify(context, signature, ncr_v_@KEY_VERIFY_SIGNATURE_ID@->length,
+        data, ncr_v_@KEY_VERIFY_DATA_ID@->length);
+    EVP_MD_CTX_free(context);
+    if (verified == 1) { return (@KEY_VERIFY_RESULT@){ .tag = @KEY_VERIFY_OK_TAG@, .data.v@KEY_VERIFY_OK_TAG@.f0 = true }; }
+    if (verified == 0) { return (@KEY_VERIFY_RESULT@){ .tag = @KEY_VERIFY_OK_TAG@, .data.v@KEY_VERIFY_OK_TAG@.f0 = false }; }
+    return ncr_result_error_@KEY_VERIFY_ERROR_RESULT@("signature verification failed", sizeof("signature verification failed") - 1, line, column);
+}
+
+static @KEY_AGREE_RESULT@ @CRYPTO_KEY_AGREE@(@KEY_TYPE@ ncr_self,
+    @KEY_TYPE@ ncr_v_@KEY_AGREE_PEER_ID@, size_t line, size_t column) {
+    EVP_PKEY *private_key = (EVP_PKEY *)ncr_self->pkey;
+    EVP_PKEY *peer_key = ncr_v_@KEY_AGREE_PEER_ID@->pkey == NULL ? NULL : (EVP_PKEY *)ncr_v_@KEY_AGREE_PEER_ID@->pkey;
+    int kind = ncr_cryptokeys_key_kind(private_key);
+    if (!ncr_self->has_private || peer_key == NULL ||
+        (kind != 3 && kind != 4) || ncr_cryptokeys_key_kind(peer_key) != kind ||
+        (kind == 4 && EVP_PKEY_parameters_eq(private_key, peer_key) != 1)) {
+        return ncr_result_error_@KEY_AGREE_ERROR_RESULT@("key agreement requires a private X25519 or compatible EC key", sizeof("key agreement requires a private X25519 or compatible EC key") - 1, line, column);
+    }
+    EVP_PKEY_CTX *context = EVP_PKEY_CTX_new(private_key, NULL);
+    size_t secret_length = 0;
+    bool success = context != NULL && EVP_PKEY_derive_init(context) > 0 &&
+        EVP_PKEY_derive_set_peer(context, peer_key) > 0 && EVP_PKEY_derive(context, NULL, &secret_length) > 0 &&
+        secret_length > 0 && secret_length <= (size_t)INT64_MAX;
+    if (!success) {
+        EVP_PKEY_CTX_free(context);
+        return ncr_result_error_@KEY_AGREE_ERROR_RESULT@("key agreement failed", sizeof("key agreement failed") - 1, line, column);
+    }
+    unsigned char *secret = ncr_allocate(secret_length, line, column);
+    size_t actual_length = secret_length;
+    success = EVP_PKEY_derive(context, secret, &actual_length) > 0 && actual_length <= secret_length;
+    EVP_PKEY_CTX_free(context);
+    if (!success || actual_length == 0) {
+        OPENSSL_cleanse(secret, secret_length);
+        ncr_deallocate(secret);
+        return ncr_result_error_@KEY_AGREE_ERROR_RESULT@("key agreement failed", sizeof("key agreement failed") - 1, line, column);
+    }
+    @BUFFER_TYPE@ output = ncr_cryptokeys_buffer_take(secret, actual_length, secret_length, line, column);
+    return (@KEY_AGREE_RESULT@){ .tag = @KEY_AGREE_OK_TAG@, .data.v@KEY_AGREE_OK_TAG@.f0 = output };
+}
+/* CRYPTOKEYS_GROUP_END KEY */
+
+/* CRYPTOKEYS_GROUP DIGEST */
+static void ncr_cryptokeys_digest_destroy(void *value) {
+    if (value != NULL) { EVP_MD_CTX_free((EVP_MD_CTX *)value); }
+}
+
+static @DIGEST_CREATE_RESULT@ @CRYPTO_DIGEST_CREATE@(@TEXT_TYPE@ ncr_v_@DIGEST_CREATE_ALGORITHM_ID@, size_t line, size_t column) {
+    const char *name = ncr_cryptokeys_digest_name(ncr_v_@DIGEST_CREATE_ALGORITHM_ID@);
+    const EVP_MD *algorithm = name == NULL ? NULL : EVP_get_digestbyname(name);
+    if (algorithm == NULL) {
+        return ncr_result_error_@DIGEST_CREATE_ERROR_RESULT@("unsupported digest algorithm", sizeof("unsupported digest algorithm") - 1, line, column);
+    }
+    EVP_MD_CTX *context = EVP_MD_CTX_new();
+    if (context == NULL || EVP_DigestInit_ex(context, algorithm, NULL) != 1) {
+        EVP_MD_CTX_free(context);
+        return ncr_result_error_@DIGEST_CREATE_ERROR_RESULT@("digest initialization failed", sizeof("digest initialization failed") - 1, line, column);
+    }
+    @DIGEST_TYPE@ owner = ncr_allocate(sizeof(*owner), line, column);
+    owner->context = context;
+    owner->finished = false;
+    return (@DIGEST_CREATE_RESULT@){ .tag = @DIGEST_CREATE_OK_TAG@, .data.v@DIGEST_CREATE_OK_TAG@.f0 = owner };
+}
+
+static @DIGEST_UPDATE_RESULT@ @CRYPTO_DIGEST_UPDATE@(@DIGEST_TYPE@ ncr_self,
+    @BUFFER_TYPE@ ncr_v_@DIGEST_UPDATE_BYTES_ID@, size_t line, size_t column) {
+    if (ncr_self->finished || ncr_self->context == NULL) {
+        return ncr_result_error_@DIGEST_UPDATE_ERROR_RESULT@("digest is already finished", sizeof("digest is already finished") - 1, line, column);
+    }
+    const unsigned char *bytes = ncr_v_@DIGEST_UPDATE_BYTES_ID@->length == 0 ? (const unsigned char *)"" : ncr_v_@DIGEST_UPDATE_BYTES_ID@->bytes;
+    if (EVP_DigestUpdate((EVP_MD_CTX *)ncr_self->context, bytes, ncr_v_@DIGEST_UPDATE_BYTES_ID@->length) != 1) {
+        return ncr_result_error_@DIGEST_UPDATE_ERROR_RESULT@("digest update failed", sizeof("digest update failed") - 1, line, column);
+    }
+    return (@DIGEST_UPDATE_RESULT@){ .tag = @DIGEST_UPDATE_OK_TAG@, .data.v@DIGEST_UPDATE_OK_TAG@.f0 = 0 };
+}
+
+static @DIGEST_FINISH_RESULT@ @CRYPTO_DIGEST_FINISH@(@DIGEST_TYPE@ ncr_self, size_t line, size_t column) {
+    if (ncr_self->finished || ncr_self->context == NULL) {
+        return ncr_result_error_@DIGEST_FINISH_ERROR_RESULT@("digest is already finished", sizeof("digest is already finished") - 1, line, column);
+    }
+    ncr_self->finished = true;
+    EVP_MD_CTX *context = (EVP_MD_CTX *)ncr_self->context;
+    ncr_self->context = NULL;
+    unsigned char bytes[EVP_MAX_MD_SIZE];
+    unsigned int length = 0;
+    int finished = EVP_DigestFinal_ex(context, bytes, &length);
+    EVP_MD_CTX_free(context);
+    if (finished != 1 || length == 0 || length > sizeof(bytes)) {
+        OPENSSL_cleanse(bytes, sizeof(bytes));
+        return ncr_result_error_@DIGEST_FINISH_ERROR_RESULT@("digest finalization failed", sizeof("digest finalization failed") - 1, line, column);
+    }
+    @BUFFER_TYPE@ output = ncr_cryptokeys_buffer_copy(bytes, length, line, column);
+    OPENSSL_cleanse(bytes, sizeof(bytes));
+    return (@DIGEST_FINISH_RESULT@){ .tag = @DIGEST_FINISH_OK_TAG@, .data.v@DIGEST_FINISH_OK_TAG@.f0 = output };
+}
+/* CRYPTOKEYS_GROUP_END DIGEST */
+
+/* CRYPTOKEYS_GROUP MAC */
+static void ncr_cryptokeys_mac_destroy(void *algorithm, void *context) {
+    if (context != NULL) { EVP_MAC_CTX_free((EVP_MAC_CTX *)context); }
+    if (algorithm != NULL) { EVP_MAC_free((EVP_MAC *)algorithm); }
+}
+
+static @MAC_CREATE_RESULT@ @CRYPTO_MAC_CREATE@(@TEXT_TYPE@ ncr_v_@MAC_CREATE_ALGORITHM_ID@,
+    @BUFFER_TYPE@ ncr_v_@MAC_CREATE_KEY_ID@, size_t line, size_t column) {
+    const char *name = ncr_cryptokeys_digest_name(ncr_v_@MAC_CREATE_ALGORITHM_ID@);
+    if (name == NULL) { return ncr_result_error_@MAC_CREATE_ERROR_RESULT@("unsupported MAC digest algorithm", sizeof("unsupported MAC digest algorithm") - 1, line, column); }
+    EVP_MAC *algorithm = EVP_MAC_fetch(NULL, "HMAC", NULL);
+    EVP_MAC_CTX *context = algorithm == NULL ? NULL : EVP_MAC_CTX_new(algorithm);
+    char *parameter_digest = (char *)name;
+    OSSL_PARAM parameters[2];
+    parameters[0] = OSSL_PARAM_construct_utf8_string(OSSL_MAC_PARAM_DIGEST, parameter_digest, 0);
+    parameters[1] = OSSL_PARAM_construct_end();
+    const unsigned char *key = ncr_v_@MAC_CREATE_KEY_ID@->length == 0 ? (const unsigned char *)"" : ncr_v_@MAC_CREATE_KEY_ID@->bytes;
+    if (context == NULL || EVP_MAC_init(context, key, ncr_v_@MAC_CREATE_KEY_ID@->length, parameters) != 1) {
+        ncr_cryptokeys_mac_destroy(algorithm, context);
+        return ncr_result_error_@MAC_CREATE_ERROR_RESULT@("MAC initialization failed", sizeof("MAC initialization failed") - 1, line, column);
+    }
+    @MAC_TYPE@ owner = ncr_allocate(sizeof(*owner), line, column);
+    owner->algorithm = algorithm;
+    owner->context = context;
+    owner->finished = false;
+    return (@MAC_CREATE_RESULT@){ .tag = @MAC_CREATE_OK_TAG@, .data.v@MAC_CREATE_OK_TAG@.f0 = owner };
+}
+
+static @MAC_UPDATE_RESULT@ @CRYPTO_MAC_UPDATE@(@MAC_TYPE@ ncr_self,
+    @BUFFER_TYPE@ ncr_v_@MAC_UPDATE_BYTES_ID@, size_t line, size_t column) {
+    if (ncr_self->finished || ncr_self->context == NULL) {
+        return ncr_result_error_@MAC_UPDATE_ERROR_RESULT@("MAC is already finished", sizeof("MAC is already finished") - 1, line, column);
+    }
+    const unsigned char *bytes = ncr_v_@MAC_UPDATE_BYTES_ID@->length == 0 ? (const unsigned char *)"" : ncr_v_@MAC_UPDATE_BYTES_ID@->bytes;
+    if (EVP_MAC_update((EVP_MAC_CTX *)ncr_self->context, bytes, ncr_v_@MAC_UPDATE_BYTES_ID@->length) != 1) {
+        return ncr_result_error_@MAC_UPDATE_ERROR_RESULT@("MAC update failed", sizeof("MAC update failed") - 1, line, column);
+    }
+    return (@MAC_UPDATE_RESULT@){ .tag = @MAC_UPDATE_OK_TAG@, .data.v@MAC_UPDATE_OK_TAG@.f0 = 0 };
+}
+
+static @MAC_FINISH_RESULT@ @CRYPTO_MAC_FINISH@(@MAC_TYPE@ ncr_self, size_t line, size_t column) {
+    if (ncr_self->finished || ncr_self->context == NULL) {
+        return ncr_result_error_@MAC_FINISH_ERROR_RESULT@("MAC is already finished", sizeof("MAC is already finished") - 1, line, column);
+    }
+    ncr_self->finished = true;
+    EVP_MAC_CTX *context = (EVP_MAC_CTX *)ncr_self->context;
+    EVP_MAC *algorithm = (EVP_MAC *)ncr_self->algorithm;
+    ncr_self->context = NULL;
+    ncr_self->algorithm = NULL;
+    unsigned char bytes[EVP_MAX_MD_SIZE];
+    size_t length = 0;
+    int finished = EVP_MAC_final(context, bytes, &length, sizeof(bytes));
+    ncr_cryptokeys_mac_destroy(algorithm, context);
+    if (finished != 1 || length == 0 || length > sizeof(bytes)) {
+        OPENSSL_cleanse(bytes, sizeof(bytes));
+        return ncr_result_error_@MAC_FINISH_ERROR_RESULT@("MAC finalization failed", sizeof("MAC finalization failed") - 1, line, column);
+    }
+    @BUFFER_TYPE@ output = ncr_cryptokeys_buffer_copy(bytes, length, line, column);
+    OPENSSL_cleanse(bytes, sizeof(bytes));
+    return (@MAC_FINISH_RESULT@){ .tag = @MAC_FINISH_OK_TAG@, .data.v@MAC_FINISH_OK_TAG@.f0 = output };
+}
+/* CRYPTOKEYS_GROUP_END MAC */
+
+/* CRYPTOKEYS_GROUP CERTIFICATE */
+static void ncr_cryptokeys_certificate_destroy(void *certificate, void *chain) {
+    if (certificate != NULL) { X509_free((X509 *)certificate); }
+    if (chain != NULL) { sk_X509_pop_free((STACK_OF(X509) *)chain, X509_free); }
+}
+
+static bool ncr_cryptokeys_certificate_time(X509 *certificate, bool before, int64_t *seconds) {
+    const ASN1_TIME *value = before ? X509_get0_notBefore(certificate) : X509_get0_notAfter(certificate);
+    struct tm parsed = {0};
+    errno = 0;
+    time_t converted = timegm(&parsed);
+    if (converted == (time_t)-1 && errno == EOVERFLOW) { return false; }
+    int64_t result = (int64_t)converted;
+    if ((time_t)result != converted) { return false; }
+    *seconds = result;
+    return true;
+}
+
+static X509 *ncr_cryptokeys_parse_certificate(const unsigned char *block, size_t block_length) {
+    if (block_length > INT_MAX) { return NULL; }
+    BIO *bio = BIO_new_mem_buf(block, (int)block_length);
+    if (bio == NULL) { return NULL; }
+    X509 *certificate = PEM_read_bio_X509(bio, NULL, NULL, NULL);
+    BIO_free(bio);
+    int64_t before = 0, after = 0;
+    EVP_PKEY *public_key = certificate == NULL ? NULL : X509_get_pubkey(certificate);
+    if (certificate == NULL || !ncr_cryptokeys_certificate_time(certificate, true, &before) ||
+        !ncr_cryptokeys_certificate_time(certificate, false, &after) || before > after || public_key == NULL) {
+        EVP_PKEY_free(public_key);
+        X509_free(certificate);
+        return NULL;
+    }
+    EVP_PKEY_free(public_key);
+    return certificate;
+}
+
+static @CERTIFICATE_PARSE_RESULT@ ncr_cryptokeys_certificate_parse(@TEXT_TYPE@ pem,
+    bool allow_chain, size_t line, size_t column) {
+    if (pem == NULL || pem->length <= 0 || ncr_cryptokeys_text_has_nul(pem)) {
+        return ncr_result_error_@CERTIFICATE_PARSE_ERROR_RESULT@("invalid certificate PEM", sizeof("invalid certificate PEM") - 1, line, column);
+    }
+    size_t cursor = 0;
+    const unsigned char *block = NULL;
+    size_t block_length = 0;
+    char label[128];
+    X509 *leaf = NULL;
+    STACK_OF(X509) *chain = NULL;
+    size_t count = 0;
+    for (;;) {
+        int status = ncr_cryptokeys_next_pem(pem->bytes, (size_t)pem->length,
+            &cursor, &block, &block_length, label, sizeof(label));
+        if (status == 0) { break; }
+        if (status != 1 || strcmp(label, "CERTIFICATE") != 0) { goto invalid_certificate; }
+        X509 *certificate = ncr_cryptokeys_parse_certificate(block, block_length);
+        if (certificate == NULL) { goto invalid_certificate; }
+        if (count == 0) {
+            leaf = certificate;
+        } else {
+            if (!allow_chain) { X509_free(certificate); goto invalid_certificate; }
+            if (chain == NULL) { chain = sk_X509_new_null(); }
+            if (chain == NULL || sk_X509_push(chain, certificate) == 0) {
+                X509_free(certificate);
+                goto invalid_certificate;
+            }
+        }
+        ++count;
+    }
+    if (count == 0) { goto invalid_certificate; }
+    @CERTIFICATE_TYPE@ owner = ncr_allocate(sizeof(*owner), line, column);
+    owner->certificate = leaf;
+    owner->chain = chain;
+    return (@CERTIFICATE_PARSE_RESULT@){ .tag = @CERTIFICATE_PARSE_OK_TAG@, .data.v@CERTIFICATE_PARSE_OK_TAG@.f0 = owner };
+
+invalid_certificate:
+    X509_free(leaf);
+    if (chain != NULL) { sk_X509_pop_free(chain, X509_free); }
+    return ncr_result_error_@CERTIFICATE_PARSE_ERROR_RESULT@("invalid certificate PEM", sizeof("invalid certificate PEM") - 1, line, column);
+}
+
+static @CERTIFICATE_PARSE_RESULT@ @CERTIFICATE_PARSE_PEM@(@TEXT_TYPE@ ncr_v_@CERTIFICATE_PARSE_PEM_ID@, size_t line, size_t column) {
+    return ncr_cryptokeys_certificate_parse(ncr_v_@CERTIFICATE_PARSE_PEM_ID@, false, line, column);
+}
+
+static @CERTIFICATE_PARSE_CHAIN_RESULT@ @CERTIFICATE_PARSE_PEM_CHAIN@(@TEXT_TYPE@ ncr_v_@CERTIFICATE_PARSE_PEM_CHAIN_ID@, size_t line, size_t column) {
+    return ncr_cryptokeys_certificate_parse(ncr_v_@CERTIFICATE_PARSE_PEM_CHAIN_ID@, true, line, column);
+}
+
+static @TEXT_TYPE@ ncr_cryptokeys_certificate_name(X509 *certificate, bool issuer, size_t line, size_t column) {
+    X509_NAME *name = issuer ? X509_get_issuer_name(certificate) : X509_get_subject_name(certificate);
+    BIO *bio = BIO_new(BIO_s_mem());
+    if (name == NULL || bio == NULL || X509_NAME_print_ex(bio, name, 0, XN_FLAG_RFC2253) < 0) {
+        BIO_free(bio);
+        return NULL;
+    }
+    BUF_MEM *memory = NULL;
+    BIO_get_mem_ptr(bio, &memory);
+    if (memory == NULL || memory->length > INT32_MAX) {
+        BIO_free(bio);
+        return NULL;
+    }
+    @TEXT_TYPE@ text = @TEXT_FROM_BYTES@( (const unsigned char *)memory->data, memory->length, line, column);
+    BIO_free(bio);
+    return text;
+}
+
+static @CERTIFICATE_SUBJECT_RESULT@ @CERTIFICATE_SUBJECT@(@CERTIFICATE_TYPE@ ncr_self, size_t line, size_t column) {
+    @TEXT_TYPE@ text = ncr_cryptokeys_certificate_name((X509 *)ncr_self->certificate, false, line, column);
+    if (text == NULL) { return ncr_result_error_@CERTIFICATE_SUBJECT_ERROR_RESULT@("certificate subject encoding failed", sizeof("certificate subject encoding failed") - 1, line, column); }
+    return (@CERTIFICATE_SUBJECT_RESULT@){ .tag = @CERTIFICATE_SUBJECT_OK_TAG@, .data.v@CERTIFICATE_SUBJECT_OK_TAG@.f0 = text };
+}
+
+static @CERTIFICATE_ISSUER_RESULT@ @CERTIFICATE_ISSUER@(@CERTIFICATE_TYPE@ ncr_self, size_t line, size_t column) {
+    @TEXT_TYPE@ text = ncr_cryptokeys_certificate_name((X509 *)ncr_self->certificate, true, line, column);
+    if (text == NULL) { return ncr_result_error_@CERTIFICATE_ISSUER_ERROR_RESULT@("certificate issuer encoding failed", sizeof("certificate issuer encoding failed") - 1, line, column); }
+    return (@CERTIFICATE_ISSUER_RESULT@){ .tag = @CERTIFICATE_ISSUER_OK_TAG@, .data.v@CERTIFICATE_ISSUER_OK_TAG@.f0 = text };
+}
+
+static @CERTIFICATE_SERIAL_RESULT@ @CERTIFICATE_SERIAL_TEXT@(@CERTIFICATE_TYPE@ ncr_self, size_t line, size_t column) {
+    const ASN1_INTEGER *serial = X509_get0_serialNumber((X509 *)ncr_self->certificate);
+    BIGNUM *number = serial == NULL ? NULL : ASN1_INTEGER_to_BN(serial, NULL);
+    char *decimal = number == NULL ? NULL : BN_bn2dec(number);
+    BN_free(number);
+    if (decimal == NULL) { return ncr_result_error_@CERTIFICATE_SERIAL_ERROR_RESULT@("certificate serial encoding failed", sizeof("certificate serial encoding failed") - 1, line, column); }
+    @TEXT_TYPE@ text = @TEXT_FROM_BYTES@( (const unsigned char *)decimal, strlen(decimal), line, column);
+    OPENSSL_free(decimal);
+    return (@CERTIFICATE_SERIAL_RESULT@){ .tag = @CERTIFICATE_SERIAL_OK_TAG@, .data.v@CERTIFICATE_SERIAL_OK_TAG@.f0 = text };
+}
+
+static bool ncr_cryptokeys_certificate_timestamp(@CERTIFICATE_TYPE@ ncr_self,
+    bool before, int64_t *seconds) {
+    return ncr_cryptokeys_certificate_time((X509 *)ncr_self->certificate, before, seconds);
+}
+
+static @CERTIFICATE_NOT_BEFORE_RESULT@ @CERTIFICATE_NOT_BEFORE_UNIX_SECONDS@(@CERTIFICATE_TYPE@ ncr_self, size_t line, size_t column) {
+    int64_t seconds = 0;
+    if (!ncr_cryptokeys_certificate_timestamp(ncr_self, true, &seconds)) {
+        return ncr_result_error_@CERTIFICATE_NOT_BEFORE_ERROR_RESULT@("certificate notBefore time is invalid", sizeof("certificate notBefore time is invalid") - 1, line, column);
+    }
+    return (@CERTIFICATE_NOT_BEFORE_RESULT@){ .tag = @CERTIFICATE_NOT_BEFORE_OK_TAG@, .data.v@CERTIFICATE_NOT_BEFORE_OK_TAG@.f0 = seconds };
+}
+
+static @CERTIFICATE_NOT_AFTER_RESULT@ @CERTIFICATE_NOT_AFTER_UNIX_SECONDS@(@CERTIFICATE_TYPE@ ncr_self, size_t line, size_t column) {
+    int64_t seconds = 0;
+    if (!ncr_cryptokeys_certificate_timestamp(ncr_self, false, &seconds)) {
+        return ncr_result_error_@CERTIFICATE_NOT_AFTER_ERROR_RESULT@("certificate notAfter time is invalid", sizeof("certificate notAfter time is invalid") - 1, line, column);
+    }
+    return (@CERTIFICATE_NOT_AFTER_RESULT@){ .tag = @CERTIFICATE_NOT_AFTER_OK_TAG@, .data.v@CERTIFICATE_NOT_AFTER_OK_TAG@.f0 = seconds };
+}
+
+static @CERTIFICATE_HOST_RESULT@ @CERTIFICATE_MATCHES_HOST@(@CERTIFICATE_TYPE@ ncr_self,
+    @TEXT_TYPE@ ncr_v_@CERTIFICATE_MATCHES_HOST_ID@, size_t line, size_t column) {
+    if (ncr_v_@CERTIFICATE_MATCHES_HOST_ID@ == NULL || ncr_v_@CERTIFICATE_MATCHES_HOST_ID@->length <= 0 ||
+        ncr_cryptokeys_text_has_nul(ncr_v_@CERTIFICATE_MATCHES_HOST_ID@)) {
+        return ncr_result_error_@CERTIFICATE_HOST_ERROR_RESULT@("hostname must be nonempty and contain no NUL", sizeof("hostname must be nonempty and contain no NUL") - 1, line, column);
+    }
+    int matched = X509_check_host((X509 *)ncr_self->certificate,
+        (const char *)ncr_v_@CERTIFICATE_MATCHES_HOST_ID@->bytes,
+        (size_t)ncr_v_@CERTIFICATE_MATCHES_HOST_ID@->length,
+        X509_CHECK_FLAG_NEVER_CHECK_SUBJECT, NULL);
+    if (matched == 1) { return (@CERTIFICATE_HOST_RESULT@){ .tag = @CERTIFICATE_HOST_OK_TAG@, .data.v@CERTIFICATE_HOST_OK_TAG@.f0 = true }; }
+    if (matched == 0) { return (@CERTIFICATE_HOST_RESULT@){ .tag = @CERTIFICATE_HOST_OK_TAG@, .data.v@CERTIFICATE_HOST_OK_TAG@.f0 = false }; }
+    return ncr_result_error_@CERTIFICATE_HOST_ERROR_RESULT@("hostname check failed", sizeof("hostname check failed") - 1, line, column);
+}
+
+static @CERTIFICATE_VERIFY_RESULT@ @CERTIFICATE_VERIFY@(@CERTIFICATE_TYPE@ ncr_self,
+    @TEXT_TYPE@ ncr_v_@CERTIFICATE_VERIFY_HOST_ID@, @PATH_TYPE@ ncr_v_@CERTIFICATE_VERIFY_CA_ID@,
+    int64_t ncr_v_@CERTIFICATE_VERIFY_TIME_ID@, size_t line, size_t column) {
+    const char *failure = "certificate verification failed";
+    if (ncr_v_@CERTIFICATE_VERIFY_HOST_ID@ == NULL || ncr_v_@CERTIFICATE_VERIFY_HOST_ID@->length <= 0 ||
+        ncr_cryptokeys_text_has_nul(ncr_v_@CERTIFICATE_VERIFY_HOST_ID@) || ncr_v_@CERTIFICATE_VERIFY_CA_ID@ == NULL ||
+        ncr_v_@CERTIFICATE_VERIFY_CA_ID@->text == NULL || ncr_v_@CERTIFICATE_VERIFY_CA_ID@->text->length <= 0 ||
+        ncr_cryptokeys_text_has_nul(ncr_v_@CERTIFICATE_VERIFY_CA_ID@->text)) {
+        return ncr_result_error_@CERTIFICATE_VERIFY_ERROR_RESULT@("hostname and CA file path must be nonempty and contain no NUL", sizeof("hostname and CA file path must be nonempty and contain no NUL") - 1, line, column);
+    }
+    time_t verify_time = (time_t)ncr_v_@CERTIFICATE_VERIFY_TIME_ID@;
+    if ((int64_t)verify_time != ncr_v_@CERTIFICATE_VERIFY_TIME_ID@) {
+        return ncr_result_error_@CERTIFICATE_VERIFY_ERROR_RESULT@("verification time is outside the platform range", sizeof("verification time is outside the platform range") - 1, line, column);
+    }
+    size_t path_length = (size_t)ncr_v_@CERTIFICATE_VERIFY_CA_ID@->text->length;
+    if (path_length == SIZE_MAX) { return ncr_result_error_@CERTIFICATE_VERIFY_ERROR_RESULT@("CA file path is too long", sizeof("CA file path is too long") - 1, line, column); }
+    char *path = OPENSSL_malloc(path_length + 1);
+    if (path == NULL) { return ncr_result_error_@CERTIFICATE_VERIFY_ERROR_RESULT@("CA file path allocation failed", sizeof("CA file path allocation failed") - 1, line, column); }
+    memcpy(path, ncr_v_@CERTIFICATE_VERIFY_CA_ID@->text->bytes, path_length);
+    path[path_length] = '\0';
+
+    X509_STORE *store = X509_STORE_new();
+    X509_STORE_CTX *context = X509_STORE_CTX_new();
+    int initialized = store != NULL && context != NULL && X509_STORE_load_file(store, path) == 1 &&
+        X509_STORE_CTX_init(context, store, (X509 *)ncr_self->certificate,
+            (STACK_OF(X509) *)ncr_self->chain) == 1;
+    OPENSSL_free(path);
+    if (!initialized) {
+        X509_STORE_CTX_free(context);
+        X509_STORE_free(store);
+        return ncr_result_error_@CERTIFICATE_VERIFY_ERROR_RESULT@("unable to initialize certificate trust verification", sizeof("unable to initialize certificate trust verification") - 1, line, column);
+    }
+    X509_VERIFY_PARAM *parameters = X509_STORE_CTX_get0_param(context);
+    bool parameters_set = parameters != NULL &&
+        X509_VERIFY_PARAM_set1_host(parameters, (const char *)ncr_v_@CERTIFICATE_VERIFY_HOST_ID@->bytes,
+            (size_t)ncr_v_@CERTIFICATE_VERIFY_HOST_ID@->length) == 1;
+    if (parameters_set) {
+        X509_VERIFY_PARAM_set_hostflags(parameters, X509_CHECK_FLAG_NEVER_CHECK_SUBJECT);
+        parameters_set = X509_VERIFY_PARAM_set_purpose(parameters, X509_PURPOSE_SSL_SERVER) == 1;
+        X509_VERIFY_PARAM_set_time(parameters, verify_time);
+    }
+    int verified = parameters_set ? X509_verify_cert(context) : -1;
+    X509_STORE_CTX_free(context);
+    X509_STORE_free(store);
+    if (verified != 1) { return ncr_result_error_@CERTIFICATE_VERIFY_ERROR_RESULT@(failure, sizeof("certificate verification failed") - 1, line, column); }
+    return (@CERTIFICATE_VERIFY_RESULT@){ .tag = @CERTIFICATE_VERIFY_OK_TAG@, .data.v@CERTIFICATE_VERIFY_OK_TAG@.f0 = 0 };
+}
+/* CRYPTOKEYS_GROUP_END CERTIFICATE */

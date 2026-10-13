@@ -142,7 +142,9 @@ impl Tables {
                         t::NativeClass::SocketAddress | t::NativeClass::TcpListener |
                         t::NativeClass::TcpStream | t::NativeClass::Datagram |
                         t::NativeClass::UdpSocket | t::NativeClass::HttpRequest |
-                        t::NativeClass::HttpResponse | t::NativeClass::Env |
+                        t::NativeClass::HttpResponse | t::NativeClass::CryptoKey |
+                        t::NativeClass::CryptoDigest | t::NativeClass::CryptoMac |
+                        t::NativeClass::Certificate | t::NativeClass::Env |
                         t::NativeClass::Command | t::NativeClass::Process |
                         t::NativeClass::ProcessOutput) | None => (None, None, None),
                 };
@@ -299,6 +301,10 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
             Some(a::NativeClass::UdpSocket) => Some(t::NativeClass::UdpSocket),
             Some(a::NativeClass::HttpRequest) => Some(t::NativeClass::HttpRequest),
             Some(a::NativeClass::HttpResponse) => Some(t::NativeClass::HttpResponse),
+            Some(a::NativeClass::CryptoKey) => Some(t::NativeClass::CryptoKey),
+            Some(a::NativeClass::CryptoDigest) => Some(t::NativeClass::CryptoDigest),
+            Some(a::NativeClass::CryptoMac) => Some(t::NativeClass::CryptoMac),
+            Some(a::NativeClass::Certificate) => Some(t::NativeClass::Certificate),
             Some(a::NativeClass::Thread(_)) => Some(t::NativeClass::Thread(Type::Void)),
             Some(a::NativeClass::Mutex(_)) => Some(t::NativeClass::Mutex(Type::Void)),
             Some(a::NativeClass::Guard(_)) => Some(t::NativeClass::Guard(Type::Void)),
