@@ -87,7 +87,7 @@ pub fn compile_c_optimized(source: &str, optimization: &str, flags: &[&str]) -> 
     fs::write(&c_path, source).map_err(|e| format!("failed to write temporary C source: {e}"))?;
     let output = Command::new(&compiler)
         .arg(optimization)
-        .args(["-std=c11", "-Wall", "-Wextra", "-pedantic", "-Wno-unused-function", "-Wno-unused-variable", "-Wno-unused-parameter", "-Wno-unused-but-set-variable"])
+        .args(["-std=c11", "-pthread", "-Wall", "-Wextra", "-pedantic", "-Wno-unused-function", "-Wno-unused-variable", "-Wno-unused-parameter", "-Wno-unused-but-set-variable"])
         .args(flags)
         .arg(&c_path).arg("-o").arg(&executable)
         .args(if cfg!(unix) { &["-lm", "-pthread"][..] } else { &[][..] })

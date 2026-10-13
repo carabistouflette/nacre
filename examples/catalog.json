@@ -1,6 +1,14 @@
 {
   "examples": [
     {
+      "category": "systems",
+      "source": "examples/systems/concurrency.ncr",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["2000", "15"]
+    },
+    {
       "category": "collections",
       "source": "examples/collections/set_deque_sort.ncr",
       "stdin": "",

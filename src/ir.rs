@@ -126,7 +126,7 @@ pub enum CallTarget { Function(usize), Println }
 
 /// Trusted standard-library storage, never exposed as source fields.
 #[derive(Debug, Clone, Copy)]
-pub enum NativeClass { List(Type), Array(Type), Deque(Type), Map(MapKeyKind, Type), Set(MapKeyKind), Text, Regex, RegexMatch, Arrays, ByteBuffer, Path, File, Directory, FileInfo, Console, Files, Args, Math, Random, Time, SocketAddress, TcpListener, TcpStream, Datagram, UdpSocket }
+pub enum NativeClass { List(Type), Array(Type), Deque(Type), Map(MapKeyKind, Type), Set(MapKeyKind), Text, Regex, RegexMatch, Arrays, ByteBuffer, Path, File, Directory, FileInfo, Console, Files, Args, Math, Random, Time, SocketAddress, TcpListener, TcpStream, Datagram, UdpSocket, Thread(Type), Mutex(Type), Guard(Type), Channel(Type), Sender(Type), Receiver(Type) }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NativeMethod {
     ListNew, ListAdd, ListSize, ListCapacity, ListIsEmpty, ListGet, ListGetRef, ListGetMut,
@@ -167,4 +167,8 @@ pub enum NativeMethod {
     TcpStreamPeerAddress, TcpStreamLocalAddress, TcpStreamClose,
     DatagramSource, DatagramBytesRead, DatagramTruncated,
     UdpSocketBind, UdpSocketSendTo, UdpSocketReceiveFrom, UdpSocketLocalAddress, UdpSocketClose,
+    ThreadSpawn, ThreadJoin, MutexCreate, MutexCloneHandle, MutexLock, MutexTryLock,
+    GuardGetRef, GuardGetMut, GuardRead, GuardWrite,
+    ChannelBounded, ChannelTakeSender, ChannelTakeReceiver,
+    SenderSend, SenderCloneSender, SenderClose, ReceiverReceive, ReceiverClose,
 }

@@ -72,6 +72,79 @@ impl Tables {
     fn is_view(&self, ty: Type) -> bool {
         ty.object_class().is_some_and(|id| self.classes[id].has_borrow)
     }
+    fn is_sendable(&self, ty: Type) -> bool {
+        fn class_sendable(tables: &Tables, id: usize, states: &mut [u8]) -> bool {
+            match states[id] {
+                1 | 2 => return true,
+                3 => return false,
+                _ => {}
+            }
+            states[id] = 1;
+            let class = &tables.classes[id];
+            let mut sendable = !class.has_borrow;
+            if sendable && class.is_interface {
+                let mut has_implementation = false;
+                for (candidate, implementation) in tables.classes.iter().enumerate() {
+                    if implementation.implementations.iter().any(|(interface, _)|
+                        *interface == id) {
+                        has_implementation = true;
+                        if !class_sendable(tables, candidate, states) {
+                            sendable = false;
+                            break;
+                        }
+                    }
+                }
+                sendable &= has_implementation;
+            } else if sendable {
+                let native_type = match class.native {
+                    Some(t::NativeClass::List(element)
+                        | t::NativeClass::Array(element)
+                        | t::NativeClass::Deque(element)
+                        | t::NativeClass::Thread(element)
+                        | t::NativeClass::Mutex(element)
+                        | t::NativeClass::Channel(element)
+                        | t::NativeClass::Sender(element)
+                        | t::NativeClass::Receiver(element)) => Some(element),
+                    Some(t::NativeClass::Map(_, value)) => Some(value),
+                    Some(t::NativeClass::Guard(_)) => {
+                        states[id] = 3;
+                        return false;
+                    }
+                    Some(t::NativeClass::Set(_) | t::NativeClass::Text |
+                        t::NativeClass::Regex | t::NativeClass::RegexMatch |
+                        t::NativeClass::Arrays | t::NativeClass::ByteBuffer |
+                        t::NativeClass::Path | t::NativeClass::File |
+                        t::NativeClass::Directory | t::NativeClass::FileInfo |
+                        t::NativeClass::Console | t::NativeClass::Files |
+                        t::NativeClass::Args | t::NativeClass::Math |
+                        t::NativeClass::Random | t::NativeClass::Time |
+                        t::NativeClass::SocketAddress | t::NativeClass::TcpListener |
+                        t::NativeClass::TcpStream | t::NativeClass::Datagram |
+                        t::NativeClass::UdpSocket) | None => None,
+                };
+                if let Some(element) = native_type {
+                    sendable &= value_sendable(tables, element, states);
+                }
+                sendable &= class.fields.iter().all(|field|
+                    value_sendable(tables, field.ty, states));
+                if let Some(variants) = &class.variants {
+                    sendable &= variants.iter().flat_map(|variant| &variant.fields)
+                        .all(|field| value_sendable(tables, *field, states));
+                }
+            }
+            states[id] = if sendable { 2 } else { 3 };
+            sendable
+        }
+        fn value_sendable(tables: &Tables, ty: Type, states: &mut [u8]) -> bool {
+            match ty {
+                Type::Byte | Type::Char | Type::Int | Type::Long | Type::Double |
+                Type::Unit | Type::Boolean | Type::String => true,
+                Type::Object(id) => class_sendable(tables, id, states),
+                Type::Borrow { .. } | Type::Void => false,
+            }
+        }
+        value_sendable(self, ty, &mut vec![0; self.classes.len()])
+    }
     fn map_key_binding_type(&self, key: a::MapKeyKind) -> Type {
         match key {
             a::MapKeyKind::Int => Type::Int,
@@ -164,6 +237,12 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
             Some(a::NativeClass::TcpStream) => Some(t::NativeClass::TcpStream),
             Some(a::NativeClass::Datagram) => Some(t::NativeClass::Datagram),
             Some(a::NativeClass::UdpSocket) => Some(t::NativeClass::UdpSocket),
+            Some(a::NativeClass::Thread(_)) => Some(t::NativeClass::Thread(Type::Void)),
+            Some(a::NativeClass::Mutex(_)) => Some(t::NativeClass::Mutex(Type::Void)),
+            Some(a::NativeClass::Guard(_)) => Some(t::NativeClass::Guard(Type::Void)),
+            Some(a::NativeClass::Channel(_)) => Some(t::NativeClass::Channel(Type::Void)),
+            Some(a::NativeClass::Sender(_)) => Some(t::NativeClass::Sender(Type::Void)),
+            Some(a::NativeClass::Receiver(_)) => Some(t::NativeClass::Receiver(Type::Void)),
             None => None,
         };
     }
@@ -185,6 +264,18 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
                     key_kind, tables.resolve_type(value, class.span)?,
                 ));
             }
+            Some(a::NativeClass::Thread(value)) =>
+                tables.classes[id].native = Some(t::NativeClass::Thread(tables.resolve_type(value, class.span)?)),
+            Some(a::NativeClass::Mutex(value)) =>
+                tables.classes[id].native = Some(t::NativeClass::Mutex(tables.resolve_type(value, class.span)?)),
+            Some(a::NativeClass::Guard(value)) =>
+                tables.classes[id].native = Some(t::NativeClass::Guard(tables.resolve_type(value, class.span)?)),
+            Some(a::NativeClass::Channel(value)) =>
+                tables.classes[id].native = Some(t::NativeClass::Channel(tables.resolve_type(value, class.span)?)),
+            Some(a::NativeClass::Sender(value)) =>
+                tables.classes[id].native = Some(t::NativeClass::Sender(tables.resolve_type(value, class.span)?)),
+            Some(a::NativeClass::Receiver(value)) =>
+                tables.classes[id].native = Some(t::NativeClass::Receiver(tables.resolve_type(value, class.span)?)),
             _ => {}
         }
         let variants = class.variants.as_ref().map(|variants| {
@@ -1170,9 +1261,38 @@ impl Checker<'_> {
         }
         let lock = receiver.as_ref().and_then(Place::root_var);
         if let Some(id) = lock { self.locks.push(id); }
-        let args = self.check_args(&sig, args, span);
+        let checked_args = self.check_args(&sig, args, span);
         if lock.is_some() { self.locks.pop(); }
-        Ok((t::ExprKind::Call { target: CallTarget::Function(id), receiver, args: args? }, sig.return_type))
+        let checked_args = checked_args?;
+        if let Some(owner) = sig.owner {
+            let send_type = match (self.tables.classes[owner].native, sig.name.as_str()) {
+                (Some(t::NativeClass::Mutex(value)), "create") => Some(value),
+                (Some(t::NativeClass::Channel(value)), "bounded") => Some(value),
+                _ => None,
+            };
+            if let Some(value) = send_type {
+                if !self.tables.is_sendable(value) {
+                    return Err(Diagnostic::new(span, format!(
+                        "[E7101] {} requires a recursively sendable value; `{}` contains a borrow, view, or non-sendable control handle",
+                        sig.name, self.tables.type_name(value))));
+                }
+            }
+            if let Some(t::NativeClass::Thread(result)) = self.tables.classes[owner].native {
+                if sig.name == "spawn" {
+                    let task = sig.params.first().copied().expect("Task spawn parameter");
+                    if !self.tables.is_sendable(task) {
+                        return Err(Diagnostic::new(span,
+                            "[E7101] Thread.spawn requires every concrete Task implementation to be recursively sendable"));
+                    }
+                    if !self.tables.is_sendable(result) {
+                        return Err(Diagnostic::new(span, format!(
+                            "[E7101] Thread.spawn result `{}` is not recursively sendable",
+                            self.tables.type_name(result))));
+                    }
+                }
+            }
+        }
+        Ok((t::ExprKind::Call { target: CallTarget::Function(id), receiver, args: checked_args }, sig.return_type))
     }
     fn builtin(&mut self, args: &[a::Expr], span: Span) -> Result<(t::ExprKind, Type), Diagnostic> {
         if args.len() != 1 { return Err(Diagnostic::new(span, "println expects exactly one argument")); }

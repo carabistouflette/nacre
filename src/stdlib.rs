@@ -54,7 +54,9 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
             C::Random => M::RandomNew,
             C::Regex | C::RegexMatch | C::Arrays | C::ByteBuffer |
             C::Path | C::File | C::Directory | C::FileInfo |
-            C::Console | C::Files | C::Args | C::Math | C::Time =>
+            C::Console | C::Files | C::Args | C::Math | C::Time |
+            C::Thread(_) | C::Mutex(_) | C::Guard(_) | C::Channel(_) |
+            C::Sender(_) | C::Receiver(_) =>
                 unreachable!("static or factory-only native class has no constructor"),
             C::SocketAddress | C::TcpListener | C::TcpStream | C::Datagram | C::UdpSocket =>
                 unreachable!("factory-only native class has no constructor"),
@@ -227,6 +229,24 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
         (C::Time, "unixMillis") => M::TimeUnixMillis,
         (C::Time, "sleepMillis") => M::TimeSleepMillis,
         (C::Time, "deadlineAfterMillis") => M::TimeDeadlineAfterMillis,
+        (C::Thread(_), "spawn") => M::ThreadSpawn,
+        (C::Thread(_), "join") => M::ThreadJoin,
+        (C::Mutex(_), "create") => M::MutexCreate,
+        (C::Mutex(_), "cloneHandle") => M::MutexCloneHandle,
+        (C::Mutex(_), "lock") => M::MutexLock,
+        (C::Mutex(_), "tryLock") => M::MutexTryLock,
+        (C::Guard(_), "getRef") => M::GuardGetRef,
+        (C::Guard(_), "getMut") => M::GuardGetMut,
+        (C::Guard(_), "read") => M::GuardRead,
+        (C::Guard(_), "write") => M::GuardWrite,
+        (C::Channel(_), "bounded") => M::ChannelBounded,
+        (C::Channel(_), "takeSender") => M::ChannelTakeSender,
+        (C::Channel(_), "takeReceiver") => M::ChannelTakeReceiver,
+        (C::Sender(_), "send") => M::SenderSend,
+        (C::Sender(_), "cloneSender") => M::SenderCloneSender,
+        (C::Sender(_), "close") => M::SenderClose,
+        (C::Receiver(_), "receive") => M::ReceiverReceive,
+        (C::Receiver(_), "close") => M::ReceiverClose,
         (C::Console, "readLine") => M::ConsoleReadLine,
         (C::Console, "print") => M::ConsolePrint,
         (C::Console, "printText") => M::ConsolePrintText,

@@ -1,0 +1,44 @@
+interface Task<T> {
+    T run();
+}
+
+class Thread<T> {
+    public static Result<Thread<T>, Text> spawn(Task<T> task) {}
+    public Result<T, Text> join() {}
+}
+
+class Mutex<T> {
+    public static Result<Mutex<T>, Text> create(T initial) {}
+    public Result<Mutex<T>, Text> cloneHandle() {}
+    public Result<Guard<T>, Text> lock() {}
+    public Result<Option<Guard<T>>, Text> tryLock() {}
+}
+
+class Guard<T> {
+    public readonly borrow T getRef() {}
+    public borrow mut T getMut() {}
+    public readonly T read() {}
+    public Result<Unit, Text> write(T value) {}
+}
+
+class Channel<T> {
+    public static Result<Channel<T>, Text> bounded(long capacity) {}
+    public Result<Sender<T>, Text> takeSender() {}
+    public Result<Receiver<T>, Text> takeReceiver() {}
+}
+
+class Sender<T> {
+    public Result<Unit, SendError<T>> send(T value) {}
+    public Result<Sender<T>, Text> cloneSender() {}
+    public Result<Unit, Text> close() {}
+}
+
+class Receiver<T> {
+    public Result<Option<T>, Text> receive() {}
+    public Result<Unit, Text> close() {}
+}
+
+enum SendError<T> {
+    Closed(T);
+    System(Text, T);
+}

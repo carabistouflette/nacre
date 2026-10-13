@@ -275,8 +275,8 @@ static void ncr_print_string(ncr_string value) {
    The frontend enforces unique ownership; generated lexical drops do the work.
    Optional counters are diagnostics only and never manage object lifetimes. */
 #ifdef NACRE_MEMORY_STATS
-static size_t ncr_allocations = 0;
-static size_t ncr_frees = 0;
+static _Atomic size_t ncr_allocations = 0;
+static _Atomic size_t ncr_frees = 0;
 #endif
 static void *ncr_allocate(size_t size, size_t line, size_t column) {
     void *p = calloc(1, size);
@@ -285,20 +285,22 @@ static void *ncr_allocate(size_t size, size_t line, size_t column) {
         exit(70);
     }
 #ifdef NACRE_MEMORY_STATS
-    ++ncr_allocations;
+    atomic_fetch_add_explicit(&ncr_allocations, 1, memory_order_relaxed);
 #endif
     return p;
 }
 static void ncr_deallocate(void *p) {
     if (p == NULL) { return; }
 #ifdef NACRE_MEMORY_STATS
-    ++ncr_frees;
+    atomic_fetch_add_explicit(&ncr_frees, 1, memory_order_relaxed);
 #endif
     free(p);
 }
 static void ncr_memory_report(void) {
 #ifdef NACRE_MEMORY_STATS
+    size_t allocations = atomic_load_explicit(&ncr_allocations, memory_order_relaxed);
+    size_t frees = atomic_load_explicit(&ncr_frees, memory_order_relaxed);
     fprintf(stderr, "NACRE_MEMORY allocations=%zu frees=%zu live=%zu\n",
-        ncr_allocations, ncr_frees, ncr_allocations - ncr_frees);
+        allocations, frees, allocations - frees);
 #endif
 }

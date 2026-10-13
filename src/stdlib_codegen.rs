@@ -18,6 +18,7 @@ mod time;
 mod network;
 mod monotonic;
 mod regex;
+mod concurrency;
 
 use crate::ast::MapKeyKind;
 use crate::ir::{self as t, NativeClass as C, Type};
@@ -38,10 +39,12 @@ pub fn fields(program: &t::Program, class: C, class_id: usize) -> String {
         C::Regex | C::RegexMatch => regex::fields(program, class),
         C::SocketAddress | C::TcpListener | C::TcpStream | C::Datagram | C::UdpSocket =>
             network::fields(program, class, class_id),
+        C::Thread(_) | C::Mutex(_) | C::Guard(_) | C::Channel(_) |
+        C::Sender(_) | C::Receiver(_) => concurrency::fields(program, class, class_id),
     }
 }
 
-pub fn drop_fields(program: &t::Program, class: C) -> String {
+pub fn drop_fields(program: &t::Program, class: C, class_id: usize) -> String {
     match class {
         C::List(element) => collections::drop_list_fields(element),
         C::Array(element) => arrays::drop_array_fields(element),
@@ -57,11 +60,17 @@ pub fn drop_fields(program: &t::Program, class: C) -> String {
         C::Regex | C::RegexMatch => regex::drop_fields(program, class),
         C::SocketAddress | C::TcpListener | C::TcpStream | C::Datagram | C::UdpSocket =>
             network::drop_fields(program, class),
+        C::Thread(_) | C::Mutex(_) | C::Guard(_) | C::Channel(_) |
+        C::Sender(_) | C::Receiver(_) => concurrency::drop_fields(class_id),
     }
 }
 
 pub fn hash_table_definition(class_id: usize) -> String {
     collections::hash_table_definition(class_id)
+}
+
+pub(crate) fn drop_helper_prototypes(program: &t::Program) -> String {
+    concurrency::drop_helper_prototypes(program)
 }
 
 pub fn map_entry_definition(program: &t::Program, class_id: usize, key: MapKeyKind, value: Type) -> String {
@@ -97,6 +106,8 @@ fn append_body(program: &t::Program, out: &mut String, class: &t::Class, native:
         C::ByteBuffer => buffer::implementation(program, class.id),
         C::SocketAddress | C::TcpListener | C::TcpStream | C::Datagram | C::UdpSocket => return,
         C::Path | C::File | C::Directory | C::FileInfo => return,
+        C::Thread(_) | C::Mutex(_) | C::Guard(_) | C::Channel(_) |
+        C::Sender(_) | C::Receiver(_) => return,
         C::Regex | C::RegexMatch | C::Console | C::Files | C::Args => return,
     };
     body = body.replace("@ID@", &class.id.to_string());
@@ -129,6 +140,7 @@ pub fn implementations(program: &t::Program) -> String {
         }
     }
     out.push_str(&regex::implementation(program));
+    out.push_str(&concurrency::implementations(program));
     if let Some(console) = console::implementation(program) {
         out.push_str(&console);
         out.push('\n');

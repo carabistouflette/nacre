@@ -257,6 +257,33 @@ impl Expander {
                 }
                 erase_comparator_marker = true;
             }
+            Some(a::NativeClass::Thread(element))
+            | Some(a::NativeClass::Mutex(element))
+            | Some(a::NativeClass::Channel(element)) => {
+                *element = self.ty(element, env, class.span, 0)?;
+            }
+            Some(a::NativeClass::Sender(element))
+            | Some(a::NativeClass::Receiver(element)) => {
+                *element = self.ty(element, env, class.span, 0)?;
+                let channel = Type::Applied {
+                    name: "Channel".to_owned(),
+                    args: vec![element.clone()],
+                };
+                self.ty(&channel, env, class.span, 0)?;
+            }
+            Some(a::NativeClass::Guard(element)) => {
+                *element = self.ty(element, env, class.span, 0)?;
+                let mutex = Type::Applied {
+                    name: "Mutex".to_owned(),
+                    args: vec![element.clone()],
+                };
+                self.ty(&mutex, env, class.span, 0)?;
+                if element.is_copy() {
+                    class.methods.retain(|method| !matches!(method.name.as_str(), "getRef" | "getMut"));
+                } else {
+                    class.methods.retain(|method| !matches!(method.name.as_str(), "read" | "write"));
+                }
+            }
             _ => {}
         }
         if !erase_comparator_marker {

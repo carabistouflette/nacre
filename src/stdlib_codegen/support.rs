@@ -118,6 +118,16 @@ pub(super) fn marker(method: M) -> &'static str {
         M::UdpSocketReceiveFrom => "@UDP_SOCKET_RECEIVE_FROM@",
         M::UdpSocketLocalAddress => "@UDP_SOCKET_LOCAL_ADDRESS@",
         M::UdpSocketClose => "@UDP_SOCKET_CLOSE@",
+        M::ThreadSpawn => "@THREAD_SPAWN@", M::ThreadJoin => "@THREAD_JOIN@",
+        M::MutexCreate => "@MUTEX_CREATE@", M::MutexCloneHandle => "@MUTEX_CLONE_HANDLE@",
+        M::MutexLock => "@MUTEX_LOCK@", M::MutexTryLock => "@MUTEX_TRY_LOCK@",
+        M::GuardGetRef => "@GUARD_GET_REF@", M::GuardGetMut => "@GUARD_GET_MUT@",
+        M::GuardRead => "@GUARD_READ@", M::GuardWrite => "@GUARD_WRITE@",
+        M::ChannelBounded => "@CHANNEL_BOUNDED@", M::ChannelTakeSender => "@CHANNEL_TAKE_SENDER@",
+        M::ChannelTakeReceiver => "@CHANNEL_TAKE_RECEIVER@",
+        M::SenderSend => "@SENDER_SEND@", M::SenderCloneSender => "@SENDER_CLONE_SENDER@",
+        M::SenderClose => "@SENDER_CLOSE@", M::ReceiverReceive => "@RECEIVER_RECEIVE@",
+        M::ReceiverClose => "@RECEIVER_CLOSE@",
     }
 }
 pub(super) fn native_function_if(program: &t::Program, is: impl Fn(M) -> bool) -> Option<&t::Function> {

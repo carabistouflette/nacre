@@ -206,6 +206,7 @@ fn class_support(program: &t::Program) -> String {
     for class in &program.classes {
         out.push_str(&format!("static void ncr_drop_{}({} p);\n", class.id, ctype(program, Type::Object(class.id))));
     }
+    out.push_str(&crate::stdlib_codegen::drop_helper_prototypes(program));
     for class in &program.classes {
         out.push_str(&format!("static void ncr_drop_{}({} p) {{\n", class.id, ctype(program, Type::Object(class.id))));
         if class.is_interface {
@@ -227,7 +228,7 @@ fn class_support(program: &t::Program) -> String {
             for (id, ty) in class.fields.iter().enumerate().rev() {
                 if let Type::Object(child) = ty { out.push_str(&format!("    ncr_drop_{child}(p->ncr_f_{id});\n")); }
             }
-            if let Some(native) = class.native { out.push_str(&crate::stdlib_codegen::drop_fields(program, native)); }
+            if let Some(native) = class.native { out.push_str(&crate::stdlib_codegen::drop_fields(program, native, class.id)); }
             out.push_str("    ncr_deallocate(p);\n");
         }
         out.push_str("}\n");

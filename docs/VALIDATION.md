@@ -106,6 +106,26 @@ capability because no opaque traversal-view type exists. It exposes neither
 bucket layout nor mutation. Persistence continues to include referenced member
 records and validates relationships before replacing live state.
 
+### Native concurrency review
+
+The concrete drift risk was separate sendability rules at thread, mutex and
+channel boundaries. `Tables::is_sendable` now owns one recursive decision across
+class fields, enum payloads, native-container contents and every concrete
+implementation of an interface; all three APIs use it. This is a bounded
+single-choice/DRY remediation rather than parallel validation policies.
+
+The ownership risk was an ordinary value acquiring hidden shared lifetime when a
+task, mutex or channel crossed threads. Atomic reference counts are confined to
+named synchronization control blocks; task results and channel payloads move,
+and the only source-visible increments are `cloneHandle` and `cloneSender`.
+`Guard<T>` remains non-sendable, with borrows rooted in the Guard receiver.
+
+The code-generation risk was growing a second native registry or a universal
+handle abstraction. Concurrency keeps the existing central native router and
+places its storage, lifecycle and method handlers in one cohesive backend unit
+with shared low-level pthread error/refcount helpers. There is no executor,
+callback framework or general-purpose reference-counted value layer.
+
 ## Remote source workflow
 
 All six jobs passed for source commit
@@ -123,12 +143,12 @@ it is not relabeled as current-release evidence.
 ## Boundaries and publication
 
 Loans remain lexical and root-wide; different keys are not independent alias
-domains. Only int keys are supported. Traversal order is unspecified. No
-first-class iterators, NLL, lifetime parameters, partial moves, text/custom keys,
-fallible allocation, exception unwinding, modules, threads, FFI, inheritance or
-direct LLVM backend is provided. Deep owned trees can exhaust the C cleanup
-stack. Hash tables do not promise hash-flooding resistance. Untrusted programs
-are not sandboxed; native Windows/macOS are not certified. Atomic replacement
+domains. Only int keys are supported. Traversal order is unspecified. The language
+has no first-class iterators, NLL, lifetime parameters, partial moves, text/custom
+keys, fallible allocation, exception unwinding, FFI, inheritance or a direct LLVM
+backend. Native concurrency is POSIX/Linux-only; Windows/macOS are not certified.
+Deep owned trees can exhaust the C cleanup stack. Hash tables do not promise
+hash-flooding resistance. Untrusted programs are not sandboxed. Atomic replacement
 promises visibility, not crash durability or preservation of old permissions.
 
 Publication is curated and portable: no workstation paths, process IDs,

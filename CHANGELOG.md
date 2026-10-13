@@ -55,6 +55,13 @@
   preserve unique header identity and free only external byte storage.
   Cloning copies already-validated Text without another UTF-8 pass; comparative
   map query/replacement allocation regressions remain representation-independent.
+- Native POSIX threads, explicitly shared mutex handles and bounded channels move
+  owned tasks and values without cloning. One recursive sendability check covers
+  task implementations, results, fields, enum payloads and native containers.
+  Guard borrows are receiver-rooted; channel abort returns unsent values and drops
+  queued owners outside its lock.
+  Guard accessors borrow stored heap pointers or inline enum addresses as appropriate;
+  hidden Deque payloads participate in exhaustive native sendability classification.
 
 - Postfix `?` unwraps trusted built-in `Result` values or returns the exact
   error payload after cleaning live locals and pending owned C temporaries.

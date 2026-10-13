@@ -28,6 +28,12 @@ enum NativeBuiltin {
     TcpStream,
     Datagram,
     UdpSocket,
+    Thread,
+    Mutex,
+    Guard,
+    Channel,
+    Sender,
+    Receiver,
 }
 
 impl NativeBuiltin {
@@ -66,6 +72,12 @@ impl NativeBuiltin {
             Self::TcpStream => NativeClass::TcpStream,
             Self::Datagram => NativeClass::Datagram,
             Self::UdpSocket => NativeClass::UdpSocket,
+            Self::Thread => NativeClass::Thread(Type::Named("T".to_owned())),
+            Self::Mutex => NativeClass::Mutex(Type::Named("T".to_owned())),
+            Self::Guard => NativeClass::Guard(Type::Named("T".to_owned())),
+            Self::Channel => NativeClass::Channel(Type::Named("T".to_owned())),
+            Self::Sender => NativeClass::Sender(Type::Named("T".to_owned())),
+            Self::Receiver => NativeClass::Receiver(Type::Named("T".to_owned())),
         }
     }
 }
@@ -156,6 +168,19 @@ pub(super) const PRELUDE_UNITS: &[PreludeUnit] = &[
             Builtin { name: "TcpStream", native: Some(NativeBuiltin::TcpStream) },
             Builtin { name: "Datagram", native: Some(NativeBuiltin::Datagram) },
             Builtin { name: "UdpSocket", native: Some(NativeBuiltin::UdpSocket) },
+        ],
+    },
+    PreludeUnit {
+        source: include_str!("../../stdlib/prelude/concurrency.ncr"),
+        builtins: &[
+            Builtin { name: "Task", native: None },
+            Builtin { name: "Thread", native: Some(NativeBuiltin::Thread) },
+            Builtin { name: "Mutex", native: Some(NativeBuiltin::Mutex) },
+            Builtin { name: "Guard", native: Some(NativeBuiltin::Guard) },
+            Builtin { name: "Channel", native: Some(NativeBuiltin::Channel) },
+            Builtin { name: "Sender", native: Some(NativeBuiltin::Sender) },
+            Builtin { name: "Receiver", native: Some(NativeBuiltin::Receiver) },
+            Builtin { name: "SendError", native: None },
         ],
     },
 ];

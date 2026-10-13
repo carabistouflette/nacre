@@ -1,0 +1,99 @@
+class IncrementTask implements Task<Unit> {
+    private Mutex<int> counter;
+    private int rounds;
+
+    public IncrementTask(Mutex<int> counter, int rounds) {
+        this.counter = counter;
+        this.rounds = rounds;
+    }
+
+    public Unit run() {
+        int i = 0;
+        while (i < this.rounds) {
+            match (this.counter.lock()) {
+                Ok(guard) {
+                    int current = guard.read();
+                    match (guard.write(current + 1)) {
+                        Ok(unit) {}
+                        Err(error) { error.print(); return (); }
+                    }
+                }
+                Err(error) { error.print(); return (); }
+            }
+            i = i + 1;
+        }
+        return ();
+    }
+}
+
+class ProducerTask implements Task<Unit> {
+    private Sender<int> sender;
+
+    public ProducerTask(Sender<int> sender) { this.sender = sender; }
+
+    public Unit run() {
+        int value = 1;
+        while (value <= 5) {
+            match (this.sender.send(value)) {
+                Ok(unit) {}
+                Err(error) {
+                    match (error) {
+                        Closed(original) { println(original); }
+                        System(message, original) { message.print(); println(original); }
+                    }
+                    return ();
+                }
+            }
+            value = value + 1;
+        }
+        match (this.sender.close()) {
+            Ok(unit) {}
+            Err(error) { error.print(); }
+        }
+        return ();
+    }
+}
+
+Result<int, Text> runMutexDemo() {
+    Mutex<int> shared = Mutex<int>.create(0)?;
+    Mutex<int> firstHandle = shared.cloneHandle()?;
+    Mutex<int> secondHandle = shared.cloneHandle()?;
+    Thread<Unit> first = Thread<Unit>.spawn(new IncrementTask(firstHandle, 1000))?;
+    Thread<Unit> second = Thread<Unit>.spawn(new IncrementTask(secondHandle, 1000))?;
+    Unit firstDone = first.join()?;
+    Unit secondDone = second.join()?;
+    Guard<int> guard = shared.lock()?;
+    return new Result<int, Text>.Ok(guard.read());
+}
+
+Result<int, Text> runChannelDemo() {
+    Channel<int> channel = Channel<int>.bounded(1L)?;
+    Sender<int> sender = channel.takeSender()?;
+    Receiver<int> receiver = channel.takeReceiver()?;
+    Thread<Unit> producer = Thread<Unit>.spawn(new ProducerTask(sender))?;
+    int total = 0;
+    while (true) {
+        match (receiver.receive()) {
+            Ok(value) {
+                match (value) {
+                    Some(item) { total = total + item; }
+                    None { break; }
+                }
+            }
+            Err(error) { return new Result<int, Text>.Err(error); }
+        }
+    }
+    Unit producerDone = producer.join()?;
+    return new Result<int, Text>.Ok(total);
+}
+
+void main() {
+    match (runMutexDemo()) {
+        Ok(value) { println(value); }
+        Err(error) { error.print(); }
+    }
+    match (runChannelDemo()) {
+        Ok(value) { println(value); }
+        Err(error) { error.print(); }
+    }
+}

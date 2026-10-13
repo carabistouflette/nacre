@@ -44,6 +44,7 @@ pub enum NativeClass {
     Text, Regex, RegexMatch, Arrays, ByteBuffer, Path, File, Directory, FileInfo,
     Console, Files, Args, Math, Random, Time,
     SocketAddress, TcpListener, TcpStream, Datagram, UdpSocket,
+    Thread(Type), Mutex(Type), Guard(Type), Channel(Type), Sender(Type), Receiver(Type),
 }
 #[derive(Debug, Clone)]
 pub struct Variant { pub name: String, pub fields: Vec<Type>, pub span: Span }
