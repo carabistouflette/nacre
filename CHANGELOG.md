@@ -26,6 +26,11 @@
   while datagram truncation is successful metadata (CQS/DbC/POLA). Console and Args
   now have separate backend leaves; the IO storage helper has no emitter routing.
 
+- Tree-sitter, Zed and VS Code syntax now cover module/import paths, qualified
+  generic static calls, native scalar literals and casts, and postfix Result
+  propagation. Editor snippets exercise owned task joins, bounded channels,
+  TCP connections and process output capture.
+
 - Per-file modules and imports resolve public/private type and function names
   before generic expansion, preserving file-local diagnostics and editor overlays.
 - Byte, Unicode-scalar Char, Long, Double and Unit values work through native

@@ -1,12 +1,16 @@
 const PREC = {
   OR: 1,
   AND: 2,
-  EQUALITY: 3,
-  COMPARISON: 4,
-  ADDITIVE: 5,
-  MULTIPLICATIVE: 6,
-  UNARY: 7,
-  POSTFIX: 8,
+  BITWISE_OR: 3,
+  BITWISE_XOR: 4,
+  BITWISE_AND: 5,
+  EQUALITY: 6,
+  COMPARISON: 7,
+  SHIFT: 8,
+  ADDITIVE: 9,
+  MULTIPLICATIVE: 10,
+  UNARY: 11,
+  POSTFIX: 12,
 };
 
 const commaSep1 = (rule) => seq(rule, repeat(seq(',', rule)));
@@ -20,15 +24,41 @@ module.exports = grammar({
     $._return_type, $.type_identifier, $.method_modifiers, $.top_level_modifiers,
     $.interface_method_modifiers,
   ],
-  conflicts: ($) => [[$.generic_type, $._expression], [$.borrowed_type, $._expression]],
+  conflicts: ($) => [
+    [$.qualified_type_identifier, $._expression],
+    [$._type_identifier, $._expression],
+  ],
 
   rules: {
-    source_file: ($) => repeat($._top_level_declaration),
+    source_file: ($) => seq(
+      optional($.module_declaration),
+      repeat($.import_declaration),
+      repeat($._top_level_declaration),
+    ),
+
+    module_declaration: ($) => seq(
+      'module',
+      field('name', $.qualified_identifier),
+      ';',
+    ),
+
+    import_declaration: ($) => seq(
+      'import',
+      field('path', $.qualified_identifier),
+      optional($.wildcard_import),
+      ';',
+    ),
+
+    qualified_identifier: ($) => prec.right(seq(
+      alias($.identifier, $.namespace_identifier),
+      repeat(seq('.', alias($.identifier, $.namespace_identifier))),
+    )),
+    wildcard_import: ($) => token(prec(1, /\.\s*\*/)),
 
     _top_level_declaration: ($) => choice(
-      seq(optional('public'), $.class_declaration),
-      seq(optional('public'), $.interface_declaration),
-      seq(optional('public'), $.enum_declaration),
+      seq(optional($.visibility_modifier), $.class_declaration),
+      seq(optional($.visibility_modifier), $.interface_declaration),
+      seq(optional($.visibility_modifier), $.enum_declaration),
       alias($._top_level_function_declaration, $.function_declaration),
     ),
 
@@ -172,29 +202,38 @@ module.exports = grammar({
 
     _type: ($) => choice(
       $.primitive_type,
-      $.type_identifier,
+      $._type_identifier,
       $.generic_type,
       $.borrowed_type,
     ),
 
     _return_type: ($) => choice($._type, alias('void', $.primitive_type)),
 
-    _reference_type: ($) => choice($.type_identifier, $.generic_type),
+    _reference_type: ($) => choice($._type_identifier, $.generic_type),
     interface_list: ($) => commaSep1($._reference_type),
 
-    primitive_type: ($) => choice('int', 'boolean', 'String'),
+    primitive_type: ($) => choice('byte', 'char', 'int', 'long', 'double', 'Unit', 'boolean', 'String'),
+
+    numeric_type: ($) => choice('byte', 'char', 'int', 'long', 'double'),
 
     type_identifier: ($) => alias($.identifier, $.type_identifier),
 
+    qualified_type_identifier: ($) => prec.right(seq(
+      repeat1(seq(alias($.identifier, $.namespace_identifier), '.')),
+      $.type_identifier,
+    )),
+
+    _type_identifier: ($) => choice($.type_identifier, $.qualified_type_identifier),
+
     generic_type: ($) => seq(
-      field('name', $.type_identifier),
+      field('name', $._type_identifier),
       field('type_arguments', $.type_arguments),
     ),
 
     borrowed_type: ($) => seq(
       'borrow',
       optional('mut'),
-      field('name', $.type_identifier),
+      field('name', $._type_identifier),
       optional(field('type_arguments', $.type_arguments)),
     ),
 
@@ -315,29 +354,47 @@ module.exports = grammar({
     _expression: ($) => choice(
       $.binary_expression,
       $.unary_expression,
+      $.numeric_cast_expression,
       $.borrow_expression,
+      $.generic_static_call_expression,
+      $.result_propagation_expression,
       $.call_expression,
       $.member_expression,
       $.new_expression,
+      $.unit_literal,
       $.parenthesized_expression,
       $.this_expression,
       $.identifier,
       $.integer_literal,
+      $.long_literal,
+      $.double_literal,
       $.boolean_literal,
+      $.character_literal,
       $.string_literal,
     ),
 
     binary_expression: ($) => choice(
       prec.left(PREC.OR, seq(field('left', $._expression), field('operator', '||'), field('right', $._expression))),
       prec.left(PREC.AND, seq(field('left', $._expression), field('operator', '&&'), field('right', $._expression))),
+      prec.left(PREC.BITWISE_OR, seq(field('left', $._expression), field('operator', '|'), field('right', $._expression))),
+      prec.left(PREC.BITWISE_XOR, seq(field('left', $._expression), field('operator', '^'), field('right', $._expression))),
+      prec.left(PREC.BITWISE_AND, seq(field('left', $._expression), field('operator', '&'), field('right', $._expression))),
       prec.left(PREC.EQUALITY, seq(field('left', $._expression), field('operator', choice('==', '!=')), field('right', $._expression))),
       prec.left(PREC.COMPARISON, seq(field('left', $._expression), field('operator', choice('<', '<=', '>', '>=')), field('right', $._expression))),
+      prec.left(PREC.SHIFT, seq(field('left', $._expression), field('operator', choice('<<', $.shift_right_operator)), field('right', $._expression))),
       prec.left(PREC.ADDITIVE, seq(field('left', $._expression), field('operator', choice('+', '-')), field('right', $._expression))),
       prec.left(PREC.MULTIPLICATIVE, seq(field('left', $._expression), field('operator', choice('*', '/', '%')), field('right', $._expression))),
     ),
 
     unary_expression: ($) => prec(PREC.UNARY, seq(
-      field('operator', choice('+', '-', '!')),
+      field('operator', choice('+', '-', '!', '~')),
+      field('argument', $._expression),
+    )),
+
+    numeric_cast_expression: ($) => prec(PREC.UNARY, seq(
+      '(',
+      field('type', $.numeric_type),
+      ')',
       field('argument', $._expression),
     )),
 
@@ -345,6 +402,10 @@ module.exports = grammar({
       'borrow',
       optional('mut'),
       field('argument', $._expression),
+    )),
+    result_propagation_expression: ($) => prec.left(PREC.POSTFIX, seq(
+      field('expression', $._expression),
+      '?',
     )),
 
     member_expression: ($) => prec.left(PREC.POSTFIX, seq(
@@ -357,12 +418,26 @@ module.exports = grammar({
       field('function', choice($.identifier, $.member_expression)),
       field('arguments', $.argument_list),
     )),
+    generic_static_call_expression: ($) => prec.left(PREC.POSTFIX, seq(
+      field('class', $.generic_type),
+      '.',
+      field('function', $.identifier),
+      field('arguments', $.argument_list),
+    )),
 
     new_expression: ($) => seq(
       'new',
-      field('type', choice($.type_identifier, $.generic_type)),
-      optional(seq('.', field('variant', $.identifier))),
-      field('arguments', $.argument_list),
+      choice(
+        seq(
+          field('type', $._type_identifier),
+          field('arguments', $.argument_list),
+        ),
+        seq(
+          field('type', $.generic_type),
+          optional(seq('.', field('variant', $.identifier))),
+          field('arguments', $.argument_list),
+        ),
+      ),
     ),
 
     argument_list: ($) => seq(
@@ -371,13 +446,29 @@ module.exports = grammar({
       ')',
     ),
 
+    unit_literal: ($) => seq('(', ')'),
+
     parenthesized_expression: ($) => seq('(', $._expression, ')'),
 
     this_expression: ($) => 'this',
 
+    shift_right_operator: ($) => token('>>'),
+
     integer_literal: ($) => token(/[0-9]+/),
 
+    long_literal: ($) => token(prec(1, /[0-9]+L/)),
+
+    double_literal: ($) => token(prec(1, /(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)[eE][+-]?[0-9]+|[0-9]+\.[0-9]*|\.[0-9]+/)),
+
     boolean_literal: ($) => choice('true', 'false'),
+
+    character_literal: ($) => seq(
+      "'",
+      choice(token.immediate(/[^'\\\n\r]/), $.character_escape_sequence),
+      token.immediate("'"),
+    ),
+
+    character_escape_sequence: ($) => token.immediate(seq('\\', choice(/[nrt0"'\\]/, /u\{[0-9A-Fa-f]+\}/))),
 
     string_literal: ($) => seq(
       '"',
@@ -388,7 +479,7 @@ module.exports = grammar({
       token.immediate('"'),
     ),
 
-    escape_sequence: ($) => token.immediate(seq('\\', /[nrt0"\\]/)),
+    escape_sequence: ($) => token.immediate(seq('\\', /[nrt0"'\\]/)),
 
     identifier: ($) => /[A-Za-z_][A-Za-z0-9_]*/,
 

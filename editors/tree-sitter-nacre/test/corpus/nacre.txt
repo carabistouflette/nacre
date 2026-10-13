@@ -139,3 +139,180 @@ void main() {
         (identifier)
         (identifier)
         (block)))))
+
+==================
+Modules, qualified generic calls, and alpha numeric syntax
+==================
+module editor.samples;
+import editor.library.Factory;
+import editor.library.*;
+
+Result<int, Text> read(borrow Text text) {
+    return new Result<int, Text>.Ok(text.parseInt()?);
+}
+
+void main() {
+    List<List<long>> nested = new List<List<long>>();
+    List<long> values = editor.library.Factory<List<long>>.identity(new List<long>());
+    editor.library.Box<List<long>> box = new editor.library.Box<List<long>>();
+    byte marker = (byte)65;
+    char scalar = '\u{1f9ea}';
+    long count = 42L;
+    double precise = (double)(int)3.75;
+    Unit unit = ();
+    int comparison = count < 8L >> 1 + 1;
+}
+---
+ (source_file
+   (module_declaration
+     (qualified_identifier
+       (namespace_identifier)
+       (namespace_identifier)))
+   (import_declaration
+     (qualified_identifier
+       (namespace_identifier)
+       (namespace_identifier)
+       (namespace_identifier)))
+   (import_declaration
+     (qualified_identifier
+       (namespace_identifier)
+       (namespace_identifier))
+     (wildcard_import))
+   (function_declaration
+     (generic_type
+       (type_identifier)
+       (type_arguments
+         (primitive_type)
+         (type_identifier)))
+     (identifier)
+     (parameter_list
+       (parameter
+         (borrowed_type
+           (type_identifier))
+         (identifier)))
+     (block
+       (return_statement
+         (new_expression
+           (generic_type
+             (type_identifier)
+             (type_arguments
+               (primitive_type)
+               (type_identifier)))
+           (identifier)
+           (argument_list
+             (result_propagation_expression
+               (call_expression
+                 (member_expression
+                   (identifier)
+                   (identifier))
+                 (argument_list))))))))
+   (function_declaration
+     (primitive_type)
+     (identifier)
+     (parameter_list)
+     (block
+       (variable_declaration
+         (generic_type
+           (type_identifier)
+           (type_arguments
+             (generic_type
+               (type_identifier)
+               (type_arguments
+                 (primitive_type)))))
+         (identifier)
+         (new_expression
+           (generic_type
+             (type_identifier)
+             (type_arguments
+               (generic_type
+                 (type_identifier)
+                 (type_arguments
+                   (primitive_type)))))
+           (argument_list)))
+       (variable_declaration
+         (generic_type
+           (type_identifier)
+           (type_arguments
+             (primitive_type)))
+         (identifier)
+         (generic_static_call_expression
+           (generic_type
+             (qualified_type_identifier
+               (namespace_identifier)
+               (namespace_identifier)
+               (type_identifier))
+             (type_arguments
+               (generic_type
+                 (type_identifier)
+                 (type_arguments
+                   (primitive_type)))))
+           (identifier)
+           (argument_list
+             (new_expression
+               (generic_type
+                 (type_identifier)
+                 (type_arguments
+                   (primitive_type)))
+               (argument_list)))))
+       (variable_declaration
+         (generic_type
+           (qualified_type_identifier
+             (namespace_identifier)
+             (namespace_identifier)
+             (type_identifier))
+           (type_arguments
+             (generic_type
+               (type_identifier)
+               (type_arguments
+                 (primitive_type)))))
+         (identifier)
+         (new_expression
+           (generic_type
+             (qualified_type_identifier
+               (namespace_identifier)
+               (namespace_identifier)
+               (type_identifier))
+             (type_arguments
+               (generic_type
+                 (type_identifier)
+                 (type_arguments
+                   (primitive_type)))))
+           (argument_list)))
+       (variable_declaration
+         (primitive_type)
+         (identifier)
+         (numeric_cast_expression
+           (numeric_type)
+           (integer_literal)))
+       (variable_declaration
+         (primitive_type)
+         (identifier)
+         (character_literal
+           (character_escape_sequence)))
+       (variable_declaration
+         (primitive_type)
+         (identifier)
+         (long_literal))
+       (variable_declaration
+         (primitive_type)
+         (identifier)
+         (numeric_cast_expression
+           (numeric_type)
+           (numeric_cast_expression
+             (numeric_type)
+             (double_literal))))
+       (variable_declaration
+         (primitive_type)
+         (identifier)
+         (unit_literal))
+       (variable_declaration
+         (primitive_type)
+         (identifier)
+         (binary_expression
+           (identifier)
+           (binary_expression
+             (long_literal)
+             (shift_right_operator)
+             (binary_expression
+               (integer_literal)
+               (integer_literal))))))))

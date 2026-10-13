@@ -67,6 +67,8 @@ function sourceForSnippet(name, body) {
   switch (name) {
     case 'Main function':
       return `${body}\n`;
+    case 'Owned task thread':
+      return `${body}\n`;
     case 'Class':
     case 'Interface':
       return `${body}\nvoid main() {}\n`;
@@ -215,6 +217,98 @@ async function main() {
   assert.notEqual(memberLine, -1, 'Sudoku example did not contain a member call');
   assertHasScope(scopesAt(sudoku, memberLine, 'cells'), 'variable.other.property.nacre', 'member field name');
   assertHasScope(scopesAt(sudoku, memberLine, 'reserve'), 'entity.name.function.member.nacre', 'member function name');
+  const numericSource = fs.readFileSync(path.join(repositoryRoot, 'examples/language/numeric_types.ncr'), 'utf8');
+  const numericAlpha = tokenize(grammar, numericSource);
+  const byteTypeLine = numericAlpha.findIndex(({ line }) => line.includes('byte maximumByte'));
+  const charTypeLine = numericAlpha.findIndex(({ line }) => line.includes('char symbol'));
+  const longTypeLine = numericAlpha.findIndex(({ line }) => line.includes('long maximumLong'));
+  const doubleTypeLine = numericAlpha.findIndex(({ line }) => line.includes('double finite'));
+  const unitTypeLine = numericAlpha.findIndex(({ line }) => line.includes('List<Unit> units'));
+  assert.notEqual(byteTypeLine, -1, 'numeric example did not declare a byte');
+  assert.notEqual(charTypeLine, -1, 'numeric example did not declare a character');
+  assert.notEqual(longTypeLine, -1, 'numeric example did not declare a long');
+  assert.notEqual(doubleTypeLine, -1, 'numeric example did not declare a double');
+  assert.notEqual(unitTypeLine, -1, 'numeric example did not declare Unit');
+  for (const [line, type] of [[byteTypeLine, 'byte'], [charTypeLine, 'char'], [longTypeLine, 'long'], [doubleTypeLine, 'double']]) {
+    assertHasScope(scopesAt(numericAlpha, line, type), 'storage.type.primitive.nacre', `${type} primitive type`);
+  }
+  assertHasScope(scopesAt(numericAlpha, unitTypeLine, 'Unit'), 'storage.type.primitive.nacre', 'Unit type');
+  assertHasScope(scopesAt(numericAlpha, charTypeLine, '\\u{1f9ea}'), 'constant.character.escape.nacre', 'Unicode scalar escape');
+  assertHasScope(scopesAt(numericAlpha, longTypeLine, '9223372036854775807L'), 'constant.numeric.integer.long.nacre', 'long literal');
+  assertHasScope(scopesAt(numericAlpha, doubleTypeLine, '3.25'), 'constant.numeric.float.nacre', 'double literal');
+
+  const factoriesSource = fs.readFileSync(path.join(repositoryRoot, 'examples/language/generic_factories.ncr'), 'utf8');
+  const factories = tokenize(grammar, factoriesSource);
+  const genericStaticLine = factories.findIndex(({ line }) => line.includes('Factory<List<int>>.identity'));
+  assert.notEqual(genericStaticLine, -1, 'generic factory example did not contain a nested static call');
+  assertHasScope(scopesAt(factories, genericStaticLine, 'Factory'), 'entity.name.type.nacre', 'generic static receiver type');
+  assertHasScope(scopesAt(factories, genericStaticLine, 'List'), 'support.type.builtin.nacre', 'nested standard generic type');
+  assertHasScope(scopesAt(factories, genericStaticLine, 'identity'), 'entity.name.function.member.nacre', 'generic static method');
+
+  const propagationSource = fs.readFileSync(path.join(repositoryRoot, 'examples/language/error_propagation.ncr'), 'utf8');
+  const propagation = tokenize(grammar, propagationSource);
+  const propagationLine = propagation.findIndex(({ line }) => line.includes('input.parseInt()?'));
+  assert.notEqual(propagationLine, -1, 'error propagation example did not contain postfix propagation');
+  assertHasScope(scopesAt(propagation, propagationLine, '?'), 'keyword.operator.nacre', 'postfix Result propagation');
+
+  const moduleSource = fs.readFileSync(path.join(repositoryRoot, 'examples/language/modules/Main.ncr'), 'utf8');
+  const modules = tokenize(grammar, moduleSource);
+  assertHasScope(scopesAt(modules, 0, 'module'), 'keyword.other.nacre', 'module declaration');
+  assertHasScope(scopesAt(modules, 1, 'import'), 'keyword.other.nacre', 'import declaration');
+  const qualifiedCallLine = modules.findIndex(({ line }) => line.includes('examples.math.Tools.adjust'));
+  assert.notEqual(qualifiedCallLine, -1, 'module example did not contain a qualified static call');
+  assertHasScope(scopesAt(modules, qualifiedCallLine, 'adjust'), 'entity.name.function.member.nacre', 'qualified static method');
+
+  const standardTypes = [
+    ['Array', 'Array<int>'],
+    ['Arrays', 'Arrays'],
+    ['ByteBuffer', 'ByteBuffer'],
+    ['Channel', 'Channel<Text>'],
+    ['Command', 'Command'],
+    ['Comparator', 'Comparator<Text>'],
+    ['Console', 'Console'],
+    ['Datagram', 'Datagram'],
+    ['Deque', 'Deque<Text>'],
+    ['Directory', 'Directory'],
+    ['Env', 'Env'],
+    ['ExitStatus', 'ExitStatus'],
+    ['File', 'File'],
+    ['FileInfo', 'FileInfo'],
+    ['Files', 'Files'],
+    ['Guard', 'Guard<Text>'],
+    ['List', 'List<long>'],
+    ['Map', 'Map<Text, int>'],
+    ['Math', 'Math'],
+    ['Mutex', 'Mutex<Text>'],
+    ['Option', 'Option<int>'],
+    ['Path', 'Path'],
+    ['Process', 'Process'],
+    ['ProcessOutput', 'ProcessOutput'],
+    ['Random', 'Random'],
+    ['Receiver', 'Receiver<Text>'],
+    ['Regex', 'Regex'],
+    ['RegexMatch', 'RegexMatch'],
+    ['Result', 'Result<Unit, Text>'],
+    ['SendError', 'SendError<Text>'],
+    ['Sender', 'Sender<Text>'],
+    ['Set', 'Set<Text>'],
+    ['SocketAddress', 'SocketAddress'],
+    ['String', 'String'],
+    ['Task', 'Task<long>'],
+    ['TcpListener', 'TcpListener'],
+    ['TcpStream', 'TcpStream'],
+    ['Text', 'Text'],
+    ['Thread', 'Thread<long>'],
+    ['Time', 'Time'],
+    ['UdpSocket', 'UdpSocket']
+  ];
+  const standardTypeLine = tokenize(
+    grammar,
+    `void standardTypes(${standardTypes.map(([, type], index) => `${type} value${index}`).join(', ')}) {}`
+  );
+  for (const [name] of standardTypes) {
+    assertHasScope(scopesAt(standardTypeLine, 0, name), 'support.type.builtin.nacre', `${name} standard type`);
+  }
 
   const ownership = tokenize(grammar, 'borrow mut Box value;');
   assertHasScope(scopesAt(ownership, 0, 'borrow'), 'storage.modifier.ownership.nacre', 'borrow modifier');
@@ -357,7 +451,7 @@ async function main() {
     'borrow mut Text value = entries.getMut(-1);',
     'match (entries.tryRemove(1)) { Some(previous) {} None {} }'
   ].join('\n'));
-  assertHasScope(scopesAt(integerMap, 0, 'Map'), 'entity.name.type.nacre', 'map nominal generic type');
+  assertHasScope(scopesAt(integerMap, 0, 'Map'), 'support.type.builtin.nacre', 'map builtin generic type');
   assertHasScope(scopesAt(integerMap, 0, 'int'), 'storage.type.primitive.nacre', 'map integer key type');
   assertHasScope(scopesAt(integerMap, 1, 'borrow'), 'storage.modifier.ownership.nacre', 'map borrowed accessor result');
   assertHasScope(scopesAt(integerMap, 1, 'getMut'), 'entity.name.function.member.nacre', 'map exclusive lookup method');
@@ -366,9 +460,11 @@ async function main() {
   for (const [name, snippet] of Object.entries(snippets)) {
     assert(typeof snippet.prefix === 'string' && snippet.prefix.length > 0, `snippet ${name} has no prefix`);
     assert(Array.isArray(snippet.body) && snippet.body.every((line) => typeof line === 'string'), `snippet ${name} has an invalid body`);
+    const expandedSource = sourceForSnippet(name, expandSnippet(snippet.body.join('\n')));
+    assert(tokenize(grammar, expandedSource).length > 0, `snippet ${name} did not tokenize after expansion`);
   }
   validateSnippetsWithCompiler(snippets);
-  console.log(`Nacre syntax validation passed (${sudoku.length} Sudoku lines, ${Object.keys(snippets).length} snippets).`);
+  console.log(`Nacre syntax validation passed (${numericAlpha.length} numeric example lines, ${modules.length} module example lines, ${Object.keys(snippets).length} snippets).`);
 }
 
 main().catch((error) => {

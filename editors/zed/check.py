@@ -52,6 +52,106 @@ def main():
                 if name == "outline" and path.name == "sudoku.ncr":
                     sudoku_outline = [source[n.start_byte:n.end_byte].decode() for n in captures.get("name", [])]
             count += 1
+        standard_types = [
+            ("Array", "Array<int>"),
+            ("Arrays", "Arrays"),
+            ("ByteBuffer", "ByteBuffer"),
+            ("Channel", "Channel<Text>"),
+            ("Command", "Command"),
+            ("Comparator", "Comparator<Text>"),
+            ("Console", "Console"),
+            ("Datagram", "Datagram"),
+            ("Deque", "Deque<Text>"),
+            ("Directory", "Directory"),
+            ("Env", "Env"),
+            ("ExitStatus", "ExitStatus"),
+            ("File", "File"),
+            ("FileInfo", "FileInfo"),
+            ("Files", "Files"),
+            ("Guard", "Guard<Text>"),
+            ("List", "List<long>"),
+            ("Map", "Map<Text, long>"),
+            ("Math", "Math"),
+            ("Mutex", "Mutex<Text>"),
+            ("Option", "Option<long>"),
+            ("Path", "Path"),
+            ("Process", "Process"),
+            ("ProcessOutput", "ProcessOutput"),
+            ("Random", "Random"),
+            ("Receiver", "Receiver<Text>"),
+            ("Regex", "Regex"),
+            ("RegexMatch", "RegexMatch"),
+            ("Result", "Result<Unit, Text>"),
+            ("SendError", "SendError<Text>"),
+            ("Sender", "Sender<Text>"),
+            ("Set", "Set<Text>"),
+            ("SocketAddress", "SocketAddress"),
+            ("String", "String"),
+            ("Task", "Task<long>"),
+            ("TcpListener", "TcpListener"),
+            ("TcpStream", "TcpStream"),
+            ("Text", "Text"),
+            ("Thread", "Thread<long>"),
+            ("Time", "Time"),
+            ("UdpSocket", "UdpSocket"),
+        ]
+        type_source = (
+            "void standardTypes("
+            + ", ".join(f"{type_expression} value{index}" for index, (_, type_expression) in enumerate(standard_types))
+            + ") {}"
+        ).encode()
+        tree = parser.parse(type_source)
+        assert not tree.root_node.has_error, tree.root_node
+        captures = QueryCursor(queries["highlights"]).captures(tree.root_node)
+        builtin_type_text = {
+            type_source[node.start_byte:node.end_byte].decode()
+            for node in captures.get("type.builtin", [])
+        }
+        expected_builtin_type_text = {name for name, _ in standard_types}
+        assert expected_builtin_type_text.issubset(builtin_type_text), (
+            expected_builtin_type_text - builtin_type_text
+        )
+
+        alpha_syntax = b'''module samples.editor;
+import samples.library.Factory;
+import samples.library.*;
+
+public class Factory<T> {
+    public static T identity(T value) { return value; }
+}
+
+Result<int, Text> parse(borrow Text input) {
+    return new Result<int, Text>.Ok(input.parseInt()?);
+}
+
+void main() {
+    List<List<long>> nested = new List<List<long>>();
+    List<long> values = samples.library.Factory<List<long>>.identity(new List<long>());
+    byte marker = (byte)65;
+    char scalar = '\\u{1f9ea}';
+    long count = 42L;
+    double precise = (double)(int)3.75;
+    Unit unit = ();
+    long shifted = count >> 2;
+    for (long item : values) {}
+    for (long key, borrow Text value : counts) {}
+}'''
+        tree = parser.parse(alpha_syntax)
+        assert not tree.root_node.has_error, tree.root_node
+        captures = QueryCursor(queries["highlights"]).captures(tree.root_node)
+        captured_text = {
+            capture: {alpha_syntax[node.start_byte:node.end_byte].decode() for node in nodes}
+            for capture, nodes in captures.items()
+        }
+        assert {"samples", "library"}.issubset(captured_text.get("namespace", set()))
+        assert "Factory" in captured_text.get("type.builtin", set()) or "Factory" in captured_text.get("type", set())
+        assert {"identity", "parseInt"}.issubset(captured_text.get("function", set()))
+        assert {">>", "?"}.issubset(captured_text.get("operator", set()))
+        assert {"byte", "char", "long", "double", "Unit"}.issubset(captured_text.get("type.builtin", set()))
+        assert {"42L", "3.75"}.issubset(captured_text.get("number", set()))
+        assert "scalar" in captured_text.get("variable", set())
+        print("Verified qualified static calls, module paths, numeric literals and casts, result propagation, and generic closers.")
+
         for keyword in ["borrow", "mut", "readonly", "class", "interface", "implements"]:
             assert keyword in all_captures.get("keyword", set()), f"Missing keyword highlight: {keyword}"
         assert {"Sudoku", "solve", "show", "main"}.issubset(sudoku_outline), sudoku_outline
