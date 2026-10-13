@@ -2,6 +2,56 @@ use nacre::{compile_to_c, native};
 use std::process::Output;
 
 const HELPERS: &str = r#"
+ByteBuffer utf8Buffer(String value) {
+    Text text = new Text(value);
+    return Encoding.utf8Encode(text);
+}
+Result<CryptoDigest, Text> createDigest(String algorithm) {
+    Text name = new Text(algorithm);
+    return CryptoDigest.create(name);
+}
+Result<CryptoMac, Text> createMac(String algorithm, borrow ByteBuffer key) {
+    Text name = new Text(algorithm);
+    return CryptoMac.create(name, key);
+}
+Result<CryptoKey, Text> generateKey(String algorithm, int bits) {
+    Text name = new Text(algorithm);
+    return CryptoKey.generate(name, bits);
+}
+Result<CryptoKey, Text> parsePrivateKey(String pem) {
+    Text text = new Text(pem);
+    return CryptoKey.parsePrivatePem(text);
+}
+Result<CryptoKey, Text> parsePublicKey(String pem) {
+    Text text = new Text(pem);
+    return CryptoKey.parsePublicPem(text);
+}
+Result<ByteBuffer, Text> signKey(borrow CryptoKey key, String algorithm, borrow ByteBuffer data) {
+    Text digest = new Text(algorithm);
+    return key.sign(digest, data);
+}
+Result<boolean, Text> verifySignature(borrow CryptoKey key, String algorithm,
+    borrow ByteBuffer message, borrow ByteBuffer signature) {
+    Text digest = new Text(algorithm);
+    return key.verify(digest, message, signature);
+}
+Result<Certificate, Text> parseCertificate(String pem) {
+    Text text = new Text(pem);
+    return Certificate.parsePem(text);
+}
+Result<Certificate, Text> parseCertificateChain(String pem) {
+    Text text = new Text(pem);
+    return Certificate.parsePemChain(text);
+}
+Result<boolean, Text> certificateMatchesHost(borrow Certificate certificate, String name) {
+    Text host = new Text(name);
+    return certificate.matchesHost(host);
+}
+Result<Unit, Text> verifyCertificate(borrow Certificate certificate, String name,
+    borrow Path caFile, long seconds) {
+    Text host = new Text(name);
+    return certificate.verify(host, caFile, seconds);
+}
 boolean unitOk(Result<Unit, Text> result) {
     match (result) { Ok(value) { return true; } Err(error) { return false; } }
 }
@@ -14,11 +64,15 @@ boolean byteBufferError(Result<ByteBuffer, Text> result) {
 boolean byteBufferHex(Result<ByteBuffer, Text> result, String expected) {
     match (result) {
         Err(error) { return false; }
-        Ok(value) { return Encoding.hexEncode(value).equalsString(expected); }
+        Ok(value) {
+            Text encoded = Encoding.hexEncode(value);
+            return encoded.equalsString(expected);
+        }
     }
 }
 Result<ByteBuffer, Text> hexBuffer(String value) {
-    return Encoding.hexDecode(new Text(value));
+    Text encoded = new Text(value);
+    return Encoding.hexDecode(encoded);
 }
 boolean booleanResultIs(Result<boolean, Text> result, boolean expected) {
     match (result) { Err(error) { return false; } Ok(value) { return value == expected; } }
@@ -29,32 +83,17 @@ boolean textError(Result<Text, Text> result) {
 boolean textResultEquals(Result<Text, Text> result, String expected) {
     match (result) { Err(error) { return false; } Ok(value) { return value.equalsString(expected); } }
 }
-boolean textResultNonempty(Result<Text, Text> result) {
-    match (result) { Err(error) { return false; } Ok(value) { return !value.isEmpty(); } }
+boolean textResultMatches(Result<Text, Text> result, borrow Text expected) {
+    match (result) { Err(error) { return false; } Ok(value) { return value.equals(expected); } }
 }
 boolean keyError(Result<CryptoKey, Text> result) {
     match (result) { Err(error) { return true; } Ok(value) { return false; } }
 }
-boolean keySuccess(Result<CryptoKey, Text> result) {
-    match (result) { Err(error) { return false; } Ok(value) { return true; } }
-}
 boolean digestError(Result<CryptoDigest, Text> result) {
     match (result) { Err(error) { return true; } Ok(value) { return false; } }
 }
-boolean digestSuccess(Result<CryptoDigest, Text> result) {
-    match (result) {
-        Err(error) { return false; }
-        Ok(digest) { return !byteBufferError(digest.finish()); }
-    }
-}
 boolean macError(Result<CryptoMac, Text> result) {
     match (result) { Err(error) { return true; } Ok(value) { return false; } }
-}
-boolean macSuccess(Result<CryptoMac, Text> result) {
-    match (result) {
-        Err(error) { return false; }
-        Ok(mac) { return !byteBufferError(mac.finish()); }
-    }
 }
 boolean certificateTimesMatch(borrow Certificate certificate, long expectedBefore, long expectedAfter) {
     match (certificate.notBeforeUnixSeconds()) {
@@ -76,16 +115,22 @@ boolean byteBufferResultsEqual(Result<ByteBuffer, Text> first, Result<ByteBuffer
         Ok(a) {
             match (second) {
                 Err(error) { return false; }
-                Ok(b) { return Encoding.hexEncode(a).equals(Encoding.hexEncode(b)); }
+                Ok(b) {
+                    Text encodedA = Encoding.hexEncode(a);
+                    Text encodedB = Encoding.hexEncode(b);
+                    return encodedA.equals(encodedB);
+                }
             }
         }
     }
 }
 boolean publishedAgreementMatches(String firstPem, String secondPem, String expected) {
-    match (CryptoKey.parsePrivatePem(new Text(firstPem))) {
+    Text firstText = new Text(firstPem);
+    match (CryptoKey.parsePrivatePem(firstText)) {
         Err(error) { return false; }
         Ok(first) {
-            match (CryptoKey.parsePrivatePem(new Text(secondPem))) {
+            Text secondText = new Text(secondPem);
+            match (CryptoKey.parsePrivatePem(secondText)) {
                 Err(error) { return false; }
                 Ok(second) {
                     return byteBufferHex(first.agree(second), expected)
@@ -101,7 +146,7 @@ boolean publicPemRoundTrips(borrow CryptoKey key) {
         Ok(pem) {
             match (CryptoKey.parsePublicPem(pem)) {
                 Err(error) { return false; }
-                Ok(parsed) { return textResultNonempty(parsed.publicPem()); }
+                Ok(parsed) { return textResultMatches(parsed.publicPem(), pem); }
             }
         }
     }
@@ -112,7 +157,7 @@ boolean privatePemRoundTrips(borrow CryptoKey key) {
         Ok(pem) {
             match (CryptoKey.parsePrivatePem(pem)) {
                 Err(error) { return false; }
-                Ok(parsed) { return textResultNonempty(parsed.privatePem()); }
+                Ok(parsed) { return textResultMatches(parsed.privatePem(), pem); }
             }
         }
     }
@@ -182,9 +227,9 @@ fn digest_and_hmac_streams_match_vectors_and_are_terminal() {
     let source = format!(
         r#"{HELPERS}
 void main() {{
-    ByteBuffer first = Encoding.utf8Encode(new Text("a"));
-    ByteBuffer second = Encoding.utf8Encode(new Text("bc"));
-    match (CryptoDigest.create(new Text("SHA256"))) {{
+    ByteBuffer first = utf8Buffer("a");
+    ByteBuffer second = utf8Buffer("bc");
+    match (createDigest("SHA256")) {{
         Err(error) {{ println(false); }}
         Ok(digest) {{
             boolean firstUpdate = unitOk(digest.update(first));
@@ -196,40 +241,27 @@ void main() {{
         }}
     }}
 
-    ByteBuffer key = Encoding.utf8Encode(new Text("key"));
-    ByteBuffer messageFirst = Encoding.utf8Encode(new Text("The quick brown "));
-    ByteBuffer messageSecond = Encoding.utf8Encode(new Text("fox jumps over the lazy dog"));
-    match (CryptoMac.create(new Text("SHA256"), key)) {{
+    ByteBuffer key = utf8Buffer("key");
+    ByteBuffer messageFirst = utf8Buffer("The quick brown ");
+    ByteBuffer messageSecond = utf8Buffer("fox jumps over the lazy dog");
+    match (createMac("SHA256", key)) {{
         Err(error) {{ println(false); }}
         Ok(mac) {{
             boolean firstUpdate = unitOk(mac.update(messageFirst));
             boolean secondUpdate = unitOk(mac.update(messageSecond));
-            boolean vector = byteBufferHex(mac.finish(), "f7bc83f430538424b13298eaa6fb143ef4d59a14946175997479dbc2d1a3cd8");
+            boolean vector = byteBufferHex(mac.finish(), "f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8");
             boolean terminalUpdate = unitError(mac.update(messageFirst));
             boolean terminalFinish = byteBufferError(mac.finish());
             println(firstUpdate && secondUpdate && vector && terminalUpdate && terminalFinish);
         }}
     }}
-    boolean digestNames =
-        digestSuccess(CryptoDigest.create(new Text("SHA384"))) &&
-        digestSuccess(CryptoDigest.create(new Text("SHA512"))) &&
-        digestSuccess(CryptoDigest.create(new Text("SHA3-256"))) &&
-        digestSuccess(CryptoDigest.create(new Text("SHA3-384"))) &&
-        digestSuccess(CryptoDigest.create(new Text("SHA3-512")));
-    boolean macNames =
-        macSuccess(CryptoMac.create(new Text("SHA384"), key)) &&
-        macSuccess(CryptoMac.create(new Text("SHA512"), key)) &&
-        macSuccess(CryptoMac.create(new Text("SHA3-256"), key)) &&
-        macSuccess(CryptoMac.create(new Text("SHA3-384"), key)) &&
-        macSuccess(CryptoMac.create(new Text("SHA3-512"), key));
-    println(digestNames && macNames);
-    println(digestError(CryptoDigest.create(new Text("SHA-1"))));
-    println(macError(CryptoMac.create(new Text("SHA-1"), key)));
-    println(digestError(CryptoDigest.create(new Text("SHA256\0"))));
+    println(digestError(createDigest("SHA-1")));
+    println(macError(createMac("SHA-1", key)));
+    println(digestError(createDigest("SHA256\0")));
 }}
 "#
     );
-    assert_native(&source, b"true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n");
+    assert_native(&source, b"true\ntrue\ntrue\ntrue\ntrue\n");
 }
 
 #[test]
@@ -240,24 +272,25 @@ fn rfc8032_ed25519_key_pem_signing_and_role_checks() {
     let source = format!(
         r#"{HELPERS}
 void main() {{
-    match (CryptoKey.parsePrivatePem(new Text({}))) {{
+    match (parsePrivateKey({})) {{
         Err(error) {{ println(false); }}
         Ok(privateKey) {{
-            match (CryptoKey.parsePublicPem(new Text({}))) {{
+            match (parsePublicKey({})) {{
                 Err(error) {{ println(false); }}
                 Ok(publicKey) {{
-                    ByteBuffer empty = Encoding.utf8Encode(new Text(""));
+                    ByteBuffer empty = utf8Buffer("");
                     boolean exports = privatePemRoundTrips(privateKey) && publicPemRoundTrips(publicKey);
-                    boolean publicCannotSign = byteBufferError(publicKey.sign(new Text(""), empty));
+                    boolean publicCannotSign = byteBufferError(signKey(publicKey, "", empty));
                     boolean publicHasNoPrivateExport = textError(publicKey.privatePem());
                     println(exports && publicCannotSign && publicHasNoPrivateExport);
-                    match (privateKey.sign(new Text(""), empty)) {{
+                    match (signKey(privateKey, "", empty)) {{
                         Err(error) {{ println(false); println(false); }}
                         Ok(signature) {{
-                            println(Encoding.hexEncode(signature).equalsString("{}"));
-                            println(booleanResultIs(publicKey.verify(new Text(""), empty, signature), true));
+                            Text encodedSignature = Encoding.hexEncode(signature);
+                            println(encodedSignature.equalsString("{}"));
+                            println(booleanResultIs(verifySignature(publicKey, "", empty, signature), true));
                             signature.set(0L, (byte)(signature.get(0L) + 1));
-                            println(booleanResultIs(publicKey.verify(new Text(""), empty, signature), false));
+                            println(booleanResultIs(verifySignature(publicKey, "", empty, signature), false));
                         }}
                     }}
                 }}
@@ -285,11 +318,11 @@ fn generated_rsa_signatures_reject_wrong_keys_and_invalid_policy() {
         r#"{HELPERS}
 void main() {{
     Text digest = new Text("SHA256");
-    ByteBuffer data = Encoding.utf8Encode(new Text("RSA-PSS payload"));
-    match (CryptoKey.generate(new Text("RSA"), 2048)) {{
+    ByteBuffer data = utf8Buffer("RSA-PSS payload");
+    match (generateKey("RSA", 2048)) {{
         Err(error) {{ println(false); }}
         Ok(key) {{
-            match (CryptoKey.generate(new Text("RSA"), 2048)) {{
+            match (generateKey("RSA", 2048)) {{
                 Err(error) {{ println(false); }}
                 Ok(otherKey) {{
                     match (key.sign(digest, data)) {{
@@ -321,16 +354,15 @@ void main() {{
             }}
         }}
     }}
-    println(keyError(CryptoKey.generate(new Text("RSA"), 1024)));
-    println(keyError(CryptoKey.generate(new Text("RSA"), 8448)));
-    println(keyError(CryptoKey.generate(new Text("RSA\0"), 2048)));
-    println(keyError(CryptoKey.generate(new Text("Ed25519"), 1)));
-    println(keyError(CryptoKey.generate(new Text("EC-P256"), 256)));
-    println(keySuccess(CryptoKey.generate(new Text("Ed25519"), 0)));
+    println(keyError(generateKey("RSA", 1024)));
+    println(keyError(generateKey("RSA", 8448)));
+    println(keyError(generateKey("RSA\0", 2048)));
+    println(keyError(generateKey("Ed25519", 1)));
+    println(keyError(generateKey("EC-P256", 256)));
 }}
 "#
     );
-    assert_native(&source, b"true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n");
+    assert_native(&source, b"true\ntrue\ntrue\ntrue\ntrue\ntrue\n");
 }
 
 #[test]
@@ -338,10 +370,10 @@ fn x25519_and_ec_keys_agree_and_ec_keys_sign() {
     let source = format!(
         r#"{HELPERS}
 boolean signsWith(borrow CryptoKey key) {{
-    ByteBuffer data = Encoding.utf8Encode(new Text("curve signature"));
-    match (key.sign(new Text("SHA256"), data)) {{
+    ByteBuffer data = utf8Buffer("curve signature");
+    match (signKey(key, "SHA256", data)) {{
         Err(error) {{ return false; }}
-        Ok(signature) {{ return booleanResultIs(key.verify(new Text("SHA256"), data, signature), true); }}
+        Ok(signature) {{ return booleanResultIs(verifySignature(key, "SHA256", data, signature), true); }}
     }}
 }}
 boolean agreementMatches(String algorithm) {{
@@ -357,25 +389,25 @@ boolean agreementMatches(String algorithm) {{
     }}
 }}
 boolean ecSigningMatches(String algorithm) {{
-    match (CryptoKey.generate(new Text(algorithm), 0)) {{
+    match (generateKey(algorithm, 0)) {{
         Err(error) {{ return false; }}
         Ok(key) {{ return signsWith(key); }}
     }}
 }}
 boolean x25519SigningUnsupported() {{
-    match (CryptoKey.generate(new Text("X25519"), 0)) {{
+    match (generateKey("X25519", 0)) {{
         Err(error) {{ return false; }}
         Ok(key) {{
-            ByteBuffer data = Encoding.utf8Encode(new Text("curve signature"));
-            return byteBufferError(key.sign(new Text("SHA256"), data));
+            ByteBuffer data = utf8Buffer("curve signature");
+            return byteBufferError(signKey(key, "SHA256", data));
         }}
     }}
 }}
 boolean crossGroupRejected() {{
-    match (CryptoKey.generate(new Text("X25519"), 0)) {{
+    match (generateKey("X25519", 0)) {{
         Err(error) {{ return false; }}
         Ok(x25519) {{
-            match (CryptoKey.generate(new Text("EC-P256"), 0)) {{
+            match (generateKey("EC-P256", 0)) {{
                 Err(error) {{ return false; }}
                 Ok(ec) {{ return byteBufferError(x25519.agree(ec)); }}
             }}
@@ -401,8 +433,8 @@ fn nist_rsa_pss_verification_fixes_digest_mgf1_and_salt_length() {
     const PUBLIC_PEM: &str = include_str!("fixtures/crypto_rsapss_nist.pub.pem");
     const MESSAGE_HEX: &str = "e002377affb04f0fe4598de9d92d31d6c786040d5776976556a2cfc55e54a1dcb3cb1b126bd6a4bed2a184990ccea773fcc79d246553e6c64f686d21ad4152673cafec22aeb40f6a084e8a5b4991f4c64cf8a927effd0fd775e71e8329e41fdd4457b3911173187b4f09a817d79ea2397fc12dfe3d9c9a0290c8ead31b6690a6";
     const SIGNATURE_HEX: &str = "4f9b425c2058460e4ab2f5c96384da2327fd29150f01955a76b4efe956af06dc08779a374ee4607eab61a93adc5608f4ec36e47f2a0f754e8ff839a8a19b1db1e884ea4cf348cd455069eb87afd53645b44e28a0a56808f5031da5ba9112768dfbfca44ebe63a0c0572b731d66122fb71609be1480faa4e4f75e43955159d70f081e2a32fbb19a48b9f162cf6b2fb445d2d6994bc58910a26b5943477803cdaaa1bd74b0da0a5d053d8b1dc593091db5388383c26079f344e2aea600d0e324164b450f7b9b465111b7265f3b1b063089ae7e2623fc0fda8052cf4bf3379102fbf71d7c98e8258664ceed637d20f95ff0111881e650ce61f251d9c3a629ef222d";
-    const WRONG_MGF1_HEX: &str = include_str!("fixtures/crypto_rsapss_mgf1_sha384.sig.hex").trim();
-    const WRONG_SALT_HEX: &str = include_str!("fixtures/crypto_rsapss_salt20.sig.hex").trim();
+    const WRONG_MGF1_HEX: &str = include_str!("fixtures/crypto_rsapss_mgf1_sha384.sig.hex");
+    const WRONG_SALT_HEX: &str = include_str!("fixtures/crypto_rsapss_salt20.sig.hex");
     // NIST CAVP SigVerPSS_186-3.rsp: 2048-bit RSA, SHA-256, MGF1-SHA256, and 32-byte salt.
     // Negative controls use the same published private key with MGF1-SHA384 or a 20-byte salt.
     let source = format!(
@@ -421,12 +453,12 @@ boolean rsaPssVectorChecks(borrow CryptoKey key, String messageHex, String signa
                             match (hexBuffer(wrongSaltHex)) {{
                                 Err(error) {{ return false; }}
                                 Ok(wrongSalt) {{
-                                    boolean knownAnswer = booleanResultIs(key.verify(new Text("SHA256"), message, signature), true);
-                                    boolean wrongDigest = booleanResultIs(key.verify(new Text("SHA384"), message, signature), false);
-                                    boolean wrongMgfParameters = booleanResultIs(key.verify(new Text("SHA256"), message, wrongMgf), false);
-                                    boolean wrongSaltParameters = booleanResultIs(key.verify(new Text("SHA256"), message, wrongSalt), false);
+                                    boolean knownAnswer = booleanResultIs(verifySignature(key, "SHA256", message, signature), true);
+                                    boolean wrongDigest = booleanResultIs(verifySignature(key, "SHA384", message, signature), false);
+                                    boolean wrongMgfParameters = booleanResultIs(verifySignature(key, "SHA256", message, wrongMgf), false);
+                                    boolean wrongSaltParameters = booleanResultIs(verifySignature(key, "SHA256", message, wrongSalt), false);
                                     message.set(0L, (byte)(message.get(0L) + 1));
-                                    boolean changedMessage = booleanResultIs(key.verify(new Text("SHA256"), message, signature), false);
+                                    boolean changedMessage = booleanResultIs(verifySignature(key, "SHA256", message, signature), false);
                                     return knownAnswer && wrongDigest && wrongMgfParameters
                                         && wrongSaltParameters && changedMessage;
                                 }}
@@ -439,7 +471,7 @@ boolean rsaPssVectorChecks(borrow CryptoKey key, String messageHex, String signa
     }}
 }}
 void main() {{
-    match (CryptoKey.parsePublicPem(new Text({}))) {{
+    match (parsePublicKey({})) {{
         Err(error) {{ println(false); }}
         Ok(key) {{
             println(rsaPssVectorChecks(key, {}, {}, {}, {}));
@@ -450,8 +482,8 @@ void main() {{
         nacre_literal(PUBLIC_PEM),
         nacre_literal(MESSAGE_HEX),
         nacre_literal(SIGNATURE_HEX),
-        nacre_literal(WRONG_MGF1_HEX),
-        nacre_literal(WRONG_SALT_HEX),
+        nacre_literal(WRONG_MGF1_HEX.trim()),
+        nacre_literal(WRONG_SALT_HEX.trim()),
     );
     assert_native(&source, b"true\n");
 }
@@ -464,6 +496,12 @@ fn nist_ecdsa_verification_accepts_binary_p256_vector() {
     // NIST CAVP FIPS 186-4 SigVer.rsp, P-256/SHA-256; the 128-byte message contains NUL and non-text bytes.
     let source = format!(
         r#"{HELPERS}
+boolean rejectsEncodedEcdsaSignature(borrow CryptoKey key, borrow ByteBuffer message, String encoded) {{
+    match (hexBuffer(encoded)) {{
+        Err(error) {{ return false; }}
+        Ok(signature) {{ return booleanResultIs(verifySignature(key, "SHA256", message, signature), false); }}
+    }}
+}}
 boolean ecdsaVectorChecks(borrow CryptoKey key, String messageHex, String signatureHex) {{
     match (hexBuffer(messageHex)) {{
         Err(error) {{ return false; }}
@@ -471,18 +509,23 @@ boolean ecdsaVectorChecks(borrow CryptoKey key, String messageHex, String signat
             match (hexBuffer(signatureHex)) {{
                 Err(error) {{ return false; }}
                 Ok(signature) {{
-                    boolean knownAnswer = booleanResultIs(key.verify(new Text("SHA256"), message, signature), true);
-                    boolean wrongDigest = booleanResultIs(key.verify(new Text("SHA384"), message, signature), false);
+                    boolean knownAnswer = booleanResultIs(verifySignature(key, "SHA256", message, signature), true);
+                    boolean wrongDigest = booleanResultIs(verifySignature(key, "SHA384", message, signature), false);
+                    boolean malformedRejected = rejectsEncodedEcdsaSignature(key, message, "")
+                        && rejectsEncodedEcdsaSignature(key, message, "30060201010201")
+                        && rejectsEncodedEcdsaSignature(key, message, "300602010102010100")
+                        && rejectsEncodedEcdsaSignature(key, message, "308106020101020101");
                     message.set(0L, (byte)(message.get(0L) + 1));
-                    boolean changedMessage = booleanResultIs(key.verify(new Text("SHA256"), message, signature), false);
-                    return knownAnswer && wrongDigest && changedMessage;
+                    boolean changedMessage = booleanResultIs(verifySignature(key, "SHA256", message, signature), false);
+                    return knownAnswer && wrongDigest && changedMessage && malformedRejected;
                 }}
             }}
         }}
     }}
 }}
 void main() {{
-    match (CryptoKey.parsePublicPem(new Text({}))) {{
+    Text pem = new Text({});
+    match (CryptoKey.parsePublicPem(pem)) {{
         Err(error) {{ println(false); }}
         Ok(key) {{ println(ecdsaVectorChecks(key, {}, {})); }}
     }}
@@ -532,27 +575,27 @@ void main() {{
         Ok(leaf) {{
             println(textResultEquals(leaf.subject(), "CN=wrong.example"));
             println(textResultEquals(leaf.issuer(), "CN=Nacre Test Intermediate"));
-            println(textResultNonempty(leaf.serialText()));
+            println(textResultEquals(leaf.serialText(), "399359574543232366588319981121540190122060777063"));
             println(certificateTimesMatch(leaf, 1791881336L, 2107241336L));
-            println(booleanResultIs(leaf.matchesHost(new Text("good.example")), true));
-            println(booleanResultIs(leaf.matchesHost(new Text("wrong.example")), false));
+            println(booleanResultIs(certificateMatchesHost(leaf, "good.example"), true));
+            println(booleanResultIs(certificateMatchesHost(leaf, "wrong.example"), false));
             match (Path.fromText(new Text({}))) {{
                 Err(error) {{ println(false); println(false); println(false); println(false); }}
                 Ok(caFile) {{
-                    println(unitError(leaf.verify(new Text("good.example"), caFile, 1791881337L)));
-                    match (Certificate.parsePemChain(new Text({}))) {{
+                    println(unitError(verifyCertificate(leaf, "good.example", caFile, 1791881337L)));
+                    match (parseCertificateChain({})) {{
                         Err(error) {{ println(false); println(false); println(false); }}
                         Ok(chain) {{
-                            println(unitOk(chain.verify(new Text("good.example"), caFile, 1791881337L)));
-                            println(unitError(chain.verify(new Text("wrong.example"), caFile, 1791881337L)));
-                            println(unitError(chain.verify(new Text("good.example"), caFile, 2107241337L)));
+                            println(unitOk(verifyCertificate(chain, "good.example", caFile, 1791881337L)));
+                            println(unitError(verifyCertificate(chain, "wrong.example", caFile, 1791881337L)));
+                            println(unitError(verifyCertificate(chain, "good.example", caFile, 2107241337L)));
                         }}
                     }}
                 }}
             }}
         }}
     }}
-    println(certificateError(Certificate.parsePem(new Text("not a certificate"))));
+    println(certificateError(parseCertificate("not a certificate")));
     leafPem.append("trailing text");
     println(certificateError(Certificate.parsePem(leafPem)));
 }}
@@ -575,12 +618,12 @@ fn certificate_times_preserve_pre_epoch_and_reject_invalid_intervals() {
     let source = format!(
         r#"{HELPERS}
 void main() {{
-    match (Certificate.parsePem(new Text({}))) {{
+    match (parseCertificate({})) {{
         Err(error) {{ println(false); }}
         Ok(certificate) {{ println(certificateTimesMatch(certificate, -1L, 1L)); }}
     }}
-    println(certificateError(Certificate.parsePem(new Text({}))));
-    println(certificateError(Certificate.parsePem(new Text({}))));
+    println(certificateError(parseCertificate({})));
+    println(certificateError(parseCertificate({})));
 }}
 "#,
         nacre_literal(PRE_EPOCH),

@@ -361,6 +361,41 @@ static @KEY_SIGN_RESULT@ @CRYPTO_KEY_SIGN@(@KEY_TYPE@ ncr_self,
     return (@KEY_SIGN_RESULT@){ .tag = @KEY_SIGN_OK_TAG@, .data.v@KEY_SIGN_OK_TAG@.f0 = output };
 }
 
+/* Validate canonical ECDSA DER without allocating a second signature object.
+ * Malformed signature bytes are a verification mismatch, not a backend error. */
+static bool ncr_cryptokeys_der_header(const unsigned char *bytes, size_t size,
+    size_t *offset, unsigned char tag, size_t *length) {
+    if (*offset >= size || bytes[(*offset)++] != tag || *offset >= size) { return false; }
+    unsigned char first = bytes[(*offset)++];
+    size_t value = first;
+    if ((first & 0x80u) != 0) {
+        size_t count = first & 0x7fu;
+        if (count == 0 || count > sizeof(size_t) || count > size - *offset ||
+            bytes[*offset] == 0) { return false; }
+        value = 0;
+        for (size_t i = 0; i < count; ++i) { value = (value << 8) | bytes[(*offset)++]; }
+        if (value < 128) { return false; }
+    }
+    if (value > size - *offset) { return false; }
+    *length = value;
+    return true;
+}
+
+static bool ncr_cryptokeys_ecdsa_der(const unsigned char *bytes, size_t size) {
+    size_t offset = 0, length = 0;
+    if (!ncr_cryptokeys_der_header(bytes, size, &offset, 0x30, &length) ||
+        length != size - offset) { return false; }
+    for (unsigned int i = 0; i < 2; ++i) {
+        if (!ncr_cryptokeys_der_header(bytes, size, &offset, 0x02, &length) ||
+            length == 0 || (bytes[offset] & 0x80u) != 0 ||
+            (length > 1 && bytes[offset] == 0 && (bytes[offset + 1] & 0x80u) == 0)) {
+            return false;
+        }
+        offset += length;
+    }
+    return offset == size;
+}
+
 static @KEY_VERIFY_RESULT@ @CRYPTO_KEY_VERIFY@(@KEY_TYPE@ ncr_self,
     @TEXT_TYPE@ ncr_v_@KEY_VERIFY_DIGEST_ID@, @BUFFER_TYPE@ ncr_v_@KEY_VERIFY_DATA_ID@,
     @BUFFER_TYPE@ ncr_v_@KEY_VERIFY_SIGNATURE_ID@, size_t line, size_t column) {
@@ -374,6 +409,11 @@ static @KEY_VERIFY_RESULT@ @CRYPTO_KEY_VERIFY@(@KEY_TYPE@ ncr_self,
     (void)key_context;
     const unsigned char *data = ncr_v_@KEY_VERIFY_DATA_ID@->length == 0 ? (const unsigned char *)"" : ncr_v_@KEY_VERIFY_DATA_ID@->bytes;
     const unsigned char *signature = ncr_v_@KEY_VERIFY_SIGNATURE_ID@->length == 0 ? (const unsigned char *)"" : ncr_v_@KEY_VERIFY_SIGNATURE_ID@->bytes;
+    if (ncr_cryptokeys_key_kind((EVP_PKEY *)ncr_self->pkey) == 4 &&
+        !ncr_cryptokeys_ecdsa_der(signature, ncr_v_@KEY_VERIFY_SIGNATURE_ID@->length)) {
+        EVP_MD_CTX_free(context);
+        return (@KEY_VERIFY_RESULT@){ .tag = @KEY_VERIFY_OK_TAG@, .data.v@KEY_VERIFY_OK_TAG@.f0 = false };
+    }
     int verified = EVP_DigestVerify(context, signature, ncr_v_@KEY_VERIFY_SIGNATURE_ID@->length,
         data, ncr_v_@KEY_VERIFY_DATA_ID@->length);
     EVP_MD_CTX_free(context);

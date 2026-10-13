@@ -513,7 +513,8 @@ block with surrounding whitespace only. Public-key export is SubjectPublicKeyInf
 PEM. `privatePem` and signing require private material. Signing uses RSA-PSS with
 the selected digest and an exactly digest-sized salt, standard DER ECDSA, or
 Ed25519 with an empty digest name. Verification returns `Ok(false)` for an
-invalid signature and `Err` for unsupported keys/digests or backend failure.
+invalid signature, including empty, truncated, noncanonical, or trailing-garbage
+ECDSA DER. Unsupported keys/digests and genuine backend failures return `Err`.
 Agreement is limited to X25519 and same-curve EC ECDH.
 
 Digest and HMAC names are the exact case-sensitive allowlist `SHA256`, `SHA384`,

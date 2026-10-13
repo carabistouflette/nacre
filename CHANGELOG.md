@@ -23,6 +23,10 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   arguments, and mapper extraction uses the element representation, not the
   input-interface representation. Hidden callback and element state remains
   subject to recursive sendability checks.
+- ECDSA verification classifies malformed DER as `Ok(false)` using bounded,
+  allocation-free validation; unsupported algorithms and backend failures remain
+  errors. Consumer regressions cover empty, truncated, noncanonical, and
+  trailing-garbage signatures alongside the published P-256 verification vector.
 - OpenSSL 3 adds affine key generation/import/export, RSA-PSS/ECDSA/Ed25519
   signatures, X25519/EC agreement, streaming digest/HMAC, and X.509 parsing with
   explicit-time CA-chain and SAN-host verification. RSA generation is bounded
