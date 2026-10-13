@@ -1,0 +1,158 @@
+int integerArgument(int index, int fallback) {
+    int value = fallback;
+    match (Args.get(index)) {
+        Ok(argument) {
+            match (argument.parseInt()) {
+                Ok(parsed) { value = parsed; }
+                Err(error) { value = fallback; }
+            }
+        }
+        Err(error) { value = fallback; }
+    }
+    return value;
+}
+
+Text textArgument(int index) {
+    Text value = new Text("");
+    match (Args.get(index)) {
+        Ok(argument) { value = argument; }
+        Err(error) {}
+    }
+    return value;
+}
+
+void runList(int count) {
+    List<int> values = new List<int>();
+    int index = 0;
+    while (index < count) {
+        values.add(index);
+        index = index + 1;
+    }
+
+    int checksum = 0;
+    for (int value : values) {
+        checksum = checksum + value;
+    }
+    println(checksum);
+    println(values.size());
+}
+
+void runIntegerMap(int count) {
+    Map<int, int> values = new Map<int, int>();
+    int index = 0;
+    while (index < count) {
+        values.put(index, index + 17);
+        index = index + 1;
+    }
+
+    int queried = 0;
+    index = 0;
+    while (index < count) {
+        match (values.tryGet(index)) {
+            None {}
+            Some(value) { queried = queried + value; }
+        }
+        index = index + 1;
+    }
+
+    int removed = 0;
+    index = 0;
+    while (index < count) {
+        match (values.tryRemove(index)) {
+            None {}
+            Some(value) { removed = removed + value; }
+        }
+        index = index + 1;
+    }
+    println(queried);
+    println(removed);
+    println(values.size());
+}
+
+void runTextMap(int count) {
+    Map<Text, int> values = new Map<Text, int>();
+    int index = 0;
+    while (index < count) {
+        Text key = new Text("bench-key-");
+        key.appendInt(index);
+        values.put(key, index + 1);
+        index = index + 1;
+    }
+
+    int queried = 0;
+    index = 0;
+    while (index < count) {
+        Text key = new Text("bench-key-");
+        key.appendInt(index);
+        match (values.tryGet(key)) {
+            None {}
+            Some(value) { queried = queried + value; }
+        }
+        index = index + 1;
+    }
+
+    int replaced = 0;
+    index = 0;
+    while (index < count) {
+        Text key = new Text("bench-key-");
+        key.appendInt(index);
+        match (values.put(key, index + 2)) {
+            None {}
+            Some(previous) { replaced = replaced + previous; }
+        }
+        index = index + 1;
+    }
+
+    int finalValues = 0;
+    index = 0;
+    while (index < count) {
+        Text key = new Text("bench-key-");
+        key.appendInt(index);
+        match (values.tryGet(key)) {
+            None {}
+            Some(value) { finalValues = finalValues + value; }
+        }
+        index = index + 1;
+    }
+    println(queried);
+    println(replaced);
+    println(finalValues);
+    println(values.size());
+}
+
+void runEmptyTextMiss(int queryCount, Text query) {
+    Map<Text, int> values = new Map<Text, int>();
+    int found = 0;
+    int index = 0;
+    while (index < queryCount) {
+        if (values.containsKey(query)) { found = found + 1; }
+        index = index + 1;
+    }
+    println(found);
+}
+
+void main() {
+    if (Args.count() < 3) {
+        println("INVALID_ARGUMENTS");
+        return;
+    }
+    Text mode = textArgument(0);
+    int count = integerArgument(1, -1);
+    int queryCount = integerArgument(2, -1);
+    if (mode.equalsString("list")) {
+        runList(count);
+    } else if (mode.equalsString("int-map")) {
+        runIntegerMap(count);
+    } else if (mode.equalsString("text-map")) {
+        runTextMap(count);
+    } else if (mode.equalsString("empty-text-miss")) {
+        if (Args.count() < 4) {
+            println("INVALID_ARGUMENTS");
+            return;
+        }
+        Text query = textArgument(3);
+        runEmptyTextMiss(queryCount, query);
+    } else {
+        println("INVALID_KERNEL");
+    }
+}
