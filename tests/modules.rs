@@ -40,7 +40,7 @@ fn cli(args: &[&std::ffi::OsStr]) -> Output {
 fn cli_runs_modular_map_text_generic_global_and_static_calls() {
     let output = cli(&["run".as_ref(), Path::new("examples/language/modules").as_os_str()]);
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
-    assert_eq!(output.stdout.split(|byte| byte.is_ascii_whitespace()).filter(|part| !part.is_empty()).next_back(), Some(b"42".as_slice()));
+    assert_eq!(output.stdout.split(|byte| byte.is_ascii_whitespace()).rfind(|part| !part.is_empty()), Some(b"42".as_slice()));
 }
 
 #[test]
@@ -51,7 +51,7 @@ fn cli_init_creates_a_runnable_modular_project() {
     assert!(initialized.status.success(), "{}", String::from_utf8_lossy(&initialized.stderr));
     let output = cli(&["run".as_ref(), path.join("src").as_os_str()]);
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
-    assert_eq!(output.stdout.split(|byte| byte.is_ascii_whitespace()).filter(|part| !part.is_empty()).next_back(), Some(b"42".as_slice()));
+    assert_eq!(output.stdout.split(|byte| byte.is_ascii_whitespace()).rfind(|part| !part.is_empty()), Some(b"42".as_slice()));
 }
 
 #[test]
