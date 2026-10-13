@@ -148,15 +148,16 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   registry, with STOP callbacks and explicit-endian UTF-16 behavior. Locale
   arguments retain explicit root/BCP-47 rules and supported collation/numbering
   extensions. Ordinary Text operations remain usable without ICU.
-- Adds affine SQLite `Database` with one explicitly owned internal prepared
-  statement, copied length-delimited bindings/rows, strict type accessors,
-  transactions, foreign-key enforcement, and bounded busy timeouts. `prepare`
-  and `execute` reject multi-statement SQL before preparing any part, while
-  preserving trigger bodies, quoted semicolons, token-leading UTF-8 BOMs, and
-  leading empty commands. `step` completion is terminal until reset/replacement,
-  and failed steps require reset before retry. Empty
-  blobs remain distinct from allocation failures. This native SQL API documents
-  its single-cursor limit and does not claim JDBC parity.
+- Adds affine SQLite `Database` connections and independently owned
+  `SqlStatement` cursors on the same connection, with copied length-delimited
+  bindings/rows, strict type accessors, transactions, foreign-key enforcement,
+  and bounded busy timeouts. `prepare` and `execute` reject multi-statement SQL
+  before preparing any part, while preserving trigger bodies, quoted
+  semicolons, token-leading UTF-8 BOMs, and leading empty commands. `execute`
+  uses a transient statement; statement completion is terminal until reset, and
+  failed steps require reset before retry. `sqlite3_close_v2` defers connection
+  deallocation until all independently owned statements are finalized. Empty
+  blobs remain distinct from allocation failures.
 - Affine ZipReader and ZipWriter use libarchive for sequential ZIP/Zip64 reads and
   store/DEFLATE writes with thread-scoped C.UTF-8 pathname conversion. File and
   memory readers require a complete seekable ZIP directory; bounded reads check

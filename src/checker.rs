@@ -158,6 +158,7 @@ impl Tables {
                         t::NativeClass::WebSocket | t::NativeClass::WebSocketMessage |
                         t::NativeClass::Command | t::NativeClass::Process |
                         t::NativeClass::ProcessOutput | t::NativeClass::Database |
+                        t::NativeClass::SqlStatement |
                         t::NativeClass::ZipReader | t::NativeClass::ZipWriter |
                         t::NativeClass::ZipEntry) | None => (None, None, None),
                 };
@@ -339,6 +340,7 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
             Some(a::NativeClass::Math) => Some(t::NativeClass::Math),
             Some(a::NativeClass::Random) => Some(t::NativeClass::Random),
             Some(a::NativeClass::Database) => Some(t::NativeClass::Database),
+            Some(a::NativeClass::SqlStatement) => Some(t::NativeClass::SqlStatement),
             Some(a::NativeClass::Compression) => Some(t::NativeClass::Compression),
             Some(a::NativeClass::Checksums) => Some(t::NativeClass::Checksums),
             Some(a::NativeClass::Time) => Some(t::NativeClass::Time),

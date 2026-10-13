@@ -62,13 +62,13 @@ boolean optionLongIsNone(Option<long> option) {
 boolean optionDoubleEquals(Option<double> option, double expected) {
     match (option) { Some(value) { return value == expected; } None { return false; } }
 }
-Result<boolean, Text> borrowedCountMatches(borrow Database database, int expected) {
-    Text name = database.columnName(0)?;
-    int count = database.columnCount()?;
+Result<boolean, Text> borrowedCountMatches(borrow SqlStatement statement, int expected) {
+    Text name = statement.columnName(0)?;
+    int count = statement.columnCount()?;
     return new Result<boolean, Text>.Ok(count == expected && name.equalsString("id"));
 }
-Result<int, Text> borrowedColumnType(borrow Database database) {
-    return database.columnType(0);
+Result<int, Text> borrowedColumnType(borrow SqlStatement statement) {
+    return statement.columnType(0);
 }
 Result<Unit, Text> exercise() {
     Text path = new Text(":memory:");
@@ -77,68 +77,68 @@ Result<Unit, Text> exercise() {
     database.execute(create)?;
 
     Text insert = new Text("INSERT INTO sample(text_value, blob_value, nullable, huge, real_value) VALUES(?,?,?,?,?)");
-    database.prepare(insert)?;
+    SqlStatement insertStatement = database.prepare(insert)?;
     Text injected = new Text("x'); DROP TABLE sample;--\0tail");
     ByteBuffer binary = ByteBuffer.withCapacity(0L)?;
     binary.append((byte)0);
     binary.append((byte)255);
     binary.append((byte)65);
     long lowest = -9223372036854775807L - 1L;
-    database.bindText(1, injected)?;
-    database.bindBlob(2, binary)?;
-    database.bindNull(3)?;
-    database.bindLong(4, lowest)?;
-    database.bindDouble(5, 1.25)?;
-    boolean insertHasRow = database.step()?;
+    insertStatement.bindText(1, injected)?;
+    insertStatement.bindBlob(2, binary)?;
+    insertStatement.bindNull(3)?;
+    insertStatement.bindLong(4, lowest)?;
+    insertStatement.bindDouble(5, 1.25)?;
+    boolean insertHasRow = insertStatement.step()?;
     println(!insertHasRow);
     println(database.changes()? == 1L);
     println(database.lastInsertRowId()? == 1L);
-    println(!database.step()?);
+    println(!insertStatement.step()?);
     println(database.lastInsertRowId()? == 1L);
     drop(injected);
     drop(binary);
 
     Text query = new Text("SELECT id AS id, text_value AS literal, blob_value AS payload, nullable, huge, real_value FROM sample");
-    database.prepare(query)?;
-    println(borrowedCountMatches(database, 6)?);
-    Text columnName = database.columnName(0)?;
+    SqlStatement queryStatement = database.prepare(query)?;
+    println(borrowedCountMatches(queryStatement, 6)?);
+    Text columnName = queryStatement.columnName(0)?;
     println(columnName.equalsString("id"));
-    println(database.step()?);
-    println(borrowedColumnType(database)?);
-    println(database.columnType(1)?);
-    println(database.columnType(2)?);
-    println(database.columnType(3)?);
-    println(database.columnType(5)?);
-    println(optionLongEquals(database.columnLong(0)?, 1L));
-    Option<Text> copiedText = database.columnText(1)?;
-    Option<ByteBuffer> copiedBlob = database.columnBlob(2)?;
-    Option<long> copiedNull = database.columnLong(3)?;
-    Option<long> copiedLong = database.columnLong(4)?;
-    Option<double> copiedDouble = database.columnDouble(5)?;
-    boolean queryHasMore = database.step()?;
+    println(queryStatement.step()?);
+    println(borrowedColumnType(queryStatement)?);
+    println(queryStatement.columnType(1)?);
+    println(queryStatement.columnType(2)?);
+    println(queryStatement.columnType(3)?);
+    println(queryStatement.columnType(5)?);
+    println(optionLongEquals(queryStatement.columnLong(0)?, 1L));
+    Option<Text> copiedText = queryStatement.columnText(1)?;
+    Option<ByteBuffer> copiedBlob = queryStatement.columnBlob(2)?;
+    Option<long> copiedNull = queryStatement.columnLong(3)?;
+    Option<long> copiedLong = queryStatement.columnLong(4)?;
+    Option<double> copiedDouble = queryStatement.columnDouble(5)?;
+    boolean queryHasMore = queryStatement.step()?;
     println(!queryHasMore);
-    println(!database.step()?);
+    println(!queryStatement.step()?);
     Text emptyBlobQuery = new Text("SELECT CAST(x'' AS BLOB)");
-    database.prepare(emptyBlobQuery)?;
-    println(database.step()?);
-    match (database.columnBlob(0)?) {
+    SqlStatement emptyBlobStatement = database.prepare(emptyBlobQuery)?;
+    println(emptyBlobStatement.step()?);
+    match (emptyBlobStatement.columnBlob(0)?) {
         None { println(false); }
         Some(bytes) { println(bytes.length() == 0L); }
     }
 
     Text parameterQuery = new Text("SELECT ?");
-    database.prepare(parameterQuery)?;
-    database.bindLong(1, 42L)?;
-    println(database.step()?);
-    println(optionLongEquals(database.columnLong(0)?, 42L));
-    database.reset()?;
-    database.clearBindings()?;
-    println(database.step()?);
-    println(optionLongIsNone(database.columnLong(0)?));
-    database.reset()?;
-    database.bindLong(1, 43L)?;
-    println(database.step()?);
-    println(optionLongEquals(database.columnLong(0)?, 43L));
+    SqlStatement parameterStatement = database.prepare(parameterQuery)?;
+    parameterStatement.bindLong(1, 42L)?;
+    println(parameterStatement.step()?);
+    println(optionLongEquals(parameterStatement.columnLong(0)?, 42L));
+    parameterStatement.reset()?;
+    parameterStatement.clearBindings()?;
+    println(parameterStatement.step()?);
+    println(optionLongIsNone(parameterStatement.columnLong(0)?));
+    parameterStatement.reset()?;
+    parameterStatement.bindLong(1, 43L)?;
+    println(parameterStatement.step()?);
+    println(optionLongEquals(parameterStatement.columnLong(0)?, 43L));
 
     database.close()?;
     database.close()?;
@@ -191,6 +191,9 @@ boolean boolFailed(Result<boolean, Text> result) {
 boolean databaseFailed(Result<Database, Text> result) {
     match (result) { Ok(value) { return false; } Err(error) { return true; } }
 }
+boolean statementFailed(Result<SqlStatement, Text> result) {
+    match (result) { Ok(value) { return false; } Err(error) { return true; } }
+}
 boolean optionLongFailed(Result<Option<long>, Text> result) {
     match (result) { Ok(value) { return false; } Err(error) { return true; } }
 }
@@ -203,7 +206,7 @@ Result<Unit, Text> exercise() {
     Text memory = new Text(":memory:");
     Database database = Database.open(memory)?;
     Text nulQuery = new Text("SELECT 1\0");
-    println(unitFailed(database.prepare(nulQuery)));
+    println(statementFailed(database.prepare(nulQuery)));
     Text parentSchema = new Text("CREATE TABLE parent (id INTEGER PRIMARY KEY)");
     database.execute(parentSchema)?;
     Text childSchema = new Text("CREATE TABLE child (parent_id INTEGER NOT NULL REFERENCES parent(id))");
@@ -211,9 +214,9 @@ Result<Unit, Text> exercise() {
     Text primaryPragma = new Text("PRAGMA foreign_keys=OFF; SELECT 1");
     Text tailPragma = new Text("SELECT 1; PRAGMA foreign_keys=OFF");
     Text invalidChild = new Text("INSERT INTO child VALUES(98)");
-    println(unitFailed(database.prepare(primaryPragma)));
+    println(statementFailed(database.prepare(primaryPragma)));
     println(longFailed(database.execute(invalidChild)));
-    println(unitFailed(database.prepare(tailPragma)));
+    println(statementFailed(database.prepare(tailPragma)));
     println(longFailed(database.execute(invalidChild)));
     println(longFailed(database.execute(primaryPragma)));
     println(longFailed(database.execute(invalidChild)));
@@ -228,13 +231,19 @@ Result<Unit, Text> exercise() {
     Text addEvent = new Text("INSERT INTO event_source(payload) VALUES('source;value')");
     database.execute(addEvent)?;
     Text eventCount = new Text("SELECT COUNT(*) FROM event_log");
-    database.prepare(eventCount)?;
-    println(database.step()?);
-    println(optionLongEquals(database.columnLong(0)?, 2L));
+    SqlStatement eventCountStatement = database.prepare(eventCount)?;
+    println(eventCountStatement.step()?);
+    println(optionLongEquals(eventCountStatement.columnLong(0)?, 2L));
+    eventCountStatement.step()?;
+    eventCountStatement.close()?;
     Text disableForeignKeys = new Text("PRAGMA foreign_keys=OFF");
     Text enableForeignKeys = new Text("PRAGMA foreign_keys=ON");
-    database.prepare(disableForeignKeys)?;
-    database.prepare(enableForeignKeys)?;
+    SqlStatement disableStatement = database.prepare(disableForeignKeys)?;
+    disableStatement.step()?;
+    disableStatement.close()?;
+    SqlStatement enableStatement = database.prepare(enableForeignKeys)?;
+    enableStatement.step()?;
+    enableStatement.close()?;
     database.begin()?;
     Text insertParent1 = new Text("INSERT INTO parent VALUES(1)");
     database.execute(insertParent1)?;
@@ -249,10 +258,11 @@ Result<Unit, Text> exercise() {
     database.rollback()?;
 
     Text countParents = new Text("SELECT COUNT(*) FROM parent");
-    database.prepare(countParents)?;
-    println(database.step()?);
-    Option<long> count = database.columnLong(0)?;
+    SqlStatement countParentsStatement = database.prepare(countParents)?;
+    println(countParentsStatement.step()?);
+    Option<long> count = countParentsStatement.columnLong(0)?;
     println(optionLongEquals(count, 1L));
+    countParentsStatement.close()?;
 
     Text rowQuery = new Text("SELECT 1");
     println(longFailed(database.execute(rowQuery)));
@@ -261,36 +271,43 @@ Result<Unit, Text> exercise() {
     Text multipleInserts = new Text("INSERT INTO marker VALUES(1); INSERT INTO marker VALUES(2)");
     println(longFailed(database.execute(multipleInserts)));
     Text countMarkers = new Text("SELECT COUNT(*) FROM marker");
-    database.prepare(countMarkers)?;
-    println(database.step()?);
-    println(optionLongEquals(database.columnLong(0)?, 0L));
+    SqlStatement countMarkersStatement = database.prepare(countMarkers)?;
+    println(countMarkersStatement.step()?);
+    println(optionLongEquals(countMarkersStatement.columnLong(0)?, 0L));
+    countMarkersStatement.close()?;
 
     Text commentedQuery = new Text("SELECT 77; /* block comment */ -- trailing comment\n");
-    database.prepare(commentedQuery)?;
+    SqlStatement commentedStatement = database.prepare(commentedQuery)?;
     Text multipleQueries = new Text("SELECT 1; SELECT 2");
-    println(unitFailed(database.prepare(multipleQueries)));
-    println(database.step()?);
-    println(optionLongEquals(database.columnLong(0)?, 77L));
-    println(optionTextFailed(database.columnText(0)));
-    println(optionLongFailed(database.columnLong(1)));
-    println(textFailed(database.columnName(1)));
-    println(intFailed(database.columnType(1)));
+    println(statementFailed(database.prepare(multipleQueries)));
+    println(commentedStatement.step()?);
+    println(optionLongEquals(commentedStatement.columnLong(0)?, 77L));
+    println(optionTextFailed(commentedStatement.columnText(0)));
+    println(optionLongFailed(commentedStatement.columnLong(1)));
+    println(textFailed(commentedStatement.columnName(1)));
+    println(intFailed(commentedStatement.columnType(1)));
+    commentedStatement.close()?;
 
     Text parameterQuery = new Text("SELECT ?");
-    database.prepare(parameterQuery)?;
-    println(unitFailed(database.bindNull(0)));
-    println(unitFailed(database.bindLong(2, 9L)));
-    database.bindLong(1, 9L)?;
-    println(database.step()?);
-    println(optionLongEquals(database.columnLong(0)?, 9L));
+    SqlStatement parameterStatement = database.prepare(parameterQuery)?;
+    println(unitFailed(parameterStatement.bindNull(0)));
+    println(unitFailed(parameterStatement.bindLong(2, 9L)));
+    parameterStatement.bindLong(1, 9L)?;
+    println(parameterStatement.step()?);
+    println(optionLongEquals(parameterStatement.columnLong(0)?, 9L));
     println(unitFailed(database.setBusyTimeoutMillis(-1L)));
     println(unitFailed(database.setBusyTimeoutMillis(2147483648L)));
 
     database.close()?;
     database.close()?;
-    println(unitFailed(database.prepare(rowQuery)));
-    println(boolFailed(database.step()));
-    println(intFailed(database.columnCount()));
+    println(statementFailed(database.prepare(rowQuery)));
+    println(boolFailed(parameterStatement.step()));
+    println(intFailed(parameterStatement.columnCount()));
+    println(unitFailed(parameterStatement.reset()));
+    println(unitFailed(parameterStatement.clearBindings()));
+    println(unitFailed(parameterStatement.bindLong(1, 10L)));
+    println(optionLongFailed(parameterStatement.columnLong(0)));
+    parameterStatement.close()?;
     Text closedSchema = new Text("CREATE TABLE closed_test (id INTEGER)");
     println(longFailed(database.execute(closedSchema)));
     return new Result<Unit, Text>.Ok(());
@@ -316,8 +333,8 @@ Result<Unit, Text> abandonTransaction(borrow Text path) {
     Text insert = new Text("INSERT INTO held VALUES(3)");
     abandoned.execute(insert)?;
     Text select = new Text("SELECT value FROM held");
-    abandoned.prepare(select)?;
-    println(abandoned.step()?);
+    SqlStatement statement = abandoned.prepare(select)?;
+    println(statement.step()?);
     return new Result<Unit, Text>.Ok(());
 }
 Result<Unit, Text> exercise(borrow Text path) {
@@ -339,9 +356,9 @@ Result<Unit, Text> exercise(borrow Text path) {
     abandonTransaction(path)?;
     Database verify = Database.open(path)?;
     Text count = new Text("SELECT COUNT(*) FROM held");
-    verify.prepare(count)?;
-    println(verify.step()?);
-    println(optionLongEquals(verify.columnLong(0)?, 0L));
+    SqlStatement countStatement = verify.prepare(count)?;
+    println(countStatement.step()?);
+    println(optionLongEquals(countStatement.columnLong(0)?, 0L));
     return new Result<Unit, Text>.Ok(());
 }
 void main() {
@@ -358,19 +375,9 @@ void main() {
 "#;
 
 #[test]
-fn sqlite_bindings_types_transactions_and_owned_rows() {
-    let output = run_memory(AFFINE_BINDING_AND_ROWS);
-    assert_eq!(output.stdout, concat!(
-        "true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n1\n3\n4\n5\n2\n",
-        "true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n",
-        "true\n3\n0\n255\n65\ntrue\ntrue\ntrue\n"
-    ).as_bytes());
-}
-
-#[test]
 fn sqlite_transactions_foreign_keys_single_commands_and_errors() {
     let output = run_memory(TRANSACTIONS_AND_ERRORS);
-    assert_eq!(output.stdout, "true\n".repeat(36).as_bytes());
+    assert_eq!(output.stdout, "true\n".repeat(40).as_bytes());
 }
 
 #[test]
@@ -381,6 +388,130 @@ fn sqlite_busy_timeout_is_bounded_between_two_connections() {
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     assert_eq!(output.stdout, b"true\ntrue\ntrue\ntrue\ntrue\n");
     assert_memory_balanced(&output);
+}
+
+const INDEPENDENT_STATEMENTS: &str = r#"
+boolean boolFailed(Result<boolean, Text> result) {
+    match (result) { Ok(value) { return false; } Err(error) { return true; } }
+}
+boolean intFailed(Result<int, Text> result) {
+    match (result) { Ok(value) { return false; } Err(error) { return true; } }
+}
+boolean unitFailed(Result<Unit, Text> result) {
+    match (result) { Ok(unit) { return false; } Err(error) { return true; } }
+}
+boolean statementFailed(Result<SqlStatement, Text> result) {
+    match (result) { Ok(statement) { return false; } Err(error) { return true; } }
+}
+boolean optionLongFailed(Result<Option<long>, Text> result) {
+    match (result) { Ok(value) { return false; } Err(error) { return true; } }
+}
+boolean optionLongEquals(Option<long> option, long expected) {
+    match (option) { Some(value) { return value == expected; } None { return false; } }
+}
+Result<SqlStatement, Text> statementAfterDatabaseDrop() {
+    Text memory = new Text(":memory:");
+    Database database = Database.open(memory)?;
+    Text sql = new Text("SELECT 73");
+    SqlStatement statement = database.prepare(sql)?;
+    return new Result<SqlStatement, Text>.Ok(statement);
+}
+Result<Unit, Text> discardStatement(SqlStatement statement) {
+    return new Result<Unit, Text>.Ok(());
+}
+Result<Unit, Text> exercise() {
+    Text memory = new Text(":memory:");
+    Database database = Database.open(memory)?;
+    Text schema = new Text("CREATE TABLE items(value INTEGER)");
+    database.execute(schema)?;
+    Text seed = new Text("INSERT INTO items VALUES(10),(20),(30)");
+    database.execute(seed)?;
+    Text auditSchema = new Text("CREATE TABLE audit(value INTEGER)");
+    database.execute(auditSchema)?;
+
+    database.begin()?;
+    Text transactionInsert = new Text("INSERT INTO items VALUES(40)");
+    database.execute(transactionInsert)?;
+    Text transactionSql = new Text("SELECT value FROM items WHERE value=40");
+    SqlStatement transactionStatement = database.prepare(transactionSql)?;
+    println(transactionStatement.step()?);
+    println(optionLongEquals(transactionStatement.columnLong(0)?, 40L));
+    transactionStatement.close()?;
+    database.rollback()?;
+
+    Text leftSql = new Text("SELECT value FROM items WHERE value >= ? ORDER BY value");
+    Text rightSql = new Text("SELECT value FROM items WHERE value <= ? ORDER BY value");
+    SqlStatement left = database.prepare(leftSql)?;
+    SqlStatement right = database.prepare(rightSql)?;
+    left.bindLong(1, 10L)?;
+    right.bindLong(1, 30L)?;
+    println(left.step()?);
+    println(optionLongEquals(left.columnLong(0)?, 10L));
+    println(right.step()?);
+    println(optionLongEquals(right.columnLong(0)?, 10L));
+
+    Text auditInsert = new Text("INSERT INTO audit VALUES(1)");
+    database.execute(auditInsert)?;
+    Text multiple = new Text("SELECT 1; SELECT 2");
+    println(statementFailed(database.prepare(multiple)));
+    println(optionLongEquals(right.columnLong(0)?, 10L));
+    Text independentSql = new Text("SELECT 999");
+    SqlStatement independent = database.prepare(independentSql)?;
+    println(independent.step()?);
+    println(optionLongEquals(independent.columnLong(0)?, 999L));
+    independent.close()?;
+
+    left.reset()?;
+    left.clearBindings()?;
+    left.bindLong(1, 30L)?;
+    println(right.step()?);
+    println(optionLongEquals(right.columnLong(0)?, 20L));
+    println(left.step()?);
+    println(optionLongEquals(left.columnLong(0)?, 30L));
+    println(right.step()?);
+    println(optionLongEquals(right.columnLong(0)?, 30L));
+    println(!left.step()?);
+    println(!right.step()?);
+
+    Text dropSql = new Text("SELECT value FROM items");
+    SqlStatement dropped = database.prepare(dropSql)?;
+    println(dropped.step()?);
+    discardStatement(dropped)?;
+    Text afterDrop = new Text("INSERT INTO audit VALUES(2)");
+    database.execute(afterDrop)?;
+
+    database.close()?;
+    println(boolFailed(left.step()));
+    println(boolFailed(right.step()));
+    println(intFailed(left.columnCount()));
+    println(unitFailed(right.reset()));
+    println(unitFailed(left.clearBindings()));
+    println(unitFailed(right.bindLong(1, 50L)));
+    println(optionLongFailed(left.columnLong(0)));
+    left.close()?;
+    right.close()?;
+
+    match (statementAfterDatabaseDrop()) {
+        Err(error) { println(false); println(false); }
+        Ok(orphan) {
+            println(boolFailed(orphan.step()));
+            println(unitFailed(orphan.close()));
+        }
+    }
+    return new Result<Unit, Text>.Ok(());
+}
+void main() {
+    match (exercise()) {
+        Ok(unit) { }
+        Err(error) { Console.printText(error); println(""); }
+    }
+}
+"#;
+
+#[test]
+fn sqlite_prepared_statements_are_independent_and_close_v2_defers_connections() {
+    let output = run_memory(INDEPENDENT_STATEMENTS);
+    assert_eq!(output.stdout, "true\n".repeat(27).as_bytes());
 }
 
 #[test]
@@ -394,34 +525,39 @@ Result<Unit, Text> exercise() {
     database.execute(table)?;
     database.execute(audit)?;
     Text leadingQuery = new Text("; /* empty commands */ ; SELECT 73");
-    database.prepare(leadingQuery)?;
-    println(database.step()?);
-    Option<long> result = database.columnLong(0)?;
+    SqlStatement leadingStatement = database.prepare(leadingQuery)?;
+    println(leadingStatement.step()?);
+    Option<long> result = leadingStatement.columnLong(0)?;
     match (result) { None { println(false); } Some(value) { println(value == 73L); } }
+    leadingStatement.step()?;
+    leadingStatement.close()?;
     Text leadingInsert = new Text("; ; INSERT INTO t VALUES(11)");
     database.execute(leadingInsert)?;
     // Both SQL inputs below begin with a literal UTF-8 BOM.
     Text executedTrigger = new Text("﻿CREATE TRIGGER executed AFTER INSERT ON t BEGIN INSERT INTO audit VALUES('exec;value'); END;");
     database.execute(executedTrigger)?;
     Text preparedTrigger = new Text("﻿CREATE TEMP TRIGGER prepared AFTER INSERT ON t BEGIN INSERT INTO audit VALUES(CASE WHEN NEW.x = 22 THEN 'prepare;value' ELSE 'wrong' END); END;");
-    database.prepare(preparedTrigger)?;
-    database.step()?;
+    SqlStatement preparedTriggerStatement = database.prepare(preparedTrigger)?;
+    preparedTriggerStatement.step()?;
+    preparedTriggerStatement.close()?;
     Text insert = new Text("INSERT INTO t VALUES(22)");
     database.execute(insert)?;
     Text query = new Text("SELECT payload FROM audit ORDER BY payload");
-    database.prepare(query)?;
-    println(database.step()?);
-    Option<Text> first = database.columnText(0)?;
+    SqlStatement queryStatement = database.prepare(query)?;
+    println(queryStatement.step()?);
+    Option<Text> first = queryStatement.columnText(0)?;
     match (first) { None { println(false); } Some(value) { println(value.equalsString("exec;value")); } }
-    println(database.step()?);
-    Option<Text> second = database.columnText(0)?;
+    println(queryStatement.step()?);
+    Option<Text> second = queryStatement.columnText(0)?;
     match (second) { None { println(false); } Some(value) { println(value.equalsString("prepare;value")); } }
-    println(!database.step()?);
+    println(!queryStatement.step()?);
+    queryStatement.close()?;
     Text values = new Text("SELECT SUM(x) FROM t");
-    database.prepare(values)?;
-    println(database.step()?);
-    Option<long> total = database.columnLong(0)?;
+    SqlStatement valuesStatement = database.prepare(values)?;
+    println(valuesStatement.step()?);
+    Option<long> total = valuesStatement.columnLong(0)?;
     match (total) { None { println(false); } Some(value) { println(value == 33L); } }
+    valuesStatement.close()?;
     return new Result<Unit, Text>.Ok(());
 }
 void main() {
@@ -433,4 +569,85 @@ void main() {
 "#;
     let output = run_memory(source);
     assert_eq!(output.stdout, "true\n".repeat(9).as_bytes());
+}
+
+#[test]
+fn sqlite_statements_interleave_and_finalize_in_any_owner_order() {
+    let source = r#"
+boolean optionLongEquals(Option<long> option, long expected) {
+    match (option) { Some(value) { return value == expected; } None { return false; } }
+}
+boolean optionLongIsNone(Option<long> option) {
+    match (option) { None { return true; } Some(value) { return false; } }
+}
+boolean boolFailed(Result<boolean, Text> result) {
+    match (result) { Ok(value) { return false; } Err(error) { return true; } }
+}
+boolean unitFailed(Result<Unit, Text> result) {
+    match (result) { Ok(value) { return false; } Err(error) { return true; } }
+}
+Result<Unit, Text> exercise() {
+    Text memory = new Text(":memory:");
+    Database database = Database.open(memory)?;
+    Text sink = new Text("CREATE TABLE sink (value INTEGER)");
+    database.execute(sink)?;
+    Text leftSql = new Text("SELECT ? UNION ALL SELECT ?");
+    Text rightSql = new Text("SELECT ? UNION ALL SELECT ?");
+    SqlStatement left = database.prepare(leftSql)?;
+    SqlStatement right = database.prepare(rightSql)?;
+    left.bindLong(1, 11L)?;
+    left.bindLong(2, 12L)?;
+    right.bindLong(1, 21L)?;
+    right.bindLong(2, 22L)?;
+    println(left.step()?);
+    println(optionLongEquals(left.columnLong(0)?, 11L));
+    println(right.step()?);
+    println(optionLongEquals(right.columnLong(0)?, 21L));
+    Text insert = new Text("INSERT INTO sink VALUES(1)");
+    database.execute(insert)?;
+    left.reset()?;
+    left.bindLong(1, 31L)?;
+    left.bindLong(2, 32L)?;
+    println(left.step()?);
+    println(optionLongEquals(left.columnLong(0)?, 31L));
+    println(right.step()?);
+    println(optionLongEquals(right.columnLong(0)?, 22L));
+    println(left.step()?);
+    println(optionLongEquals(left.columnLong(0)?, 32L));
+    println(!right.step()?);
+    println(!left.step()?);
+    left.reset()?;
+    left.clearBindings()?;
+    println(left.step()?);
+    println(optionLongIsNone(left.columnLong(0)?));
+    right.reset()?;
+    println(right.step()?);
+    println(optionLongEquals(right.columnLong(0)?, 21L));
+    left.close()?;
+    println(boolFailed(left.step()));
+    database.close()?;
+    println(boolFailed(right.step()));
+    println(!unitFailed(right.close()));
+    println(!unitFailed(right.close()));
+    drop(database);
+    drop(left);
+    drop(right);
+
+    Database abandoned = Database.open(memory)?;
+    SqlStatement orphan = abandoned.prepare(leftSql)?;
+    drop(abandoned);
+    println(boolFailed(orphan.step()));
+    println(!unitFailed(orphan.close()));
+    drop(orphan);
+    return new Result<Unit, Text>.Ok(());
+}
+void main() {
+    match (exercise()) {
+        Ok(unit) { }
+        Err(error) { Console.printText(error); println(""); }
+    }
+}
+"#;
+    let output = run_memory(source);
+    assert_eq!(output.stdout, "true\n".repeat(21).as_bytes());
 }

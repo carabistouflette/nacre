@@ -311,7 +311,10 @@ pub(super) const PRELUDE_UNITS: &[PreludeUnit] = &[
     },
     PreludeUnit {
         source: include_str!("../../stdlib/prelude/database.ncr"),
-        builtins: &[Builtin { name: "Database", native: Some(|| NativeClass::Database) }],
+        builtins: &[
+            Builtin { name: "Database", native: Some(|| NativeClass::Database) },
+            Builtin { name: "SqlStatement", native: Some(|| NativeClass::SqlStatement) },
+        ],
     },
     PreludeUnit {
         source: include_str!("../../stdlib/prelude/tls.ncr"),

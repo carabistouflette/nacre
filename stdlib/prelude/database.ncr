@@ -1,6 +1,17 @@
 class Database {
     public static Result<Database, Text> open(borrow Text path) {}
-    public Result<Unit, Text> prepare(borrow Text sql) {}
+    public Result<SqlStatement, Text> prepare(borrow Text sql) {}
+    public readonly Result<long, Text> changes() {}
+    public readonly Result<long, Text> lastInsertRowId() {}
+    public Result<long, Text> execute(borrow Text sql) {}
+    public Result<Unit, Text> begin() {}
+    public Result<Unit, Text> commit() {}
+    public Result<Unit, Text> rollback() {}
+    public Result<Unit, Text> setBusyTimeoutMillis(long milliseconds) {}
+    public Result<Unit, Text> close() {}
+}
+
+class SqlStatement {
     public Result<Unit, Text> bindNull(int index) {}
     public Result<Unit, Text> bindLong(int index, long value) {}
     public Result<Unit, Text> bindDouble(int index, double value) {}
@@ -16,12 +27,5 @@ class Database {
     public readonly Result<Option<double>, Text> columnDouble(int index) {}
     public readonly Result<Option<Text>, Text> columnText(int index) {}
     public readonly Result<Option<ByteBuffer>, Text> columnBlob(int index) {}
-    public readonly Result<long, Text> changes() {}
-    public readonly Result<long, Text> lastInsertRowId() {}
-    public Result<long, Text> execute(borrow Text sql) {}
-    public Result<Unit, Text> begin() {}
-    public Result<Unit, Text> commit() {}
-    public Result<Unit, Text> rollback() {}
-    public Result<Unit, Text> setBusyTimeoutMillis(long milliseconds) {}
     public Result<Unit, Text> close() {}
 }

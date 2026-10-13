@@ -85,7 +85,8 @@ pub fn fields(program: &t::Program, class: C, class_id: usize) -> String {
         C::Path | C::File | C::Directory | C::FileInfo | C::Watcher | C::WatchEvent | C::Files =>
             filesystem::fields(program, class),
         C::BinaryReader | C::BinaryWriter => binary::fields(program, class, class_id),
-        C::Database => database::fields(),
+        C::Database => database::database_fields(),
+        C::SqlStatement => database::statement_fields(),
         C::ZipReader | C::ZipWriter | C::ZipEntry => zip::fields(program, class),
         C::Env => io::fields(),
         C::Command | C::Process | C::ProcessOutput => process::fields(program, class),
@@ -138,7 +139,7 @@ pub fn drop_fields(program: &t::Program, class: C, class_id: usize) -> String {
         C::Path | C::File | C::Directory | C::FileInfo | C::Watcher | C::WatchEvent | C::Files =>
             filesystem::drop_fields(program, class),
         C::BinaryReader | C::BinaryWriter => binary::drop_fields(program, class, class_id),
-        C::Database => database::drop_fields(),
+        C::Database | C::SqlStatement => database::drop_fields(),
         C::ZipReader | C::ZipWriter | C::ZipEntry => zip::drop_fields(program, class),
         C::Env => io::drop_fields(),
         C::Command | C::Process | C::ProcessOutput => process::drop_fields(program, class),
@@ -237,6 +238,7 @@ fn append_body(program: &t::Program, out: &mut String, class: &t::Class, native:
         C::Uuid => uuid::implementation(program, class.id),
         C::BinaryReader | C::BinaryWriter => binary::implementation(program, class.id, native),
         C::Database => database::implementation(program, class.id),
+        C::SqlStatement => return,
         C::SocketAddress | C::TcpListener | C::TcpStream | C::Datagram | C::UdpSocket |
         C::Uri | C::Dns => return,
         C::Path | C::File | C::Directory | C::FileInfo | C::Watcher | C::WatchEvent => return,

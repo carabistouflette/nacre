@@ -614,31 +614,18 @@ without falling back to the common name. `verify` checks the supplied CA file tr
 store, stored chain, server purpose, explicit Unix time, and SAN hostname; it does
 not fetch certificates or use the network.
 
-## `Database`
+## `Database` and `SqlStatement`
 
-`Database` is an affine SQLite connection with one internally owned prepared
-statement. It is a small native SQL API, not JDBC or a driver framework. A
-connection cannot own multiple independent statement handles or simultaneous
-result cursors; open another `Database` for another connection/cursor.
+`Database` is an affine SQLite connection; each `SqlStatement` is an independent
+affine prepared statement on that same connection. A connection may own multiple
+statements and simultaneously active result cursors. Preparing, binding, stepping,
+resetting, or closing one statement does not replace or reset another. `execute`
+uses and finalizes a private transient statement, so it also leaves other cursors
+alone. These are small native SQL APIs, not JDBC or a driver framework.
 
 ```java
 static Result<Database, Text> open(borrow Text path)
-Result<Unit, Text> prepare(borrow Text sql)
-Result<Unit, Text> bindNull(int index)
-Result<Unit, Text> bindLong(int index, long value)
-Result<Unit, Text> bindDouble(int index, double value)
-Result<Unit, Text> bindText(int index, borrow Text value)
-Result<Unit, Text> bindBlob(int index, borrow ByteBuffer value)
-Result<boolean, Text> step()
-Result<Unit, Text> reset()
-Result<Unit, Text> clearBindings()
-readonly Result<int, Text> columnCount()
-readonly Result<Text, Text> columnName(int index)
-readonly Result<int, Text> columnType(int index)
-readonly Result<Option<long>, Text> columnLong(int index)
-readonly Result<Option<double>, Text> columnDouble(int index)
-readonly Result<Option<Text>, Text> columnText(int index)
-readonly Result<Option<ByteBuffer>, Text> columnBlob(int index)
+Result<SqlStatement, Text> prepare(borrow Text sql)
 readonly Result<long, Text> changes()
 readonly Result<long, Text> lastInsertRowId()
 Result<long, Text> execute(borrow Text sql)
@@ -647,6 +634,23 @@ Result<Unit, Text> commit()
 Result<Unit, Text> rollback()
 Result<Unit, Text> setBusyTimeoutMillis(long milliseconds)
 Result<Unit, Text> close()
+
+Result<Unit, Text> SqlStatement.bindNull(int index)
+Result<Unit, Text> SqlStatement.bindLong(int index, long value)
+Result<Unit, Text> SqlStatement.bindDouble(int index, double value)
+Result<Unit, Text> SqlStatement.bindText(int index, borrow Text value)
+Result<Unit, Text> SqlStatement.bindBlob(int index, borrow ByteBuffer value)
+Result<boolean, Text> SqlStatement.step()
+Result<Unit, Text> SqlStatement.reset()
+Result<Unit, Text> SqlStatement.clearBindings()
+readonly Result<int, Text> SqlStatement.columnCount()
+readonly Result<Text, Text> SqlStatement.columnName(int index)
+readonly Result<int, Text> SqlStatement.columnType(int index)
+readonly Result<Option<long>, Text> SqlStatement.columnLong(int index)
+readonly Result<Option<double>, Text> SqlStatement.columnDouble(int index)
+readonly Result<Option<Text>, Text> SqlStatement.columnText(int index)
+readonly Result<Option<ByteBuffer>, Text> SqlStatement.columnBlob(int index)
+Result<Unit, Text> SqlStatement.close()
 ```
 
 `open` accepts nonempty strict UTF-8 paths without embedded NUL; `:memory:` opens
@@ -656,22 +660,20 @@ accepts exactly one executable statement, allowing leading empty commands and
 SQLite's token-leading UTF-8 BOM whitespace. Only whitespace/comments may follow
 the statement. A bounded linear lexical preflight rejects multi-statement SQL
 before preparing any command on the live connection, while respecting quoted
-semicolons and trigger bodies. It replaces the previous prepared statement only
-after the new SQL parses. Some SQLite PRAGMAs take effect during preparation;
-`prepare` is a command, not a side-effect-free query.
-Failed SQL/tail validation keeps the previous statement; a failure while
-finalizing that previous statement is reported after SQLite has finalized it, so
-no statement remains installed. SQLite failures use generic Text diagnostics and
-do not echo SQL or expose SQLite's diagnostic message.
+semicolons and trigger bodies. Some SQLite PRAGMAs take effect during preparation,
+so a successful `prepare` can have SQL-level side effects. Failed SQL/tail
+validation leaves every existing statement and cursor untouched. SQLite failures
+use generic Text diagnostics and do not echo SQL or expose SQLite's diagnostic
+message.
 
 Binding indices are one-based SQLite parameter indices; invalid indices return
 `Err`. Text and ByteBuffer inputs are copied using SQLite's transient-binding
 semantics, preserving embedded NUL in values. `step` returns `Ok(true)` for a row,
 `Ok(false)` at completion, or `Err` on SQLite failure. Completion is terminal:
 repeated `step` calls return `Ok(false)` without rerunning the statement until
-`reset` or a successful `prepare`. After a failed step, another `step` returns
-`Err` until `reset`. `reset` rewinds the current statement and reports a prior
-evaluation error; call it before rebinding for reuse. `clearBindings` clears all
+`reset`. After a failed step, another `step` returns `Err` until `reset`. `reset`
+rewinds only its own statement and reports a prior evaluation error; call it
+before rebinding for reuse. `clearBindings` clears only that statement's
 parameters.
 
 Column indices are zero-based. `columnType` returns SQLite's documented
@@ -681,8 +683,8 @@ row. Typed accessors accept only their exact corresponding SQLite storage type:
 integer, float, text, or blob. `NULL` becomes `None`; a different type or an
 invalid column index returns `Err` rather than silently coercing. SQLite text
 results must be valid UTF-8. Returned Text and ByteBuffer values are owned copies,
-not SQLite-cell borrows, and remain valid after another step, reset, or
-closing/dropping the Database.
+not SQLite-cell borrows, and remain valid after another step, reset, or closing
+or dropping either owner.
 
 `execute` runs one unparameterized command without result columns and returns
 SQLite's 64-bit change count. For values, use `prepare` and bind parameters rather
@@ -690,14 +692,17 @@ than concatenating untrusted data into SQL. `changes` and `lastInsertRowId` repo
 SQLite's corresponding connection-local 64-bit values. Busy timeout milliseconds
 must be in `0..=INT_MAX`; an expired lock wait returns `Err`.
 
-`close` finalizes the internal statement and is idempotent after success. Dropping
-an open connection performs the same cleanup; SQLite automatically rolls back an
-uncommitted transaction on close. Programs that use `Database` require SQLite's
-development headers and `libsqlite3`; unrelated programs do not link SQLite.
-
-If automatic destruction cannot close the SQLite connection after finalizing the
-owned statement, the runtime aborts rather than releasing a wrapper around live
-SQLite state.
+`Database.close` is idempotent and closes the connection with SQLite's
+`sqlite3_close_v2`: the connection becomes unusable immediately, and SQLite
+defers backend deallocation until all outstanding statements have been finalized.
+Closing or dropping the Database automatically rolls back an uncommitted
+transaction. After the connection is closed or dropped, every operational
+`SqlStatement` method returns `Err`. `SqlStatement.close` remains safe and
+idempotent and finalizes only its handle; after closing a statement, its
+operational methods return `Err`. Dropping a statement finalizes only its own
+handle, in any order relative to Database close/drop. Programs that use these APIs
+require SQLite's development headers and `libsqlite3`; unrelated programs do not
+link SQLite.
 
 ## XML, streaming, and XSLT
 

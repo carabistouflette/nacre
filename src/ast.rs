@@ -39,7 +39,7 @@ pub enum NativeClass {
     Thread(Type), Mutex(Type), Guard(Type), Channel(Type), Sender(Type), Receiver(Type),
     Condition(Type), Future(Type), ThreadPool(Type),
     AtomicInt, AtomicLong, AtomicBoolean, Semaphore, CountDownLatch, Barrier, CancellationToken,
-    Env, Command, Process, ProcessOutput, Database,
+    Env, Command, Process, ProcessOutput, Database, SqlStatement,
 }
 #[derive(Debug, Clone)]
 pub struct Variant { pub name: String, pub fields: Vec<Type>, pub span: Span }
