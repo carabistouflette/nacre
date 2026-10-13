@@ -1,6 +1,7 @@
 use crate::ir::{self as t, NativeMethod as M, Type};
-use super::support::{native_function, replace_placeholders, result_id, variant_id};
-
+use super::support::{
+    native_function, replace_placeholders, result_id, variant_id, TEXT_INLINE_CAPACITY,
+};
 fn text_method_placeholders(body: String, program: &t::Program, text: usize) -> String {
     let parse = native_function(program, |method| matches!(method, M::TextParseInt));
     let parse_long = native_function(program, |method| matches!(method, M::TextParseLong));
@@ -29,6 +30,7 @@ fn text_method_placeholders(body: String, program: &t::Program, text: usize) -> 
     let slice_bytes_id = result_id(slice_bytes);
     let slice_id = result_id(slice);
     replace_placeholders(body, &[
+        ("@TEXT_INIT@", format!("ncr_text_init_{text}")),
         ("@PARSE_RESULT@", parse_id.to_string()),
         ("@PARSE_OK_TAG@", variant_id(program, parse_id, "Ok").to_string()),
         ("@ERROR_PARSE_RESULT@", format!("ncr_result_error_{parse_id}")),
@@ -53,11 +55,13 @@ fn text_method_placeholders(body: String, program: &t::Program, text: usize) -> 
 }
 
 pub(super) fn fields() -> String {
-    "    unsigned char *bytes;\n    int32_t length;\n    int32_t capacity;\n".to_owned()
+    format!(
+        "    unsigned char *bytes;\n    int32_t length;\n    int32_t capacity;\n    unsigned char inline_storage[{TEXT_INLINE_CAPACITY}];\n"
+    )
 }
 
 pub(super) fn drop_fields() -> String {
-    "    ncr_deallocate(p->bytes);\n".to_owned()
+    "    if (p->bytes != NULL && p->bytes != p->inline_storage) { ncr_deallocate(p->bytes); }\n".to_owned()
 }
 
 pub(super) fn implementation(program: &t::Program, text: usize) -> String {

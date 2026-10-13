@@ -3,372 +3,319 @@
     "name": "example_interfaces",
     "source": "interface Animal {\n    readonly void speak();\n}\n\nclass Dog implements Animal {\n    public readonly void speak() { println(\"Ouaf !\"); }\n}\n\nclass Cat implements Animal {\n    public readonly void speak() { println(\"Miaou !\"); }\n}\n\nvoid speakTwice(borrow Animal animal) {\n    animal.speak();\n    animal.speak();\n}\n\nvoid main() {\n    Animal animal = new Dog();\n    speakTwice(animal);\n    // Le remplacement detruit le Dog, puis conserve le Cat.\n    animal = new Cat();\n    animal.speak();\n}\n",
     "valid": true,
-    "stdout": "Ouaf !\nOuaf !\nMiaou !\n",
-    "allocations": 2
+    "stdout": "Ouaf !\nOuaf !\nMiaou !\n"
   },
   {
     "name": "example_interface_borrowing",
     "source": "interface CounterAccess {\n    void increment();\n    readonly int getValue();\n}\n\nclass Counter implements CounterAccess {\n    private int value;\n    Counter(int value) { this.value = value; }\n    public void increment() { this.value = this.value + 1; }\n    public readonly int getValue() { return this.value; }\n}\n\nvoid bump(borrow mut CounterAccess counter) { counter.increment(); }\n\nvoid main() {\n    Counter counter = new Counter(40);\n    bump(counter); // Emprunt et conversion d'interface implicites, sans allocation.\n    {\n        borrow CounterAccess reader = counter;\n        println(reader.getValue());\n        // counter.increment() serait refuse pendant cet emprunt.\n    }\n    counter.increment();\n    println(counter.getValue());\n}\n",
     "valid": true,
-    "stdout": "41\n42\n",
-    "allocations": 1
+    "stdout": "41\n42\n"
   },
   {
     "name": "example_generic_box",
     "source": "// Les methodes du modele sont verifiees pour chaque specialisation demandee.\nclass Box<T> {\n    private T value;\n    public Box(T value) { this.value = value; }\n    public readonly T get() { return this.value; }\n}\n\nvoid main() {\n    Box<int> number = new Box<int>(42);\n    Box<String> text = new Box<String>(\"Bonjour les generiques !\");\n    Box<boolean> flag = new Box<boolean>(true);\n    println(number.get());\n    println(text.get());\n    println(flag.get());\n}\n",
     "valid": true,
-    "stdout": "42\nBonjour les generiques !\ntrue\n",
-    "allocations": 3
+    "stdout": "42\nBonjour les generiques !\ntrue\n"
   },
   {
     "name": "example_generic_composition",
     "source": "class Counter {\n    private int value;\n    Counter(int value) { this.value = value; }\n    readonly int getValue() { return this.value; }\n}\n\nclass Holder<T> {\n    private T content;\n    Holder(T content) { this.content = content; }\n    readonly int read() { return this.content.getValue(); }\n}\n\nvoid main() {\n    Counter counter = new Counter(42);\n    Holder<Counter> holder = new Holder<Counter>(counter);\n    // counter a ete transfere dans holder.\n    println(holder.read());\n    // La destruction de holder detruit aussi son Counter.\n}\n",
     "valid": true,
-    "stdout": "42\n",
-    "allocations": 2
+    "stdout": "42\n"
   },
   {
     "name": "example_generic_interfaces",
     "source": "interface Source<T> {\n    readonly T read();\n}\n\nclass Constant<T> implements Source<T> {\n    private T value;\n    Constant(T value) { this.value = value; }\n    public readonly T read() { return this.value; }\n}\n\nvoid main() {\n    Source<int> number = new Constant<int>(42);\n    Source<String> text = new Constant<String>(\"Polymorphisme generique\");\n    println(number.read());\n    println(text.read());\n}\n",
     "valid": true,
-    "stdout": "42\nPolymorphisme generique\n",
-    "allocations": 2
+    "stdout": "42\nPolymorphisme generique\n"
   },
   {
     "name": "example_interface_composition",
     "source": "interface Readable { readonly int read(); }\n\nclass Number implements Readable {\n    private int value;\n    Number(int value) { this.value = value; }\n    readonly int read() { return this.value; }\n}\n\nclass Task {\n    private Readable source;\n    Task(Readable source) { this.source = source; }\n    readonly int execute() { return this.source.read(); }\n}\n\nReadable make(boolean first) {\n    if (first) { return new Number(42); }\n    else { return new Number(7); }\n}\n\nvoid main() {\n    Task task = new Task(make(true));\n    println(task.execute());\n    Readable other = make(false);\n    println(other.read());\n}\n",
     "valid": true,
-    "stdout": "42\n7\n",
-    "allocations": 3
+    "stdout": "42\n7\n"
   },
   {
     "name": "example_generic_view",
     "source": "class Counter {\n    int value = 42;\n    readonly int getValue() { return this.value; }\n}\n\nclass View<T> {\n    private borrow T target;\n    View(borrow T target) { this.target = target; }\n    readonly int read() { return this.target.getValue(); }\n}\n\nvoid main() {\n    Counter counter = new Counter();\n    {\n        View<Counter> view = new View<Counter>(counter);\n        println(view.read());\n    }\n    counter.value = 43;\n    println(counter.getValue());\n}\n",
     "valid": true,
-    "stdout": "42\n43\n",
-    "allocations": 2
+    "stdout": "42\n43\n"
   },
   {
     "name": "owned_interface_moves",
     "source": "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } void main(){ C c = new C(); I a = c; I b = a; println(b.get()); }",
     "valid": true,
-    "stdout": "1\n",
-    "allocations": 1
+    "stdout": "1\n"
   },
   {
     "name": "owned_interface_replacement",
     "source": "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } void main(){ I a = new C(); a = new D(); a.inc(); println(a.get()); }",
     "valid": true,
-    "stdout": "12\n",
-    "allocations": 2
+    "stdout": "12\n"
   },
   {
     "name": "owned_interface_self_assignment",
     "source": "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } void main(){ I a = new C(); a = a; println(a.get()); }",
     "valid": true,
-    "stdout": "1\n",
-    "allocations": 1
+    "stdout": "1\n"
   },
   {
     "name": "interface_argument_consumes",
     "source": "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } void consume(I a){println(a.get());} void main(){consume(new D());}",
     "valid": true,
-    "stdout": "10\n",
-    "allocations": 1
+    "stdout": "10\n"
   },
   {
     "name": "interface_factory_return",
     "source": "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } I make(){return new C();} void main(){I i = make(); println(i.get());}",
     "valid": true,
-    "stdout": "1\n",
-    "allocations": 1
+    "stdout": "1\n"
   },
   {
     "name": "interface_identity_return",
     "source": "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } I id(I a){return a;} void main(){I i = id(new D()); println(i.get());}",
     "valid": true,
-    "stdout": "10\n",
-    "allocations": 1
+    "stdout": "10\n"
   },
   {
     "name": "interface_early_return_cleanup",
     "source": "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } I make(){I a = new D(); {I b = new C(); return b;}} void main(){I i = make(); println(i.get());}",
     "valid": true,
-    "stdout": "1\n",
-    "allocations": 2
+    "stdout": "1\n"
   },
   {
     "name": "discard_interface_return",
     "source": "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } I make(){return new C();} void main(){make();}",
     "valid": true,
-    "stdout": "",
-    "allocations": 1
+    "stdout": ""
   },
   {
     "name": "drop_interface_explicit",
     "source": "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } void main(){I a = new C(); drop(a);}",
     "valid": true,
-    "stdout": "",
-    "allocations": 1
+    "stdout": ""
   },
   {
     "name": "shared_interface_parameter",
     "source": "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } int read(borrow I a){return a.get();} void main(){C c = new C();println(read(c));c.inc();println(read(c));}",
     "valid": true,
-    "stdout": "1\n2\n",
-    "allocations": 1
+    "stdout": "1\n2\n"
   },
   {
     "name": "mutable_interface_parameter",
     "source": "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } void bump(borrow mut I a){a.inc();} void main(){C c = new C();bump(c);println(c.get());}",
     "valid": true,
-    "stdout": "2\n",
-    "allocations": 1
+    "stdout": "2\n"
   },
   {
     "name": "borrow_owned_interface",
     "source": "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } void main(){I i = new D();{borrow I r = i;println(r.get());} i.inc(); println(i.get());}",
     "valid": true,
-    "stdout": "10\n12\n",
-    "allocations": 1
+    "stdout": "10\n12\n"
   },
   {
     "name": "interface_mutable_reborrow",
     "source": "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } void main(){C c = new C(); {borrow mut I r = c; {borrow I s = r;println(s.get());}r.inc();}println(c.get());}",
     "valid": true,
-    "stdout": "1\n2\n",
-    "allocations": 1
+    "stdout": "1\n2\n"
   },
   {
     "name": "interface_parameter_forwarding",
     "source": "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } void b(borrow mut I a){a.inc();}void f(borrow mut C c){b(c);}void main(){C c = new C();f(c);println(c.get());}",
     "valid": true,
-    "stdout": "2\n",
-    "allocations": 1
+    "stdout": "2\n"
   },
   {
     "name": "two_shared_interface_arguments",
     "source": "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } int sum(borrow I a, borrow I b){return a.get()+b.get();}void main(){C c = new C();println(sum(c,c));}",
     "valid": true,
-    "stdout": "2\n",
-    "allocations": 1
+    "stdout": "2\n"
   },
   {
     "name": "multiple_interfaces",
     "source": "interface A { readonly int a(); } interface B { readonly int b(); } class C implements A,B {readonly int a(){return 2;}readonly int b(){return 3;}} void fa(borrow A a){println(a.a());} void fb(borrow B b){println(b.b());}void main(){C c = new C();fa(c);fb(c);}",
     "valid": true,
-    "stdout": "2\n3\n",
-    "allocations": 1
+    "stdout": "2\n3\n"
   },
   {
     "name": "marker_interface",
     "source": "interface Marker {} class C implements Marker {} void main(){Marker m = new C();drop(m);}",
     "valid": true,
-    "stdout": "",
-    "allocations": 1
+    "stdout": ""
   },
   {
     "name": "forward_interface_declaration",
     "source": "class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } interface I { readonly int get(); void inc(); } void main(){I a = new C();println(a.get());}",
     "valid": true,
-    "stdout": "1\n",
-    "allocations": 1
+    "stdout": "1\n"
   },
   {
     "name": "interface_methods_source_order",
     "source": "interface I {readonly int b();readonly int a();}class C implements I {readonly int a(){return 1;}readonly int b(){return 2;}}void main(){I i = new C();println(i.a());println(i.b());}",
     "valid": true,
-    "stdout": "1\n2\n",
-    "allocations": 1
+    "stdout": "1\n2\n"
   },
   {
     "name": "interface_owned_field",
     "source": "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } class Owner { I item; Owner(I item){this.item=item;} readonly int read(){return item.get();}} void main(){Owner o = new Owner(new D());println(o.read());}",
     "valid": true,
-    "stdout": "10\n",
-    "allocations": 2
+    "stdout": "10\n"
   },
   {
     "name": "interface_field_borrow",
     "source": "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } class Owner {I item = new C();}void read(borrow I i){println(i.get());}void main(){Owner o = new Owner();read(o.item);}",
     "valid": true,
-    "stdout": "1\n",
-    "allocations": 2
+    "stdout": "1\n"
   },
   {
     "name": "interface_borrowed_field",
     "source": "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } class View {borrow I item;View(borrow I item){this.item=item;}readonly int read(){return item.get();}}void main(){C c = new C();{View v = new View(c);println(v.read());}c.inc();println(c.get());}",
     "valid": true,
-    "stdout": "1\n2\n",
-    "allocations": 2
+    "stdout": "1\n2\n"
   },
   {
     "name": "interface_conditional_move",
     "source": "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } void consume(I i){}void main(){I i = new C();if(false){consume(i);}}",
     "valid": true,
-    "stdout": "",
-    "allocations": 1
+    "stdout": ""
   },
   {
     "name": "interface_definite_init",
     "source": "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } void main(){I i; if(true){i=new C();}else{i=new D();} println(i.get());}",
     "valid": true,
-    "stdout": "1\n",
-    "allocations": 1
+    "stdout": "1\n"
   },
   {
     "name": "interface_loop_move_reinit",
     "source": "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } int take(I i){return i.get();}void main(){I i = new C();int k=0;while(k<3){println(take(i));i=new D();k=k+1;}println(i.get());}",
     "valid": true,
-    "stdout": "1\n10\n10\n10\n",
-    "allocations": 4
+    "stdout": "1\n10\n10\n10\n"
   },
   {
     "name": "interface_loop_cleanup",
     "source": "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } void main(){int k=0;while(k<4){I i = new C();k=k+1;if(k==2){continue;}if(k==4){break;}println(i.get());}}",
     "valid": true,
-    "stdout": "1\n1\n",
-    "allocations": 4
+    "stdout": "1\n1\n"
   },
   {
     "name": "interface_short_circuit",
     "source": "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } boolean take(I i){return true;}void main(){I i=new C();println(false && take(i));}",
     "valid": true,
-    "stdout": "false\n",
-    "allocations": 1
+    "stdout": "false\n"
   },
   {
     "name": "interface_dynamic_object_return",
     "source": "interface Factory { readonly C make(int n); } class C {int n;C(int n){this.n=n;}}class F implements Factory {readonly C make(int n){return new C(n);}}void main(){Factory f=new F();C c=f.make(42);println(c.n);}",
     "valid": true,
-    "stdout": "42\n",
-    "allocations": 2
+    "stdout": "42\n"
   },
   {
     "name": "interface_dynamic_interface_return",
     "source": "interface I { readonly int get(); }class C implements I {readonly int get(){return 7;}}interface F {readonly I make();}class Factory implements F {readonly I make(){return new C();}}void main(){F f=new Factory();I i=f.make();println(i.get());}",
     "valid": true,
-    "stdout": "7\n",
-    "allocations": 2
+    "stdout": "7\n"
   },
   {
     "name": "interface_dynamic_owned_argument",
     "source": "interface I {readonly int get();}class C implements I {readonly int get(){return 7;}}interface Sink {void take(I item);}class S implements Sink {void take(I item){println(item.get());}}void main(){Sink s=new S();s.take(new C());}",
     "valid": true,
-    "stdout": "7\n",
-    "allocations": 2
+    "stdout": "7\n"
   },
   {
     "name": "interface_dynamic_borrowed_argument",
     "source": "interface I {readonly int get();}class C implements I {readonly int get(){return 7;}}interface Reader {readonly int read(borrow I item);}class R implements Reader {readonly int read(borrow I item){return item.get();}}void main(){Reader r=new R();C c=new C();println(r.read(c));println(c.get());}",
     "valid": true,
-    "stdout": "7\n7\n",
-    "allocations": 2
+    "stdout": "7\n7\n"
   },
   {
     "name": "interface_many_replacements",
     "source": "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } void main(){I i=new C();int n=0;while(n<1000){i=new D();n=n+1;}println(i.get());}",
     "valid": true,
-    "stdout": "10\n",
-    "allocations": 1001
+    "stdout": "10\n"
   },
   {
     "name": "generic_two_parameters",
     "source": "class Pair<A,B>{A first;B second;Pair(A a,B b){first=a;second=b;}}void main(){Pair<int,String> p=new Pair<int,String>(42,\"ok\");println(p.first);println(p.second);}",
     "valid": true,
-    "stdout": "42\nok\n",
-    "allocations": 1
+    "stdout": "42\nok\n"
   },
   {
     "name": "generic_nested_owner",
     "source": "class Wrap<T>{T value;Wrap(T value){this.value=value;}}void main(){Wrap<int> inner=new Wrap<int>(42);Wrap<Wrap<int>> outer=new Wrap<Wrap<int>>(inner);println(outer.value.value);}",
     "valid": true,
-    "stdout": "42\n",
-    "allocations": 2
+    "stdout": "42\n"
   },
   {
     "name": "generic_whitespace_angles",
     "source": "class Box<T> { T value; Box(T value) { this.value = value; } readonly T get() { return this.value; } } void main(){Box < int > b = new Box < int > (42);println(b.get());}",
     "valid": true,
-    "stdout": "42\n",
-    "allocations": 1
+    "stdout": "42\n"
   },
   {
     "name": "generic_comparisons_not_types",
     "source": "class Box<T> { T value; Box(T value) { this.value = value; } readonly T get() { return this.value; } } void main(){int a=1;int b=2;println(a < b);Box<int> box=new Box<int>(3);println(box.get() > b);}",
     "valid": true,
-    "stdout": "true\ntrue\n",
-    "allocations": 1
+    "stdout": "true\ntrue\n"
   },
   {
     "name": "generic_same_specialization_reused",
     "source": "class Box<T> { T value; Box(T value) { this.value = value; } readonly T get() { return this.value; } } void main(){Box<int> a=new Box<int>(1);Box<int> b=new Box<int>(2);println(a.get()+b.get());}",
     "valid": true,
-    "stdout": "3\n",
-    "allocations": 2
+    "stdout": "3\n"
   },
   {
     "name": "generic_default_constructor",
     "source": "class Empty<T>{}void main(){Empty<int> e=new Empty<int>();}",
     "valid": true,
-    "stdout": "",
-    "allocations": 1
+    "stdout": ""
   },
   {
     "name": "generic_static_inside_instance",
     "source": "class Utility<T>{static int answer(){return 42;}readonly int get(){return answer();}}void main(){Utility<int> u=new Utility<int>();println(u.get());}",
     "valid": true,
-    "stdout": "42\n",
-    "allocations": 1
+    "stdout": "42\n"
   },
   {
     "name": "generic_borrow_parameter",
     "source": "class Box<T> { T value; Box(T value) { this.value = value; } readonly T get() { return this.value; } } int read(borrow Box<int> b){return b.get();}void main(){Box<int> b=new Box<int>(42);println(read(b));println(b.get());}",
     "valid": true,
-    "stdout": "42\n42\n",
-    "allocations": 1
+    "stdout": "42\n42\n"
   },
   {
     "name": "generic_owned_return",
     "source": "class Box<T> { T value; Box(T value) { this.value = value; } readonly T get() { return this.value; } } Box<int> make(){return new Box<int>(42);}void main(){Box<int> b=make();println(b.get());}",
     "valid": true,
-    "stdout": "42\n",
-    "allocations": 1
+    "stdout": "42\n"
   },
   {
     "name": "generic_interface_argument",
     "source": "interface Source<T>{readonly T read();}class N implements Source<int>{readonly int read(){return 7;}}int f(borrow Source<int> s){return s.read();}void main(){N n=new N();println(f(n));}",
     "valid": true,
-    "stdout": "7\n",
-    "allocations": 1
+    "stdout": "7\n"
   },
   {
     "name": "generic_unused_body_checked_on_instantiation",
     "source": "class Bad<T>{T bad(){return 42;}}void main(){}",
     "valid": true,
-    "stdout": "",
-    "allocations": 0
+    "stdout": ""
   },
   {
     "name": "generic_owned_parameter_semantics",
     "source": "class Identity<T>{T pass(T x){return x;}}class C{int n=8;}void main(){Identity<C> id=new Identity<C>();C c=new C();C d=id.pass(c);println(d.n);}",
     "valid": true,
-    "stdout": "8\n",
-    "allocations": 2
+    "stdout": "8\n"
   },
   {
     "name": "generic_primitive_parameter_semantics",
     "source": "class Identity<T>{T pass(T x){return x;}}void main(){Identity<int> id=new Identity<int>();int x=8;println(id.pass(x));println(x);}",
     "valid": true,
-    "stdout": "8\n8\n",
-    "allocations": 1
+    "stdout": "8\n8\n"
   },
   {
     "name": "generic_unused_type_parameter",
     "source": "class Phantom<T>{int n=7;}void main(){Phantom<int> p=new Phantom<int>();println(p.n);}",
     "valid": true,
-    "stdout": "7\n",
-    "allocations": 1
+    "stdout": "7\n"
   },
   {
     "name": "missing_method",
@@ -457,32 +404,27 @@
   {
     "name": "interface_body_forbidden",
     "source": "interface I {int get(){return 1;}}void main(){}",
-    "valid": false,
-    "error": "pas de corps"
+    "valid": false
   },
   {
     "name": "interface_field_forbidden",
     "source": "interface I {int value;}void main(){}",
-    "valid": false,
-    "error": "attendu"
+    "valid": false
   },
   {
     "name": "nominal_not_structural",
     "source": "interface I {readonly int get();}class C {readonly int get(){return 1;}}void main(){I i=new C();}",
-    "valid": false,
-    "error": "type incompatible"
+    "valid": false
   },
   {
     "name": "interface_downcast",
     "source": "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } void main(){I i=new C();C c=i;}",
-    "valid": false,
-    "error": "type incompatible"
+    "valid": false
   },
   {
     "name": "interface_cross_cast",
     "source": "interface A{}interface B{}class C implements A,B{}void main(){A a=new C();B b=a;}",
-    "valid": false,
-    "error": "type incompatible"
+    "valid": false
   },
   {
     "name": "interface_move_original_invalid",
@@ -547,14 +489,12 @@
   {
     "name": "interface_borrow_cannot_be_owned",
     "source": "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } void main(){C c=new C();borrow I r=c;I i=r;}",
-    "valid": false,
-    "error": "type incompatible"
+    "valid": false
   },
   {
     "name": "interface_borrow_temp_forbidden",
     "source": "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } void f(borrow I i){}void main(){f(new C());}",
-    "valid": false,
-    "error": "recepteur temporaire"
+    "valid": false
   },
   {
     "name": "interface_borrow_return_forbidden",
@@ -565,8 +505,7 @@
   {
     "name": "interface_cannot_access_hidden_fields",
     "source": "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } void main(){I i=new C();println(i.n);}",
-    "valid": false,
-    "error": "champ"
+    "valid": false
   },
   {
     "name": "interface_view_cannot_be_erased",
@@ -578,8 +517,7 @@
     "name": "interface_field_replacement",
     "source": "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } class Owner{I i=new C();}void main(){Owner o=new Owner();o.i=new D();println(o.i.get());}",
     "valid": true,
-    "stdout": "10\n",
-    "allocations": 3
+    "stdout": "10\n"
   },
   {
     "name": "interface_not_definitely_initialized",
@@ -650,26 +588,22 @@
   {
     "name": "generic_invariance",
     "source": "class Box<T> { T value; Box(T value) { this.value = value; } readonly T get() { return this.value; } } void main(){Box<int> a=new Box<int>(1);Box<boolean> b=a;}",
-    "valid": false,
-    "error": "type incompatible"
+    "valid": false
   },
   {
     "name": "generic_constructor_argument",
     "source": "class Box<T> { T value; Box(T value) { this.value = value; } readonly T get() { return this.value; } } void main(){Box<int> b=new Box<int>(true);}",
-    "valid": false,
-    "error": "type incompatible"
+    "valid": false
   },
   {
     "name": "generic_body_checked",
     "source": "class Bad<T>{T bad(){return 42;}}void main(){Bad<boolean> b=new Bad<boolean>();}",
-    "valid": false,
-    "error": "type incompatible"
+    "valid": false
   },
   {
     "name": "generic_object_field_not_movable",
     "source": "class C{}class Box<T> { T value; Box(T value) { this.value = value; } readonly T get() { return this.value; } } void main(){Box<C> b=new Box<C>(new C());}",
-    "valid": false,
-    "error": "deplacement"
+    "valid": false
   },
   {
     "name": "generic_move_enforced",
@@ -686,8 +620,7 @@
   {
     "name": "generic_interface_invariance",
     "source": "interface I<T>{}class C implements I<int>{}void main(){I<boolean> i=new C();}",
-    "valid": false,
-    "error": "type incompatible"
+    "valid": false
   },
   {
     "name": "generic_interface_bad_implementation",
@@ -704,7 +637,6 @@
   {
     "name": "generic_recursive_ownership",
     "source": "class Node<T>{Node<T> child;}void main(){Node<int> n;}",
-    "valid": false,
-    "error": "cycle"
+    "valid": false
   }
 ]

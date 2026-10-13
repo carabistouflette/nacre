@@ -15,7 +15,8 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 LIST = 'NEW ADD SIZE CAPACITY IS_EMPTY GET GET_REF GET_MUT SET POP REMOVE TRY_GET TRY_POP TRY_REMOVE CLEAR RESERVE'.split()
-TEXT = 'NEW APPEND APPEND_INT APPEND_BOOLEAN APPEND_TEXT BYTE_LENGTH BYTE_AT IS_EMPTY CLEAR PRINT CLONE EQUALS EQUALS_STRING PARSE_INT SLICE_BYTES'.split()
+TEXT = 'NEW APPEND APPEND_INT APPEND_BYTE APPEND_CHAR APPEND_LONG APPEND_DOUBLE APPEND_BOOLEAN APPEND_TEXT BYTE_LENGTH BYTE_AT IS_EMPTY CLEAR PRINT CLONE EQUALS EQUALS_STRING PARSE_INT PARSE_LONG PARSE_DOUBLE SLICE_BYTES CHAR_COUNT CHAR_AT COMPARE_TO INDEX_OF STARTS_WITH ENDS_WITH SLICE TRIM REPLACE SPLIT'.split()
+TEXT_INLINE_CAPACITY = 16
 
 def option_code(cid, element):
     return f'''typedef struct ncr_obj_{cid} {{
@@ -23,7 +24,7 @@ def option_code(cid, element):
         union {{ struct {{ unsigned char ncr_empty; }} v0; struct {{ {element} f0; }} v1; }} data;
     }} ncr_obj_{cid};\n'''
 
-def list_code(cid, element, zero, drop='', copy=True, borrow_type='', borrow_element=''):
+def list_code(cid, element, zero, drop='', copy=True, borrow_type='', borrow_element='', layout_decl=True):
     option_id = 300 + cid
     fields = f'typedef struct ncr_obj_{cid} {{ {element} *items; int32_t length; int32_t capacity; }} ncr_obj_{cid};\n'
     destructor = f'''static void ncr_drop_{cid}(ncr_obj_{cid} *p) {{
@@ -59,47 +60,104 @@ def list_code(cid, element, zero, drop='', copy=True, borrow_type='', borrow_ele
     replacements.update({f'@LIST_{x}@':f'list{cid}_{x.lower()}' for x in LIST})
     for k,v in replacements.items(): body=body.replace(k,v)
     assert not re.search(r'@[A-Z_]+@', body)
-    return fields + option_code(option_id, element) + destructor + body
+    return (fields if layout_decl else '') + option_code(option_id, element) + destructor + body
 
 def text_code(cid):
-    parse_id, slice_id = cid + 100, cid + 200
-    fields=f'typedef struct ncr_obj_{cid} {{ unsigned char *bytes; int32_t length; int32_t capacity; }} ncr_obj_{cid};\n'
-    # Independent fixture layouts model the real inline Result payloads.
-    fields += f'''typedef struct {{
-        int32_t tag;
-        union {{ struct {{ int32_t f0; }} v0; struct {{ ncr_obj_{cid} *f0; }} v1; }} data;
-    }} ncr_obj_{parse_id};
-    typedef struct {{
-        int32_t tag;
-        union {{ struct {{ ncr_obj_{cid} *f0; }} v0; struct {{ ncr_obj_{cid} *f0; }} v1; }} data;
-    }} ncr_obj_{slice_id};
-    static void text{cid}_new(ncr_obj_{cid} *, ncr_string, size_t, size_t);
+    parse_id, parse_long_id, parse_double_id = cid + 100, cid + 101, cid + 102
+    slice_bytes_id, slice_id = cid + 200, cid + 201
+    list_id = 11
+    fields = f'''typedef struct ncr_obj_{cid} {{
+        unsigned char *bytes;
+        int32_t length;
+        int32_t capacity;
+        unsigned char inline_storage[{TEXT_INLINE_CAPACITY}];
+    }} ncr_obj_{cid};
+    typedef struct ncr_obj_{list_id} {{
+        ncr_obj_{cid} **items;
+        int32_t length;
+        int32_t capacity;
+    }} ncr_obj_{list_id};
+    '''
+    for result_id, success_type in (
+        (parse_id, 'int32_t'),
+        (parse_long_id, 'int64_t'),
+        (parse_double_id, 'double'),
+        (slice_bytes_id, f'ncr_obj_{cid} *'),
+        (slice_id, f'ncr_obj_{cid} *'),
+    ):
+        fields += f'''typedef struct ncr_obj_{result_id} {{
+            int32_t tag;
+            union {{ struct {{ {success_type} f0; }} v0; struct {{ ncr_obj_{cid} *f0; }} v1; }} data;
+        }} ncr_obj_{result_id};
+        '''
+    fields += f'''static void text{cid}_new(ncr_obj_{cid} *, ncr_string, size_t, size_t);
+    static void list{list_id}_new(ncr_obj_{list_id} *, size_t, size_t);
+    static void list{list_id}_add(ncr_obj_{list_id} *, ncr_obj_{cid} *, size_t, size_t);
+    static void text{cid}_init(ncr_obj_{cid} *text) {{
+        text->bytes = text->inline_storage;
+        text->length = 0;
+        text->capacity = {TEXT_INLINE_CAPACITY};
+    }}
     static ncr_obj_{cid} *text{cid}_from_bytes(const unsigned char *bytes, size_t length, size_t line, size_t column) {{
         ncr_obj_{cid} *text = ncr_allocate(sizeof(ncr_obj_{cid}), line, column);
         text{cid}_new(text, (ncr_string){{bytes, length}}, line, column);
         return text;
     }}
+    static ncr_obj_{cid} *text{cid}_take_bytes(unsigned char *bytes, size_t length, size_t capacity, size_t line, size_t column) {{
+        if (length > (size_t)INT32_MAX || capacity > (size_t)INT32_MAX) {{ ncr_fail("Text is too large", line, column); }}
+        if (length > capacity || (length > 0 && bytes == NULL)) {{ ncr_fail("invalid owned Text storage", line, column); }}
+        ncr_obj_{cid} *text = ncr_allocate(sizeof(ncr_obj_{cid}), line, column);
+        text{cid}_init(text);
+        if (length <= {TEXT_INLINE_CAPACITY}) {{
+            if (length > 0) {{ memcpy(text->inline_storage, bytes, length); }}
+            text->length = (int32_t)length;
+            if (bytes != NULL) {{ ncr_deallocate(bytes); }}
+        }} else {{
+            text->bytes = bytes;
+            text->length = (int32_t)length;
+            text->capacity = (int32_t)capacity;
+        }}
+        return text;
+    }}
     '''
-    for result_id in (parse_id, slice_id):
+    for result_id in (parse_id, parse_long_id, parse_double_id, slice_bytes_id, slice_id):
         fields += f'''static ncr_obj_{result_id} text{cid}_error_{result_id}(const char *message, size_t length, size_t line, size_t column) {{
             ncr_obj_{cid} *error = text{cid}_from_bytes((const unsigned char *)message, length, line, column);
             return (ncr_obj_{result_id}){{.tag = 1, .data.v1.f0 = error}};
         }}
         '''
-    destructor=f'static void ncr_drop_{cid}(ncr_obj_{cid} *p) {{ if (p) {{ ncr_deallocate(p->bytes); ncr_deallocate(p); }} }}\n'
-    body=(ROOT/'stdlib/text.c.in').read_text().replace('@ID@',str(cid))
+    destructor = f'''static void ncr_drop_{cid}(ncr_obj_{cid} *p) {{
+        if (p != NULL) {{
+            if (p->bytes != NULL && p->bytes != p->inline_storage) {{ ncr_deallocate(p->bytes); }}
+            ncr_deallocate(p);
+        }}
+    }}
+    '''
+    body = (ROOT/'stdlib/text.c.in').read_text().replace('@ID@', str(cid))
     replacements = {
         '@PARSE_RESULT@': str(parse_id), '@PARSE_OK_TAG@': '0',
         '@ERROR_PARSE_RESULT@': f'text{cid}_error_{parse_id}',
+        '@PARSE_LONG_RESULT@': str(parse_long_id), '@PARSE_LONG_OK_TAG@': '0',
+        '@ERROR_PARSE_LONG_RESULT@': f'text{cid}_error_{parse_long_id}',
+        '@PARSE_DOUBLE_RESULT@': str(parse_double_id), '@PARSE_DOUBLE_OK_TAG@': '0',
+        '@ERROR_PARSE_DOUBLE_RESULT@': f'text{cid}_error_{parse_double_id}',
+        '@SLICE_BYTES_RESULT@': str(slice_bytes_id), '@SLICE_BYTES_OK_TAG@': '0',
+        '@ERROR_SLICE_BYTES_RESULT@': f'text{cid}_error_{slice_bytes_id}',
         '@SLICE_RESULT@': str(slice_id), '@SLICE_OK_TAG@': '0',
         '@ERROR_SLICE_RESULT@': f'text{cid}_error_{slice_id}',
+        '@TEXT_INIT@': f'text{cid}_init',
         '@TEXT_MAKE@': f'text{cid}_from_bytes',
+        '@TEXT_TAKE@': f'text{cid}_take_bytes',
+        '@LIST_TYPE@': f'ncr_obj_{list_id} *',
+        '@LIST_NEW@': f'list{list_id}_new',
+        '@LIST_ADD@': f'list{list_id}_add',
     }
     replacements.update({f'@TEXT_{name}@': f'text{cid}_{name.lower()}' for name in TEXT})
     for marker, value in replacements.items():
         body = body.replace(marker, value)
-    assert not re.search(r'@[A-Z_]+@',body)
-    return fields+destructor+body
+    assert not re.search(r'@[A-Z_]+@', body)
+    return fields + destructor + body
+
 
 def support():
     return '#define NACRE_MEMORY_STATS 1\n'+(ROOT/'src/runtime.c').read_text()+'''\n#include <assert.h>
@@ -116,7 +174,7 @@ static void iface_drop(Iface p) { if(p.data) p.destroy(p.data); }
     +list_code(3,'Item *','NULL','item_drop(VALUE);',False,'Item *','p->items[index]') \
     +list_code(4,'Iface','(Iface){NULL,NULL}','iface_drop(VALUE);',False,'Iface','p->items[index]') \
     +list_code(5,'Sum','(Sum){.tag=-1}','sum_drop(VALUE);',False,'Sum *','&p->items[index]') \
-    +text_code(10)+list_code(11,'ncr_obj_10 *','NULL','ncr_drop_10(VALUE);',False,'ncr_obj_10 *','p->items[index]') \
+    +text_code(10)+list_code(11,'ncr_obj_10 *','NULL','ncr_drop_10(VALUE);',False,'ncr_obj_10 *','p->items[index]',layout_decl=False) \
     +list_code(12,'ncr_obj_0 *','NULL','ncr_drop_0(VALUE);',False,'ncr_obj_0 *','p->items[index]')
 
 POSITIVE = r'''
@@ -246,6 +304,16 @@ int main(void) {
     text10_append_text(text,copy,1,1);assert(text10_equals(copy,text,1,1));text10_clear(text,1,1);assert(text10_equals_string(text,STR(""),1,1));
     for(int i=0;i<20000;++i)text10_append(text,STR("abc"),1,1);assert(text10_byte_length(text,1,1)==60000);ncr_drop_10(copy);
     NEW_LIST(11, texts);list11_add(texts,text,1,1);ncr_obj_10 *out=list11_pop(texts,1,1);ncr_drop_11(texts);assert(text10_byte_length(out,1,1)==60000);ncr_drop_10(out);
+    unsigned char *small_bytes=ncr_allocate(4,1,1);memcpy(small_bytes,"tiny",4);
+    ncr_obj_10 *small_taken=text10_take_bytes(small_bytes,4,4,1,1);
+    assert(small_taken->bytes==small_taken->inline_storage);
+    assert(text10_byte_length(small_taken,1,1)==4 && memcmp(small_taken->bytes,"tiny",4)==0);
+    ncr_drop_10(small_taken);
+    unsigned char *large_bytes=ncr_allocate(32,1,1);memset(large_bytes,'x',32);
+    ncr_obj_10 *large_taken=text10_take_bytes(large_bytes,32,32,1,1);
+    assert(large_taken->bytes==large_bytes);
+    assert(text10_byte_length(large_taken,1,1)==32 && large_taken->bytes[31]=='x');
+    ncr_drop_10(large_taken);
     assert(created_objects==destroyed_objects);assert(ncr_allocations==ncr_frees);
     puts("stdlib templates: all assertions passed");ncr_memory_report();return 0;
 }

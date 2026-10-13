@@ -3,323 +3,277 @@
     "name": "example_borrowing",
     "source": "class Counter {\n    private int value;\n\n    public Counter(int value) { this.value = value; }\n    public void increment() { this.value = this.value + 1; }\n    public readonly int getValue() { return this.value; }\n}\n\nvoid incrementTwice(borrow mut Counter counter) {\n    counter.increment();\n    counter.increment();\n}\n\nint read(borrow Counter counter) {\n    return counter.getValue();\n}\n\npublic class Main {\n    public static void main() {\n        Counter counter = new Counter(40);\n        incrementTwice(counter); // Emprunt pour l'appel, pas un transfert.\n        println(read(counter));\n\n        {\n            borrow Counter first = counter;\n            borrow Counter second = counter;\n            println(first.getValue() + second.getValue());\n        } // Les deux emprunts partages se terminent ici.\n\n        {\n            borrow mut Counter editor = counter;\n            editor.increment();\n        } // L'emprunt exclusif se termine ici.\n\n        println(counter.getValue());\n    }\n}\n",
     "valid": true,
-    "stdout": "42\n84\n43\n",
-    "allocations": 1
+    "stdout": "42\n84\n43\n"
   },
   {
     "name": "example_reborrowing",
     "source": "class Counter {\n    int value = 0;\n    void increment() { value = value + 1; }\n    readonly int getValue() { return value; }\n}\nvoid main() {\n    Counter counter = new Counter();\n    {\n        borrow mut Counter editor = counter;\n        editor.increment();\n        {\n            borrow Counter reader = editor;\n            println(reader.getValue());\n            // editor.increment() serait refuse tant que reader existe.\n        }\n        editor.increment();\n        println(editor.getValue());\n    }\n    println(counter.getValue());\n}\n",
     "valid": true,
-    "stdout": "1\n2\n2\n",
-    "allocations": 1
+    "stdout": "1\n2\n2\n"
   },
   {
     "name": "example_borrowed_fields",
     "source": "class Counter {\n    private int value;\n    Counter(int value) { this.value = value; }\n    void increment() { this.value = this.value + 1; }\n    readonly int getValue() { return this.value; }\n}\n\n// Classe a champ emprunte : vue locale, non transferable hors de son bloc.\nclass CounterView {\n    private borrow Counter target;\n    private String title;\n\n    CounterView(borrow Counter target, String title) {\n        this.target = target;\n        this.title = title;\n    }\n    readonly void display() {\n        println(this.title);\n        println(this.target.getValue());\n    }\n}\n\nvoid main() {\n    Counter counter = new Counter(42);\n    {\n        CounterView view = new CounterView(counter, \"Compteur partage\");\n        view.display();\n        // counter.increment() serait refuse pendant la vie de view.\n    } // Detruit view, mais pas l'objet qu'elle emprunte.\n    counter.increment();\n    println(counter.getValue());\n}\n",
     "valid": true,
-    "stdout": "Compteur partage\n42\n43\n",
-    "allocations": 2
+    "stdout": "Compteur partage\n42\n43\n"
   },
   {
     "name": "example_borrowed_loop",
     "source": "class Counter {\n    int value = 0;\n    void add(int amount) { value = value + amount; }\n    readonly int getValue() { return value; }\n}\nvoid main() {\n    Counter counter = new Counter();\n    int i = 0;\n    while (i < 5) {\n        borrow mut Counter editor = counter;\n        i = i + 1;\n        if (i == 2) { continue; }\n        if (i == 5) { break; }\n        editor.add(i);\n    }\n    println(counter.getValue());\n}\n",
     "valid": true,
-    "stdout": "8\n",
-    "allocations": 1
+    "stdout": "8\n"
   },
   {
     "name": "example_readonly_composition",
     "source": "class Engine {\n    int power = 120;\n    readonly int getPower() { return power; }\n    void tune() { power = power + 10; }\n}\nclass Car {\n    Engine engine = new Engine();\n    readonly int getPower() { return engine.getPower(); }\n    void tune() { engine.tune(); }\n}\nvoid show(borrow Car car) { println(car.getPower()); }\nvoid main() {\n    Car car = new Car();\n    show(car);\n    car.tune();\n    show(car);\n}\n",
     "valid": true,
-    "stdout": "120\n130\n",
-    "allocations": 2
+    "stdout": "120\n130\n"
   },
   {
     "name": "shared_local",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow C r = c; println(r.get()); println(c.get()); }",
     "valid": true,
-    "stdout": "1\n1\n",
-    "allocations": 1
+    "stdout": "1\n1\n"
   },
   {
     "name": "two_shared_locals",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow C a = c; borrow C b = c; println(a.n + b.n); }",
     "valid": true,
-    "stdout": "2\n",
-    "allocations": 1
+    "stdout": "2\n"
   },
   {
     "name": "mutable_local",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); { borrow mut C r = c; r.n = 7; r.inc(); } println(c.get()); }",
     "valid": true,
-    "stdout": "8\n",
-    "allocations": 1
+    "stdout": "8\n"
   },
   {
     "name": "shared_parameter",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } int read(borrow C c) { return c.get(); } void main() { C c = new C(); println(read(c)); c.inc(); println(read(c)); }",
     "valid": true,
-    "stdout": "1\n2\n",
-    "allocations": 1
+    "stdout": "1\n2\n"
   },
   {
     "name": "mutable_parameter",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void inc(borrow mut C c) { c.inc(); } void main() { C c = new C(); inc(c); println(c.get()); }",
     "valid": true,
-    "stdout": "2\n",
-    "allocations": 1
+    "stdout": "2\n"
   },
   {
     "name": "borrowed_parameter_forwarding",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void inc(borrow mut C c) { c.inc(); } void forward(borrow mut C c) { inc(c); inc(c); } void main() { C c = new C(); forward(c); println(c.get()); }",
     "valid": true,
-    "stdout": "3\n",
-    "allocations": 1
+    "stdout": "3\n"
   },
   {
     "name": "shared_reborrow",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow C a = c; borrow C b = a; println(b.get()); }",
     "valid": true,
-    "stdout": "1\n",
-    "allocations": 1
+    "stdout": "1\n"
   },
   {
     "name": "mutable_reborrow",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); { borrow mut C a = c; { borrow mut C b = a; b.inc(); } a.inc(); } println(c.get()); }",
     "valid": true,
-    "stdout": "3\n",
-    "allocations": 1
+    "stdout": "3\n"
   },
   {
     "name": "shared_reborrow_of_mutable",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); { borrow mut C a = c; { borrow C b = a; println(b.n); println(a.n); } a.inc(); } println(c.get()); }",
     "valid": true,
-    "stdout": "1\n1\n2\n",
-    "allocations": 1
+    "stdout": "1\n1\n2\n"
   },
   {
     "name": "read_after_inner_mutable_scope",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); { borrow mut C r = c; r.inc(); } borrow C r = c; println(r.get()); }",
     "valid": true,
-    "stdout": "2\n",
-    "allocations": 1
+    "stdout": "2\n"
   },
   {
     "name": "scope_releases_before_owner_move",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } int take(C c) { return c.n; } void main() { C c = new C(); { borrow C r = c; println(r.n); } println(take(c)); }",
     "valid": true,
-    "stdout": "1\n1\n",
-    "allocations": 1
+    "stdout": "1\n1\n"
   },
   {
     "name": "borrow_owned_field",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } class A { C c = new C(); } void main() { A a = new A(); { borrow mut C r = a.c; r.inc(); } println(a.c.get()); }",
     "valid": true,
-    "stdout": "2\n",
-    "allocations": 2
+    "stdout": "2\n"
   },
   {
     "name": "distinct_owners",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C a = new C(); C b = new C(); borrow mut C x = a; borrow mut C y = b; x.n = 10; y.n = 20; println(x.n + y.n); }",
     "valid": true,
-    "stdout": "30\n",
-    "allocations": 2
+    "stdout": "30\n"
   },
   {
     "name": "nested_receiver_compatibility",
     "source": "class C { int n = 2; int get() { return n; } int add(int n) { this.n = this.n + n; return this.n; } } void main() { C c = new C(); println(c.add(c.get())); }",
     "valid": true,
-    "stdout": "4\n",
-    "allocations": 1
+    "stdout": "4\n"
   },
   {
     "name": "readonly_alias_parameter",
     "source": "class C { int n = 1; readonly int plus(borrow C c) { return n + c.n; } } void main() { C c = new C(); println(c.plus(c)); }",
     "valid": true,
-    "stdout": "2\n",
-    "allocations": 1
+    "stdout": "2\n"
   },
   {
     "name": "readonly_can_mutate_separate_parameter",
     "source": "class C { int n = 1; readonly void update(borrow mut C other) { other.n = n + 1; } } void main() { C a = new C(); C b = new C(); a.update(b); println(b.n); }",
     "valid": true,
-    "stdout": "2\n",
-    "allocations": 2
+    "stdout": "2\n"
   },
   {
     "name": "readonly_can_mutate_local",
     "source": "class C { int n = 1; readonly int make() { C local = new C(); local.n = 9; return local.n; } } void main() { C c = new C(); borrow C r = c; println(r.make()); }",
     "valid": true,
-    "stdout": "9\n",
-    "allocations": 2
+    "stdout": "9\n"
   },
   {
     "name": "borrow_this",
     "source": "class C { int n = 4; readonly int read() { return inspect(this); } } int inspect(borrow C c) { return c.n; } void main() { C c = new C(); println(c.read()); }",
     "valid": true,
-    "stdout": "4\n",
-    "allocations": 1
+    "stdout": "4\n"
   },
   {
     "name": "mutable_borrow_this",
     "source": "class C { int n = 4; void update() { inc(this); } } void inc(borrow mut C c) { c.n = c.n + 1; } void main() { C c = new C(); c.update(); println(c.n); }",
     "valid": true,
-    "stdout": "5\n",
-    "allocations": 1
+    "stdout": "5\n"
   },
   {
     "name": "borrowed_constructor_argument_no_escape",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } class Sum { int n; Sum(borrow C c) { n = c.get(); } } void main() { C c = new C(); Sum s = new Sum(c); c.inc(); println(s.n + c.n); }",
     "valid": true,
-    "stdout": "3\n",
-    "allocations": 2
+    "stdout": "3\n"
   },
   {
     "name": "mutable_constructor_argument_no_escape",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } class Sum { int n; Sum(borrow mut C c) { c.inc(); n = c.n; } } void main() { C c = new C(); Sum s = new Sum(c); println(s.n + c.n); }",
     "valid": true,
-    "stdout": "4\n",
-    "allocations": 2
+    "stdout": "4\n"
   },
   {
     "name": "borrow_before_early_return",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } int f(borrow C c) { borrow C r = c; if (true) { return r.get(); } return 0; } void main() { C c = new C(); println(f(c)); c.inc(); println(c.n); }",
     "valid": true,
-    "stdout": "1\n2\n",
-    "allocations": 1
+    "stdout": "1\n2\n"
   },
   {
     "name": "borrowed_loop_condition",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } boolean next(borrow mut C c) { c.inc(); return c.n < 4; } void main() { C c = new C(); while (next(c)) {} println(c.n); }",
     "valid": true,
-    "stdout": "4\n",
-    "allocations": 1
+    "stdout": "4\n"
   },
   {
     "name": "branch_scopes",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); if (true) { borrow mut C r = c; r.inc(); } else { borrow C r = c; println(r.n); } c.inc(); println(c.n); }",
     "valid": true,
-    "stdout": "3\n",
-    "allocations": 1
+    "stdout": "3\n"
   },
   {
     "name": "reference_after_definite_initialization",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c; if (true) { c = new C(); } else { c = new C(); } borrow C r = c; println(r.get()); }",
     "valid": true,
-    "stdout": "1\n",
-    "allocations": 1
+    "stdout": "1\n"
   },
   {
     "name": "borrow_then_reinitialize_next_iteration",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); int i = 0; while (i < 3) { { borrow mut C r = c; r.inc(); println(r.n); } drop(c); c = new C(); i = i + 1; } }",
     "valid": true,
-    "stdout": "2\n2\n2\n",
-    "allocations": 4
+    "stdout": "2\n2\n2\n"
   },
   {
     "name": "readonly_recursion_signature",
     "source": "class C { readonly int f(int n) { if (n == 0) { return 1; } return f(n - 1); } } void main() { C c = new C(); borrow C r = c; println(r.f(3)); }",
     "valid": true,
-    "stdout": "1\n",
-    "allocations": 1
+    "stdout": "1\n"
   },
   {
     "name": "view_captures_shared",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } class V { borrow C target; V(borrow C target) { this.target = target; } readonly int get() { return target.get(); } } void main() { C c = new C(); { V v = new V(c); println(v.get()); println(c.get()); } c.inc(); println(c.n); }",
     "valid": true,
-    "stdout": "1\n1\n2\n",
-    "allocations": 2
+    "stdout": "1\n1\n2\n"
   },
   {
     "name": "view_captures_shared_reborrow",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } class V { borrow C target; V(borrow C target) { this.target = target; } readonly int get() { return target.get(); } } void main() { C c = new C(); { borrow C r = c; V v = new V(r); println(v.get()); } c.inc(); println(c.n); }",
     "valid": true,
-    "stdout": "1\n2\n",
-    "allocations": 2
+    "stdout": "1\n2\n"
   },
   {
     "name": "view_downgrades_mutable_local",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } class V { borrow C target; V(borrow C target) { this.target = target; } readonly int get() { return target.get(); } } void main() { C c = new C(); { borrow mut C r = c; { V v = new V(r); println(v.get()); } r.inc(); } println(c.n); }",
     "valid": true,
-    "stdout": "1\n2\n",
-    "allocations": 2
+    "stdout": "1\n2\n"
   },
   {
     "name": "view_duplicate_fields_one_argument",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } class V { borrow C a; borrow C b; V(borrow C x) { a = x; b = x; } readonly int get() { return a.n + b.n; } } void main() { C c = new C(); { V v = new V(c); println(v.get()); } c.inc(); println(c.n); }",
     "valid": true,
-    "stdout": "2\n2\n",
-    "allocations": 2
+    "stdout": "2\n2\n"
   },
   {
     "name": "view_two_aliased_arguments",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } class V { borrow C a; borrow C b; V(borrow C a, borrow C b) { this.a = a; this.b = b; } } void main() { C c = new C(); V v = new V(c, c); println(v.a.n + v.b.n); }",
     "valid": true,
-    "stdout": "2\n",
-    "allocations": 2
+    "stdout": "2\n"
   },
   {
     "name": "view_parameter_mapping",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } class V { borrow C target; int tag; V(int tag, borrow C target) { this.tag = tag; this.target = target; } } void main() { C c = new C(); V v = new V(100, c); println(v.target.n + v.tag); }",
     "valid": true,
-    "stdout": "101\n",
-    "allocations": 2
+    "stdout": "101\n"
   },
   {
     "name": "view_reversed_mapping",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } class V { borrow C first; borrow C second; V(borrow C a, borrow C b) { first = b; second = a; } } void main() { C a = new C(); C b = new C(); b.n = 5; V v = new V(a, b); println(v.first.n); println(v.second.n); }",
     "valid": true,
-    "stdout": "5\n1\n",
-    "allocations": 3
+    "stdout": "5\n1\n"
   },
   {
     "name": "view_with_owned_child",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } class V { borrow C target; C owned = new C(); V(borrow C target) { this.target = target; } } void main() { C c = new C(); { V v = new V(c); v.owned.inc(); println(v.target.n + v.owned.n); } c.inc(); println(c.n); }",
     "valid": true,
-    "stdout": "3\n2\n",
-    "allocations": 3
+    "stdout": "3\n2\n"
   },
   {
     "name": "view_own_state_mutable",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } class V { borrow C target; int hits = 0; V(borrow C target) { this.target = target; } int read() { hits = hits + 1; return target.n + hits; } } void main() { C c = new C(); V v = new V(c); println(v.read()); println(v.read()); }",
     "valid": true,
-    "stdout": "2\n3\n",
-    "allocations": 2
+    "stdout": "2\n3\n"
   },
   {
     "name": "view_borrowed_field_projection",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } class V { borrow C target; V(borrow C target) { this.target = target; } readonly int get() { return target.get(); } } void main() { C c = new C(); V v = new V(c); borrow C r = v.target; println(r.n); }",
     "valid": true,
-    "stdout": "1\n",
-    "allocations": 2
+    "stdout": "1\n"
   },
   {
     "name": "view_inside_loop",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } class V { borrow C target; V(borrow C target) { this.target = target; } readonly int get() { return target.get(); } } void main() { C c = new C(); int i = 0; while (i < 3) { { V v = new V(c); println(v.get()); } c.inc(); i = i + 1; } println(c.n); }",
     "valid": true,
-    "stdout": "1\n2\n3\n4\n",
-    "allocations": 4
+    "stdout": "1\n2\n3\n4\n"
   },
   {
     "name": "view_break_cleanup",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } class V { borrow C target; V(borrow C target) { this.target = target; } readonly int get() { return target.get(); } } void main() { C c = new C(); while (true) { V v = new V(c); println(v.get()); break; } c.inc(); println(c.n); }",
     "valid": true,
-    "stdout": "1\n2\n",
-    "allocations": 2
+    "stdout": "1\n2\n"
   },
   {
     "name": "view_early_return_cleanup",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } class V { borrow C target; V(borrow C target) { this.target = target; } readonly int get() { return target.get(); } } int show(borrow C c) { V v = new V(c); return v.get(); } void main() { C c = new C(); println(show(c)); c.inc(); println(c.n); }",
     "valid": true,
-    "stdout": "1\n2\n",
-    "allocations": 2
+    "stdout": "1\n2\n"
   },
   {
     "name": "two_views_same_referent",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } class V { borrow C target; V(borrow C target) { this.target = target; } readonly int get() { return target.get(); } } void main() { C c = new C(); { V a = new V(c); V b = new V(c); println(a.get() + b.get()); } c.inc(); println(c.n); }",
     "valid": true,
-    "stdout": "2\n2\n",
-    "allocations": 3
+    "stdout": "2\n2\n"
   },
   {
     "name": "shared_then_mutable",
@@ -468,44 +422,37 @@
   {
     "name": "borrow_temporary",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { borrow C r = new C(); }",
-    "valid": false,
-    "error": "temporaire"
+    "valid": false
   },
   {
     "name": "borrowed_argument_temporary",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void f(borrow C c) {} void main() { f(new C()); }",
-    "valid": false,
-    "error": "temporaire"
+    "valid": false
   },
   {
     "name": "borrow_wrong_class",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } class B {} void main() { B b = new B(); borrow C r = b; }",
-    "valid": false,
-    "error": "type incompatible"
+    "valid": false
   },
   {
     "name": "borrow_unknown_class",
     "source": "void main() { borrow Missing r; }",
-    "valid": false,
-    "error": "inconnue"
+    "valid": false
   },
   {
     "name": "borrow_int",
     "source": "void main() { borrow int r = 1; }",
-    "valid": false,
-    "error": "nom de classe"
+    "valid": false
   },
   {
     "name": "borrow_void",
     "source": "void f(borrow void r) {} void main() {}",
-    "valid": false,
-    "error": "nom de classe"
+    "valid": false
   },
   {
     "name": "borrow_string",
     "source": "void main() { borrow String s = \"abc\"; }",
-    "valid": false,
-    "error": "nom de classe"
+    "valid": false
   },
   {
     "name": "borrow_return_type",
@@ -522,38 +469,32 @@
   {
     "name": "borrow_cannot_be_owned",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow C r = c; C owned = r; }",
-    "valid": false,
-    "error": "type incompatible"
+    "valid": false
   },
   {
     "name": "borrow_cannot_return_ownership",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } C f(borrow C c) { return c; } void main() {}",
-    "valid": false,
-    "error": "type incompatible"
+    "valid": false
   },
   {
     "name": "borrow_cannot_consume",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void take(C c) {} void main() { C c = new C(); borrow C r = c; take(r); }",
-    "valid": false,
-    "error": "type incompatible"
+    "valid": false
   },
   {
     "name": "borrow_cannot_drop",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow C r = c; drop(r); }",
-    "valid": false,
-    "error": "objet possede"
+    "valid": false
   },
   {
     "name": "borrow_cannot_move",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow mut C r = c; move(r); }",
-    "valid": false,
-    "error": "objet possede"
+    "valid": false
   },
   {
     "name": "borrow_cannot_print",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow C r = c; println(r); }",
-    "valid": false,
-    "error": "afficher un objet"
+    "valid": false
   },
   {
     "name": "readonly_direct_mutation",
@@ -582,32 +523,27 @@
   {
     "name": "readonly_free_function",
     "source": "readonly void main() {}",
-    "valid": false,
-    "error": "reserve aux methodes"
+    "valid": false
   },
   {
     "name": "readonly_static_method",
     "source": "class Main { readonly static void main() {} }",
-    "valid": false,
-    "error": "reserve aux methodes"
+    "valid": false
   },
   {
     "name": "readonly_constructor",
     "source": "class C { readonly C() {} } void main() {}",
-    "valid": false,
-    "error": "constructeur"
+    "valid": false
   },
   {
     "name": "readonly_field",
     "source": "class C { readonly int n = 1; } void main() {}",
-    "valid": false,
-    "error": "pas de champ"
+    "valid": false
   },
   {
     "name": "readonly_duplicate",
     "source": "class C { readonly readonly void f() {} } void main() {}",
-    "valid": false,
-    "error": "duplique"
+    "valid": false
   },
   {
     "name": "shared_calls_unmarked_getter",
@@ -618,8 +554,7 @@
   {
     "name": "borrow_this_before_initialized",
     "source": "class C { int n; C() { use(this); n = 1; } } void use(borrow C c) {} void main() {}",
-    "valid": false,
-    "error": "non initialises"
+    "valid": false
   },
   {
     "name": "argument_shared_then_owned",
@@ -762,8 +697,7 @@
   {
     "name": "view_no_temporary_referent",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } class V { borrow C target; V(borrow C target) { this.target = target; } readonly int get() { return target.get(); } } void main() { V v = new V(new C()); }",
-    "valid": false,
-    "error": "temporaire"
+    "valid": false
   },
   {
     "name": "borrowed_field_from_local",
@@ -774,14 +708,12 @@
   {
     "name": "borrowed_field_from_owned_parameter",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } class V { borrow C target; V(C c) { target = c; } } void main() {}",
-    "valid": false,
-    "error": "type incompatible"
+    "valid": false
   },
   {
     "name": "borrowed_field_from_mutable_parameter",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } class V { borrow C target; V(borrow mut C c) { target = c; } } void main() {}",
-    "valid": false,
-    "error": "type incompatible"
+    "valid": false
   },
   {
     "name": "borrowed_field_from_projection",
@@ -804,14 +736,12 @@
   {
     "name": "borrowed_field_uninitialized",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } class V { borrow C target; } void main() {}",
-    "valid": false,
-    "error": "non initialises"
+    "valid": false
   },
   {
     "name": "borrowed_field_conditionally_initialized",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } class V { borrow C target; V(borrow C c) { if (true) { target = c; } else { target = c; } } } void main() {}",
-    "valid": false,
-    "error": "directement"
+    "valid": false
   },
   {
     "name": "borrowed_field_replacement",
@@ -834,7 +764,6 @@
   {
     "name": "view_cannot_escape_branch",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } class V { borrow C target; V(borrow C target) { this.target = target; } readonly int get() { return target.get(); } } void main() { C c = new C(); if (true) { V v = new V(c); } println(v.get()); }",
-    "valid": false,
-    "error": "non declaree"
+    "valid": false
   }
 ]

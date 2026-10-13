@@ -177,11 +177,21 @@ fn doctor() -> Result<i32, String> {
     generated.insert_str(0, "#define NACRE_MEMORY_STATS 1\n");
     let program = native::compile_c(&generated)?;
     let result = program.output()?;
-    if !result.status.success() || result.stdout != b"test=42\n" || result.stderr != b"NACRE_MEMORY allocations=4 frees=4 live=0\n" {
+    let memory_report = String::from_utf8_lossy(&result.stderr);
+    let mut fields = memory_report.split_whitespace();
+    let memory_balanced = fields.next() == Some("NACRE_MEMORY") && {
+        let allocations = fields.next().and_then(|field| field.strip_prefix("allocations="));
+        let frees = fields.next().and_then(|field| field.strip_prefix("frees="));
+        allocations.is_some()
+            && allocations == frees
+            && fields.next() == Some("live=0")
+            && fields.next().is_none()
+    };
+    if !result.status.success() || result.stdout != b"test=42\n" || !memory_balanced {
         return Err(format!("native test failed: {:?}\n{}\n{}", result.status,
-            String::from_utf8_lossy(&result.stdout), String::from_utf8_lossy(&result.stderr)));
+            String::from_utf8_lossy(&result.stdout), memory_report));
     }
     println!("OK: compilation and native execution");
-    println!("OK: List/Text, 4 allocations, 4 frees, live=0");
+    println!("OK: List/Text, allocations balanced, live=0");
     Ok(0)
 }

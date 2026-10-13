@@ -12,13 +12,12 @@ fn execute_native(source: &str) -> (std::process::Output, usize) {
     let stderr = String::from_utf8_lossy(&output.stderr);
     let mut fields = stderr.split_whitespace();
     assert_eq!(fields.next(), Some("NACRE_MEMORY"));
-    let allocations = fields.next().unwrap().strip_prefix("allocations=").unwrap()
-        .parse::<usize>().unwrap();
-    let frees = fields.next().unwrap().strip_prefix("frees=").unwrap()
-        .parse::<usize>().unwrap();
-    assert_eq!(allocations, frees);
-    assert_eq!(fields.next(), Some("live=0"));
-    assert_eq!(fields.next(), None);
+    let allocations = fields.next().unwrap().strip_prefix("allocations=").unwrap();
+    let frees = fields.next().unwrap().strip_prefix("frees=").unwrap();
+    assert_eq!(allocations, frees, "{stderr}");
+    assert_eq!(fields.next(), Some("live=0"), "{stderr}");
+    assert_eq!(fields.next(), None, "{stderr}");
+    let allocations = allocations.parse::<usize>().unwrap();
     (output, allocations)
 }
 
@@ -121,25 +120,6 @@ void main() {
     );
 }
 
-#[test]
-fn duplicate_text_key_replacement_needs_only_its_explicit_key_allocation() {
-    let baseline = r#"
-void main() {
-    Map<Text, int> entries = new Map<Text, int>();
-    entries.put(new Text("same"), 1);
-    Text incoming = new Text("same");
-    drop(incoming);
-}
-"#;
-    let replacement = r#"
-void main() {
-    Map<Text, int> entries = new Map<Text, int>();
-    entries.put(new Text("same"), 1);
-    entries.put(new Text("same"), 2);
-}
-"#;
-    assert_eq!(allocation_count(baseline), allocation_count(replacement));
-}
 
 #[test]
 fn growth_and_collision_chain_deletion_preserve_text_key_associations() {
@@ -402,6 +382,65 @@ void main() {
     );
 }
 
+
+#[test]
+fn named_inventory_example_uses_borrowed_queries_and_unordered_traversal() {
+    assert_native(
+        include_str!("../examples/collections/text_map_inventory.ncr"),
+        b"true\ntrue\n12\n20\n2\n",
+    );
+}
+
+#[test]
+fn invalid_text_key_bindings_hash_mutation_and_root_aliases_are_rejected() {
+    for source in [
+        include_str!("../examples/invalid/text_map_owned_key_binding.ncr"),
+        include_str!("../examples/invalid/text_map_mutable_key_binding.ncr"),
+        include_str!("../examples/invalid/text_map_move_borrowed_key.ncr"),
+        include_str!("../examples/invalid/text_map_mutate_key.ncr"),
+        include_str!("../examples/invalid/text_map_root_write.ncr"),
+        include_str!("../examples/invalid/text_map_root_absent_remove.ncr"),
+        include_str!("../examples/invalid/text_map_root_write_during_traversal.ncr"),
+        include_str!("../examples/invalid/text_map_exclusive_independent_read.ncr"),
+        include_str!("../examples/invalid/text_map_exclusive_traversal_read.ncr"),
+    ] {
+        assert_rejected(source);
+    }
+}
+
+#[test]
+fn invalid_text_keys_and_escaping_local_borrows_are_rejected() {
+    for source in [
+        include_str!("../examples/invalid/text_map_escape_key.ncr"),
+        include_str!("../examples/invalid/text_map_escape_value.ncr"),
+        include_str!("../examples/invalid/text_map_string_key.ncr"),
+        include_str!("../examples/invalid/text_map_boolean_key.ncr"),
+        include_str!("../examples/invalid/text_map_custom_key.ncr"),
+    ] {
+        assert_rejected(source);
+    }
+}
+
+#[test]
+fn duplicate_text_key_replacement_needs_only_its_explicit_key_allocation() {
+    let baseline = r#"
+void main() {
+    Map<Text, int> entries = new Map<Text, int>();
+    entries.put(new Text("same"), 1);
+    Text incoming = new Text("same");
+    drop(incoming);
+}
+"#;
+    let replacement = r#"
+void main() {
+    Map<Text, int> entries = new Map<Text, int>();
+    entries.put(new Text("same"), 1);
+    entries.put(new Text("same"), 2);
+}
+"#;
+    assert_eq!(allocation_count(baseline), allocation_count(replacement));
+}
+
 #[test]
 fn borrowed_text_queries_and_key_traversal_add_no_allocations() {
     let setup = r#"
@@ -476,42 +515,4 @@ void main() {
 "#
     );
     assert_eq!(allocation_count(&without_traversal), allocation_count(&with_traversal));
-}
-
-#[test]
-fn named_inventory_example_uses_borrowed_queries_and_unordered_traversal() {
-    assert_native(
-        include_str!("../examples/collections/text_map_inventory.ncr"),
-        b"true\ntrue\n12\n20\n2\n",
-    );
-}
-
-#[test]
-fn invalid_text_key_bindings_hash_mutation_and_root_aliases_are_rejected() {
-    for source in [
-        include_str!("../examples/invalid/text_map_owned_key_binding.ncr"),
-        include_str!("../examples/invalid/text_map_mutable_key_binding.ncr"),
-        include_str!("../examples/invalid/text_map_move_borrowed_key.ncr"),
-        include_str!("../examples/invalid/text_map_mutate_key.ncr"),
-        include_str!("../examples/invalid/text_map_root_write.ncr"),
-        include_str!("../examples/invalid/text_map_root_absent_remove.ncr"),
-        include_str!("../examples/invalid/text_map_root_write_during_traversal.ncr"),
-        include_str!("../examples/invalid/text_map_exclusive_independent_read.ncr"),
-        include_str!("../examples/invalid/text_map_exclusive_traversal_read.ncr"),
-    ] {
-        assert_rejected(source);
-    }
-}
-
-#[test]
-fn invalid_text_keys_and_escaping_local_borrows_are_rejected() {
-    for source in [
-        include_str!("../examples/invalid/text_map_escape_key.ncr"),
-        include_str!("../examples/invalid/text_map_escape_value.ncr"),
-        include_str!("../examples/invalid/text_map_string_key.ncr"),
-        include_str!("../examples/invalid/text_map_boolean_key.ncr"),
-        include_str!("../examples/invalid/text_map_custom_key.ncr"),
-    ] {
-        assert_rejected(source);
-    }
 }

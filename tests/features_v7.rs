@@ -1,12 +1,19 @@
 use nacre::{compile_to_c, native, validate};
 
-fn assert_native(source: &str, stdout: &[u8], allocations: usize) {
+fn assert_native(source: &str, stdout: &[u8]) {
     let c = compile_to_c(source).unwrap_or_else(|error| panic!("{}", error.render("v7.ncr", source)));
     let output = native::compile_c_with_flags(&c, &["-DNACRE_MEMORY_STATS"])
         .unwrap().output().unwrap();
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     assert_eq!(output.stdout, stdout);
-    assert_eq!(output.stderr, format!("NACRE_MEMORY allocations={allocations} frees={allocations} live=0\n").as_bytes());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let mut fields = stderr.split_whitespace();
+    assert_eq!(fields.next(), Some("NACRE_MEMORY"), "{stderr}");
+    let allocations = fields.next().unwrap().strip_prefix("allocations=").unwrap();
+    let frees = fields.next().unwrap().strip_prefix("frees=").unwrap();
+    assert_eq!(allocations, frees, "{stderr}");
+    assert_eq!(fields.next(), Some("live=0"), "{stderr}");
+    assert_eq!(fields.next(), None, "{stderr}");
 }
 
 #[test]
@@ -40,7 +47,7 @@ void main() {
         println(text.byteLength());
     }
 }
-"#, b"3\n5\n", 7);
+    "#, b"3\n5\n");
 }
 
 #[test]
@@ -60,7 +67,7 @@ void main() {
     match (items.pop()) { None { } Some(text) { println(text.byteLength()); } }
     println(items.size());
 }
-"#, b"1\n2\n0\n", 4);
+ "#, b"1\n2\n0\n");
 }
 
 #[test]
@@ -81,7 +88,7 @@ void main() {
     items.clear();
     println(items.size());
 }
-"#, b"7\n8\n0\n", 3);
+ "#, b"7\n8\n0\n");
 }
 
 #[test]
@@ -116,7 +123,7 @@ void main() {
     }
     println(read(pair));
 }
-"#, b"5\n1\n2\n5\n", 5);
+ "#, b"5\n1\n2\n5\n");
 }
 
 #[test]
@@ -136,7 +143,7 @@ void main() {
         match (item) { None { println(0); } Some(text) { println(text.byteLength()); } }
     }
 }
-"#, b"3\n", 5);
+ "#, b"3\n");
 }
 
 const HOLDER: &str = r#"
@@ -225,5 +232,5 @@ fn mutable_argument_cannot_alias_a_reserved_projected_receiver() {
 
 #[test]
 fn evaluating_mutation_before_field_selection_preserves_the_live_receiver() {
-    assert_native(&format!("{PROJECTED_RECEIVER} void main() {{ Parent parent = new Parent(); int value = parent.replaceChild(); println(parent.child.assign(value)); parent.child.value = 43; println(parent.child.value); }}"), b"42\n43\n", 3);
+    assert_native(&format!("{PROJECTED_RECEIVER} void main() {{ Parent parent = new Parent(); int value = parent.replaceChild(); println(parent.child.assign(value)); parent.child.value = 43; println(parent.child.value); }}"), b"42\n43\n");
 }

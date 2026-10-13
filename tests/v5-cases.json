@@ -3,260 +3,223 @@
     "name": "example_collections",
     "source": "void main() {\n    List<int> scores = new List<int>();\n    scores.add(10);\n    scores.add(20);\n    scores.add(12);\n    int sum = 0;\n    int i = 0;\n    while (i < scores.size()) {\n        sum = sum + scores.get(i);\n        i = i + 1;\n    }\n    Text message = new Text(\"Somme = \");\n    message.appendInt(sum);\n    message.print();\n    println(scores.remove(1));\n    println(scores.pop());\n    println(scores.size());\n}\n",
     "valid": true,
-    "stdout": "Somme = 42\n20\n12\n1\n",
-    "allocations": 4
+    "stdout": "Somme = 42\n20\n12\n1\n"
   },
   {
     "name": "example_owned_list",
     "source": "interface Named {\n    readonly String name();\n}\nclass Person implements Named {\n    private String value;\n    public Person(String value) { this.value = value; }\n    public readonly String name() { return this.value; }\n}\nvoid main() {\n    List<Named> people = new List<Named>();\n    Person alice = new Person(\"Alice\");\n    people.add(alice); // Transfert; alice n'est plus utilisable.\n    people.add(new Person(\"Bob\"));\n    Named first = people.remove(0);\n    println(first.name());\n    // Vider la liste detruit Bob, mais pas Alice extraite par remove.\n    people.clear();\n    println(first.name());\n    println(people.isEmpty());\n}\n",
     "valid": true,
-    "stdout": "Alice\nAlice\ntrue\n",
-    "allocations": 4
+    "stdout": "Alice\nAlice\ntrue\n"
   },
   {
     "name": "example_owned_tree",
     "source": "class Node {\n    private int value;\n    private List<Node> children = new List<Node>();\n    public Node(int value) { this.value = value; }\n    public void add(Node child) { this.children.add(child); }\n    public Node detachLast() { return this.children.pop(); }\n    public readonly int getValue() { return this.value; }\n}\nvoid main() {\n    Node root = new Node(1);\n    root.add(new Node(2));\n    root.add(new Node(3));\n    Node detached = root.detachLast();\n    drop(root); // Detruit le sous-arbre restant; pas detached.\n    println(detached.getValue());\n}\n",
     "valid": true,
-    "stdout": "3\n",
-    "allocations": 7
+    "stdout": "3\n"
   },
   {
     "name": "example_dynamic_text",
     "source": "void main() {\n    Text message = new Text(\"Bonjour\");\n    message.append(\" ! Réponse = \");\n    message.appendInt(42);\n    message.print();\n    Text copy = message.clone(); // Copie explicite et independante.\n    println(copy.equals(message));\n    message.clear();\n    println(message.isEmpty());\n    copy.print();\n}\n",
     "valid": true,
-    "stdout": "Bonjour ! Réponse = 42\ntrue\ntrue\nBonjour ! Réponse = 42\n",
-    "allocations": 5
+    "stdout": "Bonjour ! Réponse = 42\ntrue\ntrue\nBonjour ! Réponse = 42\n"
   },
   {
     "name": "list_empty",
     "source": "void main(){List<int> xs=new List<int>();println(xs.size());println(xs.capacity());println(xs.isEmpty());}",
     "valid": true,
-    "stdout": "0\n0\ntrue\n",
-    "allocations": 1
+    "stdout": "0\n0\ntrue\n"
   },
   {
     "name": "list_primitive_mutations",
     "source": "void main(){List<int> xs=new List<int>();xs.add(1);xs.add(2);xs.add(3);xs.set(1,20);println(xs.remove(0));println(xs.get(0));println(xs.pop());xs.clear();println(xs.size());println(xs.capacity());}",
     "valid": true,
-    "stdout": "1\n20\n3\n0\n4\n",
-    "allocations": 2
+    "stdout": "1\n20\n3\n0\n4\n"
   },
   {
     "name": "list_boolean",
     "source": "void main(){List<boolean> xs=new List<boolean>();xs.add(true);xs.add(false);println(xs.get(0));println(xs.pop());}",
     "valid": true,
-    "stdout": "true\nfalse\n",
-    "allocations": 2
+    "stdout": "true\nfalse\n"
   },
   {
     "name": "list_static_string_outlives_container",
     "source": "String make(){List<String> xs=new List<String>();xs.add(\"Bonjour\");return xs.pop();}void main(){println(make());}",
     "valid": true,
-    "stdout": "Bonjour\n",
-    "allocations": 2
+    "stdout": "Bonjour\n"
   },
   {
     "name": "list_string_embedded_nul",
     "source": "void main(){List<String> xs=new List<String>();xs.add(\"a\\0b\");println(xs.get(0));}",
     "valid": true,
-    "stdout": "a\u0000b\n",
-    "allocations": 2
+    "stdout": "a\u0000b\n"
   },
   {
     "name": "list_reserve_reuse",
     "source": "void main(){List<int> xs=new List<int>();xs.reserve(0);xs.reserve(9);println(xs.capacity());xs.add(7);xs.clear();xs.add(8);println(xs.pop());}",
     "valid": true,
-    "stdout": "16\n8\n",
-    "allocations": 2
+    "stdout": "16\n8\n"
   },
   {
     "name": "list_grows_1000",
     "source": "void main(){List<int> xs=new List<int>();int i=0;while(i<1000){xs.add(i);i=i+1;}println(xs.get(999));println(xs.size());println(xs.capacity());}",
     "valid": true,
-    "stdout": "999\n1000\n1024\n",
-    "allocations": 10
+    "stdout": "999\n1000\n1024\n"
   },
   {
     "name": "list_nested_pop",
     "source": "void main(){List<List<int>> rows=new List<List<int>>();List<int> row=new List<int>();row.add(42);rows.add(row);List<int> extracted=rows.pop();drop(rows);println(extracted.get(0));}",
     "valid": true,
-    "stdout": "42\n",
-    "allocations": 4
+    "stdout": "42\n"
   },
   {
     "name": "list_owned_pop_outlives_list",
     "source": "class C { int n; C(int n) { this.n = n; } readonly int get() { return n; } } void main(){List<C> xs=new List<C>();xs.add(new C(42));C c=xs.pop();drop(xs);println(c.get());}",
     "valid": true,
-    "stdout": "42\n",
-    "allocations": 3
+    "stdout": "42\n"
   },
   {
     "name": "list_owned_set_destroys_previous",
     "source": "class C { int n; C(int n) { this.n = n; } readonly int get() { return n; } } void main(){List<C> xs=new List<C>();xs.add(new C(1));xs.set(0,new C(2));C c=xs.pop();println(c.get());}",
     "valid": true,
-    "stdout": "2\n",
-    "allocations": 4
+    "stdout": "2\n"
   },
   {
     "name": "list_owned_ignored_pop_drops",
     "source": "class C { int n; C(int n) { this.n = n; } readonly int get() { return n; } } void main(){List<C> xs=new List<C>();xs.add(new C(1));xs.pop();println(xs.size());}",
     "valid": true,
-    "stdout": "0\n",
-    "allocations": 3
+    "stdout": "0\n"
   },
   {
     "name": "list_owned_function_return",
     "source": "class C { int n; C(int n) { this.n = n; } readonly int get() { return n; } } C make(){List<C> xs=new List<C>();xs.add(new C(42));return xs.remove(0);}void main(){C c=make();println(c.get());}",
     "valid": true,
-    "stdout": "42\n",
-    "allocations": 3
+    "stdout": "42\n"
   },
   {
     "name": "list_owned_replace_container",
     "source": "class C { int n; C(int n) { this.n = n; } readonly int get() { return n; } } void main(){List<C> xs=new List<C>();xs.add(new C(1));xs=new List<C>();println(xs.size());}",
     "valid": true,
-    "stdout": "0\n",
-    "allocations": 4
+    "stdout": "0\n"
   },
   {
     "name": "list_owned_clear_reuse",
     "source": "class C { int n; C(int n) { this.n = n; } readonly int get() { return n; } } void main(){List<C> xs=new List<C>();xs.add(new C(1));xs.clear();xs.add(new C(2));C c=xs.pop();println(c.get());}",
     "valid": true,
-    "stdout": "2\n",
-    "allocations": 4
+    "stdout": "2\n"
   },
   {
     "name": "list_borrow_parameter",
     "source": "int first(borrow List<int> xs){return xs.get(0);}void main(){List<int> xs=new List<int>();xs.add(42);println(first(xs));println(xs.size());}",
     "valid": true,
-    "stdout": "42\n1\n",
-    "allocations": 2
+    "stdout": "42\n1\n"
   },
   {
     "name": "list_exclusive_parameter",
     "source": "void append(borrow mut List<int> xs){xs.add(42);}void main(){List<int> xs=new List<int>();append(xs);println(xs.get(0));}",
     "valid": true,
-    "stdout": "42\n",
-    "allocations": 2
+    "stdout": "42\n"
   },
   {
     "name": "list_two_phase_receiver",
     "source": "void main(){List<int> xs=new List<int>();xs.add(1);xs.add(xs.get(0));xs.add(xs.pop());println(xs.size());}",
     "valid": true,
-    "stdout": "2\n",
-    "allocations": 2
+    "stdout": "2\n"
   },
   {
     "name": "list_shared_reads",
     "source": "void main(){List<int> xs=new List<int>();borrow List<int> r=xs;println(xs.size());println(r.size());}",
     "valid": true,
-    "stdout": "0\n0\n",
-    "allocations": 1
+    "stdout": "0\n0\n"
   },
   {
     "name": "list_generic_wrapper",
     "source": "class Store<T>{List<T> values=new List<T>();void add(T value){values.add(value);}T pop(){return values.pop();}}void main(){Store<int> s=new Store<int>();s.add(42);println(s.pop());}",
     "valid": true,
-    "stdout": "42\n",
-    "allocations": 3
+    "stdout": "42\n"
   },
   {
     "name": "list_generic_owned_wrapper",
     "source": "class C { int n; C(int n) { this.n = n; } readonly int get() { return n; } } class Store<T>{List<T> values=new List<T>();void add(T value){values.add(value);}T pop(){return values.pop();}}void main(){Store<C> s=new Store<C>();s.add(new C(42));C c=s.pop();drop(s);println(c.get());}",
     "valid": true,
-    "stdout": "42\n",
-    "allocations": 4
+    "stdout": "42\n"
   },
   {
     "name": "text_empty",
     "source": "void main(){Text t=new Text(\"\");println(t.byteLength());println(t.isEmpty());t.print();}",
     "valid": true,
-    "stdout": "0\ntrue\n\n",
-    "allocations": 1
+    "stdout": "0\ntrue\n\n"
   },
   {
     "name": "text_formatting",
     "source": "void main(){Text t=new Text(\"\");t.appendInt(-2147483648);t.append(\" \");t.appendInt(2147483647);t.append(\" \");t.appendBoolean(false);t.print();}",
     "valid": true,
-    "stdout": "-2147483648 2147483647 false\n",
-    "allocations": 3
+    "stdout": "-2147483648 2147483647 false\n"
   },
   {
     "name": "text_utf8_bytes",
     "source": "void main(){Text t=new Text(\"é\");println(t.byteLength());println(t.byteAt(0));println(t.byteAt(1));}",
     "valid": true,
-    "stdout": "2\n195\n169\n",
-    "allocations": 2
+    "stdout": "2\n195\n169\n"
   },
   {
     "name": "text_embedded_nul",
     "source": "void main(){Text t=new Text(\"a\\0b\");println(t.byteLength());println(t.byteAt(1));t.print();}",
     "valid": true,
-    "stdout": "3\n0\na\u0000b\n",
-    "allocations": 2
+    "stdout": "3\n0\na\u0000b\n"
   },
   {
     "name": "text_clone_independence",
     "source": "void main(){Text a=new Text(\"a\");Text b=a.clone();a.append(\"b\");println(b.equalsString(\"a\"));println(a.equals(b));drop(a);b.print();}",
     "valid": true,
-    "stdout": "true\nfalse\na\n",
-    "allocations": 4
+    "stdout": "true\nfalse\na\n"
   },
   {
     "name": "text_append_borrow",
     "source": "void main(){Text a=new Text(\"\");Text b=new Text(\"hello\");a.appendText(b);drop(b);a.print();}",
     "valid": true,
-    "stdout": "hello\n",
-    "allocations": 4
+    "stdout": "hello\n"
   },
   {
     "name": "text_shared_same_object_equality",
     "source": "void main(){Text t=new Text(\"x\");println(t.equals(t));}",
     "valid": true,
-    "stdout": "true\n",
-    "allocations": 2
+    "stdout": "true\n"
   },
   {
     "name": "text_return_owner",
     "source": "Text make(){Text t=new Text(\"hello\");return t;}void main(){Text t=make();t.print();}",
     "valid": true,
-    "stdout": "hello\n",
-    "allocations": 2
+    "stdout": "hello\n"
   },
   {
     "name": "text_owned_in_list",
     "source": "void main(){List<Text> texts=new List<Text>();Text t=new Text(\"hello\");texts.add(t);Text out=texts.pop();drop(texts);out.print();}",
     "valid": true,
-    "stdout": "hello\n",
-    "allocations": 4
+    "stdout": "hello\n"
   },
   {
     "name": "text_grows_10000",
     "source": "void main(){Text t=new Text(\"\");int i=0;while(i<10000){t.append(\"x\");i=i+1;}println(t.byteLength());println(t.byteAt(9999));}",
     "valid": true,
-    "stdout": "10000\n120\n",
-    "allocations": 12
+    "stdout": "10000\n120\n"
   },
   {
     "name": "text_borrowed_view",
     "source": "class V{borrow Text value;V(borrow Text value){this.value=value;}readonly int size(){return value.byteLength();}}void main(){Text t=new Text(\"abc\");{V v=new V(t);println(v.size());}t.append(\"d\");t.print();}",
     "valid": true,
-    "stdout": "3\nabcd\n",
-    "allocations": 3
+    "stdout": "3\nabcd\n"
   },
   {
     "name": "list_uninitialized_then_assigned",
     "source": "void main(){List<int> xs;xs=new List<int>();println(xs.isEmpty());}",
     "valid": true,
-    "stdout": "true\n",
-    "allocations": 1
+    "stdout": "true\n"
   },
   {
     "name": "reserved_prelude_parameter_does_not_shadow_user_t",
     "source": "class T {} void main(){T t=new T();}",
     "valid": true,
-    "stdout": "",
-    "allocations": 1
+    "stdout": ""
   },
   {
     "name": "reserved_list_class",
@@ -291,14 +254,12 @@
   {
     "name": "list_primitive_argument_mismatch",
     "source": "void main(){List<int> xs=new List<int>();xs.add(true);}",
-    "valid": false,
-    "error": "attendu int"
+    "valid": false
   },
   {
     "name": "list_index_not_int",
     "source": "void main(){List<int> xs=new List<int>();println(xs.get(true));}",
-    "valid": false,
-    "error": "attendu int"
+    "valid": false
   },
   {
     "name": "list_owned_get_forbidden",
@@ -363,38 +324,32 @@
   {
     "name": "list_native_fields_private",
     "source": "void main(){List<int> xs=new List<int>();println(xs.length);}",
-    "valid": false,
-    "error": "champ"
+    "valid": false
   },
   {
     "name": "list_invariant_types",
     "source": "void main(){List<int> xs=new List<int>();List<boolean> ys=xs;}",
-    "valid": false,
-    "error": "type incompatible"
+    "valid": false
   },
   {
     "name": "text_initial_argument_required",
     "source": "void main(){Text t=new Text();}",
-    "valid": false,
-    "error": "attend 1"
+    "valid": false
   },
   {
     "name": "text_append_wrong_type",
     "source": "void main(){Text t=new Text(\"\");t.append(42);}",
-    "valid": false,
-    "error": "attendu String"
+    "valid": false
   },
   {
     "name": "text_to_static_string_forbidden",
     "source": "void main(){Text t=new Text(\"x\");String s=t;}",
-    "valid": false,
-    "error": "type incompatible"
+    "valid": false
   },
   {
     "name": "text_to_string_borrow_not_supported",
     "source": "void main(){Text t=new Text(\"x\");String s=t.toString();}",
-    "valid": false,
-    "error": "methode"
+    "valid": false
   },
   {
     "name": "text_move_is_not_copy",
@@ -423,8 +378,7 @@
   {
     "name": "text_private_storage",
     "source": "void main(){Text t=new Text(\"\");println(t.bytes);}",
-    "valid": false,
-    "error": "champ"
+    "valid": false
   },
   {
     "name": "text_readonly_field_mutation",

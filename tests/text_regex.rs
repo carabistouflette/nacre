@@ -172,6 +172,55 @@ void main() {
 }
 
 #[test]
+fn text_inline_and_heap_storage_transitions_preserve_ownership() {
+    let output = execute(r#"
+void main() {
+    Text empty = new Text("");
+    println(empty.isEmpty());
+    empty.append("small");
+    empty.print();
+
+    Text exact = new Text("0123456789abcdef");
+    Text inlineCopy = exact.clone();
+    println(exact.byteLength());
+    exact.append("g");
+    exact.append("0123456789abcdef");
+    Text heapCopy = exact.clone();
+    exact.append("!");
+    heapCopy.append("?");
+    println(inlineCopy.equalsString("0123456789abcdef"));
+    println(exact.equalsString("0123456789abcdefg0123456789abcdef!"));
+    println(heapCopy.equalsString("0123456789abcdefg0123456789abcdef?"));
+    inlineCopy.print();
+    exact.print();
+    heapCopy.print();
+
+    Text smallInput = new Text("a-a-a");
+    Text a = new Text("a");
+    Text xy = new Text("xy");
+    Text smallOwnedTake = smallInput.replace(a, xy);
+    smallOwnedTake.print();
+
+    Text largeInput = new Text("aaaaaaaaaaaaaaaaaaaa");
+    Text largeOwnedTake = largeInput.replace(a, xy);
+    println(largeOwnedTake.byteLength());
+    println(largeOwnedTake.byteAt(39));
+
+    Text mixed = new Text("é\0😀");
+    println(mixed.byteLength());
+    println(mixed.charCount());
+    println(mixed.byteAt(2));
+    mixed.print();
+}
+"#);
+    assert_eq!(
+        output.stdout,
+        "true\nsmall\n16\ntrue\ntrue\ntrue\n0123456789abcdef\n0123456789abcdefg0123456789abcdef!\n0123456789abcdefg0123456789abcdef?\nxy-xy-xy\n40\n121\n7\n3\n0\né\0😀\n"
+            .as_bytes()
+    );
+}
+
+#[test]
 fn regex_uses_utf8_ere_and_owned_capture_text_with_byte_offsets() {
     let output = execute(r#"
 void main() {

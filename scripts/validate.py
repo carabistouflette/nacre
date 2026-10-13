@@ -15,23 +15,23 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES = {
-    "borrowing": ("42\n84\n43\n", 1),
-    "sums": ("42\n0\n", 2),
-    "reborrowing": ("1\n2\n2\n", 1),
-    "borrowed_fields": ("Shared counter\n42\n43\n", 2),
-    "borrowed_loop": ("8\n", 1),
-    "readonly_composition": ("120\n130\n", 2),
-    "counter": ("42\n", 1),
-    "composition": ("My car\n150\n", 2),
-    "ownership": ("42\n42\n7\n", 2),
-    "field_initializers": ("Settings\ntrue\n200\n", 1),
-    "static_methods": ("36\n49\n", 0),
-    "object_scopes": ("0\n2\n100\n", 5),
-    "ownership_loop": ("13\n", 4),
-    "definite_initialization": ("Initialized through the first branch.\nInitialized through the second branch.\n", 2),
-    "explicit_drop": ("150\n150\n", 4),
-    "ownership_continue": ("40\n", 5),
-    "ownership_break": ("7\n", 2),
+    "borrowing": "42\n84\n43\n",
+    "sums": "42\n0\n",
+    "reborrowing": "1\n2\n2\n",
+    "borrowed_fields": "Shared counter\n42\n43\n",
+    "borrowed_loop": "8\n",
+    "readonly_composition": "120\n130\n",
+    "counter": "42\n",
+    "composition": "My car\n150\n",
+    "ownership": "42\n42\n7\n",
+    "field_initializers": "Settings\ntrue\n200\n",
+    "static_methods": "36\n49\n",
+    "object_scopes": "0\n2\n100\n",
+    "ownership_loop": "13\n",
+    "definite_initialization": "Initialized through the first branch.\nInitialized through the second branch.\n",
+    "explicit_drop": "150\n150\n",
+    "ownership_continue": "40\n",
+    "ownership_break": "7\n",
 }
 EXAMPLE_PATHS = {
     "borrowing": "ownership/borrowing.ncr",
@@ -72,7 +72,15 @@ def example_source(name):
 def command(args, **kwargs):
     return subprocess.run(args, cwd=ROOT, check=True, **kwargs)
 
-def exercise_native(nacre, source, name, expected, count, cc, directory, env, sanitizers):
+def assert_memory_balanced(stderr, name):
+    fields = stderr.decode('ascii').split()
+    assert len(fields) == 4 and fields[0] == 'NACRE_MEMORY', (name, stderr)
+    allocations = int(fields[1].removeprefix('allocations='), 10)
+    frees = int(fields[2].removeprefix('frees='), 10)
+    assert allocations == frees and fields[3] == 'live=0', (name, stderr)
+    return allocations, frees
+
+def exercise_native(nacre, source, name, expected, cc, directory, env, sanitizers):
     c_file = directory / f'{name}.c'
     exe = directory / name
     command([str(nacre), 'emit-c', str(source), '-o', str(c_file)], capture_output=True)
@@ -85,10 +93,10 @@ def exercise_native(nacre, source, name, expected, count, cc, directory, env, sa
     run_env = dict(env, ASAN_OPTIONS='detect_leaks=1:halt_on_error=1')
     result = command([str(exe)], capture_output=True, env=run_env, timeout=20)
     assert result.stdout == expected.encode('utf-8'), (name, result.stdout)
-    stats = f'NACRE_MEMORY allocations={count} frees={count} live=0\n'.encode()
-    assert result.stderr == stats, (name, result.stderr)
-    return {'compiler': cc, 'case': name, 'allocations': count,
-            'live_at_exit': 0, 'sanitizers': sanitizers, 'status': 'passed'}
+    allocations, frees = assert_memory_balanced(result.stderr, name)
+    return {'compiler': cc, 'case': name, 'allocations': allocations,
+            'frees': frees, 'live_at_exit': 0,
+            'sanitizers': sanitizers, 'status': 'passed'}
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -109,9 +117,9 @@ def main():
     cases = [(version, case) for version in (2, 3, 4, 5)
              for case in json.loads((ROOT / f'tests/v{version}-cases.json').read_text())]
     for name, spec in json.loads((ROOT/'tests/v4-examples.json').read_text()).items():
-        EXAMPLES[name] = (spec['stdout'], spec['allocations'])
+        EXAMPLES[name] = spec['stdout']
     for name, spec in json.loads((ROOT/'tests/v5-examples.json').read_text()).items():
-        EXAMPLES[name] = (spec['stdout'], spec['allocations'])
+        EXAMPLES[name] = spec['stdout']
     results = []
     rejected = []
     for cc in compilers:
@@ -126,12 +134,12 @@ def main():
         nacre = target / 'debug' / ('nacre.exe' if os.name == 'nt' else 'nacre')
         with tempfile.TemporaryDirectory(prefix='nacre-validation-') as temporary:
             directory = Path(temporary)
-            for name, (stdout, count) in EXAMPLES.items():
+            for name, stdout in EXAMPLES.items():
                 source = example_source(name)
-                results.append(exercise_native(nacre, source, name, stdout, count,
+                results.append(exercise_native(nacre, source, name, stdout,
                                                cc, directory, env, args.sanitizers))
             results.append(exercise_native(nacre, ROOT/'examples/language/multi_file_project', 'multifile_project',
-                'Sum = 42\n', 4, cc, directory, env, args.sanitizers))
+                'Sum = 42\n', cc, directory, env, args.sanitizers))
             command([str(nacre), 'doctor'], env=env)
             for version, case in cases:
                 name = f'v{version}_' + case['name']
@@ -141,8 +149,8 @@ def main():
                                        capture_output=True, text=True, timeout=20)
                 if not case['valid']:
                     assert check.returncode != 0, ('invalid source accepted', name)
-                    if case['error'].startswith('E'):
-                        assert case['error'] in check.stderr, (name, check.stderr)
+                    if case.get('error', '').startswith('E'):
+                        assert case.get('error', '') in check.stderr, (name, check.stderr)
                     else:
                         header = check.stderr.partition('\n')[0]
                         location, separator, _ = header.partition(': error:')
@@ -152,9 +160,8 @@ def main():
                     rejected.append({'compiler': cc, 'case': name, 'status': 'correctly_rejected'})
                 else:
                     assert check.returncode == 0, (name, check.stderr)
-                    if 'stdout' in case:
-                        results.append(exercise_native(nacre, source, name, case['stdout'],
-                            case['allocations'], cc, directory, env, args.sanitizers))
+                    results.append(exercise_native(nacre, source, name, case['stdout'],
+                        cc, directory, env, args.sanitizers))
                     if 'runtime_error' in case:
                         # Fatal runtime errors terminate without unwinding. Run
                         # these exit-code checks separately from leak checks.
@@ -180,9 +187,9 @@ def main():
                 command([str(nacre), 'emit-llvm', str(source), '-O2', '--memory-stats', '-o', str(ir)], capture_output=True)
                 command([os.environ.get('NACRE_CLANG', 'clang'), str(ir), '-o', str(exe)], capture_output=True)
                 result = command([str(exe)], capture_output=True, timeout=20)
-                stdout, count = EXAMPLES[name]
+                stdout = EXAMPLES[name]
                 assert result.stdout == stdout.encode(), (name, result.stdout)
-                assert result.stderr == f'NACRE_MEMORY allocations={count} frees={count} live=0\n'.encode(), (name, result.stderr)
+                assert_memory_balanced(result.stderr, name)
                 llvm_cases.append({'case':name, 'status':'passed'})
     report = {'scope': 'actual Rust compiler and generated executables', 'llvm_cases':llvm_cases,
               'status': 'passed', 'results': results, 'negative_cases': rejected}

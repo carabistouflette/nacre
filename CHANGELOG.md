@@ -42,6 +42,10 @@
   support total primitive ordering or borrowed Comparators, without enum operand copies.
 - Module resolution preserves E4101 classification for type parameters that shadow
   declared or imported types and reserved names.
+- Native Text owners embed up to 16 bytes; growth and owned-buffer transfers
+  preserve unique header identity and free only external byte storage.
+  Cloning copies already-validated Text without another UTF-8 pass; comparative
+  map query/replacement allocation regressions remain representation-independent.
 
 - Postfix `?` unwraps trusted built-in `Result` values or returns the exact
   error payload after cleaning live locals and pending owned C temporaries.

@@ -1,4 +1,5 @@
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
+pub(super) const TEXT_INLINE_CAPACITY: usize = 16;
 pub(super) fn marker(method: M) -> &'static str {
     match method {
         M::ListNew => "@LIST_NEW@", M::ListAdd => "@LIST_ADD@",
@@ -133,10 +134,13 @@ pub(super) fn text_class(program: &t::Program) -> Option<usize> {
 pub(super) fn text_helpers(program: &t::Program, text: usize) -> String {
     let text_new = native_function(program, |method| matches!(method, M::TextNew)).id;
     let mut out = format!(
-        "static ncr_obj_{text} *ncr_text_from_bytes_{text}(const unsigned char *bytes, size_t length, size_t line, size_t column) {{\n    ncr_obj_{text} *text = ncr_allocate(sizeof(ncr_obj_{text}), line, column);\n    ncr_fn_{text_new}(text, (ncr_string){{bytes, length}}, line, column);\n    return text;\n}}\n"
+        "static void ncr_text_init_{text}(ncr_obj_{text} *p) {{\n    p->bytes = p->inline_storage;\n    p->length = 0;\n    p->capacity = {TEXT_INLINE_CAPACITY};\n}}\n"
     );
     out.push_str(&format!(
-        "static ncr_obj_{text} *ncr_text_take_bytes_{text}(unsigned char *bytes, size_t length, size_t capacity, size_t line, size_t column) {{\n    ncr_obj_{text} *text = ncr_allocate(sizeof(ncr_obj_{text}), line, column);\n    text->bytes = bytes;\n    text->length = (int32_t)length;\n    text->capacity = (int32_t)capacity;\n    return text;\n}}\n"
+        "static ncr_obj_{text} *ncr_text_from_bytes_{text}(const unsigned char *bytes, size_t length, size_t line, size_t column) {{\n    ncr_obj_{text} *text = ncr_allocate(sizeof(ncr_obj_{text}), line, column);\n    ncr_fn_{text_new}(text, (ncr_string){{bytes, length}}, line, column);\n    return text;\n}}\n"
+    ));
+    out.push_str(&format!(
+        "static ncr_obj_{text} *ncr_text_take_bytes_{text}(unsigned char *bytes, size_t length, size_t capacity, size_t line, size_t column) {{\n    if (length > (size_t)INT32_MAX || capacity > (size_t)INT32_MAX) {{ ncr_fail(\"Text is too large\", line, column); }}\n    if (length > capacity || (length > 0 && bytes == NULL)) {{ ncr_fail(\"invalid owned Text storage\", line, column); }}\n    ncr_obj_{text} *text = ncr_allocate(sizeof(ncr_obj_{text}), line, column);\n    ncr_text_init_{text}(text);\n    if (length <= {TEXT_INLINE_CAPACITY}) {{\n        if (length > 0) {{ memcpy(text->inline_storage, bytes, length); }}\n        text->length = (int32_t)length;\n        if (bytes != NULL) {{ ncr_deallocate(bytes); }}\n    }} else {{\n        text->bytes = bytes;\n        text->length = (int32_t)length;\n        text->capacity = (int32_t)capacity;\n    }}\n    return text;\n}}\n"
     ));
     let mut result_ids = Vec::new();
     for function in &program.functions {

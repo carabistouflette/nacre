@@ -1,30 +1,23 @@
 {
   "interfaces": {
-    "stdout": "Woof!\nWoof!\nMeow!\n",
-    "allocations": 2
+    "stdout": "Woof!\nWoof!\nMeow!\n"
   },
   "interface_borrowing": {
-    "stdout": "41\n42\n",
-    "allocations": 1
+    "stdout": "41\n42\n"
   },
   "generic_box": {
-    "stdout": "42\nHello, generics!\ntrue\n",
-    "allocations": 3
+    "stdout": "42\nHello, generics!\ntrue\n"
   },
   "generic_composition": {
-    "stdout": "42\n",
-    "allocations": 2
+    "stdout": "42\n"
   },
   "generic_interfaces": {
-    "stdout": "42\nGeneric polymorphism\n",
-    "allocations": 2
+    "stdout": "42\nGeneric polymorphism\n"
   },
   "interface_composition": {
-    "stdout": "42\n7\n",
-    "allocations": 3
+    "stdout": "42\n7\n"
   },
   "generic_view": {
-    "stdout": "42\n43\n",
-    "allocations": 2
+    "stdout": "42\n43\n"
   }
 }

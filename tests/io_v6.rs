@@ -70,10 +70,18 @@ void main() {
         Ok(option) { match (option) { Some(line) { line.print(); } None { println("EOF"); } } }
         Err(error) { error.print(); }
     }
+    match (Console.readLine()) {
+        Ok(option) { match (option) { Some(line) { line.print(); } None { println("EOF"); } } }
+        Err(error) { error.print(); }
+    }
+    match (Console.readLine()) {
+        Ok(option) { match (option) { Some(line) { line.print(); } None { println("EOF"); } } }
+        Err(error) { error.print(); }
+    }
 }
 "#;
-    let output = execute(source, b"\nfirst\r\nlast", &[]);
-    assert_stdout(&output, b"prompt:\nfirst\nlast\nEOF\n");
+    let output = execute(source, b"\nfirst\r\n0123456789abcdef\nthis line is longer than sixteen bytes\nlast", &[]);
+    assert_stdout(&output, b"prompt:\nfirst\n0123456789abcdef\nthis line is longer than sixteen bytes\nlast\nEOF\n");
 }
 
 #[test]

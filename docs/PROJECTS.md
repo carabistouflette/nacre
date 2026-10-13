@@ -42,7 +42,8 @@ Une erreur d’écriture peut laisser un dossier partiel :
 aucun chemin existant n’est supprimé automatiquement.
 
 `nacre doctor` vérifie le frontend puis compile et exécute une courte application
-List/Text. Il exige la sortie `test=42` et un bilan de 4 allocations/libérations.
+List/Text. Il exige la sortie `test=42`, des allocations équilibrées et aucun
+objet vivant à la fin.
 Son succès est un test de fumée, pas une validation exhaustive du langage.
 
 ## API Rust

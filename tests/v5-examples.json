@@ -1,18 +1,14 @@
 {
   "collections": {
-    "stdout": "Sum = 42\n20\n12\n1\n",
-    "allocations": 4
+    "stdout": "Sum = 42\n20\n12\n1\n"
   },
   "owned_list": {
-    "stdout": "Alice\nAlice\ntrue\n",
-    "allocations": 4
+    "stdout": "Alice\nAlice\ntrue\n"
   },
   "owned_tree": {
-    "stdout": "3\n",
-    "allocations": 7
+    "stdout": "3\n"
   },
   "dynamic_text": {
-    "stdout": "Hello! Answer = 42\ntrue\ntrue\nHello! Answer = 42\n",
-    "allocations": 5
+    "stdout": "Hello! Answer = 42\ntrue\ntrue\nHello! Answer = 42\n"
   }
 }
