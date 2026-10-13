@@ -1,0 +1,21 @@
+class ZipReader {
+    public static Result<ZipReader, Text> open(borrow Path path) {}
+    public static Result<ZipReader, Text> fromBytes(borrow ByteBuffer bytes) {}
+    public Result<Option<ZipEntry>, Text> next() {}
+    public Result<ByteBuffer, Text> readEntry(long maxBytes) {}
+    public Result<Unit, Text> skipEntry() {}
+    public Result<Unit, Text> close() {}
+}
+
+class ZipEntry {
+    public readonly borrow Text name() {}
+    public readonly long size() {}
+    public readonly boolean isDirectory() {}
+}
+
+class ZipWriter {
+    public static Result<ZipWriter, Text> create(borrow Path path, int level) {}
+    public Result<Unit, Text> add(borrow Text name, borrow ByteBuffer bytes) {}
+    public Result<Unit, Text> addDirectory(borrow Text name) {}
+    public Result<Unit, Text> close() {}
+}

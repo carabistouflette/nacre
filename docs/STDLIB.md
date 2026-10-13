@@ -1231,6 +1231,52 @@ counts. `File.flush` calls `fsync`. `TcpStream.read` and `write` use timeout `0`
 delivery. `Streams.copy` and `writeAll` flush their sink according to that sink's
 contract, not a peer-acknowledgement guarantee.
 
+## ZIP archives
+
+`ZipReader` and `ZipWriter` use libarchive's ZIP support, including Zip64. They
+operate on archive entries only: no method extracts to the filesystem. Entry names
+are preserved as UTF-8, including absolute names and `.`/`..` components, so callers
+that later extract entries must apply their own destination-path policy. Writers
+permit duplicate names; entries remain in the order written and readers expose
+them sequentially without merging or replacing them.
+
+```java
+static Result<ZipReader, Text> ZipReader.open(borrow Path path)
+static Result<ZipReader, Text> ZipReader.fromBytes(borrow ByteBuffer bytes)
+Result<Option<ZipEntry>, Text> ZipReader.next()
+Result<ByteBuffer, Text> ZipReader.readEntry(long maxBytes)
+Result<Unit, Text> ZipReader.skipEntry()
+Result<Unit, Text> ZipReader.close()
+
+readonly borrow Text ZipEntry.name()
+readonly long ZipEntry.size()
+readonly boolean ZipEntry.isDirectory()
+
+static Result<ZipWriter, Text> ZipWriter.create(borrow Path path, int level)
+Result<Unit, Text> ZipWriter.add(borrow Text name, borrow ByteBuffer bytes)
+Result<Unit, Text> ZipWriter.addDirectory(borrow Text name)
+Result<Unit, Text> ZipWriter.close()
+```
+
+`fromBytes` keeps an internal copy of the archive, so the borrowed buffer may be
+used or dropped after the call. `next` returns one owned metadata value at a time,
+`Ok(None)` at end, and implicitly skips an unread prior entry. `readEntry` reads
+the current file at most once, returns an owned binary buffer, and errors if the
+actual decompressed bytes exceed `maxBytes`; the archive's declared size is
+metadata only and is never used to preallocate the result. `ZipEntry.size` is the
+declared uncompressed size, or -1 when the header omits it. A negative limit, a
+second read, unsupported entry types, encrypted entries, invalid UTF-8 names,
+truncated data, and decompression or CRC failures return `Err`. Use `skipEntry`
+to discard the current entry explicitly. Directories have no file data.
+
+`ZipWriter.create` accepts levels 0 through 9: level 0 stores entries, while levels
+1 through 9 use DEFLATE. Entry names must be nonempty UTF-8 without NUL. Names,
+absolute names and `..` components are not rejected or normalized. Archives are
+never extracted automatically. Writes may leave a partial archive on error. Call
+`close()` explicitly to report final ZIP directory/close errors; dropping an open
+writer closes it best-effort and does not claim success. Reader and writer methods
+return `Err` after explicit close.
+
 ## POSIX regular expressions
 
 ```java

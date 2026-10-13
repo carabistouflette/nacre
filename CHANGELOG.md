@@ -69,6 +69,12 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   and failed steps require reset before retry. Empty
   blobs remain distinct from allocation failures. This native SQL API documents
   its single-cursor limit and does not claim JDBC parity.
+- Affine ZipReader and ZipWriter use libarchive for sequential ZIP/Zip64 reads and
+  store/DEFLATE writes. Bounded reads check decompressed output, CRC and truncation;
+  readers copy borrowed in-memory archives, entries own their UTF-8 metadata, and
+  writers require explicit close to report final directory errors. Entry names are
+  preserved without extraction, including duplicate and traversal-shaped names.
+
 - Floating min/max normalize signed-zero ties explicitly rather than relying on
   host libm's unspecified tie sign; both operand orders and same-sign zeros are
   covered by generated-program sanitizer regressions.

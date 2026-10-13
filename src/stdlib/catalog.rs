@@ -79,6 +79,9 @@ enum NativeBuiltin {
     Charset,
     Locale,
     Database,
+    ZipReader,
+    ZipWriter,
+    ZipEntry,
 }
 
 impl NativeBuiltin {
@@ -174,6 +177,9 @@ impl NativeBuiltin {
             Self::Process => NativeClass::Process,
             Self::ProcessOutput => NativeClass::ProcessOutput,
             Self::Database => NativeClass::Database,
+            Self::ZipReader => NativeClass::ZipReader,
+            Self::ZipWriter => NativeClass::ZipWriter,
+            Self::ZipEntry => NativeClass::ZipEntry,
         }
     }
 }
@@ -311,6 +317,14 @@ pub(super) const PRELUDE_UNITS: &[PreludeUnit] = &[
             Builtin { name: "WatchKind", native: None },
             Builtin { name: "Watcher", native: Some(NativeBuiltin::Watcher) },
             Builtin { name: "WatchEvent", native: Some(NativeBuiltin::WatchEvent) },
+        ],
+    },
+    PreludeUnit {
+        source: include_str!("../../stdlib/prelude/zip.ncr"),
+        builtins: &[
+            Builtin { name: "ZipReader", native: Some(NativeBuiltin::ZipReader) },
+            Builtin { name: "ZipWriter", native: Some(NativeBuiltin::ZipWriter) },
+            Builtin { name: "ZipEntry", native: Some(NativeBuiltin::ZipEntry) },
         ],
     },
     PreludeUnit {

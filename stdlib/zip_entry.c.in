@@ -1,0 +1,17 @@
+static ncr_obj_@TEXT_ID@ *@ZIP_ENTRY_NAME@(ncr_obj_@ZIP_ENTRY_ID@ *ncr_self, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line;
+    (void)ncr_column;
+    return ncr_self->name;
+}
+
+static int64_t @ZIP_ENTRY_SIZE@(ncr_obj_@ZIP_ENTRY_ID@ *ncr_self, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line;
+    (void)ncr_column;
+    return ncr_self->size;
+}
+
+static bool @ZIP_ENTRY_IS_DIRECTORY@(ncr_obj_@ZIP_ENTRY_ID@ *ncr_self, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line;
+    (void)ncr_column;
+    return ncr_self->is_directory;
+}

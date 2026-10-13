@@ -32,6 +32,7 @@ mod monotonic;
 mod regex;
 mod concurrency;
 mod cryptokeys;
+mod zip;
 mod process;
 mod crypto;
 mod big_numbers;
@@ -79,6 +80,7 @@ pub fn fields(program: &t::Program, class: C, class_id: usize) -> String {
             filesystem::fields(program, class),
         C::BinaryReader | C::BinaryWriter => binary::fields(program, class, class_id),
         C::Database => database::fields(),
+        C::ZipReader | C::ZipWriter | C::ZipEntry => zip::fields(program, class),
         C::Env => io::fields(),
         C::Command | C::Process | C::ProcessOutput => process::fields(program, class),
         C::Random => random::fields(),
@@ -125,6 +127,7 @@ pub fn drop_fields(program: &t::Program, class: C, class_id: usize) -> String {
             filesystem::drop_fields(program, class),
         C::BinaryReader | C::BinaryWriter => binary::drop_fields(program, class, class_id),
         C::Database => database::drop_fields(),
+        C::ZipReader | C::ZipWriter | C::ZipEntry => zip::drop_fields(program, class),
         C::Env => io::drop_fields(),
         C::Command | C::Process | C::ProcessOutput => process::drop_fields(program, class),
         C::Random => random::drop_fields(),
@@ -215,6 +218,7 @@ fn append_body(program: &t::Program, out: &mut String, class: &t::Class, native:
         C::SocketAddress | C::TcpListener | C::TcpStream | C::Datagram | C::UdpSocket |
         C::Uri | C::Dns => return,
         C::Path | C::File | C::Directory | C::FileInfo | C::Watcher | C::WatchEvent => return,
+        C::ZipReader | C::ZipWriter | C::ZipEntry => return,
         C::Thread(_) | C::Mutex(_) | C::Guard(_) | C::Channel(_) |
         C::Sender(_) | C::Receiver(_) => return,
         C::HttpRequest | C::HttpResponse | C::Unicode | C::Character | C::Charset | C::Locale |
@@ -296,6 +300,10 @@ pub fn implementations(program: &t::Program) -> String {
     out.push_str(&uri::percent_helpers(program, transport_needs_connect));
     out.push_str(&uri::implementation(program));
     out.push_str(&dns::implementation(program, transport_needs_connect, transport_needs_connect));
+    out.push_str(&zip::entry_implementation(program));
+    if let Some(zip) = zip::implementation(program) {
+        out.push_str(&zip);
+    }
     if let Some(filesystem) = filesystem::implementations(program) {
         out.push_str(&filesystem);
         out.push('\n');

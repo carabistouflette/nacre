@@ -151,7 +151,9 @@ impl Tables {
                         t::NativeClass::TlsConfig | t::NativeClass::TlsStream |
                         t::NativeClass::WebSocket | t::NativeClass::WebSocketMessage |
                         t::NativeClass::Command | t::NativeClass::Process |
-                        t::NativeClass::ProcessOutput | t::NativeClass::Database) | None => (None, None, None),
+                        t::NativeClass::ProcessOutput | t::NativeClass::Database |
+                        t::NativeClass::ZipReader | t::NativeClass::ZipWriter |
+                        t::NativeClass::ZipEntry) | None => (None, None, None),
                 };
                 for native_type in [native_first, native_second, native_third].into_iter().flatten() {
                     sendable &= value_sendable(tables, native_type, states);
@@ -332,6 +334,9 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
             Some(a::NativeClass::Command) => Some(t::NativeClass::Command),
             Some(a::NativeClass::Process) => Some(t::NativeClass::Process),
             Some(a::NativeClass::ProcessOutput) => Some(t::NativeClass::ProcessOutput),
+            Some(a::NativeClass::ZipReader) => Some(t::NativeClass::ZipReader),
+            Some(a::NativeClass::ZipWriter) => Some(t::NativeClass::ZipWriter),
+            Some(a::NativeClass::ZipEntry) => Some(t::NativeClass::ZipEntry),
             None => None,
         };
     }

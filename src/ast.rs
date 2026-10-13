@@ -33,6 +33,7 @@ pub enum NativeClass {
     CryptoKey, CryptoDigest, CryptoMac, Certificate,
     Watcher, WatchEvent, BinaryReader, BinaryWriter, Uri, Dns,
     TlsConfig, TlsStream, WebSocket, WebSocketMessage,
+    ZipReader, ZipWriter, ZipEntry,
     Thread(Type), Mutex(Type), Guard(Type), Channel(Type), Sender(Type), Receiver(Type),
     Env, Command, Process, ProcessOutput, Database,
 }

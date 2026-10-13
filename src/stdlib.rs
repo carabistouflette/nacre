@@ -69,6 +69,7 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
             C::Compression | C::Checksums | C::BigInt | C::BigDecimal |
             C::CryptoKey | C::CryptoDigest | C::CryptoMac | C::Certificate |
             C::TlsConfig | C::TlsStream | C::WebSocket | C::WebSocketMessage |
+            C::ZipReader | C::ZipWriter | C::ZipEntry |
             C::Thread(_) | C::Mutex(_) | C::Guard(_) | C::Channel(_) |
             C::Sender(_) | C::Receiver(_) | C::Env | C::Command | C::Process | C::ProcessOutput |
             C::Uri | C::Dns =>
@@ -371,6 +372,19 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
         (C::BinaryWriter, "writeUtf8") => M::BinaryWriterWriteUtf8,
         (C::BinaryWriter, "bytes") => M::BinaryWriterBytes,
         (C::BinaryWriter, "finish") => M::BinaryWriterFinish,
+        (C::ZipReader, "open") => M::ZipReaderOpen,
+        (C::ZipReader, "fromBytes") => M::ZipReaderFromBytes,
+        (C::ZipReader, "next") => M::ZipReaderNext,
+        (C::ZipReader, "readEntry") => M::ZipReaderReadEntry,
+        (C::ZipReader, "skipEntry") => M::ZipReaderSkipEntry,
+        (C::ZipReader, "close") => M::ZipReaderClose,
+        (C::ZipEntry, "name") => M::ZipEntryName,
+        (C::ZipEntry, "size") => M::ZipEntrySize,
+        (C::ZipEntry, "isDirectory") => M::ZipEntryIsDirectory,
+        (C::ZipWriter, "create") => M::ZipWriterCreate,
+        (C::ZipWriter, "add") => M::ZipWriterAdd,
+        (C::ZipWriter, "addDirectory") => M::ZipWriterAddDirectory,
+        (C::ZipWriter, "close") => M::ZipWriterClose,
         (C::Text, "append") => M::TextAppend,
         (C::Text, "appendInt") => M::TextAppendInt,
         (C::Text, "appendByte") => M::TextAppendByte,

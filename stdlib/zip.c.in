@@ -1,0 +1,460 @@
+#include <archive.h>
+#include <archive_entry.h>
+/* nacre-link: archive */
+
+static size_t ncr_zip_error_message(char *message, size_t capacity, const char *operation, struct archive *archive) {
+    const char *detail = archive == NULL ? NULL : archive_error_string(archive);
+    int written;
+    if (detail != NULL && ncr_utf8_valid((const unsigned char *)detail, strlen(detail))) {
+        written = snprintf(message, capacity, "%s: %s", operation, detail);
+    } else {
+        written = snprintf(message, capacity, "%s failed", operation);
+    }
+    if (written < 0) {
+        if (capacity != 0) { message[0] = '\0'; }
+        return 0;
+    }
+    return (size_t)written < capacity ? (size_t)written : capacity - 1;
+}
+
+#define NCR_ZIP_RETURN_ERROR(result_id, operation, archive, line, column) do { \
+    char ncr_zip_message[512]; \
+    size_t ncr_zip_length = ncr_zip_error_message(ncr_zip_message, sizeof(ncr_zip_message), operation, archive); \
+    return ncr_result_error_ ## result_id(ncr_zip_message, ncr_zip_length, line, column); \
+} while (0)
+
+static void ncr_zip_reader_release(void *handle) {
+    if (handle != NULL) { (void)archive_read_free((struct archive *)handle); }
+}
+
+static void ncr_zip_writer_release(void *handle) {
+    if (handle != NULL) {
+        struct archive *archive = (struct archive *)handle;
+        (void)archive_write_close(archive);
+        (void)archive_write_free(archive);
+    }
+}
+
+static bool ncr_zip_buffer_append_@BUFFER_ID@(ncr_obj_@BUFFER_ID@ *buffer, const unsigned char *bytes,
+    size_t amount, size_t maximum, size_t line, size_t column) {
+    if (buffer->length > maximum || amount > maximum - buffer->length) { return false; }
+    size_t required = buffer->length + amount;
+    if (required > buffer->capacity) {
+        size_t grown = buffer->capacity;
+        if (grown == 0) { grown = maximum < 16 ? maximum : 16; }
+        while (grown < required) {
+            if (grown > maximum / 2) { grown = maximum; break; }
+            grown *= 2;
+        }
+        if (grown < required) { return false; }
+        unsigned char *next = ncr_allocate(grown, line, column);
+        if (buffer->length > 0) { memcpy(next, buffer->bytes, buffer->length); }
+        ncr_deallocate(buffer->bytes);
+        buffer->bytes = next;
+        buffer->capacity = grown;
+    }
+    if (amount > 0) { memcpy(buffer->bytes + buffer->length, bytes, amount); }
+    buffer->length = required;
+    return true;
+}
+
+static ncr_obj_@OPEN_RESULT_ID@ @ZIP_READER_OPEN@(ncr_obj_@PATH_ID@ *ncr_v_@OPEN_PATH_ID@, size_t ncr_line, size_t ncr_column) {
+    ncr_obj_@TEXT_ID@ *path = ncr_v_@OPEN_PATH_ID@->text;
+    if (path == NULL || path->length <= 0 || path->bytes == NULL
+        || memchr(path->bytes, 0, (size_t)path->length) != NULL) {
+        return ncr_result_error_@OPEN_RESULT_ID@("ZipReader.open: invalid path", sizeof("ZipReader.open: invalid path") - 1, ncr_line, ncr_column);
+    }
+    size_t path_length = (size_t)path->length;
+    if (path_length == SIZE_MAX) {
+        return ncr_result_error_@OPEN_RESULT_ID@("ZipReader.open: path is too long", sizeof("ZipReader.open: path is too long") - 1, ncr_line, ncr_column);
+    }
+    char *filename = malloc(path_length + 1);
+    if (filename == NULL) {
+        return ncr_result_error_@OPEN_RESULT_ID@("ZipReader.open: unable to allocate path", sizeof("ZipReader.open: unable to allocate path") - 1, ncr_line, ncr_column);
+    }
+    memcpy(filename, path->bytes, path_length);
+    filename[path_length] = '\0';
+    struct archive *archive = archive_read_new();
+    if (archive == NULL) {
+        free(filename);
+        return ncr_result_error_@OPEN_RESULT_ID@("ZipReader.open: unable to allocate archive reader", sizeof("ZipReader.open: unable to allocate archive reader") - 1, ncr_line, ncr_column);
+    }
+    int status = archive_read_support_filter_all(archive);
+    if (status == ARCHIVE_OK) { status = archive_read_support_format_zip(archive); }
+    if (status == ARCHIVE_OK) { status = archive_read_open_filename(archive, filename, 65536); }
+    free(filename);
+    if (status != ARCHIVE_OK) {
+        char message[512];
+        size_t length = ncr_zip_error_message(message, sizeof(message), "ZipReader.open", archive);
+        (void)archive_read_free(archive);
+        return ncr_result_error_@OPEN_RESULT_ID@(message, length, ncr_line, ncr_column);
+    }
+    ncr_obj_@ZIP_READER_ID@ *reader = ncr_allocate(sizeof(*reader), ncr_line, ncr_column);
+    reader->archive = archive;
+    reader->release = ncr_zip_reader_release;
+    reader->memory = NULL;
+    reader->entry_active = false;
+    reader->entry_read = false;
+    reader->eof = false;
+    return (ncr_obj_@OPEN_RESULT_ID@){ .tag = @OPEN_OK_TAG@, .data.v@OPEN_OK_TAG@.f0 = reader };
+}
+
+static ncr_obj_@FROM_BYTES_RESULT_ID@ @ZIP_READER_FROM_BYTES@(ncr_obj_@BUFFER_ID@ *ncr_v_@FROM_BYTES_BUFFER_ID@, size_t ncr_line, size_t ncr_column) {
+    size_t length = ncr_v_@FROM_BYTES_BUFFER_ID@->length;
+    unsigned char *copy = NULL;
+    if (length > 0) {
+        copy = malloc(length);
+        if (copy == NULL) {
+            return ncr_result_error_@FROM_BYTES_RESULT_ID@("ZipReader.fromBytes: unable to allocate archive copy", sizeof("ZipReader.fromBytes: unable to allocate archive copy") - 1, ncr_line, ncr_column);
+        }
+        memcpy(copy, ncr_v_@FROM_BYTES_BUFFER_ID@->bytes, length);
+    }
+    struct archive *archive = archive_read_new();
+    if (archive == NULL) {
+        free(copy);
+        return ncr_result_error_@FROM_BYTES_RESULT_ID@("ZipReader.fromBytes: unable to allocate archive reader", sizeof("ZipReader.fromBytes: unable to allocate archive reader") - 1, ncr_line, ncr_column);
+    }
+    int status = archive_read_support_filter_all(archive);
+    if (status == ARCHIVE_OK) { status = archive_read_support_format_zip(archive); }
+    static const unsigned char empty_archive_bytes[1] = { 0 };
+    const void *archive_bytes = copy == NULL ? (const void *)empty_archive_bytes : (const void *)copy;
+    if (status == ARCHIVE_OK) { status = archive_read_open_memory(archive, archive_bytes, length); }
+    if (status != ARCHIVE_OK) {
+        char message[512];
+        size_t message_length = ncr_zip_error_message(message, sizeof(message), "ZipReader.fromBytes", archive);
+        (void)archive_read_free(archive);
+        free(copy);
+        return ncr_result_error_@FROM_BYTES_RESULT_ID@(message, message_length, ncr_line, ncr_column);
+    }
+    ncr_obj_@ZIP_READER_ID@ *reader = ncr_allocate(sizeof(*reader), ncr_line, ncr_column);
+    reader->archive = archive;
+    reader->release = ncr_zip_reader_release;
+    reader->memory = copy;
+    reader->entry_active = false;
+    reader->entry_read = false;
+    reader->eof = false;
+    return (ncr_obj_@FROM_BYTES_RESULT_ID@){ .tag = @FROM_BYTES_OK_TAG@, .data.v@FROM_BYTES_OK_TAG@.f0 = reader };
+}
+
+static ncr_obj_@NEXT_RESULT_ID@ @ZIP_READER_NEXT@(ncr_obj_@ZIP_READER_ID@ *ncr_self, size_t ncr_line, size_t ncr_column) {
+    struct archive *archive = (struct archive *)ncr_self->archive;
+    if (archive == NULL) {
+        return ncr_result_error_@NEXT_RESULT_ID@("ZipReader.next: handle is closed", sizeof("ZipReader.next: handle is closed") - 1, ncr_line, ncr_column);
+    }
+    if (ncr_self->eof) {
+        ncr_obj_@OPTION_ID@ option = { .tag = @OPTION_NONE_TAG@, .data.v@OPTION_NONE_TAG@.ncr_empty = 0 };
+        return (ncr_obj_@NEXT_RESULT_ID@){ .tag = @NEXT_OK_TAG@, .data.v@NEXT_OK_TAG@.f0 = option };
+    }
+    if (ncr_self->entry_active) {
+        int skip_status = archive_read_data_skip(archive);
+        if (skip_status != ARCHIVE_OK) { NCR_ZIP_RETURN_ERROR(@NEXT_RESULT_ID@, "ZipReader.next", archive, ncr_line, ncr_column); }
+        ncr_self->entry_active = false;
+        ncr_self->entry_read = false;
+    }
+    struct archive_entry *header = NULL;
+    int status = archive_read_next_header(archive, &header);
+    if (status == ARCHIVE_EOF) {
+        ncr_self->eof = true;
+        ncr_obj_@OPTION_ID@ option = { .tag = @OPTION_NONE_TAG@, .data.v@OPTION_NONE_TAG@.ncr_empty = 0 };
+        return (ncr_obj_@NEXT_RESULT_ID@){ .tag = @NEXT_OK_TAG@, .data.v@NEXT_OK_TAG@.f0 = option };
+    }
+    if (status != ARCHIVE_OK) { NCR_ZIP_RETURN_ERROR(@NEXT_RESULT_ID@, "ZipReader.next", archive, ncr_line, ncr_column); }
+    ncr_self->entry_active = true;
+    ncr_self->entry_read = false;
+    if (archive_entry_is_encrypted(header) != 0) {
+        return ncr_result_error_@NEXT_RESULT_ID@("ZipReader.next: encrypted entries are unsupported", sizeof("ZipReader.next: encrypted entries are unsupported") - 1, ncr_line, ncr_column);
+    }
+    mode_t filetype = archive_entry_filetype(header);
+    bool is_directory = filetype == AE_IFDIR;
+    if (!is_directory && filetype != AE_IFREG) {
+        return ncr_result_error_@NEXT_RESULT_ID@("ZipReader.next: unsupported entry type", sizeof("ZipReader.next: unsupported entry type") - 1, ncr_line, ncr_column);
+    }
+    const char *pathname = archive_entry_pathname_utf8(header);
+    if (pathname == NULL) {
+        return ncr_result_error_@NEXT_RESULT_ID@("ZipReader.next: entry name is not UTF-8", sizeof("ZipReader.next: entry name is not UTF-8") - 1, ncr_line, ncr_column);
+    }
+    size_t name_length = strlen(pathname);
+    if (!ncr_utf8_valid((const unsigned char *)pathname, name_length)) {
+        return ncr_result_error_@NEXT_RESULT_ID@("ZipReader.next: entry name is not UTF-8", sizeof("ZipReader.next: entry name is not UTF-8") - 1, ncr_line, ncr_column);
+    }
+    int64_t size = -1;
+    if (archive_entry_size_is_set(header)) {
+        la_int64_t declared_size = archive_entry_size(header);
+        if (declared_size < 0) {
+            return ncr_result_error_@NEXT_RESULT_ID@("ZipReader.next: invalid declared entry size", sizeof("ZipReader.next: invalid declared entry size") - 1, ncr_line, ncr_column);
+        }
+        size = (int64_t)declared_size;
+    } else if (is_directory) {
+        size = 0;
+    }
+    ncr_obj_@TEXT_ID@ *name = @TEXT_FROM_BYTES@((const unsigned char *)pathname, name_length, ncr_line, ncr_column);
+    ncr_obj_@ZIP_ENTRY_ID@ *entry = ncr_allocate(sizeof(*entry), ncr_line, ncr_column);
+    entry->name = name;
+    entry->size = size;
+    entry->is_directory = is_directory;
+    ncr_obj_@OPTION_ID@ option = { .tag = @OPTION_SOME_TAG@, .data.v@OPTION_SOME_TAG@.f0 = entry };
+    return (ncr_obj_@NEXT_RESULT_ID@){ .tag = @NEXT_OK_TAG@, .data.v@NEXT_OK_TAG@.f0 = option };
+}
+
+static ncr_obj_@READ_RESULT_ID@ @ZIP_READER_READ_ENTRY@(ncr_obj_@ZIP_READER_ID@ *ncr_self, int64_t ncr_v_@READ_MAX_BYTES_ID@, size_t ncr_line, size_t ncr_column) {
+    struct archive *archive = (struct archive *)ncr_self->archive;
+    if (archive == NULL) {
+        return ncr_result_error_@READ_RESULT_ID@("ZipReader.readEntry: handle is closed", sizeof("ZipReader.readEntry: handle is closed") - 1, ncr_line, ncr_column);
+    }
+    if (!ncr_self->entry_active) {
+        return ncr_result_error_@READ_RESULT_ID@("ZipReader.readEntry: no current entry", sizeof("ZipReader.readEntry: no current entry") - 1, ncr_line, ncr_column);
+    }
+    if (ncr_self->entry_read) {
+        return ncr_result_error_@READ_RESULT_ID@("ZipReader.readEntry: current entry was already read", sizeof("ZipReader.readEntry: current entry was already read") - 1, ncr_line, ncr_column);
+    }
+    if (ncr_v_@READ_MAX_BYTES_ID@ < 0) {
+        return ncr_result_error_@READ_RESULT_ID@("ZipReader.readEntry: maxBytes must be non-negative", sizeof("ZipReader.readEntry: maxBytes must be non-negative") - 1, ncr_line, ncr_column);
+    }
+    uint64_t requested_maximum = (uint64_t)ncr_v_@READ_MAX_BYTES_ID@;
+    if (requested_maximum > (uint64_t)SIZE_MAX) {
+        return ncr_result_error_@READ_RESULT_ID@("ZipReader.readEntry: maxBytes exceeds platform capacity", sizeof("ZipReader.readEntry: maxBytes exceeds platform capacity") - 1, ncr_line, ncr_column);
+    }
+    size_t maximum = (size_t)requested_maximum;
+    ncr_self->entry_read = true;
+    ncr_obj_@BUFFER_ID@ *buffer = ncr_allocate(sizeof(*buffer), ncr_line, ncr_column);
+    buffer->bytes = NULL;
+    buffer->length = 0;
+    buffer->capacity = 0;
+    unsigned char chunk[8192];
+    for (;;) {
+        uint64_t remaining = requested_maximum - (uint64_t)buffer->length;
+        size_t amount = sizeof(chunk);
+        if ((uint64_t)amount > remaining) { amount = (size_t)(remaining + UINT64_C(1)); }
+        la_ssize_t count = archive_read_data(archive, chunk, amount);
+        if (count < 0) {
+            ncr_drop_@BUFFER_ID@(buffer);
+            NCR_ZIP_RETURN_ERROR(@READ_RESULT_ID@, "ZipReader.readEntry", archive, ncr_line, ncr_column);
+        }
+        if (count == 0) { break; }
+        if ((uint64_t)count > remaining) {
+            ncr_drop_@BUFFER_ID@(buffer);
+            return ncr_result_error_@READ_RESULT_ID@("ZipReader.readEntry: entry exceeds maxBytes", sizeof("ZipReader.readEntry: entry exceeds maxBytes") - 1, ncr_line, ncr_column);
+        }
+        if (!ncr_zip_buffer_append_@BUFFER_ID@(buffer, chunk, (size_t)count, maximum, ncr_line, ncr_column)) {
+            ncr_drop_@BUFFER_ID@(buffer);
+            return ncr_result_error_@READ_RESULT_ID@("ZipReader.readEntry: entry exceeds maxBytes", sizeof("ZipReader.readEntry: entry exceeds maxBytes") - 1, ncr_line, ncr_column);
+        }
+    }
+    return (ncr_obj_@READ_RESULT_ID@){ .tag = @READ_OK_TAG@, .data.v@READ_OK_TAG@.f0 = buffer };
+}
+
+static ncr_obj_@SKIP_RESULT_ID@ @ZIP_READER_SKIP_ENTRY@(ncr_obj_@ZIP_READER_ID@ *ncr_self, size_t ncr_line, size_t ncr_column) {
+    struct archive *archive = (struct archive *)ncr_self->archive;
+    if (archive == NULL) {
+        return ncr_result_error_@SKIP_RESULT_ID@("ZipReader.skipEntry: handle is closed", sizeof("ZipReader.skipEntry: handle is closed") - 1, ncr_line, ncr_column);
+    }
+    if (!ncr_self->entry_active) {
+        return ncr_result_error_@SKIP_RESULT_ID@("ZipReader.skipEntry: no current entry", sizeof("ZipReader.skipEntry: no current entry") - 1, ncr_line, ncr_column);
+    }
+    int status = archive_read_data_skip(archive);
+    if (status != ARCHIVE_OK) { NCR_ZIP_RETURN_ERROR(@SKIP_RESULT_ID@, "ZipReader.skipEntry", archive, ncr_line, ncr_column); }
+    ncr_self->entry_active = false;
+    ncr_self->entry_read = false;
+    return (ncr_obj_@SKIP_RESULT_ID@){ .tag = @SKIP_OK_TAG@, .data.v@SKIP_OK_TAG@.f0 = UINT8_C(0) };
+}
+
+static ncr_obj_@READER_CLOSE_RESULT_ID@ @ZIP_READER_CLOSE@(ncr_obj_@ZIP_READER_ID@ *ncr_self, size_t ncr_line, size_t ncr_column) {
+    struct archive *archive = (struct archive *)ncr_self->archive;
+    if (archive == NULL) {
+        return ncr_result_error_@READER_CLOSE_RESULT_ID@("ZipReader.close: handle is closed", sizeof("ZipReader.close: handle is closed") - 1, ncr_line, ncr_column);
+    }
+    ncr_self->archive = NULL;
+    ncr_self->release = NULL;
+    ncr_self->entry_active = false;
+    ncr_self->entry_read = false;
+    ncr_self->eof = false;
+    int close_status = archive_read_close(archive);
+    char message[512];
+    size_t message_length = 0;
+    if (close_status != ARCHIVE_OK) {
+        message_length = ncr_zip_error_message(message, sizeof(message), "ZipReader.close", archive);
+    }
+    int free_status = archive_read_free(archive);
+    free(ncr_self->memory);
+    ncr_self->memory = NULL;
+    if (close_status == ARCHIVE_OK && free_status != ARCHIVE_OK) {
+        message_length = ncr_zip_error_message(message, sizeof(message), "ZipReader.close", NULL);
+    }
+    if (close_status != ARCHIVE_OK || free_status != ARCHIVE_OK) {
+        return ncr_result_error_@READER_CLOSE_RESULT_ID@(message, message_length, ncr_line, ncr_column);
+    }
+    return (ncr_obj_@READER_CLOSE_RESULT_ID@){ .tag = @READER_CLOSE_OK_TAG@, .data.v@READER_CLOSE_OK_TAG@.f0 = UINT8_C(0) };
+}
+
+static ncr_obj_@CREATE_RESULT_ID@ @ZIP_WRITER_CREATE@(ncr_obj_@PATH_ID@ *ncr_v_@CREATE_PATH_ID@, int32_t ncr_v_@CREATE_LEVEL_ID@, size_t ncr_line, size_t ncr_column) {
+    if (ncr_v_@CREATE_LEVEL_ID@ < 0 || ncr_v_@CREATE_LEVEL_ID@ > 9) {
+        return ncr_result_error_@CREATE_RESULT_ID@("ZipWriter.create: level must be between 0 and 9", sizeof("ZipWriter.create: level must be between 0 and 9") - 1, ncr_line, ncr_column);
+    }
+    ncr_obj_@TEXT_ID@ *path = ncr_v_@CREATE_PATH_ID@->text;
+    if (path == NULL || path->length <= 0 || path->bytes == NULL
+        || memchr(path->bytes, 0, (size_t)path->length) != NULL) {
+        return ncr_result_error_@CREATE_RESULT_ID@("ZipWriter.create: invalid path", sizeof("ZipWriter.create: invalid path") - 1, ncr_line, ncr_column);
+    }
+    size_t path_length = (size_t)path->length;
+    if (path_length == SIZE_MAX) {
+        return ncr_result_error_@CREATE_RESULT_ID@("ZipWriter.create: path is too long", sizeof("ZipWriter.create: path is too long") - 1, ncr_line, ncr_column);
+    }
+    char *filename = malloc(path_length + 1);
+    if (filename == NULL) {
+        return ncr_result_error_@CREATE_RESULT_ID@("ZipWriter.create: unable to allocate path", sizeof("ZipWriter.create: unable to allocate path") - 1, ncr_line, ncr_column);
+    }
+    memcpy(filename, path->bytes, path_length);
+    filename[path_length] = '\0';
+    struct archive *archive = archive_write_new();
+    if (archive == NULL) {
+        free(filename);
+        return ncr_result_error_@CREATE_RESULT_ID@("ZipWriter.create: unable to allocate archive writer", sizeof("ZipWriter.create: unable to allocate archive writer") - 1, ncr_line, ncr_column);
+    }
+    int status = archive_write_set_format_zip(archive);
+    if (status == ARCHIVE_OK) {
+        status = ncr_v_@CREATE_LEVEL_ID@ == 0
+            ? archive_write_zip_set_compression_store(archive)
+            : archive_write_zip_set_compression_deflate(archive);
+    }
+    char compression_level[2] = { (char)('0' + ncr_v_@CREATE_LEVEL_ID@), '\0' };
+    if (status == ARCHIVE_OK && ncr_v_@CREATE_LEVEL_ID@ > 0) {
+        status = archive_write_set_format_option(archive, "zip", "compression-level", compression_level);
+    }
+    if (status == ARCHIVE_OK) { status = archive_write_open_filename(archive, filename); }
+    free(filename);
+    if (status != ARCHIVE_OK) {
+        char message[512];
+        size_t length = ncr_zip_error_message(message, sizeof(message), "ZipWriter.create", archive);
+        (void)archive_write_free(archive);
+        return ncr_result_error_@CREATE_RESULT_ID@(message, length, ncr_line, ncr_column);
+    }
+    ncr_obj_@ZIP_WRITER_ID@ *writer = ncr_allocate(sizeof(*writer), ncr_line, ncr_column);
+    writer->archive = archive;
+    writer->release = ncr_zip_writer_release;
+    writer->failed = false;
+    return (ncr_obj_@CREATE_RESULT_ID@){ .tag = @CREATE_OK_TAG@, .data.v@CREATE_OK_TAG@.f0 = writer };
+}
+
+static bool ncr_zip_name_copy(const ncr_obj_@TEXT_ID@ *name, char **copy) {
+    if (name == NULL || name->length <= 0 || name->bytes == NULL
+        || memchr(name->bytes, 0, (size_t)name->length) != NULL
+        || !ncr_utf8_valid(name->bytes, (size_t)name->length)) { return false; }
+    size_t length = (size_t)name->length;
+    if (length == SIZE_MAX) { return false; }
+    char *result = malloc(length + 1);
+    if (result == NULL) { return false; }
+    memcpy(result, name->bytes, length);
+    result[length] = '\0';
+    *copy = result;
+    return true;
+}
+
+static ncr_obj_@ADD_RESULT_ID@ @ZIP_WRITER_ADD@(ncr_obj_@ZIP_WRITER_ID@ *ncr_self, ncr_obj_@TEXT_ID@ *ncr_v_@ADD_NAME_ID@, ncr_obj_@BUFFER_ID@ *ncr_v_@ADD_BYTES_ID@, size_t ncr_line, size_t ncr_column) {
+    struct archive *archive = (struct archive *)ncr_self->archive;
+    if (archive == NULL) {
+        return ncr_result_error_@ADD_RESULT_ID@("ZipWriter.add: handle is closed", sizeof("ZipWriter.add: handle is closed") - 1, ncr_line, ncr_column);
+    }
+    if (ncr_self->failed) {
+        return ncr_result_error_@ADD_RESULT_ID@("ZipWriter.add: writer is in a failed state", sizeof("ZipWriter.add: writer is in a failed state") - 1, ncr_line, ncr_column);
+    }
+    char *name = NULL;
+    if (!ncr_zip_name_copy(ncr_v_@ADD_NAME_ID@, &name)) {
+        return ncr_result_error_@ADD_RESULT_ID@("ZipWriter.add: entry name must be nonempty UTF-8 without NUL", sizeof("ZipWriter.add: entry name must be nonempty UTF-8 without NUL") - 1, ncr_line, ncr_column);
+    }
+    struct archive_entry *entry = archive_entry_new();
+    if (entry == NULL) {
+        free(name);
+        return ncr_result_error_@ADD_RESULT_ID@("ZipWriter.add: unable to allocate entry", sizeof("ZipWriter.add: unable to allocate entry") - 1, ncr_line, ncr_column);
+    }
+    archive_entry_set_pathname_utf8(entry, name);
+    archive_entry_set_filetype(entry, AE_IFREG);
+    archive_entry_set_perm(entry, 0644);
+    archive_entry_set_size(entry, (la_int64_t)ncr_v_@ADD_BYTES_ID@->length);
+    int status = archive_write_header(archive, entry);
+    archive_entry_free(entry);
+    free(name);
+    if (status != ARCHIVE_OK) {
+        ncr_self->failed = true;
+        NCR_ZIP_RETURN_ERROR(@ADD_RESULT_ID@, "ZipWriter.add header", archive, ncr_line, ncr_column);
+    }
+    size_t offset = 0;
+    while (offset < ncr_v_@ADD_BYTES_ID@->length) {
+        size_t amount = ncr_v_@ADD_BYTES_ID@->length - offset;
+        if (amount > (size_t)SSIZE_MAX) { amount = (size_t)SSIZE_MAX; }
+        la_ssize_t count = archive_write_data(archive, ncr_v_@ADD_BYTES_ID@->bytes + offset, amount);
+        if (count <= 0) {
+            ncr_self->failed = true;
+            NCR_ZIP_RETURN_ERROR(@ADD_RESULT_ID@, "ZipWriter.add data", archive, ncr_line, ncr_column);
+        }
+        offset += (size_t)count;
+    }
+    int finish_status = archive_write_finish_entry(archive);
+    if (finish_status != ARCHIVE_OK) {
+        ncr_self->failed = true;
+        NCR_ZIP_RETURN_ERROR(@ADD_RESULT_ID@, "ZipWriter.add finish", archive, ncr_line, ncr_column);
+    }
+    return (ncr_obj_@ADD_RESULT_ID@){ .tag = @ADD_OK_TAG@, .data.v@ADD_OK_TAG@.f0 = UINT8_C(0) };
+}
+
+static ncr_obj_@ADD_DIRECTORY_RESULT_ID@ @ZIP_WRITER_ADD_DIRECTORY@(ncr_obj_@ZIP_WRITER_ID@ *ncr_self, ncr_obj_@TEXT_ID@ *ncr_v_@ADD_DIRECTORY_NAME_ID@, size_t ncr_line, size_t ncr_column) {
+    struct archive *archive = (struct archive *)ncr_self->archive;
+    if (archive == NULL) {
+        return ncr_result_error_@ADD_DIRECTORY_RESULT_ID@("ZipWriter.addDirectory: handle is closed", sizeof("ZipWriter.addDirectory: handle is closed") - 1, ncr_line, ncr_column);
+    }
+    if (ncr_self->failed) {
+        return ncr_result_error_@ADD_DIRECTORY_RESULT_ID@("ZipWriter.addDirectory: writer is in a failed state", sizeof("ZipWriter.addDirectory: writer is in a failed state") - 1, ncr_line, ncr_column);
+    }
+    char *name = NULL;
+    if (!ncr_zip_name_copy(ncr_v_@ADD_DIRECTORY_NAME_ID@, &name)) {
+        return ncr_result_error_@ADD_DIRECTORY_RESULT_ID@("ZipWriter.addDirectory: entry name must be nonempty UTF-8 without NUL", sizeof("ZipWriter.addDirectory: entry name must be nonempty UTF-8 without NUL") - 1, ncr_line, ncr_column);
+    }
+    struct archive_entry *entry = archive_entry_new();
+    if (entry == NULL) {
+        free(name);
+        return ncr_result_error_@ADD_DIRECTORY_RESULT_ID@("ZipWriter.addDirectory: unable to allocate entry", sizeof("ZipWriter.addDirectory: unable to allocate entry") - 1, ncr_line, ncr_column);
+    }
+    archive_entry_set_pathname_utf8(entry, name);
+    archive_entry_set_filetype(entry, AE_IFDIR);
+    archive_entry_set_perm(entry, 0755);
+    archive_entry_set_size(entry, 0);
+    int status = archive_write_header(archive, entry);
+    archive_entry_free(entry);
+    free(name);
+    if (status != ARCHIVE_OK) {
+        ncr_self->failed = true;
+        NCR_ZIP_RETURN_ERROR(@ADD_DIRECTORY_RESULT_ID@, "ZipWriter.addDirectory", archive, ncr_line, ncr_column);
+    }
+    int finish_status = archive_write_finish_entry(archive);
+    if (finish_status != ARCHIVE_OK) {
+        ncr_self->failed = true;
+        NCR_ZIP_RETURN_ERROR(@ADD_DIRECTORY_RESULT_ID@, "ZipWriter.addDirectory finish", archive, ncr_line, ncr_column);
+    }
+    return (ncr_obj_@ADD_DIRECTORY_RESULT_ID@){ .tag = @ADD_DIRECTORY_OK_TAG@, .data.v@ADD_DIRECTORY_OK_TAG@.f0 = UINT8_C(0) };
+}
+
+static ncr_obj_@WRITER_CLOSE_RESULT_ID@ @ZIP_WRITER_CLOSE@(ncr_obj_@ZIP_WRITER_ID@ *ncr_self, size_t ncr_line, size_t ncr_column) {
+    struct archive *archive = (struct archive *)ncr_self->archive;
+    if (archive == NULL) {
+        return ncr_result_error_@WRITER_CLOSE_RESULT_ID@("ZipWriter.close: handle is closed", sizeof("ZipWriter.close: handle is closed") - 1, ncr_line, ncr_column);
+    }
+    bool earlier_failure = ncr_self->failed;
+    ncr_self->archive = NULL;
+    ncr_self->release = NULL;
+    int close_status = archive_write_close(archive);
+    char message[512];
+    size_t message_length = 0;
+    if (close_status != ARCHIVE_OK) {
+        message_length = ncr_zip_error_message(message, sizeof(message), "ZipWriter.close", archive);
+    }
+    int free_status = archive_write_free(archive);
+    if (close_status == ARCHIVE_OK && free_status != ARCHIVE_OK) {
+        message_length = ncr_zip_error_message(message, sizeof(message), "ZipWriter.close", NULL);
+    }
+    if (close_status != ARCHIVE_OK || free_status != ARCHIVE_OK) {
+        return ncr_result_error_@WRITER_CLOSE_RESULT_ID@(message, message_length, ncr_line, ncr_column);
+    }
+    if (earlier_failure) {
+        return ncr_result_error_@WRITER_CLOSE_RESULT_ID@("ZipWriter.close: an earlier entry write failed", sizeof("ZipWriter.close: an earlier entry write failed") - 1, ncr_line, ncr_column);
+    }
+    return (ncr_obj_@WRITER_CLOSE_RESULT_ID@){ .tag = @WRITER_CLOSE_OK_TAG@, .data.v@WRITER_CLOSE_OK_TAG@.f0 = UINT8_C(0) };
+}
