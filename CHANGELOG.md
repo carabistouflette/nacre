@@ -135,9 +135,12 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   exact bytes and separators without normalization; invalid complete UTF-8 names
   and embedded NUL are rejected before conversion. Header rejection leaves no
   readable current entry and permits advancement. The pinned private libarchive
-  correction validates EOCD comment extent and parsed directory entry counts and
-  searches the entire legal 65,557-byte EOCD/comment range while retaining strict
-  seekable ZIP/Zip64 handling without streaming fallback.
+  correction is generated against the exact release tarball and validates EOCD
+  comment extent plus directory byte/entry counts. It searches the entire legal
+  65,557-byte EOCD/comment range without stopping at invalid embedded signatures,
+  reads preceding Zip64 locators separately, and corrects SFX-relative offsets
+  after Zip64 expansion. Raw UTF-8 storage uses a fallible copy. Strict seekable
+  ZIP/Zip64 handling is retained without streaming fallback.
 
 - Affine XML uses libxml2 for namespace-aware DOM/XPath, mutation, serialization,
   XSD validation, incremental pull events with stable owned snapshots, and

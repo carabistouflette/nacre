@@ -542,18 +542,23 @@ fn append_le32(bytes: &mut Vec<u8>, value: u32) {
     bytes.extend_from_slice(&value.to_le_bytes());
 }
 
+fn append_le64(bytes: &mut Vec<u8>, value: u64) {
+    bytes.extend_from_slice(&value.to_le_bytes());
+}
+
 fn make_zip(
     entries: &[(&[u8], u16)],
     comment: &[u8],
     declared_entry_count: Option<u16>,
     declared_comment_length: Option<u16>,
+    zip64: bool,
 ) -> Vec<u8> {
     let mut bytes = Vec::new();
     let mut central = Vec::new();
     for &(name, flags) in entries {
         let local_offset = bytes.len() as u32;
         bytes.extend_from_slice(b"PK\x03\x04");
-        append_le16(&mut bytes, 20);
+        append_le16(&mut bytes, if zip64 { 45 } else { 20 });
         append_le16(&mut bytes, flags);
         append_le16(&mut bytes, 0);
         append_le16(&mut bytes, 0);
@@ -567,7 +572,7 @@ fn make_zip(
 
         central.extend_from_slice(b"PK\x01\x02");
         append_le16(&mut central, 20);
-        append_le16(&mut central, 20);
+        append_le16(&mut central, if zip64 { 45 } else { 20 });
         append_le16(&mut central, flags);
         append_le16(&mut central, 0);
         append_le16(&mut central, 0);
@@ -576,26 +581,48 @@ fn make_zip(
         append_le32(&mut central, 0);
         append_le32(&mut central, 0);
         append_le16(&mut central, name.len() as u16);
-        append_le16(&mut central, 0);
+        append_le16(&mut central, if zip64 { 12 } else { 0 });
         append_le16(&mut central, 0);
         append_le16(&mut central, 0);
         append_le16(&mut central, 0);
         append_le32(&mut central, 0);
-        append_le32(&mut central, local_offset);
+        append_le32(&mut central, if zip64 { u32::MAX } else { local_offset });
         central.extend_from_slice(name);
+        if zip64 {
+            append_le16(&mut central, 1);
+            append_le16(&mut central, 8);
+            append_le64(&mut central, u64::from(local_offset));
+        }
     }
 
     let central_offset = bytes.len() as u32;
     let central_size = central.len() as u32;
     bytes.extend_from_slice(&central);
+    let entry_count = declared_entry_count.unwrap_or(entries.len() as u16);
+    if zip64 {
+        let record_offset = bytes.len() as u64;
+        bytes.extend_from_slice(b"PK\x06\x06");
+        append_le64(&mut bytes, 44);
+        append_le16(&mut bytes, 45);
+        append_le16(&mut bytes, 45);
+        append_le32(&mut bytes, 0);
+        append_le32(&mut bytes, 0);
+        append_le64(&mut bytes, u64::from(entry_count));
+        append_le64(&mut bytes, u64::from(entry_count));
+        append_le64(&mut bytes, u64::from(central_size));
+        append_le64(&mut bytes, u64::from(central_offset));
+        bytes.extend_from_slice(b"PK\x06\x07");
+        append_le32(&mut bytes, 0);
+        append_le64(&mut bytes, record_offset);
+        append_le32(&mut bytes, 1);
+    }
     bytes.extend_from_slice(b"PK\x05\x06");
     append_le16(&mut bytes, 0);
     append_le16(&mut bytes, 0);
-    let entry_count = declared_entry_count.unwrap_or(entries.len() as u16);
-    append_le16(&mut bytes, entry_count);
-    append_le16(&mut bytes, entry_count);
-    append_le32(&mut bytes, central_size);
-    append_le32(&mut bytes, central_offset);
+    append_le16(&mut bytes, if zip64 { u16::MAX } else { entry_count });
+    append_le16(&mut bytes, if zip64 { u16::MAX } else { entry_count });
+    append_le32(&mut bytes, if zip64 { u32::MAX } else { central_size });
+    append_le32(&mut bytes, if zip64 { u32::MAX } else { central_offset });
     append_le16(&mut bytes, declared_comment_length.unwrap_or(comment.len() as u16));
     bytes.extend_from_slice(comment);
     bytes
@@ -743,6 +770,13 @@ Result<Unit, Text> exercise() {
     Path shortComment = argumentPath(4)?;
     Path longComment = argumentPath(5)?;
     Path maximumComment = argumentPath(6)?;
+    Path embeddedComment = argumentPath(7)?;
+    Path maximumZip64Comment = argumentPath(8)?;
+    Path shortZip64Comment = argumentPath(9)?;
+    Path wrongExtent = argumentPath(10)?;
+    Path wrongZip64Extent = argumentPath(11)?;
+    Path sfxZip64 = argumentPath(12)?;
+    Path sfxZip32 = argumentPath(13)?;
     checkRawFactories(rawNames)?;
     checkMalformedNameFactories(cesu8)?;
     checkMalformedNameFactories(nulName)?;
@@ -750,6 +784,13 @@ Result<Unit, Text> exercise() {
     checkMalformedEocdFactories(shortComment)?;
     assertEmptyArchive(longComment)?;
     assertEmptyArchive(maximumComment)?;
+    checkRawFactories(embeddedComment)?;
+    assertEmptyArchive(maximumZip64Comment)?;
+    checkMalformedEocdFactories(shortZip64Comment)?;
+    checkMalformedEocdFactories(wrongExtent)?;
+    checkMalformedEocdFactories(wrongZip64Extent)?;
+    checkRawFactories(sfxZip64)?;
+    checkRawFactories(sfxZip32)?;
     return new Result<Unit, Text>.Ok(());
 }
 void main() {
@@ -783,6 +824,7 @@ fn reader_preserves_raw_names_rejects_malformed_names_and_checks_eocd_bounds() {
             &[],
             None,
             None,
+            false,
         ),
     ).unwrap();
     fs::write(
@@ -792,16 +834,50 @@ fn reader_preserves_raw_names_rejects_malformed_names_and_checks_eocd_bounds() {
             &[],
             None,
             None,
+            false,
         ),
     ).unwrap();
     fs::write(
         &nul_name,
-        make_zip(&[(b"a\0\xff", utf8_flag), (b"valid", utf8_flag)], &[], None, None),
+        make_zip(&[(b"a\0\xff", utf8_flag), (b"valid", utf8_flag)], &[], None, None, false),
     ).unwrap();
-    fs::write(&wrong_count, make_zip(&[], &[], Some(1), None)).unwrap();
-    fs::write(&short_comment, make_zip(&[], &[], None, Some(1))).unwrap();
-    fs::write(&long_comment, make_zip(&[], &vec![b'x'; 20_000], None, None)).unwrap();
-    fs::write(&maximum_comment, make_zip(&[], &vec![b'x'; 65_535], None, None)).unwrap();
+    fs::write(&wrong_count, make_zip(&[], &[], Some(1), None, false)).unwrap();
+    fs::write(&short_comment, make_zip(&[], &[], None, Some(1), false)).unwrap();
+    fs::write(&long_comment, make_zip(&[], &vec![b'x'; 20_000], None, None, false)).unwrap();
+    fs::write(&maximum_comment, make_zip(&[], &vec![b'x'; 65_535], None, None, false)).unwrap();
+
+    let names: &[(&[u8], u16)] = &[
+        ("é".as_bytes(), utf8_flag),
+        ("e\u{301}".as_bytes(), utf8_flag),
+        (b"a\\b", utf8_flag),
+    ];
+    let embedded_comment = scratch.path("embedded-comment.zip");
+    let mut comment = vec![b'x'; 8];
+    comment.extend_from_slice(&make_zip(&[], &[], None, None, false));
+    comment.extend_from_slice(&[b'x'; 34]);
+    fs::write(&embedded_comment, make_zip(names, &comment, None, None, false)).unwrap();
+    let maximum_zip64_comment = scratch.path("maximum-zip64-comment.zip");
+    fs::write(&maximum_zip64_comment, make_zip(&[], &vec![b'x'; 65_535], None, None, true)).unwrap();
+    let short_zip64_comment = scratch.path("short-zip64-comment.zip");
+    fs::write(&short_zip64_comment, make_zip(&[], &[], None, Some(1), true)).unwrap();
+    let wrong_extent = scratch.path("wrong-extent.zip");
+    let mut invalid_extent = make_zip(&[], &[], None, None, false);
+    invalid_extent[12..16].copy_from_slice(&1u32.to_le_bytes());
+    invalid_extent.insert(0, b'x');
+    fs::write(&wrong_extent, invalid_extent).unwrap();
+    let wrong_zip64_extent = scratch.path("wrong-zip64-extent.zip");
+    let mut invalid_zip64_extent = make_zip(&[], &[], None, None, true);
+    invalid_zip64_extent[40..48].copy_from_slice(&1u64.to_le_bytes());
+    invalid_zip64_extent.insert(0, b'x');
+    fs::write(&wrong_zip64_extent, invalid_zip64_extent).unwrap();
+    let sfx_zip64 = scratch.path("sfx-zip64.zip");
+    let mut prefixed_zip64 = b"SFX!".to_vec();
+    prefixed_zip64.extend_from_slice(&make_zip(names, &[], None, None, true));
+    fs::write(&sfx_zip64, prefixed_zip64).unwrap();
+    let sfx_zip32 = scratch.path("sfx-zip32.zip");
+    let mut prefixed_zip32 = b"SFX!".to_vec();
+    prefixed_zip32.extend_from_slice(&make_zip(names, &[], None, None, false));
+    fs::write(&sfx_zip32, prefixed_zip32).unwrap();
 
     let program = compile(ZIP_BOUNDARY_SOURCE);
     let output = run(
@@ -814,6 +890,13 @@ fn reader_preserves_raw_names_rejects_malformed_names_and_checks_eocd_bounds() {
             &short_comment,
             &long_comment,
             &maximum_comment,
+            &embedded_comment,
+            &maximum_zip64_comment,
+            &short_zip64_comment,
+            &wrong_extent,
+            &wrong_zip64_extent,
+            &sfx_zip64,
+            &sfx_zip32,
         ],
     );
     let stdout = String::from_utf8_lossy(&output.stdout);

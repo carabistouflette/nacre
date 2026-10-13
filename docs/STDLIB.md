@@ -1449,9 +1449,12 @@ document their own field order and schema evolution.
 
 The pinned private dependency build in `scripts/build_libarchive.py` applies
 ZIP-specific corrections to libarchive 3.8.9: complete filename validation before
-conversion, EOCD comment-extent and parsed-entry-count checks, and a search across
-the full legal 65,557-byte EOCD/comment range. See README for compile/runtime
-library paths. Both file and memory readers use the same strict seekable format.
+conversion, EOCD comment extent and exact directory byte/entry-count checks, and a
+search across the full legal 65,557-byte EOCD/comment range. Invalid EOCD signatures
+inside a comment do not stop the search; Zip64 locators are read separately when
+they precede that window. Self-extracting prefixes preserve relative entry offsets,
+including Zip64 offset expansion. See README for compile/runtime library paths.
+Both file and memory readers use the same strict seekable format.
 
 `ZipReader` and `ZipWriter` use libarchive's ZIP support, including Zip64. They
 operate on archive entries only: no method extracts to the filesystem. UTF-8-flagged

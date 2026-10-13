@@ -33,10 +33,12 @@ allowlist, never linker flags supplied by Nacre source.
 
 ZIP uses pinned libarchive 3.8.9 with a private ZIP-boundary correction. It
 validates length-delimited filenames before conversion, preserves ZIP path names,
-checks EOCD comment extent and declared entry counts, and searches the complete
-legal 65,557-byte EOCD range, including zero-entry archives at offset zero. The
-dependency build verifies the release SHA-256 and applies the patch with zero
-fuzz; it installs only to the chosen private prefix.
+checks EOCD comment extent and exact directory byte/entry counts, and searches the
+complete legal 65,557-byte EOCD range, including zero-entry archives at offset zero.
+Zip64 locators remain readable with maximum-length comments; relative offsets in
+self-extracting prefixes are corrected after Zip64 expansion. The dependency build
+verifies the release SHA-256 and applies the exact-release patch with zero fuzz;
+it installs only to the chosen private prefix.
 With Python 3.12+, CMake, `patch`, and the native development packages installed:
 
 ```sh
