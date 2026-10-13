@@ -54,12 +54,10 @@ const URI_METHODS: &[M] = &[
     M::UriDecodeComponent, M::UriPercentDecode,
 ];
 
-pub(super) fn percent_helpers(program: &t::Program) -> String {
+pub(super) fn percent_helpers(program: &t::Program, dns_helper_required: bool) -> String {
     if uses_native_methods(program, URI_METHODS)
-        || uses_native_methods(program, &[
-            M::DnsIdna, M::DnsResolve, M::TlsStreamConnect,
-            M::WebSocketConnect, M::WebSocketConnectTls,
-        ]) {
+        || uses_native_methods(program, &[M::DnsIdna, M::DnsResolve])
+        || dns_helper_required {
         include_str!("../../stdlib/percent.c.in").to_owned()
     } else {
         String::new()

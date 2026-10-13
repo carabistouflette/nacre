@@ -2,8 +2,11 @@ use crate::codegen::ctype;
 use crate::ir::{self as t, NativeMethod as M, Type};
 use super::support::{
     marker, native_function, replace_method_ids, replace_placeholders, result_id, text_class,
-    uses_native_methods, variant_id,
+    uses_native_methods,
 };
+
+pub(super) const IDNA_HELPER_NAME: &str = "ncr_dns_idna_host";
+pub(super) const RESOLVER_HELPER_NAME: &str = "ncr_dns_resolve_host";
 
 fn function(program: &t::Program, method: M) -> &t::Function {
     native_function(program, |candidate| candidate == method)
@@ -30,84 +33,165 @@ fn group(source: &str, name: &str) -> String {
         .split_once(&end).expect("DNS template group closer").0.to_owned()
 }
 
+fn text_result_layout(program: &t::Program, function: &t::Function, text: usize) -> (usize, usize, usize) {
+    let result = result_id(function);
+    let layout = program.classes[result].result.expect("DNS text operation returns Result");
+    assert_eq!(layout.ok_type, Type::Object(text), "DNS text operation returns Text");
+    assert_eq!(layout.err_type, Type::Object(text), "DNS text operation errors own Text");
+    (result, layout.ok_variant, layout.err_variant)
+}
+
 pub(super) fn fields() -> String {
     "    unsigned char ncr_static_class;\n".to_owned()
 }
 
 pub(super) fn drop_fields() -> String { String::new() }
 
-pub(super) fn implementation(program: &t::Program) -> String {
-    const IDNA_METHODS: &[M] = &[
-        M::DnsIdna, M::DnsResolve, M::TlsStreamConnect,
-        M::WebSocketConnect, M::WebSocketConnectTls,
-    ];
-    const RESOLVE_METHODS: &[M] = &[
-        M::DnsResolve, M::WebSocketConnect, M::WebSocketConnectTls,
-    ];
-    const REVERSE_METHODS: &[M] = &[M::DnsReverse];
-    const HOSTNAME_METHODS: &[M] = &[M::DnsLocalHostName];
-    let idna_used = uses_native_methods(program, IDNA_METHODS);
-    let resolve_used = uses_native_methods(program, RESOLVE_METHODS);
-    let reverse_used = uses_native_methods(program, REVERSE_METHODS);
-    let hostname_used = uses_native_methods(program, HOSTNAME_METHODS);
-    if !idna_used && !reverse_used && !hostname_used { return String::new(); }
+pub(super) fn implementation(
+    program: &t::Program,
+    transport_needs_idna: bool,
+    transport_needs_resolver: bool,
+) -> String {
+    let public_idna = uses_native_methods(program, &[M::DnsIdna]);
+    let public_resolve = uses_native_methods(program, &[M::DnsResolve]);
+    let reverse_used = uses_native_methods(program, &[M::DnsReverse]);
+    let hostname_used = uses_native_methods(program, &[M::DnsLocalHostName]);
+    let resolver_used = public_resolve || transport_needs_resolver;
+    let idna_core_used = public_idna || public_resolve || transport_needs_idna || transport_needs_resolver;
+    if !idna_core_used && !reverse_used && !hostname_used { return String::new(); }
 
-    let text = text_class(program).expect("DNS requires native Text");
-    let idna = function(program, M::DnsIdna);
-    let (text_result, text_ok) = match idna.return_type {
-        Type::Object(result) => {
-            let layout = program.classes[result].result.expect("Dns.idna returns Result");
-            assert_eq!(layout.ok_type, Type::Object(text), "Dns.idna returns Text");
-            assert_eq!(layout.err_type, Type::Object(text), "Dns.idna errors own Text");
-            (result, layout.ok_variant)
-        }
-        _ => unreachable!("Dns.idna returns Result<Text, Text>"),
-    };
-    let text_error = program.classes[text_result].result.expect("DNS Text Result layout").err_variant;
-    for method in [M::DnsReverse, M::DnsLocalHostName] {
-        let function = function(program, method);
-        assert_eq!(result_id(function), text_result, "DNS Text operations share Result<Text, Text>");
-    }
-
-    let resolve = function(program, M::DnsResolve);
-    let socket_resolve = function(program, M::SocketAddressResolve);
-    assert_eq!(resolve.return_type, socket_resolve.return_type,
-        "Dns.resolve composes the existing SocketAddress.resolve result");
-    let resolve_result = result_id(resolve);
-    let resolve_error = program.classes[resolve_result].result.expect("Dns.resolve Result layout").err_variant;
-    assert_eq!(resolve_result, result_id(socket_resolve),
-        "Dns.resolve and SocketAddress.resolve share their owned List result");
-
-    let template = include_str!("../../stdlib/dns.c.in");
+    let text = text_class(program).expect("DNS helpers require native Text");
     let mut body = String::new();
-    if idna_used {
+    if idna_core_used {
         body.push_str("/* nacre-link: icu */\n#include <unicode/uidna.h>\n#include <arpa/inet.h>\n");
-        body.push_str(&group(template, "idna"));
+        body.push_str(&group(include_str!("../../stdlib/dns.c.in"), "idna_core"));
     }
-    if resolve_used { body.push_str(&group(template, "resolve")); }
-    if reverse_used { body.push_str(&group(template, "reverse")); }
-    if hostname_used { body.push_str(&group(template, "hostname")); }
+
+    let idna_function = if public_idna { Some(function(program, M::DnsIdna)) } else { None };
+    let resolve_function = if public_resolve { Some(function(program, M::DnsResolve)) } else { None };
+    let reverse_function = if reverse_used { Some(function(program, M::DnsReverse)) } else { None };
+    let hostname_function = if hostname_used { Some(function(program, M::DnsLocalHostName)) } else { None };
+
+    if public_idna { body.push_str(&group(include_str!("../../stdlib/dns.c.in"), "idna_public")); }
+    let socket_resolve = if resolver_used { Some(function(program, M::SocketAddressResolve)) } else { None };
+    if resolver_used { body.push_str(&group(include_str!("../../stdlib/dns.c.in"), "resolve_core")); }
+    if public_resolve { body.push_str(&group(include_str!("../../stdlib/dns.c.in"), "resolve_public")); }
+    if reverse_used { body.push_str(&group(include_str!("../../stdlib/dns.c.in"), "reverse")); }
+    if hostname_used { body.push_str(&group(include_str!("../../stdlib/dns.c.in"), "hostname")); }
 
     let mut substitutions = vec![
         ("@TEXT_ID@", text.to_string()),
-        ("@TEXT_RESULT_TYPE@", ctype(program, idna.return_type)),
-        ("@TEXT_RESULT_ID@", text_result.to_string()),
-        ("@TEXT_RESULT_OK_TAG@", text_ok.to_string()),
-        ("@TEXT_RESULT_ERR_TAG@", text_error.to_string()),
-        ("@DNS_IDNA_SIGNATURE@", signature(program, M::DnsIdna)),
-        ("@DNS_RESOLVE_SIGNATURE@", signature(program, M::DnsResolve)),
-        ("@DNS_REVERSE_SIGNATURE@", signature(program, M::DnsReverse)),
-        ("@DNS_LOCAL_HOST_NAME_SIGNATURE@", signature(program, M::DnsLocalHostName)),
-        ("@DNS_IDNA_INPUT@", parameter(idna, 0)),
-        ("@DNS_RESOLVE_INPUT@", parameter(resolve, 0)),
-        ("@DNS_RESOLVE_PORT@", parameter(resolve, 1)),
-        ("@DNS_REVERSE_ADDRESS@", parameter(function(program, M::DnsReverse), 0)),
-        ("@DNS_RESOLVE_RESULT_TYPE@", ctype(program, resolve.return_type)),
-        ("@DNS_RESOLVE_RESULT_ID@", resolve_result.to_string()),
-        ("@DNS_RESOLVE_ERROR_TAG@", resolve_error.to_string()),
-        ("@DNS_IDNA_OK_TAG@", text_ok.to_string()),
-        ("@DNS_IDNA_ERROR_TAG@", text_error.to_string()),
+        ("@IDNA_CORE_SIGNATURE@", format!(
+            "static bool {IDNA_HELPER_NAME}(ncr_obj_{text} *ncr_input, ncr_obj_{text} **ncr_ascii, ncr_obj_{text} **ncr_error, size_t ncr_line, size_t ncr_column)")),
     ];
+    if let Some(idna) = idna_function {
+        let (result, ok, err) = text_result_layout(program, idna, text);
+        substitutions.extend([
+            ("@TEXT_RESULT_TYPE@", ctype(program, idna.return_type)),
+            ("@TEXT_RESULT_ID@", result.to_string()),
+            ("@TEXT_RESULT_OK_TAG@", ok.to_string()),
+            ("@TEXT_RESULT_ERR_TAG@", err.to_string()),
+            ("@DNS_IDNA_SIGNATURE@", signature(program, M::DnsIdna)),
+            ("@DNS_IDNA_INPUT@", parameter(idna, 0)),
+        ]);
+    }
+    if let Some(reverse) = reverse_function {
+        let (result, ok, err) = text_result_layout(program, reverse, text);
+        if let Some(idna) = idna_function {
+            assert_eq!(result, result_id(idna), "DNS text results share Result<Text, Text>");
+        }
+        if let Some(hostname) = hostname_function {
+            assert_eq!(result, result_id(hostname), "DNS text results share Result<Text, Text>");
+        }
+        substitutions.extend([
+            ("@TEXT_RESULT_TYPE@", ctype(program, reverse.return_type)),
+            ("@TEXT_RESULT_ID@", result.to_string()),
+            ("@TEXT_RESULT_OK_TAG@", ok.to_string()),
+            ("@TEXT_RESULT_ERR_TAG@", err.to_string()),
+            ("@DNS_REVERSE_SIGNATURE@", signature(program, M::DnsReverse)),
+            ("@DNS_REVERSE_ADDRESS@", parameter(reverse, 0)),
+        ]);
+    }
+    if let Some(hostname) = hostname_function {
+        let (result, ok, err) = text_result_layout(program, hostname, text);
+        if let Some(idna) = idna_function {
+            assert_eq!(result, result_id(idna), "DNS text results share Result<Text, Text>");
+        }
+        substitutions.extend([
+            ("@TEXT_RESULT_TYPE@", ctype(program, hostname.return_type)),
+            ("@TEXT_RESULT_ID@", result.to_string()),
+            ("@TEXT_RESULT_OK_TAG@", ok.to_string()),
+            ("@TEXT_RESULT_ERR_TAG@", err.to_string()),
+            ("@DNS_LOCAL_HOST_NAME_SIGNATURE@", signature(program, M::DnsLocalHostName)),
+        ]);
+    }
+    if let Some(resolve) = resolve_function {
+        let socket_resolve = socket_resolve.expect("Dns.resolve requires SocketAddress.resolve");
+        assert_eq!(resolve.return_type, socket_resolve.return_type,
+            "Dns.resolve composes the existing SocketAddress.resolve result");
+        assert_eq!(resolve.params.len(), 2, "Dns.resolve accepts host and port");
+        assert_eq!(socket_resolve.params.len(), 3,
+            "SocketAddress.resolve accepts host, port, and passive mode");
+        assert_eq!(resolve.params[0].1, socket_resolve.params[0].1,
+            "Dns.resolve uses the existing SocketAddress.resolve host type");
+        assert_eq!(resolve.params[1].1, socket_resolve.params[1].1,
+            "Dns.resolve uses the existing SocketAddress.resolve port type");
+        substitutions.extend([
+            ("@DNS_RESOLVE_SIGNATURE@", signature(program, M::DnsResolve)),
+            ("@DNS_RESOLVE_INPUT@", parameter(resolve, 0)),
+            ("@DNS_RESOLVE_PORT@", parameter(resolve, 1)),
+            ("@DNS_RESOLVE_CORE_SIGNATURE@", format!(
+                "static {} {RESOLVER_HELPER_NAME}({} ncr_input, {} ncr_port, size_t ncr_line, size_t ncr_column)",
+                ctype(program, socket_resolve.return_type),
+                ctype(program, socket_resolve.params[0].1),
+                ctype(program, socket_resolve.params[1].1))),
+            ("@DNS_RESOLVE_RESULT_TYPE@", ctype(program, socket_resolve.return_type)),
+            ("@DNS_RESOLVE_RESULT_ID@", result_id(socket_resolve).to_string()),
+            ("@DNS_RESOLVE_ERROR_TAG@", program.classes[result_id(socket_resolve)].result
+                .expect("SocketAddress.resolve returns Result").err_variant.to_string()),
+            ("@SOCKET_ADDRESS_RESOLVE@", marker(M::SocketAddressResolve)),
+        ]);
+    }
+    if let Some(socket_resolve) = socket_resolve {
+        if transport_needs_resolver && resolve_function.is_none() {
+            assert_eq!(socket_resolve.params.len(), 3,
+                "SocketAddress.resolve accepts host, port, and passive mode");
+            substitutions.extend([
+                ("@DNS_RESOLVE_CORE_SIGNATURE@", format!(
+                    "static {} {RESOLVER_HELPER_NAME}({} ncr_input, {} ncr_port, size_t ncr_line, size_t ncr_column)",
+                    ctype(program, socket_resolve.return_type),
+                    ctype(program, socket_resolve.params[0].1),
+                    ctype(program, socket_resolve.params[1].1))),
+                ("@DNS_RESOLVE_RESULT_TYPE@", ctype(program, socket_resolve.return_type)),
+                ("@DNS_RESOLVE_RESULT_ID@", result_id(socket_resolve).to_string()),
+                ("@DNS_RESOLVE_ERROR_TAG@", program.classes[result_id(socket_resolve)].result
+                    .expect("SocketAddress.resolve returns Result").err_variant.to_string()),
+                ("@SOCKET_ADDRESS_RESOLVE@", marker(M::SocketAddressResolve)),
+            ]);
+        }
+    }
+    if let Some(reverse) = reverse_function {
+        if !substitutions.iter().any(|(key, _)| *key == "@TEXT_RESULT_TYPE@") {
+            let (result, ok, err) = text_result_layout(program, reverse, text);
+            substitutions.extend([
+                ("@TEXT_RESULT_TYPE@", ctype(program, reverse.return_type)),
+                ("@TEXT_RESULT_ID@", result.to_string()),
+                ("@TEXT_RESULT_OK_TAG@", ok.to_string()),
+                ("@TEXT_RESULT_ERR_TAG@", err.to_string()),
+            ]);
+        }
+    }
+    if let Some(hostname) = hostname_function {
+        if !substitutions.iter().any(|(key, _)| *key == "@TEXT_RESULT_TYPE@") {
+            let (result, ok, err) = text_result_layout(program, hostname, text);
+            substitutions.extend([
+                ("@TEXT_RESULT_TYPE@", ctype(program, hostname.return_type)),
+                ("@TEXT_RESULT_ID@", result.to_string()),
+                ("@TEXT_RESULT_OK_TAG@", ok.to_string()),
+                ("@TEXT_RESULT_ERR_TAG@", err.to_string()),
+            ]);
+        }
+    }
 
     body = replace_placeholders(body, &substitutions);
     body = replace_method_ids(body, program, None);

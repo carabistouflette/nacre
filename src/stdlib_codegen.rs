@@ -274,9 +274,9 @@ pub fn implementations(program: &t::Program) -> String {
     }
     out.push_str(&network::implementation(program));
     out.push_str(&http::implementation(program));
-    out.push_str(&uri::percent_helpers(program));
+    out.push_str(&uri::percent_helpers(program, false));
     out.push_str(&uri::implementation(program));
-    out.push_str(&dns::implementation(program));
+    out.push_str(&dns::implementation(program, false, false));
     if let Some(filesystem) = filesystem::implementations(program) {
         out.push_str(&filesystem);
         out.push('\n');
