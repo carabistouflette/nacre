@@ -58,8 +58,11 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   operations remain usable without ICU.
 - Adds affine SQLite `Database` with one explicitly owned internal prepared
   statement, copied length-delimited bindings/rows, strict type accessors,
-  transactions, foreign-key enforcement, and bounded busy timeouts. This native
-  SQL API documents its single-cursor limit and does not claim JDBC parity.
+  transactions, foreign-key enforcement, and bounded busy timeouts. `prepare`
+  rejects executable tails without preparing them; `step` completion is terminal
+  until reset/replacement, and failed steps require reset before retry. Empty
+  blobs remain distinct from allocation failures. This native SQL API documents
+  its single-cursor limit and does not claim JDBC parity.
 - Floating min/max normalize signed-zero ties explicitly rather than relying on
   host libm's unspecified tie sign; both operand orders and same-sign zeros are
   covered by generated-program sanitizer regressions.

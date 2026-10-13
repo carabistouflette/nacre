@@ -2,7 +2,7 @@ use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
 use super::support::{native_function, replace_method_ids, result_id, variant, variant_id};
 
 pub(super) fn fields() -> String {
-    "    void *database;\n    void *statement;\n    bool row_active;\n    void (*destroy)(void *);\n".to_owned()
+    "    void *database;\n    void *statement;\n    bool row_active;\n    bool statement_done;\n    bool statement_reset_required;\n    void (*destroy)(void *);\n".to_owned()
 }
 
 pub(super) fn drop_fields() -> String {

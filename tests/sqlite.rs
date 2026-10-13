@@ -93,6 +93,8 @@ Result<Unit, Text> exercise() {
     println(!insertHasRow);
     println(database.changes()? == 1L);
     println(database.lastInsertRowId()? == 1L);
+    println(!database.step()?);
+    println(database.lastInsertRowId()? == 1L);
     drop(injected);
     drop(binary);
 
@@ -114,6 +116,13 @@ Result<Unit, Text> exercise() {
     Option<double> copiedDouble = database.columnDouble(5)?;
     boolean queryHasMore = database.step()?;
     println(!queryHasMore);
+    println(!database.step()?);
+    database.prepare(new Text("SELECT CAST(x'' AS BLOB)"))?;
+    println(database.step()?);
+    match (database.columnBlob(0)?) {
+        None { println(false); }
+        Some(bytes) { println(bytes.length() == 0L); }
+    }
 
     database.prepare(new Text("SELECT ?"))?;
     database.bindLong(1, 42L)?;
@@ -176,6 +185,9 @@ boolean boolFailed(Result<boolean, Text> result) {
 boolean databaseFailed(Result<Database, Text> result) {
     match (result) { Ok(value) { return false; } Err(error) { return true; } }
 }
+boolean optionLongFailed(Result<Option<long>, Text> result) {
+    match (result) { Ok(value) { return false; } Err(error) { return true; } }
+}
 boolean optionLongEquals(Option<long> option, long expected) {
     match (option) { Some(value) { return value == expected; } None { return false; } }
 }
@@ -187,6 +199,10 @@ Result<Unit, Text> exercise() {
     println(unitFailed(database.prepare(new Text("SELECT 1\0"))));
     database.execute(new Text("CREATE TABLE parent (id INTEGER PRIMARY KEY)"))?;
     database.execute(new Text("CREATE TABLE child (parent_id INTEGER NOT NULL REFERENCES parent(id))"))?;
+    println(unitFailed(database.prepare(new Text("SELECT 1; PRAGMA foreign_keys=OFF"))));
+    println(longFailed(database.execute(new Text("INSERT INTO child VALUES(98)"))));
+    println(longFailed(database.execute(new Text("SELECT 1; PRAGMA foreign_keys=OFF"))));
+    println(longFailed(database.execute(new Text("INSERT INTO child VALUES(97)"))));
     database.begin()?;
     database.execute(new Text("INSERT INTO parent VALUES(1)"))?;
     database.commit()?;
@@ -209,7 +225,7 @@ Result<Unit, Text> exercise() {
     println(database.step()?);
     println(optionLongEquals(database.columnLong(0)?, 0L));
 
-    database.prepare(new Text("SELECT 77; -- trailing comment\n"))?;
+    database.prepare(new Text("SELECT 77; /* block comment */ -- trailing comment\n"))?;
     println(unitFailed(database.prepare(new Text("SELECT 1; SELECT 2"))));
     println(database.step()?);
     println(optionLongEquals(database.columnLong(0)?, 77L));
@@ -295,8 +311,8 @@ void main() {
 fn sqlite_bindings_types_transactions_and_owned_rows() {
     let output = run_memory(AFFINE_BINDING_AND_ROWS);
     assert_eq!(output.stdout, concat!(
-        "true\ntrue\ntrue\ntrue\ntrue\ntrue\n1\n3\n4\n5\n2\n",
-        "true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n",
+        "true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n1\n3\n4\n5\n2\n",
+        "true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n",
         "true\n3\n0\n255\n65\ntrue\ntrue\ntrue\n"
     ).as_bytes());
 }
@@ -304,7 +320,7 @@ fn sqlite_bindings_types_transactions_and_owned_rows() {
 #[test]
 fn sqlite_transactions_foreign_keys_single_commands_and_errors() {
     let output = run_memory(TRANSACTIONS_AND_ERRORS);
-    assert_eq!(output.stdout, "true\n".repeat(26).as_bytes());
+    assert_eq!(output.stdout, "true\n".repeat(30).as_bytes());
 }
 
 #[test]
