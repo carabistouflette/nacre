@@ -10,6 +10,7 @@
   "catalog": {"passed": 55, "total": 55},
   "package_audit": {"status": "passed", "include_str_paths": 147, "declared_tests_not_executed_by_audit": 1113, "original_mit_attribution": "preserved"},
   "trusted_runtime_fixtures": {"status": "passed", "compilers": ["gcc", "clang"], "scope": "Supplementary runtime and handwritten/template fixtures; not substituted for actual generated-program evidence"},
+  "remote_exposed_math_remediation": {"problem": "Host libm zero-tie sign did not meet the promised Math.minDouble/maxDouble signed-zero contract", "fix": "Explicit zero-tie normalization for both operand orders and same-sign zeros; nonzero and NaN paths keep existing libm behavior", "local_verification": {"passed_per_compiler": 7, "compilers": ["gcc", "clang"], "address_undefined_sanitizers": true, "actual_math_example": {"allocations": 12, "frees": 12, "live": 0}}, "remote_verification": "Recorded separately after corrected source CI completes"},
   "systems_regressions": {
     "process": {"passed_per_compiler": 11, "compilers": ["gcc", "clang"], "standalone_types_at_O0": true, "sigterm_resistant_child_drop_reaped": true},
     "concurrency": {"passed_per_compiler": 21, "compilers": ["gcc", "clang"]},

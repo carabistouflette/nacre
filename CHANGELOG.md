@@ -3,6 +3,9 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Floating min/max normalize signed-zero ties explicitly rather than relying on
+  host libm's unspecified tie sign; both operand orders and same-sign zeros are
+  covered by generated-program sanitizer regressions.
 - Borrowed channel wakeup regressions synchronize closure after entry into the
   real condition wait, proving blocked receiver EOF and owned sender recovery.
 - Existing composition and lending examples use `ReadJob` and `DeskCommand`

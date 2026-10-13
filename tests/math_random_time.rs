@@ -66,6 +66,12 @@ void main() {
     println(Math.minDouble(-0.0, 0.0) == 0.0);
     println(1.0 / Math.minDouble(-0.0, 0.0) < 0.0);
     println(1.0 / Math.maxDouble(-0.0, 0.0) > 0.0);
+    println(1.0 / Math.minDouble(0.0, -0.0) < 0.0);
+    println(1.0 / Math.maxDouble(0.0, -0.0) > 0.0);
+    println(1.0 / Math.minDouble(-0.0, -0.0) < 0.0);
+    println(1.0 / Math.maxDouble(-0.0, -0.0) < 0.0);
+    println(1.0 / Math.minDouble(0.0, 0.0) > 0.0);
+    println(1.0 / Math.maxDouble(0.0, 0.0) > 0.0);
     println(Math.sqrt(9.0) == 3.0);
     println(Math.pow(2.0, 10.0) == 1024.0);
     println(Math.log(1.0) == 0.0);
@@ -83,7 +89,8 @@ void main() {
     assert_eq!(String::from_utf8_lossy(&output.stdout), concat!(
         "17\n9\nINT_MIN_ERR\nLONG_MIN_ERR\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n",
         "true\ntrue\ntrue\ntrue\ntrue\ntrue\nfalse\nfalse\ntrue\ntrue\ntrue\ntrue\n",
-        "true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n"
+        "true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n",
+        "true\ntrue\ntrue\ntrue\ntrue\ntrue\n"
     ));
     assert_live_zero(&output);
 }

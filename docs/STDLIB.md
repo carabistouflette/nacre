@@ -470,8 +470,10 @@ static boolean isFinite(double value)
 positive absolute value is not representable. Floating-point methods follow the
 host C math library and IEEE values: domain/range cases may produce NaN or
 infinity; these methods do not turn every floating-point domain case into `Err`.
-`round` uses ties away from zero. `minDouble`/`maxDouble` use the C `fmin`/`fmax`
-NaN and signed-zero behavior.
+`round` uses ties away from zero. `minDouble`/`maxDouble` ignore one NaN and
+return NaN for two NaNs. For zero ties, min chooses negative zero if either
+operand is negative zero; max chooses positive zero if either is positive zero.
+This sign contract is explicit rather than dependent on libm's zero-tie choice.
 
 ### `Random`
 
