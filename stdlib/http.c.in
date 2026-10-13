@@ -521,13 +521,13 @@ static @SEND_RESULT_TYPE@ @HTTP_REQUEST_SEND@(ncr_obj_@HTTP_REQUEST_ID@ *ncr_sel
     if (ncr_self->ca_file != NULL) {
         NCR_HTTP_SETOPT(CURLOPT_CAINFO, (const char *)ncr_self->ca_file);
     }
-    if (ncr_self->method_length == sizeof("HEAD") - 1
-        && memcmp(ncr_self->method, "HEAD", sizeof("HEAD") - 1) == 0) {
-        NCR_HTTP_SETOPT(CURLOPT_NOBODY, 1L);
-    }
     if (ncr_self->body_set) {
         NCR_HTTP_SETOPT(CURLOPT_POSTFIELDS, ncr_self->body_length == 0 ? "" : (const char *)ncr_self->body);
         NCR_HTTP_SETOPT(CURLOPT_POSTFIELDSIZE_LARGE, body_length);
+    }
+    if (ncr_self->method_length == sizeof("HEAD") - 1
+        && memcmp(ncr_self->method, "HEAD", sizeof("HEAD") - 1) == 0) {
+        NCR_HTTP_SETOPT(CURLOPT_NOBODY, 1L);
     }
 #undef NCR_HTTP_SETOPT
 
@@ -540,25 +540,25 @@ static @SEND_RESULT_TYPE@ @HTTP_REQUEST_SEND@(ncr_obj_@HTTP_REQUEST_ID@ *ncr_sel
         else if (context.malformed_header) { detail = "response contains a malformed or non-UTF-8 header"; }
         char message[256];
         size_t message_length = ncr_http_format_error(message, sizeof(message), "HttpRequest.send", detail);
-        ncr_http_response_destroy(response);
+        ncr_drop_@HTTP_RESPONSE_ID@(response);
         return ncr_result_error_@SEND_RESULT_ID@(message, message_length, ncr_line, ncr_column);
     }
 
     long response_code = 0;
     CURLcode info_status = curl_easy_getinfo(easy, CURLINFO_RESPONSE_CODE, &response_code);
     if (info_status != CURLE_OK || response_code < 100 || response_code > 599) {
-        ncr_http_response_destroy(response);
+        ncr_drop_@HTTP_RESPONSE_ID@(response);
         return ncr_result_error_@SEND_RESULT_ID@("HttpRequest.send: invalid HTTP response status", sizeof("HttpRequest.send: invalid HTTP response status") - 1, ncr_line, ncr_column);
     }
     char *effective_url = NULL;
     info_status = curl_easy_getinfo(easy, CURLINFO_EFFECTIVE_URL, &effective_url);
     if (info_status != CURLE_OK || effective_url == NULL) {
-        ncr_http_response_destroy(response);
+        ncr_drop_@HTTP_RESPONSE_ID@(response);
         return ncr_result_error_@SEND_RESULT_ID@("HttpRequest.send: libcurl did not provide the final URL", sizeof("HttpRequest.send: libcurl did not provide the final URL") - 1, ncr_line, ncr_column);
     }
     size_t final_url_length = strlen(effective_url);
     if (final_url_length > (size_t)INT32_MAX || final_url_length == SIZE_MAX) {
-        ncr_http_response_destroy(response);
+        ncr_drop_@HTTP_RESPONSE_ID@(response);
         return ncr_result_error_@SEND_RESULT_ID@("HttpRequest.send: final URL exceeds Text limits", sizeof("HttpRequest.send: final URL exceeds Text limits") - 1, ncr_line, ncr_column);
     }
     response->final_url = ncr_allocate(final_url_length + 1, ncr_line, ncr_column);
@@ -572,7 +572,7 @@ http_option_error:
     {
         char message[256];
         size_t message_length = ncr_http_format_error(message, sizeof(message), "HttpRequest.send option", option_error);
-        ncr_http_response_destroy(response);
+        ncr_drop_@HTTP_RESPONSE_ID@(response);
         return ncr_result_error_@SEND_RESULT_ID@(message, message_length, ncr_line, ncr_column);
     }
 }
@@ -614,6 +614,9 @@ static @RESPONSE_FINAL_URL_RESULT_TYPE@ @HTTP_RESPONSE_FINAL_URL@(ncr_obj_@HTTP_
 
 static @BODY_TEXT_RESULT_TYPE@ @HTTP_RESPONSE_BODY_TEXT@(ncr_obj_@HTTP_RESPONSE_ID@ *ncr_self,
                                                           size_t ncr_line, size_t ncr_column) {
+    if (ncr_self->body->length > (size_t)INT32_MAX) {
+        return ncr_result_error_@BODY_TEXT_RESULT_ID@("HTTP response body exceeds Text limits", sizeof("HTTP response body exceeds Text limits") - 1, ncr_line, ncr_column);
+    }
     if (!ncr_utf8_valid(ncr_self->body->bytes, ncr_self->body->length)) {
         return ncr_result_error_@BODY_TEXT_RESULT_ID@("HTTP response body is not valid UTF-8", sizeof("HTTP response body is not valid UTF-8") - 1, ncr_line, ncr_column);
     }

@@ -31,12 +31,11 @@ fn method(program: &t::Program, native: M) -> &t::Function {
 
 fn http_call(program: &t::Program, expr: &Expr) -> bool {
     match &expr.kind {
-        ExprKind::Call { target, receiver, args, .. } => {
+        ExprKind::Call { target, args, .. } => {
             let direct = matches!(target, CallTarget::Function(id)
                 if program.functions.get(*id).and_then(|function| function.native)
                     .is_some_and(|native| HTTP_METHODS.contains(&native)));
             direct
-                || receiver.as_ref().is_some_and(|receiver| http_call(program, receiver))
                 || args.iter().any(|argument| http_call(program, argument))
         }
         ExprKind::Drop(value) | ExprKind::Upcast { value, .. } |

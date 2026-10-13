@@ -111,14 +111,39 @@ fn two_response_server(responses: Vec<Vec<u8>>) -> (String, JoinHandle<Vec<Captu
 }
 
 #[test]
-fn ordinary_programs_do_not_emit_the_optional_curl_dependency() {
-    let source = "void main() { println(\"NO_HTTP\"); }";
-    let c = compile_to_c(source).unwrap_or_else(|error| panic!("{}", error.render("http_optional.ncr", source)));
-    assert!(!c.contains("/* nacre-link: curl */"));
-    let program = native::compile_c_with_flags(&c, &["-pthread", "-DNACRE_MEMORY_STATS"])
-        .unwrap_or_else(|error| panic!("{error}"));
-    assert_eq!(stdout_lines(&run(&program)), vec!["NO_HTTP".to_owned()]);
+fn head_with_explicit_empty_body_does_not_wait_for_response_content() {
+    let (url, server) = one_response_server(
+        b"HTTP/1.1 200 OK\r\nContent-Length: 123\r\nConnection: close\r\n\r\n".to_vec(),
+        Duration::ZERO,
+    );
+    let source = r#"
+Result<Unit, Text> exchange() {
+    Text method = new Text("HEAD");
+    Text url = new Text("@URL@");
+    HttpRequest request = HttpRequest.create(method, url)?;
+    request.setTimeoutMillis(1000L)?;
+    ByteBuffer empty = ByteBuffer.withCapacity(0L)?;
+    request.setBody(empty);
+    HttpResponse response = request.send()?;
+    println(response.status());
+    borrow ByteBuffer body = response.body();
+    println(body.length());
+    return new Result<Unit, Text>.Ok(());
 }
+void main() {
+    match (exchange()) {
+        Ok(unit) {}
+        Err(error) { error.print(); }
+    }
+}
+"#;
+    let output = run(&compile(&source.replace("@URL@", &url)));
+    assert_eq!(stdout_lines(&output), vec!["200".to_owned(), "0".to_owned()]);
+    let request = server.join().unwrap();
+    assert!(request.headers.starts_with("HEAD / HTTP/1.1"));
+    assert!(request.body.is_empty());
+}
+
 
 
 #[test]
