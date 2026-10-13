@@ -1,5 +1,9 @@
 use nacre::{compile_to_c, native, validate};
-use std::process::Output;
+use std::io::{BufRead, BufReader, Read, Write};
+use std::process::{Child, ChildStdin, Command, Output, Stdio};
+use std::sync::mpsc::{self, Receiver};
+use std::thread::{self, JoinHandle};
+use std::time::{Duration, Instant};
 
 fn execute(source: &str, flags: &[&str]) -> Output {
     let c = compile_to_c(source)
@@ -23,6 +27,181 @@ fn assert_clean(output: &Output, expected_stdout: &str) {
     assert_eq!(fields[3], "live=0", "{stderr}");
     assert!(!stderr.contains("AddressSanitizer"), "{stderr}");
     assert!(!stderr.contains("runtime error:"), "{stderr}");
+}
+
+fn channel_wait_observer(c: &str) -> String {
+    let sender_wait = "pthread_cond_wait(&control->not_full, &control->mutex)";
+    let receiver_wait = "pthread_cond_wait(&control->not_empty, &control->mutex)";
+    assert!(c.contains(sender_wait), "generated sender condition wait was not found");
+    assert!(c.contains(receiver_wait), "generated receiver condition wait was not found");
+    let instrumented = c
+        .replace(
+            sender_wait,
+            "ncr_test_sender_cond_wait(&control->not_full, &control->mutex)",
+        )
+        .replace(
+            receiver_wait,
+            "ncr_test_receiver_cond_wait(&control->not_empty, &control->mutex)",
+        );
+    let mut observed = r#"
+#define _GNU_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#include <pthread.h>
+#include <stdatomic.h>
+#include <unistd.h>
+static atomic_flag ncr_test_wait_reported = ATOMIC_FLAG_INIT;
+static int ncr_test_sender_cond_wait(pthread_cond_t *condition, pthread_mutex_t *mutex) {
+    if (!atomic_flag_test_and_set_explicit(&ncr_test_wait_reported, memory_order_relaxed)) {
+        static const char marker[] = "NCR_TEST_WAIT_ENTRY:SENDER\n";
+        (void)write(STDOUT_FILENO, marker, sizeof(marker) - 1);
+    }
+    return pthread_cond_wait(condition, mutex);
+}
+static int ncr_test_receiver_cond_wait(pthread_cond_t *condition, pthread_mutex_t *mutex) {
+    if (!atomic_flag_test_and_set_explicit(&ncr_test_wait_reported, memory_order_relaxed)) {
+        static const char marker[] = "NCR_TEST_WAIT_ENTRY:RECEIVER\n";
+        (void)write(STDOUT_FILENO, marker, sizeof(marker) - 1);
+    }
+    return pthread_cond_wait(condition, mutex);
+}
+"#
+    .to_owned();
+    observed.push_str(&instrumented);
+    observed
+}
+
+struct NativeWaitProcess {
+    child: Child,
+    stdin: Option<ChildStdin>,
+    stdout_rx: Receiver<String>,
+    stderr_rx: Receiver<String>,
+    stdout: String,
+    stdout_reader: Option<JoinHandle<()>>,
+    stderr_reader: Option<JoinHandle<()>>,
+}
+
+impl NativeWaitProcess {
+    fn start(program: &native::NativeProgram) -> Self {
+        let mut child = Command::new(program.path())
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let stdout = child.stdout.take().unwrap();
+        let stderr = child.stderr.take().unwrap();
+        let stdin = child.stdin.take();
+        let (stdout_tx, stdout_rx) = mpsc::channel();
+        let stdout_reader = thread::spawn(move || {
+            let mut reader = BufReader::new(stdout);
+            loop {
+                let mut line = String::new();
+                match reader.read_line(&mut line) {
+                    Ok(0) | Err(_) => break,
+                    Ok(_) => {
+                        if stdout_tx.send(line).is_err() {
+                            break;
+                        }
+                    }
+                }
+            }
+        });
+        let (stderr_tx, stderr_rx) = mpsc::channel();
+        let stderr_reader = thread::spawn(move || {
+            let mut reader = BufReader::new(stderr);
+            let mut output = String::new();
+            let _ = reader.read_to_string(&mut output);
+            let _ = stderr_tx.send(output);
+        });
+        Self {
+            child,
+            stdin,
+            stdout_rx,
+            stderr_rx,
+            stdout: String::new(),
+            stdout_reader: Some(stdout_reader),
+            stderr_reader: Some(stderr_reader),
+        }
+    }
+
+    fn wait_for_entry(&mut self, expected: &str) {
+        let line = self
+            .stdout_rx
+            .recv_timeout(Duration::from_secs(10))
+            .expect("native channel operation did not enter pthread_cond_wait");
+        assert_eq!(line.trim_end_matches(['\r', '\n']), expected);
+    }
+
+    fn release(&mut self) {
+        let mut stdin = self.stdin.take().expect("native stdin is piped");
+        stdin.write_all(b"\n").unwrap();
+        stdin.flush().unwrap();
+    }
+
+    fn finish_for(mut self, timeout: Duration) -> Output {
+        let deadline = Instant::now() + timeout;
+        let status = loop {
+            if let Some(status) = self.child.try_wait().unwrap() {
+                break status;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "native channel operation exceeded its finite test deadline"
+            );
+            thread::sleep(Duration::from_millis(10));
+        };
+        loop {
+            match self.stdout_rx.recv_timeout(Duration::from_secs(5)) {
+                Ok(line) => self.stdout.push_str(&line),
+                Err(mpsc::RecvTimeoutError::Disconnected) => break,
+                Err(mpsc::RecvTimeoutError::Timeout) => {
+                    panic!("native stdout reader did not finish")
+                }
+            }
+        }
+        let stderr = self
+            .stderr_rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("native stderr reader did not finish");
+        if let Some(reader) = self.stdout_reader.take() {
+            reader.join().unwrap();
+        }
+        if let Some(reader) = self.stderr_reader.take() {
+            reader.join().unwrap();
+        }
+        Output {
+            status,
+            stdout: std::mem::take(&mut self.stdout).into_bytes(),
+            stderr: stderr.into_bytes(),
+        }
+    }
+}
+
+impl Drop for NativeWaitProcess {
+    fn drop(&mut self) {
+        if self.child.try_wait().ok().flatten().is_none() {
+            let _ = self.child.kill();
+        }
+        let _ = self.child.wait();
+        if let Some(reader) = self.stdout_reader.take() {
+            let _ = reader.join();
+        }
+        if let Some(reader) = self.stderr_reader.take() {
+            let _ = reader.join();
+        }
+    }
+}
+
+fn execute_after_channel_wait(source: &str, expected_wait: &str) -> Output {
+    let c = compile_to_c(source)
+        .unwrap_or_else(|error| panic!("{}", error.render("concurrency_alpha.ncr", source)));
+    let c = channel_wait_observer(&c);
+    let program = native::compile_c_with_flags(&c, &["-DNACRE_MEMORY_STATS"])
+        .unwrap_or_else(|error| panic!("native compile failed: {error}"));
+    let mut process = NativeWaitProcess::start(&program);
+    process.wait_for_entry(expected_wait);
+    process.release();
+    process.finish_for(Duration::from_secs(10))
 }
 
 const THREAD_LIFETIME: &str = r#"
@@ -291,6 +470,15 @@ void main() {
         Ok(value) { worker = value; }
         Err(error) { error.print(); return; }
     }
+    match (Console.readLine()) {
+        Ok(value) {
+            match (value) {
+                Some(line) { drop(line); }
+                None { println("unexpected release EOF"); }
+            }
+        }
+        Err(error) { error.print(); }
+    }
     match (receiver.close()) {
         Ok(value) {}
         Err(error) { error.print(); return; }
@@ -313,8 +501,78 @@ void main() {
 
 #[test]
 fn receiver_abort_wakes_senders_and_returns_unsent_values() {
-    let output = execute(CHANNEL_ABORT, &["-DNACRE_MEMORY_STATS"]);
+    let output = execute_after_channel_wait(CHANNEL_ABORT, "NCR_TEST_WAIT_ENTRY:SENDER");
     assert_clean(&output, "second\nblocked sender woke\nthird\n");
+}
+
+const BLOCKED_RECEIVER: &str = r#"
+class WaitingReceiver implements Task<Unit> {
+    private Receiver<int> receiver;
+    public WaitingReceiver(Receiver<int> receiver) { this.receiver = receiver; }
+    public Unit run() {
+        match (this.receiver.receive()) {
+            Ok(value) {
+                match (value) {
+                    Some(item) { println("unexpected item"); }
+                    None { println("receiver observed EOF"); }
+                }
+            }
+            Err(error) { error.print(); }
+        }
+        return ();
+    }
+}
+
+void waitForHostRelease() {
+    match (Console.readLine()) {
+        Ok(value) {
+            match (value) {
+                Some(line) { drop(line); }
+                None { println("unexpected release EOF"); }
+            }
+        }
+        Err(error) { error.print(); }
+    }
+}
+
+void main() {
+    Channel<int> channel;
+    match (Channel<int>.bounded(1L)) {
+        Ok(value) { channel = value; }
+        Err(error) { error.print(); return; }
+    }
+    Sender<int> sender;
+    Receiver<int> receiver;
+    match (channel.takeSender()) {
+        Ok(value) { sender = value; }
+        Err(error) { error.print(); return; }
+    }
+    match (channel.takeReceiver()) {
+        Ok(value) { receiver = value; }
+        Err(error) { error.print(); return; }
+    }
+    Thread<Unit> worker;
+    match (Thread<Unit>.spawn(new WaitingReceiver(receiver))) {
+        Ok(value) { worker = value; }
+        Err(error) { error.print(); return; }
+    }
+    waitForHostRelease();
+    match (sender.close()) {
+        Ok(value) {}
+        Err(error) { error.print(); return; }
+    }
+    match (worker.join()) {
+        Ok(value) {}
+        Err(error) { error.print(); }
+    }
+}
+"#;
+
+#[test]
+fn last_sender_close_wakes_a_receiver_blocked_in_pthread_cond_wait() {
+    let output =
+        execute_after_channel_wait(BLOCKED_RECEIVER, "NCR_TEST_WAIT_ENTRY:RECEIVER");
+    assert_clean(&output, "receiver observed EOF\n");
 }
 
 #[test]
