@@ -1,0 +1,86 @@
+void udp_loopback(borrow Text host) {
+    match (SocketAddress.resolve(host, 0, false)) {
+        Err(error) { println("UDP address resolution failed"); }
+        Ok(addresses) {
+            match (UdpSocket.bind(addresses.getRef(0))) {
+                Err(error) { println("UDP bind failed"); }
+                Ok(socket) {
+                    match (socket.localAddress()) {
+                        Err(error) { println("UDP local address failed"); }
+                        Ok(local) {
+                            match (ByteBuffer.withCapacity(0L)) {
+                                Err(error) { println("UDP payload allocation failed"); }
+                                Ok(payload) {
+                                    payload.append((byte)80);
+                                    payload.append((byte)73);
+                                    payload.append((byte)78);
+                                    payload.append((byte)71);
+                                    match (socket.sendTo(payload, 0L, 4L, local, 1000L)) {
+                                        Err(error) { println("UDP send failed"); }
+                                        Ok(sent) {
+                                            match (ByteBuffer.withCapacity(0L)) {
+                                                Err(error) { println("UDP receive buffer allocation failed"); }
+                                                Ok(received) {
+                                                    match (socket.receiveFrom(received, 4L, 1000L)) {
+                                                        Err(error) { println("UDP receive failed"); }
+                                                        Ok(datagram) {
+                                                            println("UDP bytes: 4");
+                                                            println(datagram.bytesRead() == 4L && sent == 4L);
+                                                            println(!datagram.truncated());
+                                                            borrow SocketAddress source_address = datagram.source();
+                                                            Text source = source_address.toText();
+                                                            println(source.charCount() > 0);
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            match (socket.close()) {
+                                Ok(unit) { println("UDP socket closed"); }
+                                Err(error) { println("UDP close failed"); }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+void main() {
+    Text host = new Text("127.0.0.1");
+    udp_loopback(host);
+    match (SocketAddress.resolve(host, 0, false)) {
+        Err(error) { println("TCP address resolution failed"); }
+        Ok(addresses) {
+            match (TcpListener.bind(addresses.getRef(0), 8)) {
+                Err(error) { println("TCP bind failed"); }
+                Ok(listener) {
+                    match (listener.localAddress()) {
+                        Err(error) { println("TCP local address failed"); }
+                        Ok(local) {
+                            Text endpoint = local.toText();
+                            Console.print("TCP listener: ");
+                            Console.printText(endpoint);
+                            Console.print("\n");
+                            match (listener.accept(25L)) {
+                                Err(error) { println("TCP accept deadline expired"); }
+                                Ok(stream) {
+                                    println("Unexpected TCP client");
+                                    drop(stream);
+                                }
+                            }
+                        }
+                    }
+                    match (listener.close()) {
+                        Ok(unit) { println("TCP listener closed"); }
+                        Err(error) { println("TCP close failed"); }
+                    }
+                }
+            }
+        }
+    }
+}

@@ -55,6 +55,8 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
             C::Regex | C::RegexMatch | C::Arrays | C::ByteBuffer |
             C::Console | C::Files | C::Args | C::Math | C::Time =>
                 unreachable!("static or factory-only native class has no constructor"),
+            C::SocketAddress | C::TcpListener | C::TcpStream | C::Datagram | C::UdpSocket =>
+                unreachable!("factory-only native class has no constructor"),
         };
     }
     match (class, name) {
@@ -206,6 +208,27 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
         (C::Files, "writeText") => M::FilesWriteText,
         (C::Files, "writeTextAtomic") => M::FilesWriteTextAtomic,
         (C::Args, "count") => M::ArgsCount,
+        (C::SocketAddress, "resolve") => M::SocketAddressResolve,
+        (C::SocketAddress, "toText") => M::SocketAddressToText,
+        (C::TcpListener, "bind") => M::TcpListenerBind,
+        (C::TcpListener, "accept") => M::TcpListenerAccept,
+        (C::TcpListener, "localAddress") => M::TcpListenerLocalAddress,
+        (C::TcpListener, "close") => M::TcpListenerClose,
+        (C::TcpStream, "connect") => M::TcpStreamConnect,
+        (C::TcpStream, "readSome") => M::TcpStreamReadSome,
+        (C::TcpStream, "writeSome") => M::TcpStreamWriteSome,
+        (C::TcpStream, "writeAll") => M::TcpStreamWriteAll,
+        (C::TcpStream, "peerAddress") => M::TcpStreamPeerAddress,
+        (C::TcpStream, "localAddress") => M::TcpStreamLocalAddress,
+        (C::TcpStream, "close") => M::TcpStreamClose,
+        (C::Datagram, "source") => M::DatagramSource,
+        (C::Datagram, "bytesRead") => M::DatagramBytesRead,
+        (C::Datagram, "truncated") => M::DatagramTruncated,
+        (C::UdpSocket, "bind") => M::UdpSocketBind,
+        (C::UdpSocket, "sendTo") => M::UdpSocketSendTo,
+        (C::UdpSocket, "receiveFrom") => M::UdpSocketReceiveFrom,
+        (C::UdpSocket, "localAddress") => M::UdpSocketLocalAddress,
+        (C::UdpSocket, "close") => M::UdpSocketClose,
         (C::Args, "get") => M::ArgsGet,
         _ => unreachable!("compiler-owned native method"),
     }

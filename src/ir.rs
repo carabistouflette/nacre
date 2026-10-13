@@ -126,7 +126,7 @@ pub enum CallTarget { Function(usize), Println }
 
 /// Trusted standard-library storage, never exposed as source fields.
 #[derive(Debug, Clone, Copy)]
-pub enum NativeClass { List(Type), Array(Type), Deque(Type), Map(MapKeyKind, Type), Set(MapKeyKind), Text, Regex, RegexMatch, Arrays, ByteBuffer, Console, Files, Args, Math, Random, Time }
+pub enum NativeClass { List(Type), Array(Type), Deque(Type), Map(MapKeyKind, Type), Set(MapKeyKind), Text, Regex, RegexMatch, Arrays, ByteBuffer, Console, Files, Args, Math, Random, Time, SocketAddress, TcpListener, TcpStream, Datagram, UdpSocket }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NativeMethod {
     ListNew, ListAdd, ListSize, ListCapacity, ListIsEmpty, ListGet, ListGetRef, ListGetMut,
@@ -156,4 +156,10 @@ pub enum NativeMethod {
     MathSqrt, MathPow, MathLog, MathExp, MathSin, MathCos, MathTan, MathFloor, MathCeil, MathRound, MathHypot, MathIsNaN, MathIsFinite,
     RandomNew, RandomFromSystem, RandomReseed, RandomNextLong, RandomNextInt, RandomNextDouble,
     TimeMonotonicNanos, TimeUnixMillis, TimeSleepMillis, TimeDeadlineAfterMillis,
+    SocketAddressResolve, SocketAddressToText,
+    TcpListenerBind, TcpListenerAccept, TcpListenerLocalAddress, TcpListenerClose,
+    TcpStreamConnect, TcpStreamReadSome, TcpStreamWriteSome, TcpStreamWriteAll,
+    TcpStreamPeerAddress, TcpStreamLocalAddress, TcpStreamClose,
+    DatagramSource, DatagramBytesRead, DatagramTruncated,
+    UdpSocketBind, UdpSocketSendTo, UdpSocketReceiveFrom, UdpSocketLocalAddress, UdpSocketClose,
 }

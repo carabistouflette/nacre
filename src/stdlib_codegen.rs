@@ -12,6 +12,8 @@ mod set;
 mod support;
 mod text;
 mod time;
+mod network;
+mod monotonic;
 mod regex;
 
 use crate::ast::MapKeyKind;
@@ -30,6 +32,8 @@ pub fn fields(program: &t::Program, class: C, class_id: usize) -> String {
         C::Math | C::Time | C::Console | C::Files | C::Args => io::fields(),
         C::Random => random::fields(),
         C::Regex | C::RegexMatch => regex::fields(program, class),
+        C::SocketAddress | C::TcpListener | C::TcpStream | C::Datagram | C::UdpSocket =>
+            network::fields(program, class, class_id),
     }
 }
 
@@ -46,6 +50,8 @@ pub fn drop_fields(program: &t::Program, class: C) -> String {
         C::Math | C::Time | C::Console | C::Files | C::Args => io::drop_fields(),
         C::Random => random::drop_fields(),
         C::Regex | C::RegexMatch => regex::drop_fields(program, class),
+        C::SocketAddress | C::TcpListener | C::TcpStream | C::Datagram | C::UdpSocket =>
+            network::drop_fields(program, class),
     }
 }
 
@@ -84,6 +90,7 @@ fn append_body(program: &t::Program, out: &mut String, class: &t::Class, native:
         C::Time => time::implementation(program),
         C::Arrays => arrays::zeroed_implementations(program),
         C::ByteBuffer => buffer::implementation(program, class.id),
+        C::SocketAddress | C::TcpListener | C::TcpStream | C::Datagram | C::UdpSocket => return,
         C::Regex | C::RegexMatch | C::Console | C::Files | C::Args => return,
     };
     body = body.replace("@ID@", &class.id.to_string());
@@ -96,6 +103,8 @@ fn append_body(program: &t::Program, out: &mut String, class: &t::Class, native:
 
 pub fn implementations(program: &t::Program) -> String {
     let mut out = String::new();
+    out.push_str(&monotonic::implementation());
+    out.push('\n');
     if let Some(text) = support::text_class(program) {
         out.push_str(&support::text_helpers(program, text));
     }
@@ -117,6 +126,7 @@ pub fn implementations(program: &t::Program) -> String {
     if let Some(io) = io::implementations(program) {
         out.push_str(&io);
     }
+    out.push_str(&network::implementation(program));
     out
 }
 

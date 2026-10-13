@@ -19,6 +19,11 @@ enum NativeBuiltin {
     Math,
     Random,
     Time,
+    SocketAddress,
+    TcpListener,
+    TcpStream,
+    Datagram,
+    UdpSocket,
 }
 
 impl NativeBuiltin {
@@ -48,6 +53,11 @@ impl NativeBuiltin {
             Self::Math => NativeClass::Math,
             Self::Random => NativeClass::Random,
             Self::Time => NativeClass::Time,
+            Self::SocketAddress => NativeClass::SocketAddress,
+            Self::TcpListener => NativeClass::TcpListener,
+            Self::TcpStream => NativeClass::TcpStream,
+            Self::Datagram => NativeClass::Datagram,
+            Self::UdpSocket => NativeClass::UdpSocket,
         }
     }
 }
@@ -120,6 +130,16 @@ pub(super) const PRELUDE_UNITS: &[PreludeUnit] = &[
     PreludeUnit {
         source: include_str!("../../stdlib/prelude/time.ncr"),
         builtins: &[Builtin { name: "Time", native: Some(NativeBuiltin::Time) }],
+    },
+    PreludeUnit {
+        source: include_str!("../../stdlib/prelude/network.ncr"),
+        builtins: &[
+            Builtin { name: "SocketAddress", native: Some(NativeBuiltin::SocketAddress) },
+            Builtin { name: "TcpListener", native: Some(NativeBuiltin::TcpListener) },
+            Builtin { name: "TcpStream", native: Some(NativeBuiltin::TcpStream) },
+            Builtin { name: "Datagram", native: Some(NativeBuiltin::Datagram) },
+            Builtin { name: "UdpSocket", native: Some(NativeBuiltin::UdpSocket) },
+        ],
     },
 ];
 

@@ -1,6 +1,7 @@
 /* Nacre runtime support: no GC and no VM; unique-owned object allocation.
  * libc is still used for output and process termination.
  */
+#define _GNU_SOURCE
 #define _XOPEN_SOURCE 700
 #define _POSIX_C_SOURCE 200809L
 #include <stdint.h>
@@ -16,6 +17,12 @@
 #include <unistd.h>
 #include <locale.h>
 #include <regex.h>
+#include <limits.h>
+#include <netdb.h>
+#include <netinet/in.h>
+#include <poll.h>
+#include <sys/socket.h>
+#include <sys/uio.h>
 
 typedef struct {
     const unsigned char *data;

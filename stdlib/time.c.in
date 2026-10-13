@@ -1,30 +1,6 @@
 #include <time.h>
 
-/* CLOCK_MONOTONIC values are nanoseconds since an unspecified steady-clock
-   origin, representable only in [0, INT64_MAX]. Wall time is Unix epoch ms. */
-static bool ncr_time_monotonic_value(int64_t *value, int *failure) {
-    struct timespec timestamp;
-    if (clock_gettime(CLOCK_MONOTONIC, &timestamp) != 0) {
-        *failure = errno;
-        return false;
-    }
-    if (timestamp.tv_sec < 0 || timestamp.tv_nsec < 0 || timestamp.tv_nsec >= 1000000000L) {
-        *failure = EOVERFLOW;
-        return false;
-    }
-    uintmax_t seconds = (uintmax_t)timestamp.tv_sec;
-    if (seconds > (uintmax_t)INT64_MAX / UINT64_C(1000000000)) {
-        *failure = EOVERFLOW;
-        return false;
-    }
-    uint64_t nanoseconds = (uint64_t)seconds * UINT64_C(1000000000) + (uint64_t)timestamp.tv_nsec;
-    if (nanoseconds > (uint64_t)INT64_MAX) {
-        *failure = EOVERFLOW;
-        return false;
-    }
-    *value = (int64_t)nanoseconds;
-    return true;
-}
+/* Wall time is Unix epoch milliseconds. */
 
 static bool ncr_time_unix_millis(int64_t *value, int *failure) {
     struct timespec timestamp;
@@ -55,16 +31,6 @@ static bool ncr_time_unix_millis(int64_t *value, int *failure) {
     return true;
 }
 
-static bool ncr_time_deadline_after_millis(int64_t monotonic_now, int64_t timeout_millis, int64_t *deadline) {
-    if (monotonic_now < 0 || timeout_millis < 0
-        || timeout_millis > INT64_MAX / INT64_C(1000000)) {
-        return false;
-    }
-    int64_t delta = timeout_millis * INT64_C(1000000);
-    if (delta > INT64_MAX - monotonic_now) { return false; }
-    *deadline = monotonic_now + delta;
-    return true;
-}
 
 static size_t ncr_time_error_message(char *buffer, size_t capacity, const char *operation, int failure) {
     int length = snprintf(buffer, capacity, "%s failed (errno=%d)", operation, failure);

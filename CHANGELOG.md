@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- Linux networking adds immutable IPv4/IPv6 `SocketAddress`, owned TCP listeners/streams,
+  UDP sockets and datagrams with poll-based deadlines and direct ByteBuffer appends.
+  `stdlib/time_clock.c.in` now owns the monotonic clock/deadline helpers shared by
+  Time and networking; no DNS-timeout or descriptor-sharing API is implied.
+- Datagram accessors are emitted independently of UdpSocket specialization,
+  including unoptimized native compilation of standalone borrowed helpers.
+- Design-principles review keeps TCP, UDP and address resolution in one cohesive
+  networking unit, hides descriptor/sockaddr state, and keeps Datagram source
+  ownership closed over its value. Results report timeouts; TCP EOF is Ok(0),
+  while datagram truncation is successful metadata (CQS/DbC/POLA). Existing
+  `src/stdlib_codegen/io.rs::implementations` still emits Console, Files and Args
+  together (SRP boundary); bounded follow-up: split those emitters when the
+  integration owner next changes the central IO router, preserving the current
+  native IDs and public signatures.
+
 - Per-file modules and imports resolve public/private type and function names
   before generic expansion, preserving file-local diagnostics and editor overlays.
 - Byte, Unicode-scalar Char, Long, Double and Unit values work through native

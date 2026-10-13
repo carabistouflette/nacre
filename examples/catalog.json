@@ -25,6 +25,14 @@
       "meaningful_outputs": ["40", "39", "255", "41", "true"]
     },
     {
+      "category": "systems",
+      "source": "examples/systems/network_loopback.ncr",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["UDP bytes: 4", "TCP listener:", "TCP accept deadline expired", "TCP listener closed"]
+    },
+    {
       "category": "text",
       "source": "examples/text/utf8_regex.ncr",
       "stdin": "",

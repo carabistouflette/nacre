@@ -155,6 +155,11 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
             Some(a::NativeClass::Math) => Some(t::NativeClass::Math),
             Some(a::NativeClass::Random) => Some(t::NativeClass::Random),
             Some(a::NativeClass::Time) => Some(t::NativeClass::Time),
+            Some(a::NativeClass::SocketAddress) => Some(t::NativeClass::SocketAddress),
+            Some(a::NativeClass::TcpListener) => Some(t::NativeClass::TcpListener),
+            Some(a::NativeClass::TcpStream) => Some(t::NativeClass::TcpStream),
+            Some(a::NativeClass::Datagram) => Some(t::NativeClass::Datagram),
+            Some(a::NativeClass::UdpSocket) => Some(t::NativeClass::UdpSocket),
             None => None,
         };
     }

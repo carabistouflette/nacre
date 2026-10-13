@@ -1,0 +1,35 @@
+class SocketAddress {
+    public static Result<List<SocketAddress>, Text> resolve(borrow Text host, int port, boolean passive) {}
+    public readonly Text toText() {}
+}
+
+class TcpListener {
+    public static Result<TcpListener, Text> bind(borrow SocketAddress address, int backlog) {}
+    public Result<TcpStream, Text> accept(long timeoutMs) {}
+    public Result<SocketAddress, Text> localAddress() {}
+    public Result<Unit, Text> close() {}
+}
+
+class TcpStream {
+    public static Result<TcpStream, Text> connect(borrow SocketAddress address, long timeoutMs) {}
+    public Result<long, Text> readSome(borrow mut ByteBuffer destination, long maxBytes, long timeoutMs) {}
+    public Result<long, Text> writeSome(borrow ByteBuffer source, long offset, long maxBytes, long timeoutMs) {}
+    public Result<Unit, Text> writeAll(borrow ByteBuffer source, long timeoutMs) {}
+    public Result<SocketAddress, Text> peerAddress() {}
+    public Result<SocketAddress, Text> localAddress() {}
+    public Result<Unit, Text> close() {}
+}
+
+class Datagram {
+    public readonly borrow SocketAddress source() {}
+    public readonly long bytesRead() {}
+    public readonly boolean truncated() {}
+}
+
+class UdpSocket {
+    public static Result<UdpSocket, Text> bind(borrow SocketAddress address) {}
+    public Result<long, Text> sendTo(borrow ByteBuffer source, long offset, long length, borrow SocketAddress destination, long timeoutMs) {}
+    public Result<Datagram, Text> receiveFrom(borrow mut ByteBuffer destination, long maxBytes, long timeoutMs) {}
+    public Result<SocketAddress, Text> localAddress() {}
+    public Result<Unit, Text> close() {}
+}

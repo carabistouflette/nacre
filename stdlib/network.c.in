@@ -1,0 +1,641 @@
+/* NETWORK_GROUP common */
+#define NCR_NETWORK_RETURN_ERROR(result_id, operation, failure, line, column) do { \
+    char ncr_network_message[192]; \
+    size_t ncr_network_length = ncr_network_format_error(ncr_network_message, sizeof(ncr_network_message), operation, failure); \
+    return ncr_result_error_ ## result_id(ncr_network_message, ncr_network_length, line, column); \
+} while (0)
+#define NCR_NETWORK_RETURN_TIMEOUT(result_id, operation, line, column) do { \
+    char ncr_network_message[192]; \
+    size_t ncr_network_length = ncr_network_format_timeout(ncr_network_message, sizeof(ncr_network_message), operation); \
+    return ncr_result_error_ ## result_id(ncr_network_message, ncr_network_length, line, column); \
+} while (0)
+#define NCR_NETWORK_RETURN_GAI(result_id, operation, code, system_errno, line, column) do { \
+    char ncr_network_message[256]; \
+    size_t ncr_network_length = ncr_network_format_gai(ncr_network_message, sizeof(ncr_network_message), operation, code, system_errno); \
+    return ncr_result_error_ ## result_id(ncr_network_message, ncr_network_length, line, column); \
+} while (0)
+
+static size_t ncr_network_format_error(char *message, size_t capacity, const char *operation, int failure) {
+    int written = snprintf(message, capacity, "%s failed (errno=%d)", operation, failure);
+    if (written < 0) { if (capacity != 0) { message[0] = '\0'; } return 0; }
+    return (size_t)written < capacity ? (size_t)written : capacity - 1;
+}
+
+static size_t ncr_network_format_timeout(char *message, size_t capacity, const char *operation) {
+    int written = snprintf(message, capacity, "%s timed out (errno=%d)", operation, ETIMEDOUT);
+    if (written < 0) { if (capacity != 0) { message[0] = '\0'; } return 0; }
+    return (size_t)written < capacity ? (size_t)written : capacity - 1;
+}
+
+static size_t ncr_network_format_gai(char *message, size_t capacity, const char *operation, int code, int system_errno) {
+    int written;
+    if (code == EAI_SYSTEM) {
+        written = snprintf(message, capacity, "%s failed (EAI=%d: %s; errno=%d)", operation, code, gai_strerror(code), system_errno);
+    } else {
+        written = snprintf(message, capacity, "%s failed (EAI=%d: %s)", operation, code, gai_strerror(code));
+    }
+    if (written < 0) { if (capacity != 0) { message[0] = '\0'; } return 0; }
+    return (size_t)written < capacity ? (size_t)written : capacity - 1;
+}
+
+static bool ncr_network_deadline(int64_t timeout_millis, bool *finite, int64_t *deadline, int *failure) {
+    if (timeout_millis < 0) { *failure = EINVAL; return false; }
+    *finite = timeout_millis > 0;
+    if (!*finite) { return true; }
+    int64_t now = 0;
+    if (!ncr_time_monotonic_value(&now, failure)) { return false; }
+    if (!ncr_time_deadline_after_millis(now, timeout_millis, deadline)) {
+        *failure = EOVERFLOW;
+        return false;
+    }
+    return true;
+}
+
+/* Return 1 when ready, 0 when the original deadline expires, and -1 on error. */
+static int ncr_network_poll(int fd, short events, bool finite, int64_t deadline, int *failure) {
+    for (;;) {
+        int timeout = -1;
+        if (finite) {
+            int64_t now = 0;
+            if (!ncr_time_monotonic_value(&now, failure)) { return -1; }
+            if (now >= deadline) { return 0; }
+            uint64_t remaining = (uint64_t)(deadline - now);
+            uint64_t milliseconds = (remaining + UINT64_C(999999)) / UINT64_C(1000000);
+            timeout = milliseconds > (uint64_t)INT_MAX ? INT_MAX : (int)milliseconds;
+        }
+        struct pollfd descriptor = { .fd = fd, .events = events, .revents = 0 };
+        int ready = poll(&descriptor, 1, timeout);
+        if (ready > 0) {
+            if ((descriptor.revents & POLLNVAL) != 0) { *failure = EBADF; return -1; }
+            return 1;
+        }
+        if (ready == 0) { continue; }
+        if (errno == EINTR) { continue; }
+        *failure = errno;
+        return -1;
+    }
+}
+
+static bool ncr_network_store_address(ncr_obj_@ADDRESS_ID@ *address, const struct sockaddr *source, socklen_t length) {
+    if (source == NULL || (size_t)length > sizeof(address->address)) { return false; }
+    if (source->sa_family == AF_INET) {
+        if ((size_t)length < sizeof(struct sockaddr_in)) { return false; }
+    } else if (source->sa_family == AF_INET6) {
+        if ((size_t)length < sizeof(struct sockaddr_in6)) { return false; }
+    } else {
+        return false;
+    }
+    memset(&address->address, 0, sizeof(address->address));
+    memcpy(&address->address, source, (size_t)length);
+    address->length = length;
+    address->family = source->sa_family;
+    return true;
+}
+
+static bool ncr_network_valid_address(const ncr_obj_@ADDRESS_ID@ *address) {
+    if (address == NULL || (size_t)address->length > sizeof(address->address)) { return false; }
+    if (address->family == AF_INET) {
+        return address->address.ss_family == AF_INET && (size_t)address->length >= sizeof(struct sockaddr_in);
+    }
+    if (address->family == AF_INET6) {
+        return address->address.ss_family == AF_INET6 && (size_t)address->length >= sizeof(struct sockaddr_in6);
+    }
+    return false;
+}
+
+static void ncr_network_drop_fd(int *fd) {
+    if (*fd >= 0) {
+        int owned = *fd;
+        *fd = -1;
+        (void)close(owned);
+    }
+}
+
+/* NETWORK_GROUP_END common */
+/* NETWORK_GROUP address */
+static ncr_obj_@ADDRESS_RESULT_TYPE@ ncr_network_get_address(int fd, bool peer, const char *operation, size_t line, size_t column) {
+    if (fd < 0) { NCR_NETWORK_RETURN_ERROR(@ADDRESS_RESULT_ID@, operation, EBADF, line, column); }
+    struct sockaddr_storage storage;
+    socklen_t length = (socklen_t)sizeof(storage);
+    memset(&storage, 0, sizeof(storage));
+    int status = peer
+        ? getpeername(fd, (struct sockaddr *)&storage, &length)
+        : getsockname(fd, (struct sockaddr *)&storage, &length);
+    if (status != 0) { int failure = errno; NCR_NETWORK_RETURN_ERROR(@ADDRESS_RESULT_ID@, operation, failure, line, column); }
+    ncr_obj_@ADDRESS_ID@ *address = ncr_allocate(sizeof(*address), line, column);
+    if (!ncr_network_store_address(address, (const struct sockaddr *)&storage, length)) {
+        ncr_drop_@ADDRESS_ID@(address);
+        NCR_NETWORK_RETURN_ERROR(@ADDRESS_RESULT_ID@, operation, EAFNOSUPPORT, line, column);
+    }
+    return (ncr_obj_@ADDRESS_RESULT_ID@){
+        .tag = @ADDRESS_RESULT_OK_TAG@,
+        .data.v@ADDRESS_RESULT_OK_TAG@.f0 = address
+    };
+}
+/* NETWORK_GROUP_END address */
+/* NETWORK_GROUP close */
+
+static ncr_obj_@UNIT_RESULT_TYPE@ ncr_network_close(int *fd, const char *operation, size_t line, size_t column) {
+    if (*fd < 0) { NCR_NETWORK_RETURN_ERROR(@UNIT_RESULT_ID@, operation, EBADF, line, column); }
+    int owned = *fd;
+    *fd = -1;
+    if (close(owned) != 0) {
+        int failure = errno;
+        NCR_NETWORK_RETURN_ERROR(@UNIT_RESULT_ID@, operation, failure, line, column);
+    }
+    return (ncr_obj_@UNIT_RESULT_ID@){
+        .tag = @UNIT_RESULT_OK_TAG@,
+        .data.v@UNIT_RESULT_OK_TAG@.f0 = UINT8_C(0)
+    };
+}
+/* NETWORK_GROUP_END close */
+/* NETWORK_GROUP resolve */
+
+static ncr_obj_@RESOLVE_RESULT_TYPE@ @SOCKET_ADDRESS_RESOLVE@(
+    ncr_obj_@TEXT_ID@ *ncr_v_@RESOLVE_HOST_ID@,
+    int32_t ncr_v_@RESOLVE_PORT_ID@,
+    bool ncr_v_@RESOLVE_PASSIVE_ID@,
+    size_t ncr_line, size_t ncr_column) {
+    if (ncr_v_@RESOLVE_PORT_ID@ < 0 || ncr_v_@RESOLVE_PORT_ID@ > 65535) {
+        NCR_NETWORK_RETURN_ERROR(@RESOLVE_RESULT_ID@, "SocketAddress.resolve port", EINVAL, ncr_line, ncr_column);
+    }
+    if (ncr_v_@RESOLVE_HOST_ID@ == NULL
+        || !ncr_utf8_valid(ncr_v_@RESOLVE_HOST_ID@->bytes, (size_t)ncr_v_@RESOLVE_HOST_ID@->length)) {
+        NCR_NETWORK_RETURN_ERROR(@RESOLVE_RESULT_ID@, "SocketAddress.resolve host", EILSEQ, ncr_line, ncr_column);
+    }
+    size_t host_length = (size_t)ncr_v_@RESOLVE_HOST_ID@->length;
+    if (host_length > 0 && memchr(ncr_v_@RESOLVE_HOST_ID@->bytes, '\0', host_length) != NULL) {
+        NCR_NETWORK_RETURN_ERROR(@RESOLVE_RESULT_ID@, "SocketAddress.resolve host", EINVAL, ncr_line, ncr_column);
+    }
+    if (host_length == 0 && !ncr_v_@RESOLVE_PASSIVE_ID@) {
+        NCR_NETWORK_RETURN_ERROR(@RESOLVE_RESULT_ID@, "SocketAddress.resolve empty host", EINVAL, ncr_line, ncr_column);
+    }
+    if (host_length == SIZE_MAX) {
+        NCR_NETWORK_RETURN_ERROR(@RESOLVE_RESULT_ID@, "SocketAddress.resolve host", EOVERFLOW, ncr_line, ncr_column);
+    }
+    char *host = NULL;
+    if (host_length > 0) {
+        host = ncr_allocate(host_length + 1, ncr_line, ncr_column);
+        memcpy(host, ncr_v_@RESOLVE_HOST_ID@->bytes, host_length);
+        host[host_length] = '\0';
+    }
+    char service[6];
+    int service_length = snprintf(service, sizeof(service), "%d", ncr_v_@RESOLVE_PORT_ID@);
+    if (service_length < 0 || (size_t)service_length >= sizeof(service)) {
+        ncr_deallocate(host);
+        NCR_NETWORK_RETURN_ERROR(@RESOLVE_RESULT_ID@, "SocketAddress.resolve port", EOVERFLOW, ncr_line, ncr_column);
+    }
+    struct addrinfo hints;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags = ncr_v_@RESOLVE_PASSIVE_ID@ ? AI_PASSIVE : 0;
+    struct addrinfo *resolved = NULL;
+    int code = getaddrinfo(host, service, &hints, &resolved);
+    int system_errno = code == EAI_SYSTEM ? errno : 0;
+    ncr_deallocate(host);
+    if (code != 0) {
+        if (resolved != NULL) { freeaddrinfo(resolved); }
+        NCR_NETWORK_RETURN_GAI(@RESOLVE_RESULT_ID@, "SocketAddress.resolve", code, system_errno, ncr_line, ncr_column);
+    }
+
+    ncr_obj_@LIST_ID@ *addresses = ncr_allocate(sizeof(*addresses), ncr_line, ncr_column);
+    @LIST_NEW@(addresses, ncr_line, ncr_column);
+    for (struct addrinfo *entry = resolved; entry != NULL; entry = entry->ai_next) {
+        if (entry->ai_addr == NULL || entry->ai_addrlen > (socklen_t)sizeof(struct sockaddr_storage)) { continue; }
+        if (entry->ai_family != AF_INET && entry->ai_family != AF_INET6) { continue; }
+        if ((entry->ai_family == AF_INET && entry->ai_addrlen < (socklen_t)sizeof(struct sockaddr_in))
+            || (entry->ai_family == AF_INET6 && entry->ai_addrlen < (socklen_t)sizeof(struct sockaddr_in6))) { continue; }
+        ncr_obj_@ADDRESS_ID@ *address = ncr_allocate(sizeof(*address), ncr_line, ncr_column);
+        if (!ncr_network_store_address(address, entry->ai_addr, entry->ai_addrlen)) {
+            ncr_drop_@ADDRESS_ID@(address);
+            continue;
+        }
+        @LIST_ADD@(addresses, address, ncr_line, ncr_column);
+    }
+    if (resolved != NULL) { freeaddrinfo(resolved); }
+    if (addresses->length == 0) {
+        ncr_drop_@LIST_ID@(addresses);
+        NCR_NETWORK_RETURN_GAI(@RESOLVE_RESULT_ID@, "SocketAddress.resolve IPv4/IPv6", EAI_FAMILY, 0, ncr_line, ncr_column);
+    }
+    return (ncr_obj_@RESOLVE_RESULT_TYPE@){
+        .tag = @RESOLVE_OK_TAG@,
+        .data.v@RESOLVE_OK_TAG@.f0 = addresses
+    };
+}
+/* NETWORK_GROUP_END resolve */
+/* NETWORK_GROUP text */
+
+static ncr_obj_@TEXT_ID@ *@SOCKET_ADDRESS_TO_TEXT@(ncr_obj_@ADDRESS_ID@ *p, size_t ncr_line, size_t ncr_column) {
+    if (!ncr_network_valid_address(p)) { ncr_fail("invalid SocketAddress storage", ncr_line, ncr_column); }
+    char host[NI_MAXHOST];
+    char service[NI_MAXSERV];
+    int code = getnameinfo((const struct sockaddr *)&p->address, p->length,
+        host, sizeof(host), service, sizeof(service), NI_NUMERICHOST | NI_NUMERICSERV);
+    int system_errno = code == EAI_SYSTEM ? errno : 0;
+    if (code != 0) {
+        char message[192];
+        int written;
+        if (code == EAI_SYSTEM) {
+            written = snprintf(message, sizeof(message), "SocketAddress.toText failed (EAI=%d: %s; errno=%d)", code, gai_strerror(code), system_errno);
+        } else {
+            written = snprintf(message, sizeof(message), "SocketAddress.toText failed (EAI=%d: %s)", code, gai_strerror(code));
+        }
+        if (written < 0) { ncr_fail("SocketAddress.toText failed", ncr_line, ncr_column); }
+        ncr_fail(message, ncr_line, ncr_column);
+    }
+    char numeric[NI_MAXHOST + NI_MAXSERV + 4];
+    int written = p->family == AF_INET6
+        ? snprintf(numeric, sizeof(numeric), "[%s]:%s", host, service)
+        : snprintf(numeric, sizeof(numeric), "%s:%s", host, service);
+    if (written < 0 || (size_t)written >= sizeof(numeric)) {
+        ncr_fail("SocketAddress.toText numeric address is too long", ncr_line, ncr_column);
+    }
+    return ncr_text_from_bytes_@TEXT_ID@((const unsigned char *)numeric, (size_t)written, ncr_line, ncr_column);
+}
+/* NETWORK_GROUP_END text */
+/* NETWORK_GROUP listener */
+
+static ncr_obj_@LISTENER_RESULT_TYPE@ @TCP_LISTENER_BIND@(
+    ncr_obj_@ADDRESS_ID@ *ncr_v_@LISTENER_BIND_ADDRESS_ID@,
+    int32_t ncr_v_@LISTENER_BIND_BACKLOG_ID@,
+    size_t ncr_line, size_t ncr_column) {
+    if (!ncr_network_valid_address(ncr_v_@LISTENER_BIND_ADDRESS_ID@)) {
+        NCR_NETWORK_RETURN_ERROR(@LISTENER_BIND_RESULT_ID@, "TcpListener.bind address", EAFNOSUPPORT, ncr_line, ncr_column);
+    }
+    if (ncr_v_@LISTENER_BIND_BACKLOG_ID@ <= 0) {
+        NCR_NETWORK_RETURN_ERROR(@LISTENER_BIND_RESULT_ID@, "TcpListener.bind backlog", EINVAL, ncr_line, ncr_column);
+    }
+    int fd = socket(ncr_v_@LISTENER_BIND_ADDRESS_ID@->family, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
+    if (fd < 0) { int failure = errno; NCR_NETWORK_RETURN_ERROR(@LISTENER_BIND_RESULT_ID@, "TcpListener.bind socket", failure, ncr_line, ncr_column); }
+    if (bind(fd, (const struct sockaddr *)&ncr_v_@LISTENER_BIND_ADDRESS_ID@->address, ncr_v_@LISTENER_BIND_ADDRESS_ID@->length) != 0) {
+        int failure = errno;
+        ncr_network_drop_fd(&fd);
+        NCR_NETWORK_RETURN_ERROR(@LISTENER_BIND_RESULT_ID@, "TcpListener.bind", failure, ncr_line, ncr_column);
+    }
+    if (listen(fd, ncr_v_@LISTENER_BIND_BACKLOG_ID@) != 0) {
+        int failure = errno;
+        ncr_network_drop_fd(&fd);
+        NCR_NETWORK_RETURN_ERROR(@LISTENER_BIND_RESULT_ID@, "TcpListener.listen", failure, ncr_line, ncr_column);
+    }
+    ncr_obj_@TCP_LISTENER_ID@ *listener = ncr_allocate(sizeof(*listener), ncr_line, ncr_column);
+    listener->fd = fd;
+    return (ncr_obj_@LISTENER_RESULT_TYPE@){
+        .tag = @LISTENER_RESULT_OK_TAG@,
+        .data.v@LISTENER_RESULT_OK_TAG@.f0 = listener
+    };
+}
+
+static ncr_obj_@ACCEPT_RESULT_TYPE@ @TCP_LISTENER_ACCEPT@(ncr_obj_@TCP_LISTENER_ID@ *p, int64_t ncr_v_@ACCEPT_TIMEOUT_ID@, size_t ncr_line, size_t ncr_column) {
+    if (p->fd < 0) { NCR_NETWORK_RETURN_ERROR(@ACCEPT_RESULT_ID@, "TcpListener.accept", EBADF, ncr_line, ncr_column); }
+    bool finite = false;
+    int64_t deadline = 0;
+    int failure = 0;
+    if (!ncr_network_deadline(ncr_v_@ACCEPT_TIMEOUT_ID@, &finite, &deadline, &failure)) {
+        NCR_NETWORK_RETURN_ERROR(@ACCEPT_RESULT_ID@, "TcpListener.accept timeout", failure, ncr_line, ncr_column);
+    }
+    for (;;) {
+        int ready = ncr_network_poll(p->fd, POLLIN, finite, deadline, &failure);
+        if (ready == 0) { NCR_NETWORK_RETURN_TIMEOUT(@ACCEPT_RESULT_ID@, "TcpListener.accept", ncr_line, ncr_column); }
+        if (ready < 0) { NCR_NETWORK_RETURN_ERROR(@ACCEPT_RESULT_ID@, "TcpListener.accept poll", failure, ncr_line, ncr_column); }
+        int accepted = accept4(p->fd, NULL, NULL, SOCK_NONBLOCK | SOCK_CLOEXEC);
+        if (accepted >= 0) {
+            ncr_obj_@TCP_STREAM_ID@ *stream = ncr_allocate(sizeof(*stream), ncr_line, ncr_column);
+            stream->fd = accepted;
+            return (ncr_obj_@ACCEPT_RESULT_TYPE@){
+                .tag = @ACCEPT_RESULT_OK_TAG@,
+                .data.v@ACCEPT_RESULT_OK_TAG@.f0 = stream
+            };
+        }
+        failure = errno;
+        if (failure == EINTR || failure == EAGAIN || failure == EWOULDBLOCK) { continue; }
+        NCR_NETWORK_RETURN_ERROR(@ACCEPT_RESULT_ID@, "TcpListener.accept", failure, ncr_line, ncr_column);
+    }
+}
+
+static ncr_obj_@ADDRESS_RESULT_TYPE@ @TCP_LISTENER_LOCAL_ADDRESS@(ncr_obj_@TCP_LISTENER_ID@ *p, size_t ncr_line, size_t ncr_column) {
+    return ncr_network_get_address(p->fd, false, "TcpListener.localAddress", ncr_line, ncr_column);
+}
+
+static ncr_obj_@UNIT_RESULT_TYPE@ @TCP_LISTENER_CLOSE@(ncr_obj_@TCP_LISTENER_ID@ *p, size_t ncr_line, size_t ncr_column) {
+    return ncr_network_close(&p->fd, "TcpListener.close", ncr_line, ncr_column);
+}
+/* NETWORK_GROUP_END listener */
+/* NETWORK_GROUP stream */
+
+static ncr_obj_@CONNECT_RESULT_TYPE@ @TCP_STREAM_CONNECT@(ncr_obj_@ADDRESS_ID@ *ncr_v_@CONNECT_ADDRESS_ID@, int64_t ncr_v_@CONNECT_TIMEOUT_ID@, size_t ncr_line, size_t ncr_column) {
+    if (!ncr_network_valid_address(ncr_v_@CONNECT_ADDRESS_ID@)) {
+        NCR_NETWORK_RETURN_ERROR(@CONNECT_RESULT_ID@, "TcpStream.connect address", EAFNOSUPPORT, ncr_line, ncr_column);
+    }
+    bool finite = false;
+    int64_t deadline = 0;
+    int failure = 0;
+    if (!ncr_network_deadline(ncr_v_@CONNECT_TIMEOUT_ID@, &finite, &deadline, &failure)) {
+        NCR_NETWORK_RETURN_ERROR(@CONNECT_RESULT_ID@, "TcpStream.connect timeout", failure, ncr_line, ncr_column);
+    }
+    int fd = socket(ncr_v_@CONNECT_ADDRESS_ID@->family, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
+    if (fd < 0) { failure = errno; NCR_NETWORK_RETURN_ERROR(@CONNECT_RESULT_ID@, "TcpStream.connect socket", failure, ncr_line, ncr_column); }
+    int status = connect(fd, (const struct sockaddr *)&ncr_v_@CONNECT_ADDRESS_ID@->address, ncr_v_@CONNECT_ADDRESS_ID@->length);
+    if (status != 0) {
+        failure = errno;
+        if (failure != EINPROGRESS && failure != EALREADY && failure != EINTR) {
+            ncr_network_drop_fd(&fd);
+            NCR_NETWORK_RETURN_ERROR(@CONNECT_RESULT_ID@, "TcpStream.connect", failure, ncr_line, ncr_column);
+        }
+        for (;;) {
+            int ready = ncr_network_poll(fd, POLLOUT, finite, deadline, &failure);
+            if (ready == 0) {
+                ncr_network_drop_fd(&fd);
+                NCR_NETWORK_RETURN_TIMEOUT(@CONNECT_RESULT_ID@, "TcpStream.connect", ncr_line, ncr_column);
+            }
+            if (ready < 0) {
+                ncr_network_drop_fd(&fd);
+                NCR_NETWORK_RETURN_ERROR(@CONNECT_RESULT_ID@, "TcpStream.connect poll", failure, ncr_line, ncr_column);
+            }
+            int socket_error = 0;
+            socklen_t socket_error_length = (socklen_t)sizeof(socket_error);
+            if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &socket_error, &socket_error_length) != 0) {
+                failure = errno;
+                ncr_network_drop_fd(&fd);
+                NCR_NETWORK_RETURN_ERROR(@CONNECT_RESULT_ID@, "TcpStream.connect SO_ERROR", failure, ncr_line, ncr_column);
+            }
+            if (socket_error == 0) { break; }
+            if (socket_error == EINPROGRESS || socket_error == EALREADY) { continue; }
+            ncr_network_drop_fd(&fd);
+            NCR_NETWORK_RETURN_ERROR(@CONNECT_RESULT_ID@, "TcpStream.connect", socket_error, ncr_line, ncr_column);
+        }
+    }
+    ncr_obj_@TCP_STREAM_ID@ *stream = ncr_allocate(sizeof(*stream), ncr_line, ncr_column);
+    stream->fd = fd;
+    return (ncr_obj_@CONNECT_RESULT_TYPE@){
+        .tag = @CONNECT_RESULT_OK_TAG@,
+        .data.v@CONNECT_RESULT_OK_TAG@.f0 = stream
+    };
+}
+
+static ncr_obj_@LONG_RESULT_TYPE@ @TCP_STREAM_READ_SOME@(ncr_obj_@TCP_STREAM_ID@ *p, ncr_obj_@BUFFER_ID@ *ncr_v_@READ_DESTINATION_ID@, int64_t ncr_v_@READ_MAX_ID@, int64_t ncr_v_@READ_TIMEOUT_ID@, size_t ncr_line, size_t ncr_column) {
+    if (p->fd < 0) { NCR_NETWORK_RETURN_ERROR(@LONG_RESULT_ID@, "TcpStream.readSome", EBADF, ncr_line, ncr_column); }
+    if (ncr_v_@READ_MAX_ID@ < 0) { NCR_NETWORK_RETURN_ERROR(@LONG_RESULT_ID@, "TcpStream.readSome maxBytes", EINVAL, ncr_line, ncr_column); }
+    if (ncr_v_@READ_TIMEOUT_ID@ < 0) { NCR_NETWORK_RETURN_ERROR(@LONG_RESULT_ID@, "TcpStream.readSome timeout", EINVAL, ncr_line, ncr_column); }
+    if (ncr_v_@READ_MAX_ID@ == 0) {
+        return (ncr_obj_@LONG_RESULT_ID@){.tag = @LONG_RESULT_OK_TAG@, .data.v@LONG_RESULT_OK_TAG@.f0 = 0};
+    }
+    uint64_t requested_value = (uint64_t)ncr_v_@READ_MAX_ID@;
+    if (requested_value > (uint64_t)SIZE_MAX) { NCR_NETWORK_RETURN_ERROR(@LONG_RESULT_ID@, "TcpStream.readSome maxBytes", EOVERFLOW, ncr_line, ncr_column); }
+    if (requested_value > (uint64_t)SSIZE_MAX) { requested_value = (uint64_t)SSIZE_MAX; }
+    size_t requested = (size_t)requested_value;
+    if (requested > (size_t)INT64_MAX - ncr_v_@READ_DESTINATION_ID@->length
+        || requested > SIZE_MAX - ncr_v_@READ_DESTINATION_ID@->length) {
+        NCR_NETWORK_RETURN_ERROR(@LONG_RESULT_ID@, "TcpStream.readSome buffer length", EOVERFLOW, ncr_line, ncr_column);
+    }
+    bool finite = false;
+    int64_t deadline = 0;
+    int failure = 0;
+    if (!ncr_network_deadline(ncr_v_@READ_TIMEOUT_ID@, &finite, &deadline, &failure)) {
+        NCR_NETWORK_RETURN_ERROR(@LONG_RESULT_ID@, "TcpStream.readSome timeout", failure, ncr_line, ncr_column);
+    }
+    @BUFFER_RESERVE@(ncr_v_@READ_DESTINATION_ID@, ncr_v_@READ_DESTINATION_ID@->length + requested, ncr_line, ncr_column);
+    for (;;) {
+        int ready = ncr_network_poll(p->fd, POLLIN, finite, deadline, &failure);
+        if (ready == 0) { NCR_NETWORK_RETURN_TIMEOUT(@LONG_RESULT_ID@, "TcpStream.readSome", ncr_line, ncr_column); }
+        if (ready < 0) { NCR_NETWORK_RETURN_ERROR(@LONG_RESULT_ID@, "TcpStream.readSome poll", failure, ncr_line, ncr_column); }
+        ssize_t count = recv(p->fd, ncr_v_@READ_DESTINATION_ID@->bytes + ncr_v_@READ_DESTINATION_ID@->length, requested, 0);
+        if (count >= 0) {
+            ncr_v_@READ_DESTINATION_ID@->length += (size_t)count;
+            return (ncr_obj_@LONG_RESULT_ID@){.tag = @LONG_RESULT_OK_TAG@, .data.v@LONG_RESULT_OK_TAG@.f0 = (int64_t)count};
+        }
+        failure = errno;
+        if (failure == EINTR || failure == EAGAIN || failure == EWOULDBLOCK) { continue; }
+        NCR_NETWORK_RETURN_ERROR(@LONG_RESULT_ID@, "TcpStream.readSome", failure, ncr_line, ncr_column);
+    }
+}
+
+static ncr_obj_@LONG_RESULT_TYPE@ @TCP_STREAM_WRITE_SOME@(ncr_obj_@TCP_STREAM_ID@ *p, ncr_obj_@BUFFER_ID@ *ncr_v_@WRITE_SOURCE_ID@, int64_t ncr_v_@WRITE_OFFSET_ID@, int64_t ncr_v_@WRITE_MAX_ID@, int64_t ncr_v_@WRITE_TIMEOUT_ID@, size_t ncr_line, size_t ncr_column) {
+    if (p->fd < 0) { NCR_NETWORK_RETURN_ERROR(@LONG_RESULT_ID@, "TcpStream.writeSome", EBADF, ncr_line, ncr_column); }
+    if (ncr_v_@WRITE_OFFSET_ID@ < 0 || ncr_v_@WRITE_MAX_ID@ < 0
+        || (uint64_t)ncr_v_@WRITE_OFFSET_ID@ > (uint64_t)ncr_v_@WRITE_SOURCE_ID@->length
+        || (uint64_t)ncr_v_@WRITE_MAX_ID@ > (uint64_t)ncr_v_@WRITE_SOURCE_ID@->length - (uint64_t)ncr_v_@WRITE_OFFSET_ID@) {
+        NCR_NETWORK_RETURN_ERROR(@LONG_RESULT_ID@, "TcpStream.writeSome range", EINVAL, ncr_line, ncr_column);
+    }
+    if (ncr_v_@WRITE_TIMEOUT_ID@ < 0) { NCR_NETWORK_RETURN_ERROR(@LONG_RESULT_ID@, "TcpStream.writeSome timeout", EINVAL, ncr_line, ncr_column); }
+    if (ncr_v_@WRITE_MAX_ID@ == 0) {
+        return (ncr_obj_@LONG_RESULT_ID@){.tag = @LONG_RESULT_OK_TAG@, .data.v@LONG_RESULT_OK_TAG@.f0 = 0};
+    }
+    uint64_t requested_value = (uint64_t)ncr_v_@WRITE_MAX_ID@;
+    if (requested_value > (uint64_t)SIZE_MAX) { NCR_NETWORK_RETURN_ERROR(@LONG_RESULT_ID@, "TcpStream.writeSome maxBytes", EOVERFLOW, ncr_line, ncr_column); }
+    if (requested_value > (uint64_t)SSIZE_MAX) { requested_value = (uint64_t)SSIZE_MAX; }
+    size_t requested = (size_t)requested_value;
+    bool finite = false;
+    int64_t deadline = 0;
+    int failure = 0;
+    if (!ncr_network_deadline(ncr_v_@WRITE_TIMEOUT_ID@, &finite, &deadline, &failure)) {
+        NCR_NETWORK_RETURN_ERROR(@LONG_RESULT_ID@, "TcpStream.writeSome timeout", failure, ncr_line, ncr_column);
+    }
+    const unsigned char *bytes = ncr_v_@WRITE_SOURCE_ID@->bytes + (size_t)ncr_v_@WRITE_OFFSET_ID@;
+    for (;;) {
+        int ready = ncr_network_poll(p->fd, POLLOUT, finite, deadline, &failure);
+        if (ready == 0) { NCR_NETWORK_RETURN_TIMEOUT(@LONG_RESULT_ID@, "TcpStream.writeSome", ncr_line, ncr_column); }
+        if (ready < 0) { NCR_NETWORK_RETURN_ERROR(@LONG_RESULT_ID@, "TcpStream.writeSome poll", failure, ncr_line, ncr_column); }
+        ssize_t count = send(p->fd, bytes, requested, MSG_NOSIGNAL);
+        if (count > 0) {
+            return (ncr_obj_@LONG_RESULT_ID@){.tag = @LONG_RESULT_OK_TAG@, .data.v@LONG_RESULT_OK_TAG@.f0 = (int64_t)count};
+        }
+        if (count == 0) { NCR_NETWORK_RETURN_ERROR(@LONG_RESULT_ID@, "TcpStream.writeSome", EPIPE, ncr_line, ncr_column); }
+        failure = errno;
+        if (failure == EINTR || failure == EAGAIN || failure == EWOULDBLOCK) { continue; }
+        NCR_NETWORK_RETURN_ERROR(@LONG_RESULT_ID@, "TcpStream.writeSome", failure, ncr_line, ncr_column);
+    }
+}
+
+static ncr_obj_@UNIT_RESULT_TYPE@ @TCP_STREAM_WRITE_ALL@(ncr_obj_@TCP_STREAM_ID@ *p, ncr_obj_@BUFFER_ID@ *ncr_v_@WRITE_ALL_SOURCE_ID@, int64_t ncr_v_@WRITE_ALL_TIMEOUT_ID@, size_t ncr_line, size_t ncr_column) {
+    if (p->fd < 0) { NCR_NETWORK_RETURN_ERROR(@UNIT_RESULT_ID@, "TcpStream.writeAll", EBADF, ncr_line, ncr_column); }
+    if (ncr_v_@WRITE_ALL_TIMEOUT_ID@ < 0) { NCR_NETWORK_RETURN_ERROR(@UNIT_RESULT_ID@, "TcpStream.writeAll timeout", EINVAL, ncr_line, ncr_column); }
+    bool finite = false;
+    int64_t deadline = 0;
+    int failure = 0;
+    if (!ncr_network_deadline(ncr_v_@WRITE_ALL_TIMEOUT_ID@, &finite, &deadline, &failure)) {
+        NCR_NETWORK_RETURN_ERROR(@UNIT_RESULT_ID@, "TcpStream.writeAll timeout", failure, ncr_line, ncr_column);
+    }
+    size_t offset = 0;
+    while (offset < ncr_v_@WRITE_ALL_SOURCE_ID@->length) {
+        size_t remaining = ncr_v_@WRITE_ALL_SOURCE_ID@->length - offset;
+        size_t amount = remaining > (size_t)SSIZE_MAX ? (size_t)SSIZE_MAX : remaining;
+        int ready = ncr_network_poll(p->fd, POLLOUT, finite, deadline, &failure);
+        if (ready == 0) { NCR_NETWORK_RETURN_TIMEOUT(@UNIT_RESULT_ID@, "TcpStream.writeAll", ncr_line, ncr_column); }
+        if (ready < 0) { NCR_NETWORK_RETURN_ERROR(@UNIT_RESULT_ID@, "TcpStream.writeAll poll", failure, ncr_line, ncr_column); }
+        ssize_t count = send(p->fd, ncr_v_@WRITE_ALL_SOURCE_ID@->bytes + offset, amount, MSG_NOSIGNAL);
+        if (count > 0) { offset += (size_t)count; continue; }
+        if (count == 0) { NCR_NETWORK_RETURN_ERROR(@UNIT_RESULT_ID@, "TcpStream.writeAll", EPIPE, ncr_line, ncr_column); }
+        failure = errno;
+        if (failure == EINTR || failure == EAGAIN || failure == EWOULDBLOCK) { continue; }
+        NCR_NETWORK_RETURN_ERROR(@UNIT_RESULT_ID@, "TcpStream.writeAll", failure, ncr_line, ncr_column);
+    }
+    return (ncr_obj_@UNIT_RESULT_ID@){
+        .tag = @UNIT_RESULT_OK_TAG@,
+        .data.v@UNIT_RESULT_OK_TAG@.f0 = UINT8_C(0)
+    };
+}
+
+static ncr_obj_@ADDRESS_RESULT_TYPE@ @TCP_STREAM_PEER_ADDRESS@(ncr_obj_@TCP_STREAM_ID@ *p, size_t ncr_line, size_t ncr_column) {
+    return ncr_network_get_address(p->fd, true, "TcpStream.peerAddress", ncr_line, ncr_column);
+}
+
+static ncr_obj_@ADDRESS_RESULT_TYPE@ @TCP_STREAM_LOCAL_ADDRESS@(ncr_obj_@TCP_STREAM_ID@ *p, size_t ncr_line, size_t ncr_column) {
+    return ncr_network_get_address(p->fd, false, "TcpStream.localAddress", ncr_line, ncr_column);
+}
+
+static ncr_obj_@UNIT_RESULT_TYPE@ @TCP_STREAM_CLOSE@(ncr_obj_@TCP_STREAM_ID@ *p, size_t ncr_line, size_t ncr_column) {
+    return ncr_network_close(&p->fd, "TcpStream.close", ncr_line, ncr_column);
+}
+/* NETWORK_GROUP_END stream */
+/* NETWORK_GROUP udp */
+
+static ncr_obj_@SOCKET_RESULT_TYPE@ @UDP_SOCKET_BIND@(ncr_obj_@ADDRESS_ID@ *ncr_v_@UDP_BIND_ADDRESS_ID@, size_t ncr_line, size_t ncr_column) {
+    if (!ncr_network_valid_address(ncr_v_@UDP_BIND_ADDRESS_ID@)) {
+        NCR_NETWORK_RETURN_ERROR(@UDP_BIND_RESULT_ID@, "UdpSocket.bind address", EAFNOSUPPORT, ncr_line, ncr_column);
+    }
+    int fd = socket(ncr_v_@UDP_BIND_ADDRESS_ID@->family, SOCK_DGRAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
+    if (fd < 0) { int failure = errno; NCR_NETWORK_RETURN_ERROR(@UDP_BIND_RESULT_ID@, "UdpSocket.bind socket", failure, ncr_line, ncr_column); }
+    if (bind(fd, (const struct sockaddr *)&ncr_v_@UDP_BIND_ADDRESS_ID@->address, ncr_v_@UDP_BIND_ADDRESS_ID@->length) != 0) {
+        int failure = errno;
+        ncr_network_drop_fd(&fd);
+        NCR_NETWORK_RETURN_ERROR(@UDP_BIND_RESULT_ID@, "UdpSocket.bind", failure, ncr_line, ncr_column);
+    }
+    ncr_obj_@UDP_SOCKET_ID@ *socket = ncr_allocate(sizeof(*socket), ncr_line, ncr_column);
+    socket->fd = fd;
+    return (ncr_obj_@SOCKET_RESULT_TYPE@){
+        .tag = @UDP_SOCKET_RESULT_OK_TAG@,
+        .data.v@UDP_SOCKET_RESULT_OK_TAG@.f0 = socket
+    };
+}
+
+static ncr_obj_@LONG_RESULT_TYPE@ @UDP_SOCKET_SEND_TO@(ncr_obj_@UDP_SOCKET_ID@ *p, ncr_obj_@BUFFER_ID@ *ncr_v_@UDP_SEND_SOURCE_ID@, int64_t ncr_v_@UDP_SEND_OFFSET_ID@, int64_t ncr_v_@UDP_SEND_LENGTH_ID@, ncr_obj_@ADDRESS_ID@ *ncr_v_@UDP_SEND_DESTINATION_ID@, int64_t ncr_v_@UDP_SEND_TIMEOUT_ID@, size_t ncr_line, size_t ncr_column) {
+    if (p->fd < 0) { NCR_NETWORK_RETURN_ERROR(@UDP_SEND_RESULT_ID@, "UdpSocket.sendTo", EBADF, ncr_line, ncr_column); }
+    if (ncr_v_@UDP_SEND_OFFSET_ID@ < 0 || ncr_v_@UDP_SEND_LENGTH_ID@ < 0
+        || (uint64_t)ncr_v_@UDP_SEND_OFFSET_ID@ > (uint64_t)ncr_v_@UDP_SEND_SOURCE_ID@->length
+        || (uint64_t)ncr_v_@UDP_SEND_LENGTH_ID@ > (uint64_t)ncr_v_@UDP_SEND_SOURCE_ID@->length - (uint64_t)ncr_v_@UDP_SEND_OFFSET_ID@) {
+        NCR_NETWORK_RETURN_ERROR(@UDP_SEND_RESULT_ID@, "UdpSocket.sendTo range", EINVAL, ncr_line, ncr_column);
+    }
+    if (!ncr_network_valid_address(ncr_v_@UDP_SEND_DESTINATION_ID@)) {
+        NCR_NETWORK_RETURN_ERROR(@UDP_SEND_RESULT_ID@, "UdpSocket.sendTo destination", EAFNOSUPPORT, ncr_line, ncr_column);
+    }
+    if (ncr_v_@UDP_SEND_TIMEOUT_ID@ < 0) { NCR_NETWORK_RETURN_ERROR(@UDP_SEND_RESULT_ID@, "UdpSocket.sendTo timeout", EINVAL, ncr_line, ncr_column); }
+    uint64_t length_value = (uint64_t)ncr_v_@UDP_SEND_LENGTH_ID@;
+    if (length_value > (uint64_t)SIZE_MAX || length_value > (uint64_t)SSIZE_MAX) {
+        NCR_NETWORK_RETURN_ERROR(@UDP_SEND_RESULT_ID@, "UdpSocket.sendTo length", EOVERFLOW, ncr_line, ncr_column);
+    }
+    size_t length = (size_t)length_value;
+    bool finite = false;
+    int64_t deadline = 0;
+    int failure = 0;
+    if (!ncr_network_deadline(ncr_v_@UDP_SEND_TIMEOUT_ID@, &finite, &deadline, &failure)) {
+        NCR_NETWORK_RETURN_ERROR(@UDP_SEND_RESULT_ID@, "UdpSocket.sendTo timeout", failure, ncr_line, ncr_column);
+    }
+    const unsigned char *bytes = length == 0 ? NULL : ncr_v_@UDP_SEND_SOURCE_ID@->bytes + (size_t)ncr_v_@UDP_SEND_OFFSET_ID@;
+    for (;;) {
+        int ready = ncr_network_poll(p->fd, POLLOUT, finite, deadline, &failure);
+        if (ready == 0) { NCR_NETWORK_RETURN_TIMEOUT(@UDP_SEND_RESULT_ID@, "UdpSocket.sendTo", ncr_line, ncr_column); }
+        if (ready < 0) { NCR_NETWORK_RETURN_ERROR(@UDP_SEND_RESULT_ID@, "UdpSocket.sendTo poll", failure, ncr_line, ncr_column); }
+        ssize_t count = sendto(p->fd, bytes, length, 0,
+            (const struct sockaddr *)&ncr_v_@UDP_SEND_DESTINATION_ID@->address, ncr_v_@UDP_SEND_DESTINATION_ID@->length);
+        if (count >= 0) {
+            if ((size_t)count != length) { NCR_NETWORK_RETURN_ERROR(@UDP_SEND_RESULT_ID@, "UdpSocket.sendTo short datagram", EIO, ncr_line, ncr_column); }
+            return (ncr_obj_@LONG_RESULT_ID@){.tag = @LONG_RESULT_OK_TAG@, .data.v@LONG_RESULT_OK_TAG@.f0 = (int64_t)count};
+        }
+        failure = errno;
+        if (failure == EINTR || failure == EAGAIN || failure == EWOULDBLOCK) { continue; }
+        NCR_NETWORK_RETURN_ERROR(@UDP_SEND_RESULT_ID@, "UdpSocket.sendTo", failure, ncr_line, ncr_column);
+    }
+}
+
+static ncr_obj_@DATAGRAM_RESULT_TYPE@ @UDP_SOCKET_RECEIVE_FROM@(ncr_obj_@UDP_SOCKET_ID@ *p, ncr_obj_@BUFFER_ID@ *ncr_v_@UDP_RECEIVE_DESTINATION_ID@, int64_t ncr_v_@UDP_RECEIVE_MAX_ID@, int64_t ncr_v_@UDP_RECEIVE_TIMEOUT_ID@, size_t ncr_line, size_t ncr_column) {
+    if (p->fd < 0) { NCR_NETWORK_RETURN_ERROR(@UDP_RECEIVE_RESULT_ID@, "UdpSocket.receiveFrom", EBADF, ncr_line, ncr_column); }
+    if (ncr_v_@UDP_RECEIVE_MAX_ID@ < 0) { NCR_NETWORK_RETURN_ERROR(@UDP_RECEIVE_RESULT_ID@, "UdpSocket.receiveFrom maxBytes", EINVAL, ncr_line, ncr_column); }
+    if (ncr_v_@UDP_RECEIVE_TIMEOUT_ID@ < 0) { NCR_NETWORK_RETURN_ERROR(@UDP_RECEIVE_RESULT_ID@, "UdpSocket.receiveFrom timeout", EINVAL, ncr_line, ncr_column); }
+    uint64_t requested_value = (uint64_t)ncr_v_@UDP_RECEIVE_MAX_ID@;
+    if (requested_value > (uint64_t)SIZE_MAX) { NCR_NETWORK_RETURN_ERROR(@UDP_RECEIVE_RESULT_ID@, "UdpSocket.receiveFrom maxBytes", EOVERFLOW, ncr_line, ncr_column); }
+    if (requested_value > (uint64_t)SSIZE_MAX) { requested_value = (uint64_t)SSIZE_MAX; }
+    size_t requested = (size_t)requested_value;
+    if (requested > (size_t)INT64_MAX - ncr_v_@UDP_RECEIVE_DESTINATION_ID@->length
+        || requested > SIZE_MAX - ncr_v_@UDP_RECEIVE_DESTINATION_ID@->length) {
+        NCR_NETWORK_RETURN_ERROR(@UDP_RECEIVE_RESULT_ID@, "UdpSocket.receiveFrom buffer length", EOVERFLOW, ncr_line, ncr_column);
+    }
+    bool finite = false;
+    int64_t deadline = 0;
+    int failure = 0;
+    if (!ncr_network_deadline(ncr_v_@UDP_RECEIVE_TIMEOUT_ID@, &finite, &deadline, &failure)) {
+        NCR_NETWORK_RETURN_ERROR(@UDP_RECEIVE_RESULT_ID@, "UdpSocket.receiveFrom timeout", failure, ncr_line, ncr_column);
+    }
+    @BUFFER_RESERVE@(ncr_v_@UDP_RECEIVE_DESTINATION_ID@, ncr_v_@UDP_RECEIVE_DESTINATION_ID@->length + requested, ncr_line, ncr_column);
+    for (;;) {
+        int ready = ncr_network_poll(p->fd, POLLIN, finite, deadline, &failure);
+        if (ready == 0) { NCR_NETWORK_RETURN_TIMEOUT(@UDP_RECEIVE_RESULT_ID@, "UdpSocket.receiveFrom", ncr_line, ncr_column); }
+        if (ready < 0) { NCR_NETWORK_RETURN_ERROR(@UDP_RECEIVE_RESULT_ID@, "UdpSocket.receiveFrom poll", failure, ncr_line, ncr_column); }
+        struct sockaddr_storage source_storage;
+        memset(&source_storage, 0, sizeof(source_storage));
+        struct iovec vector = {
+            .iov_base = requested == 0 ? NULL : ncr_v_@UDP_RECEIVE_DESTINATION_ID@->bytes + ncr_v_@UDP_RECEIVE_DESTINATION_ID@->length,
+            .iov_len = requested
+        };
+        struct msghdr message;
+        memset(&message, 0, sizeof(message));
+        message.msg_name = &source_storage;
+        message.msg_namelen = (socklen_t)sizeof(source_storage);
+        message.msg_iov = &vector;
+        message.msg_iovlen = 1;
+        ssize_t count = recvmsg(p->fd, &message, MSG_TRUNC);
+        if (count < 0) {
+            failure = errno;
+            if (failure == EINTR || failure == EAGAIN || failure == EWOULDBLOCK) { continue; }
+            NCR_NETWORK_RETURN_ERROR(@UDP_RECEIVE_RESULT_ID@, "UdpSocket.receiveFrom", failure, ncr_line, ncr_column);
+        }
+        if ((uint64_t)count > (uint64_t)INT64_MAX) {
+            NCR_NETWORK_RETURN_ERROR(@UDP_RECEIVE_RESULT_ID@, "UdpSocket.receiveFrom datagram length", EOVERFLOW, ncr_line, ncr_column);
+        }
+        ncr_obj_@ADDRESS_ID@ *source = ncr_allocate(sizeof(*source), ncr_line, ncr_column);
+        if (!ncr_network_store_address(source, (const struct sockaddr *)&source_storage, message.msg_namelen)) {
+            ncr_drop_@ADDRESS_ID@(source);
+            NCR_NETWORK_RETURN_ERROR(@UDP_RECEIVE_RESULT_ID@, "UdpSocket.receiveFrom source", EAFNOSUPPORT, ncr_line, ncr_column);
+        }
+        size_t copied = (uint64_t)count > (uint64_t)requested ? requested : (size_t)count;
+        ncr_v_@UDP_RECEIVE_DESTINATION_ID@->length += copied;
+        ncr_obj_@DATAGRAM_ID@ *datagram = ncr_allocate(sizeof(*datagram), ncr_line, ncr_column);
+        datagram->source = source;
+        datagram->bytes_read = (int64_t)copied;
+        datagram->truncated = (message.msg_flags & MSG_TRUNC) != 0 || (uint64_t)count > (uint64_t)requested;
+        return (ncr_obj_@DATAGRAM_RESULT_TYPE@){
+            .tag = @UDP_RECEIVE_RESULT_OK_TAG@,
+            .data.v@UDP_RECEIVE_RESULT_OK_TAG@.f0 = datagram
+        };
+    }
+}
+
+static ncr_obj_@ADDRESS_RESULT_TYPE@ @UDP_SOCKET_LOCAL_ADDRESS@(ncr_obj_@UDP_SOCKET_ID@ *p, size_t ncr_line, size_t ncr_column) {
+    return ncr_network_get_address(p->fd, false, "UdpSocket.localAddress", ncr_line, ncr_column);
+}
+
+static ncr_obj_@UNIT_RESULT_TYPE@ @UDP_SOCKET_CLOSE@(ncr_obj_@UDP_SOCKET_ID@ *p, size_t ncr_line, size_t ncr_column) {
+    return ncr_network_close(&p->fd, "UdpSocket.close", ncr_line, ncr_column);
+}
+/* NETWORK_GROUP_END udp */
+/* NETWORK_GROUP datagram */
+
+static ncr_obj_@ADDRESS_ID@ *@DATAGRAM_SOURCE@(ncr_obj_@DATAGRAM_ID@ *p, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column;
+    return p->source;
+}
+
+static int64_t @DATAGRAM_BYTES_READ@(ncr_obj_@DATAGRAM_ID@ *p, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column;
+    return p->bytes_read;
+}
+
+static bool @DATAGRAM_TRUNCATED@(ncr_obj_@DATAGRAM_ID@ *p, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column;
+    return p->truncated;
+}
+/* NETWORK_GROUP_END datagram */
+
+#undef NCR_NETWORK_RETURN_ERROR
+#undef NCR_NETWORK_RETURN_TIMEOUT
+#undef NCR_NETWORK_RETURN_GAI

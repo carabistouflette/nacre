@@ -42,6 +42,7 @@ pub enum NativeClass {
     Map { key: Type, value: Type, key_kind: Option<MapKeyKind> },
     Set { key: Type, key_kind: Option<MapKeyKind> }, Comparator(Type),
     Text, Regex, RegexMatch, Arrays, ByteBuffer, Console, Files, Args, Math, Random, Time,
+    SocketAddress, TcpListener, TcpStream, Datagram, UdpSocket,
 }
 #[derive(Debug, Clone)]
 pub struct Variant { pub name: String, pub fields: Vec<Type>, pub span: Span }
