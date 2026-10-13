@@ -144,6 +144,7 @@ pub enum NativeClass {
     Sender(Type), Receiver(Type), Env, Command, Process, ProcessOutput, Database,
     Condition(Type), Future(Type), ThreadPool(Type),
     AtomicInt, AtomicLong, AtomicBoolean, Semaphore, CountDownLatch, Barrier, CancellationToken,
+    XmlDocument,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NativeMethod {
@@ -299,4 +300,8 @@ pub enum NativeMethod {
     CancellationTokenCreate, CancellationTokenCloneHandle, CancellationTokenRequest, CancellationTokenIsCancelled,
     FutureSpawn, FutureAwait, FutureCancel, FutureIsDone,
     ThreadPoolCreate, ThreadPoolSubmit, ThreadPoolSchedule, ThreadPoolShutdown,
+    XmlDocumentParse, XmlDocumentSerialize, XmlDocumentRootName,
+    XmlDocumentQueryText, XmlDocumentQueryXml, XmlDocumentSetText,
+    XmlDocumentSetAttribute, XmlDocumentRemove, XmlDocumentAppendXml,
+    XmlDocumentValidate, XmlDocumentRegisterNamespace, XmlDocumentEscape,
 }

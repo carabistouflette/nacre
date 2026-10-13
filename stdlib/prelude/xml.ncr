@@ -1,0 +1,16 @@
+// In-memory DOM, XPath, and XSD validation. Streaming XML and XSLT are not provided.
+class XmlDocument {
+    public static Result<XmlDocument, Text> parse(borrow Text xml) {}
+    public static Text escape(borrow Text text) {}
+
+    public readonly Result<Text, Text> serialize() {}
+    public readonly Text rootName() {}
+    public readonly Result<List<Text>, Text> queryText(borrow Text xpath) {}
+    public readonly Result<List<Text>, Text> queryXml(borrow Text xpath) {}
+    public Result<long, Text> setText(borrow Text xpath, borrow Text value) {}
+    public Result<long, Text> setAttribute(borrow Text xpath, borrow Text name, borrow Text value) {}
+    public Result<long, Text> remove(borrow Text xpath) {}
+    public Result<long, Text> appendXml(borrow Text parentXpath, borrow Text fragment) {}
+    public readonly Result<Unit, Text> validate(borrow Text xsd) {}
+    public Result<Unit, Text> registerNamespace(borrow Text prefix, borrow Text uri) {}
+}

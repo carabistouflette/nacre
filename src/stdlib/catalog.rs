@@ -47,6 +47,7 @@ enum NativeBuiltin {
     Compression,
     Checksums,
     DateTime,
+    XmlDocument,
     SocketAddress,
     TcpListener,
     TcpStream,
@@ -200,6 +201,7 @@ impl NativeBuiltin {
             Self::ZipReader => NativeClass::ZipReader,
             Self::ZipWriter => NativeClass::ZipWriter,
             Self::ZipEntry => NativeClass::ZipEntry,
+            Self::XmlDocument => NativeClass::XmlDocument,
         }
     }
 }
@@ -372,6 +374,10 @@ pub(super) const PRELUDE_UNITS: &[PreludeUnit] = &[
             Builtin { name: "DateFields", native: None },
             Builtin { name: "DateTime", native: Some(NativeBuiltin::DateTime) },
         ],
+    },
+    PreludeUnit {
+        source: include_str!("../../stdlib/prelude/xml.ncr"),
+        builtins: &[Builtin { name: "XmlDocument", native: Some(NativeBuiltin::XmlDocument) }],
     },
     PreludeUnit {
         source: include_str!("../../stdlib/prelude/network.ncr"),

@@ -70,6 +70,7 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
             C::CryptoKey | C::CryptoDigest | C::CryptoMac | C::Certificate |
             C::TlsConfig | C::TlsStream | C::WebSocket | C::WebSocketMessage |
             C::ZipReader | C::ZipWriter | C::ZipEntry |
+            C::XmlDocument |
             C::Thread(_) | C::Mutex(_) | C::Guard(_) | C::Channel(_) |
             C::Sender(_) | C::Receiver(_) | C::Condition(_) | C::Future(_) | C::ThreadPool(_) |
             C::AtomicInt | C::AtomicLong | C::AtomicBoolean | C::Semaphore |
@@ -740,6 +741,18 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
         (C::ProcessOutput, "stdoutTruncated") => M::ProcessOutputStdoutTruncated,
         (C::ProcessOutput, "stderrTruncated") => M::ProcessOutputStderrTruncated,
         (C::ProcessOutput, "timedOut") => M::ProcessOutputTimedOut,
+        (C::XmlDocument, "parse") => M::XmlDocumentParse,
+        (C::XmlDocument, "serialize") => M::XmlDocumentSerialize,
+        (C::XmlDocument, "rootName") => M::XmlDocumentRootName,
+        (C::XmlDocument, "queryText") => M::XmlDocumentQueryText,
+        (C::XmlDocument, "queryXml") => M::XmlDocumentQueryXml,
+        (C::XmlDocument, "setText") => M::XmlDocumentSetText,
+        (C::XmlDocument, "setAttribute") => M::XmlDocumentSetAttribute,
+        (C::XmlDocument, "remove") => M::XmlDocumentRemove,
+        (C::XmlDocument, "appendXml") => M::XmlDocumentAppendXml,
+        (C::XmlDocument, "validate") => M::XmlDocumentValidate,
+        (C::XmlDocument, "registerNamespace") => M::XmlDocumentRegisterNamespace,
+        (C::XmlDocument, "escape") => M::XmlDocumentEscape,
         _ => unreachable!("compiler-owned native method"),
     }
 }

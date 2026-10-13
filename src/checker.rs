@@ -149,6 +149,7 @@ impl Tables {
                         t::NativeClass::Unicode | t::NativeClass::Character |
                         t::NativeClass::Charset | t::NativeClass::Locale |
                         t::NativeClass::SocketAddress | t::NativeClass::TcpListener |
+                        t::NativeClass::XmlDocument |
                         t::NativeClass::TcpStream | t::NativeClass::Datagram |
                         t::NativeClass::UdpSocket | t::NativeClass::HttpRequest |
                         t::NativeClass::HttpResponse | t::NativeClass::CryptoKey |
@@ -354,6 +355,7 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
             Some(a::NativeClass::ZipReader) => Some(t::NativeClass::ZipReader),
             Some(a::NativeClass::ZipWriter) => Some(t::NativeClass::ZipWriter),
             Some(a::NativeClass::ZipEntry) => Some(t::NativeClass::ZipEntry),
+            Some(a::NativeClass::XmlDocument) => Some(t::NativeClass::XmlDocument),
             None => None,
         };
     }

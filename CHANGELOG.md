@@ -88,6 +88,11 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   with its upstream zero-entry bidder correction; strict central-directory
   validation is preserved rather than falling back to streaming format detection.
 
+- Affine XmlDocument uses libxml2 for in-memory UTF-8 parsing, namespace-aware
+  XPath queries and mutation, serialization, XML escaping and actual XSD
+  validation. DTDs, external entities, XInclude processing, and external XSD
+  composition are denied; streaming XML and XSLT remain unsupported, so this is
+  not complete XML parity.
 - Floating min/max normalize signed-zero ties explicitly rather than relying on
   host libm's unspecified tie sign; both operand orders and same-sign zeros are
   covered by generated-program sanitizer regressions.
