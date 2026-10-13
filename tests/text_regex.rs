@@ -685,6 +685,13 @@ fn text_scalar_index_is_checked_and_opaque_regex_has_no_constructor() {
 }
 
 #[test]
+fn static_native_utility_types_are_not_values_but_factory_values_are() {
+    assert!(compile_to_c("void accept(Arrays values) {} void main() {}").is_err());
+    compile_to_c("void inspect(RegexMatch capture) { println(capture.groupCount()); } void main() {}")
+        .expect("factory-owned RegexMatch remains an instance value");
+}
+
+#[test]
 fn utf8_regex_example_runs_as_a_native_program() {
     let output = execute(include_str!("../examples/text/utf8_regex.ncr"));
     assert_eq!(output.stdout, "12\n6\nalpha\n🚀\nbeta\n2\n6\n10\n🚀\nbytes=15 scalars=12\n".as_bytes());

@@ -16,6 +16,10 @@ owner, and scope cleanup destroys any owner that was not transferred. There is n
 implicit clone or general reference counting. `clone()` and the named shared-handle
 operations below are explicit exceptions.
 
+Static-only prelude utility classes can be called by class name but cannot be
+used as value types. Factory-returned native values with instance methods, such as
+`RegexMatch` and `CryptoDigest`, remain usable affine values.
+
 Fallible library operations use `Result<T, Text>`. A successful command returns
 `Ok(())`, where `()` is the value of the inhabited `Unit` type; an error returns an
 owned diagnostic `Text`. `Option<T>` represents absence, not an error. A nonzero

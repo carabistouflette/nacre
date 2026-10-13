@@ -16,6 +16,7 @@ struct Signature {
 struct FieldInfo { name: String, ty: Type, visibility: Visibility }
 struct ClassInfo {
     native: Option<t::NativeClass>,
+    static_native: bool,
     name: String, fields: Vec<FieldInfo>, variants: Option<Vec<t::Variant>>,
     result: Option<t::ResultLayout>,
     methods: HashMap<String, usize>, constructor: Option<usize>, has_borrow: bool,
@@ -54,14 +55,7 @@ impl Tables {
             self.classes[from].implementations.iter().any(|(interface, _)| *interface == to))
     }
     fn is_static_native(&self, id: usize) -> bool {
-        matches!(self.classes[id].native,
-            Some(t::NativeClass::Arrays | t::NativeClass::Encoding | t::NativeClass::Console | t::NativeClass::Files |
-                t::NativeClass::Args | t::NativeClass::Math | t::NativeClass::Time |
-                t::NativeClass::DateTime |
-                t::NativeClass::Env | t::NativeClass::Crypto | t::NativeClass::Compression |
-                t::NativeClass::Checksums | t::NativeClass::Iterators(_) |
-                t::NativeClass::Unicode | t::NativeClass::Character | t::NativeClass::Charset |
-                t::NativeClass::Locale))
+        self.classes[id].static_native
     }
     fn type_name(&self, ty: Type) -> String {
         match ty {
@@ -258,7 +252,9 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
         if tables.names.insert(class.qualified_name.clone(), id).is_some() {
             return Err(Diagnostic::new(class.span, format!("type `{}` is declared more than once", class.qualified_name)));
         }
-        tables.classes.push(ClassInfo { native: None, name: class.qualified_name.clone(), fields: Vec::new(),
+        let static_native = class.is_builtin && class.native.is_some() && !class.is_interface
+            && class.constructor.is_none() && class.methods.iter().all(|method| method.is_static);
+        tables.classes.push(ClassInfo { native: None, static_native, name: class.qualified_name.clone(), fields: Vec::new(),
             variants: None, result: None, methods: HashMap::new(), constructor: None, has_borrow: false,
             is_interface: class.is_interface, interface_methods: Vec::new(), implementations: Vec::new() });
     }
@@ -630,7 +626,7 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
             if class.is_interface { tables.classes[class_id].interface_methods.push(id); }
             declarations.push(method.clone());
         }
-        if class.is_interface || class.variants.is_some() || tables.is_static_native(class_id)
+        if class.is_interface || class.variants.is_some()
             || (class.native.is_some() && class.constructor.is_none()) { continue; }
         let constructor = class.constructor.clone().unwrap_or_else(|| a::Function {
             name: class.name.clone(), span: class.span, return_type: a::Type::Void,

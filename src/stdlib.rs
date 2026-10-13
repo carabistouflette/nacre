@@ -63,25 +63,7 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
             C::Random => M::RandomNew,
             C::BinaryReader => M::BinaryReaderNew,
             C::BinaryWriter => M::BinaryWriterNew,
-            C::Unicode | C::Character | C::Charset | C::Locale |
-            C::Regex | C::RegexMatch | C::Arrays | C::ByteBuffer | C::Encoding | C::Crypto |
-            C::Path | C::File | C::Directory | C::FileInfo | C::Watcher | C::WatchEvent |
-            C::Console | C::Files | C::Args | C::Math | C::Time | C::DateTime | C::Temporal |
-            C::Compression | C::Checksums | C::BigInt | C::BigDecimal |
-            C::CryptoKey | C::CryptoDigest | C::CryptoMac | C::Certificate |
-            C::TlsConfig | C::TlsStream | C::WebSocket | C::WebSocketMessage |
-            C::ZipReader | C::ZipWriter | C::ZipEntry |
-            C::XmlDocument | C::XmlReader | C::XmlEvent | C::XmlWriter | C::XsltStylesheet |
-            C::Thread(_) | C::Mutex(_) | C::Guard(_) | C::Channel(_) |
-            C::Sender(_) | C::Receiver(_) | C::Condition(_) | C::Future(_) | C::ThreadPool(_) |
-            C::AtomicInt | C::AtomicLong | C::AtomicBoolean | C::Semaphore |
-            C::CountDownLatch | C::Barrier | C::CancellationToken |
-            C::Env | C::Command | C::Process | C::ProcessOutput | C::Uri | C::Dns =>
-                unreachable!("static or factory-only native class has no constructor"),
-            C::Uuid | C::SocketAddress | C::TcpListener | C::TcpStream | C::Datagram | C::UdpSocket |
-            C::HttpRequest | C::HttpResponse | C::ListIterator(_) | C::Iterators(_) |
-            C::Database =>
-                unreachable!("factory-only native class has no constructor"),
+            _ => unreachable!("native constructor has no codegen mapping"),
         };
     }
     if let C::ThreadPool(_) = class {

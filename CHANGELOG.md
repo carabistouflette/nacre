@@ -3,6 +3,11 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Native prelude identities and constructor availability derive from trusted AST
+  declarations. Static utilities follow their actual methods, while factory-
+  returned native values with instance queries remain values; declared concrete
+  constructors retain their direct code-generation mappings.
+
 - XML consumer regressions use named borrowed inputs and retain their process
   output for allocation checks. Native CLI checks validate XSD, preserve query
   values after the document is dropped, and reject external-entity declarations.
