@@ -574,12 +574,6 @@
     "error": "E4103"
   },
   {
-    "name": "borrow_substituted_primitive",
-    "source": "class View<T>{borrow T target;View(borrow T target){this.target=target;}}void main(){View<int> v=new View<int>(1);}",
-    "valid": false,
-    "error": "E4103"
-  },
-  {
     "name": "generic_diamond",
     "source": "class Box<T> { T value; Box(T value) { this.value = value; } readonly T get() { return this.value; } } void main(){Box<int> b=new Box<>(1);}",
     "valid": false,

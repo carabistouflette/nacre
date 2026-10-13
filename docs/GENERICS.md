@@ -28,8 +28,10 @@ Declarations may have up to eight distinct type parameters. A type parameter
 cannot hide a declared type name. Type arguments may be `byte`, `char`, `int`,
 `long`, `double`, `Unit`, `boolean`, `String`, or a nominal class, interface, or
 enum type with its own valid arguments. `void` and borrowed types cannot be type
-arguments. A parameter may appear as `borrow T` in a template, but that
-specialization is valid only when `T` resolves to a borrowable nominal type.
+arguments. An immutable `borrow T` in a template specializes to a readonly borrow
+for nominal types and a copied value for scalar types. This adaptation applies
+to substituted declarations, not direct primitive borrow syntax. `borrow mut T`
+still requires a borrowable nominal type.
 
 Every application supplies all arguments: no diamond, inferred arguments, raw
 generic type, bounds, wildcard, or variance is supported. Generic functions and
@@ -84,10 +86,10 @@ class Box<T> {
 the method would move an owned field out of `this`, which is unsupported. The
 specialized body is rejected even if `get()` is never called. To expose an
 operation on a nominal value, define a method that operates through the field
-without moving it, or return `readonly borrow T` from a nominal-only template.
-Such a borrowed return keeps a lexical loan of the template instance.
+without moving it, or declare a readonly `borrow T` getter. A nominal result
+keeps a lexical loan of the template instance; a scalar result is copied.
 
-A generic borrowed getter is valid only for nominal specializations:
+A generic immutable borrowed getter supports both kinds of specialization:
 
 ```java
 class Box<T> {
@@ -97,8 +99,9 @@ class Box<T> {
 }
 ```
 
-`Box<int>` cannot use `getRef`, because scalar types cannot be borrowed. Local
-views and other unsupported escapes remain rejected after substitution.
+`Box<int>.getRef()` returns a copied `int`; `Box<Counter>.getRef()` returns a
+readonly borrow. Mutable primitive borrows, nominal borrowed fields, local views,
+and other unsupported escapes remain rejected after substitution.
 
 ## Generic interfaces
 
@@ -116,7 +119,7 @@ class Constant<T> implements Source<T> {
 `Source<Counter>` and `Source<OtherCounter>` are different nominal interfaces;
 there is no conversion between them just because their layouts look alike.
 `Constant<T>` must satisfy the interface contract after substitution. This
-borrowed-return example is for nominal `T`; a scalar specialization is invalid.
+immutable borrowed-return example adapts scalar `T` to a copied result.
 Generic interfaces use the same exact method-signature and borrowing rules as
 non-generic interfaces. See [INTERFACES.md](INTERFACES.md).
 

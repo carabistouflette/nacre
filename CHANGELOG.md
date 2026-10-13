@@ -26,6 +26,9 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   built-in dependencies, matching the existing concrete-user-type budget. Native
   drain and iterator prerequisites no longer exhaust the budget in ordinary array
   programs; the 64 user-specialization, depth and name-length guards remain.
+  Generic immutable `borrow T` declarations adapt copied arguments to values;
+  nominal borrows and mutable-borrow restrictions remain unchanged. Obsolete
+  rejection cases and nominal-only documentation were removed.
 
 - Adds reusable affine `Codec<T>` and `Serialization<T>` APIs with a canonical
   big-endian `NCRS`/version-1 frame, primitive, length-prefixed UTF-8 and byte

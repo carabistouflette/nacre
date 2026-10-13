@@ -618,12 +618,6 @@ fn type_argument_borrow() {
     assert!(_error.message.contains("E4103"), "{}", _error.render("case.ncr", source));
 }
 
-#[test]
-fn borrow_substituted_primitive() {
-    let source = "class View<T>{borrow T target;View(borrow T target){this.target=target;}}void main(){View<int> v=new View<int>(1);}";
-    let _error = validate(source).expect_err("invalid source accepted");
-    assert!(_error.message.contains("E4103"), "{}", _error.render("case.ncr", source));
-}
 
 #[test]
 fn generic_diamond() {
