@@ -232,9 +232,9 @@ fn crypto_known_answers_and_owned_outputs() {
         "3cb25f25faacd57a90434f64d0362f2a2d2d0a90cf1a5a4c5db02d56ecc4c5bf34007208d5b887185865\n",
         "0388dace60b6a392f328c2b971b2fe78ab6e47d42cec13bdf53a67b21257bddf\n",
         "00000000000000000000000000000000\n",
+        "true\n",
         "42831ec2217774244b7221b784d0d49ce3aa212f2c02a4e035c17e2329aca12e21d514b25466931c7d8f6a5aac84aa051ba30b396a0aac973d58e0915bc94fbc3221a5db94fae95ae7121a47\n",
         "d9313225f88406e5a55909c5aff5269a86a7a9531534f7da2e4c303d8a318a728c3c0c95156809539fcf0e2429a6b525b16aedf5aa0de657ba637b39\n",
-        "true\n",
         "true\nfalse\ntrue\ntrue\nfalse\n"
     ).as_bytes());
     assert_memory_balanced(&output);
