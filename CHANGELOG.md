@@ -37,9 +37,10 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   native interface CLI checks retain output and ownership-balance verification.
 
 - Adds reusable affine `Codec<T>` and `Serialization<T>` APIs with a canonical
-  big-endian `NCRS`/version-1 frame, primitive, length-prefixed UTF-8 and byte
-  codecs, explicit nested domain schemas, and owned decode results that reject
-  invalid headers, malformed lengths, truncated fields, and trailing input.
+  big-endian `NCRS`/version-1 frame, primitive and aggregate codecs, explicit
+  list element limits, canonical Option/Result tags, UUID network-byte encoding,
+  nested domain schemas, and owned decode results that reject malformed data,
+  truncated fields, and trailing input.
 - XML consumer regressions use named borrowed inputs and retain their process
   output for allocation checks. Native CLI checks validate XSD, preserve query
   values after the document is dropped, and reject external-entity declarations.

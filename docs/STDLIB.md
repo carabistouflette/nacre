@@ -1425,11 +1425,12 @@ contract, not a peer-acknowledgement guarantee.
 ### Domain serialization
 
 `Codec<T>` is an ordinary generic interface: each codec owns the schema for
-its domain value and explicitly writes every dependent field. A codec can
-compose other codecs by calling them in wire order; there is no reflection,
-implicit field discovery, or automatic collection codec. The mutable reader or
-writer is borrowed only for the call. `Serialization<T>` provides the framed
-entry points:
+its domain value and explicitly writes every dependent field. `ListCodec<T>`,
+`OptionCodec<T>`, and `ResultCodec<T, E>` compose caller-supplied codecs for
+their nested values; they do not use reflection or implicit cloning. The caller
+must pass an explicit nonnegative `maxElements` to `ListCodec`, so decoding has
+no hidden collection-size default. The mutable reader or writer is borrowed
+only for each call. `Serialization<T>` provides the framed entry points:
 
 ```java
 interface Codec<T> {
@@ -1441,6 +1442,31 @@ static Result<ByteBuffer, Text> Serialization<T>.encode(
 static Result<T, Text> Serialization<T>.decode(
     ByteBuffer input, borrow mut Codec<T> codec)
 ```
+
+`ListCodec`, `OptionCodec`, and `ResultCodec` take ownership of their nested
+codec interfaces. Each instance can therefore carry its own mutable child state;
+the codec instance remains usable after a call, but state changes made by a
+child before an error are not rolled back. Encoding borrows list elements and
+enum payloads and does not drain or move the source value. Encoders and decoders
+are ordinary independently owned codec instances when a caller wants independent
+state.
+
+The aggregate wire forms are explicit: a list is a signed 32-bit big-endian
+element count followed by that many elements, an option uses byte tag `0` for
+`None` and `1` for `Some`, and a result uses byte tag `0` for `Ok` and `1` for
+`Err`. A list decoder rejects a negative count or a count above its configured
+bound before allocating its result list or decoding elements; its encoder rejects
+an oversized value before writing the count. If a nested list item fails to
+decode, already decoded owned items are cleared before returning that error. All
+nested codecs use the same borrowed `BinaryReader`/`BinaryWriter`, so compositions
+work directly with those APIs as well as inside `Serialization<T>`; the outer
+frame is unchanged.
+
+`UuidCodec` reads and writes exactly 16 bytes using the existing UUID bit APIs:
+the most- and least-significant 64-bit halves are emitted in canonical network
+order, independent of the reader/writer byte-order setting, and reconstructed
+with `Uuid.fromLongs()`. The codec does not copy native UUID layout or encode
+through UUID text.
 
 `encode` borrows the value, builds the header and codec payload directly in a
 single `BinaryWriter`, then transfers its buffer. `decode` consumes the input
@@ -1455,17 +1481,18 @@ Resource cleanup does not roll back the borrowed codec's abstract state: mutatio
 made by a codec remain observable after its own error or trailing-input rejection.
 Stateful codecs must define any transactional behavior themselves.
 
-The built-in `ByteCodec`, `CharCodec`, `IntCodec`, `LongCodec`, `DoubleCodec`,
-`BooleanCodec`, and `UnitCodec` cover the corresponding scalar values. Numeric
-fields use the existing binary reader/writer's big-endian representation;
-booleans accept only the canonical bytes `0` and `1`, and characters encode a
-Unicode scalar as a four-byte signed integer. `TextCodec` and `BytesCodec`
-prefix UTF-8 text and arbitrary bytes, respectively, with a four-byte signed
-big-endian length, then emit the content. Decoders reject negative lengths and
-lengths larger than the reader's remaining input before allocating or reading
-the content; text decoding also requires valid UTF-8. Their lengths are limited
-to the nonnegative signed 32-bit range. Composed application codecs choose and
-document their own field order and schema evolution.
+`ByteCodec`, `CharCodec`, `IntCodec`, `LongCodec`, `DoubleCodec`, `BooleanCodec`,
+and `UnitCodec` cover the corresponding scalar values. Numeric fields use the
+existing binary reader/writer's big-endian representation; booleans accept only
+the canonical bytes `0` and `1`, and characters encode a Unicode scalar as a
+four-byte signed integer. `TextCodec` and `BytesCodec` prefix UTF-8 text and
+arbitrary bytes, respectively, with a four-byte signed big-endian length, then
+emit the content. Decoders reject negative lengths and lengths larger than the
+reader's remaining input before allocating or reading the content; text decoding
+also requires valid UTF-8. Their lengths are limited to the nonnegative signed
+32-bit range. Composed application codecs document their own field order and
+schema evolution.
+
 
 ## ZIP archives
 

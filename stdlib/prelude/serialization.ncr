@@ -141,3 +141,153 @@ class BytesCodec implements Codec<ByteBuffer> {
         return reader.readBytes((long)length);
     }
 }
+
+// Aggregate codecs own their child codecs. Calls mutate child state in wire order;
+// errors do not roll back a child's state, so callers choose when to reuse a codec.
+class ListCodec<T> implements Codec<List<T>> {
+    private Codec<T> elementCodec;
+    private int maxElements;
+    public ListCodec(Codec<T> elementCodec, int maxElements) {
+        this.elementCodec = elementCodec;
+        this.maxElements = maxElements;
+    }
+    public Result<Unit, Text> encode(borrow List<T> value, borrow mut BinaryWriter writer) {
+        int count = value.size();
+        if (this.maxElements < 0) {
+            return new Result<Unit, Text>.Err(new Text("ListCodec.encode: maxElements must be nonnegative"));
+        }
+        if (count > this.maxElements) {
+            return new Result<Unit, Text>.Err(new Text("ListCodec.encode: element count exceeds maxElements"));
+        }
+        writer.writeInt32(count)?;
+        int index = 0;
+        while (index < count) {
+            this.elementCodec.encode(value.getRef(index), writer)?;
+            index = index + 1;
+        }
+        return new Result<Unit, Text>.Ok(());
+    }
+    public Result<List<T>, Text> decode(borrow mut BinaryReader reader) {
+        int count = reader.readInt32()?;
+        if (this.maxElements < 0) {
+            return new Result<List<T>, Text>.Err(new Text("ListCodec.decode: maxElements must be nonnegative"));
+        }
+        if (count < 0) {
+            return new Result<List<T>, Text>.Err(new Text("ListCodec.decode: negative element count"));
+        }
+        if (count > this.maxElements) {
+            return new Result<List<T>, Text>.Err(new Text("ListCodec.decode: element count exceeds maxElements"));
+        }
+        List<T> values = new List<T>();
+        values.reserve(count);
+        int index = 0;
+        while (index < count) {
+            match (this.elementCodec.decode(reader)) {
+                Ok(value) { values.add(value); }
+                Err(error) {
+                    values.clear();
+                    return new Result<List<T>, Text>.Err(error);
+                }
+            }
+            index = index + 1;
+        }
+        return new Result<List<T>, Text>.Ok(values);
+    }
+}
+
+class OptionCodec<T> implements Codec<Option<T>> {
+    private Codec<T> valueCodec;
+    public OptionCodec(Codec<T> valueCodec) {
+        this.valueCodec = valueCodec;
+    }
+    public Result<Unit, Text> encode(borrow Option<T> value, borrow mut BinaryWriter writer) {
+        match (value) {
+            None { return writer.writeByte((byte)0); }
+            Some(payload) {
+                writer.writeByte((byte)1)?;
+                return this.valueCodec.encode(payload, writer);
+            }
+        }
+    }
+    public Result<Option<T>, Text> decode(borrow mut BinaryReader reader) {
+        byte tag = reader.readByte()?;
+        if (tag == (byte)0) {
+            return new Result<Option<T>, Text>.Ok(new Option<T>.None());
+        }
+        if (tag == (byte)1) {
+            T payload = this.valueCodec.decode(reader)?;
+            return new Result<Option<T>, Text>.Ok(new Option<T>.Some(payload));
+        }
+        return new Result<Option<T>, Text>.Err(new Text("OptionCodec.decode: invalid discriminant"));
+    }
+}
+
+// ResultCodec encodes Ok with tag 0 and Err with tag 1.
+class ResultCodec<T, E> implements Codec<Result<T, E>> {
+    private Codec<T> okCodec;
+    private Codec<E> errCodec;
+    public ResultCodec(Codec<T> okCodec, Codec<E> errCodec) {
+        this.okCodec = okCodec;
+        this.errCodec = errCodec;
+    }
+    public Result<Unit, Text> encode(borrow Result<T, E> value, borrow mut BinaryWriter writer) {
+        match (value) {
+            Ok(payload) {
+                writer.writeByte((byte)0)?;
+                return this.okCodec.encode(payload, writer);
+            }
+            Err(payload) {
+                writer.writeByte((byte)1)?;
+                return this.errCodec.encode(payload, writer);
+            }
+        }
+    }
+    public Result<Result<T, E>, Text> decode(borrow mut BinaryReader reader) {
+        byte tag = reader.readByte()?;
+        if (tag == (byte)0) {
+            T payload = this.okCodec.decode(reader)?;
+            return new Result<Result<T, E>, Text>.Ok(new Result<T, E>.Ok(payload));
+        }
+        if (tag == (byte)1) {
+            E payload = this.errCodec.decode(reader)?;
+            return new Result<Result<T, E>, Text>.Ok(new Result<T, E>.Err(payload));
+        }
+        return new Result<Result<T, E>, Text>.Err(new Text("ResultCodec.decode: invalid discriminant"));
+    }
+}
+
+class UuidCodec implements Codec<Uuid> {
+    public Result<Unit, Text> encode(borrow Uuid value, borrow mut BinaryWriter writer) {
+        // Write the UUID's canonical halves explicitly, independent of writer byte order.
+        long most = value.mostSignificantBits();
+        long least = value.leastSignificantBits();
+        int index = 7;
+        while (index >= 0) {
+            writer.writeByte((byte)(most >> (index * 8)))?;
+            index = index - 1;
+        }
+        index = 7;
+        while (index >= 0) {
+            writer.writeByte((byte)(least >> (index * 8)))?;
+            index = index - 1;
+        }
+        return new Result<Unit, Text>.Ok(());
+    }
+    public Result<Uuid, Text> decode(borrow mut BinaryReader reader) {
+        long most = 0L;
+        long least = 0L;
+        int index = 0;
+        while (index < 8) {
+            byte encoded = reader.readByte()?;
+            most = (most << 8) | ((long)encoded & 255L);
+            index = index + 1;
+        }
+        index = 0;
+        while (index < 8) {
+            byte encoded = reader.readByte()?;
+            least = (least << 8) | ((long)encoded & 255L);
+            index = index + 1;
+        }
+        return new Result<Uuid, Text>.Ok(Uuid.fromLongs(most, least));
+    }
+}

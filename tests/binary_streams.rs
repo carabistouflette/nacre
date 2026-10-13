@@ -650,6 +650,131 @@ boolean rejectParent(ByteBuffer bytes) {
     return rejected;
 }
 
+Result<ByteBuffer, Text> tagFrame(byte tag) {
+    BinaryWriter writer = new BinaryWriter(0L, false);
+    writer.writeByte((byte)78)?;
+    writer.writeByte((byte)67)?;
+    writer.writeByte((byte)82)?;
+    writer.writeByte((byte)83)?;
+    writer.writeByte((byte)1)?;
+    writer.writeByte(tag)?;
+    return new Result<ByteBuffer, Text>.Ok(BinaryWriter.finish(move(writer)));
+}
+
+Result<ByteBuffer, Text> truncatedTextListFrame() {
+    BinaryWriter writer = new BinaryWriter(0L, false);
+    writer.writeByte((byte)78)?;
+    writer.writeByte((byte)67)?;
+    writer.writeByte((byte)82)?;
+    writer.writeByte((byte)83)?;
+    writer.writeByte((byte)1)?;
+    writer.writeInt32(2)?;
+    TextCodec textCodec = new TextCodec();
+    Text first = new Text("kept");
+    textCodec.encode(first, writer)?;
+    drop(first);
+    writer.writeInt32(2)?;
+    writer.writeByte((byte)65)?;
+    drop(textCodec);
+    return new Result<ByteBuffer, Text>.Ok(BinaryWriter.finish(move(writer)));
+}
+
+boolean nestedOptionsMatch(borrow List<Option<Text>> values) {
+    if (values.size() != 3) { return false; }
+    {
+        borrow Option<Text> first = values.getRef(0);
+        match (first) {
+            None { }
+            Some(text) { return false; }
+        }
+    }
+    {
+        borrow Option<Text> second = values.getRef(1);
+        match (second) {
+            None { return false; }
+            Some(text) { if (!text.equalsString("alpha")) { return false; } }
+        }
+    }
+    {
+        borrow Option<Text> third = values.getRef(2);
+        match (third) {
+            None { return false; }
+            Some(text) { if (!text.equalsString("")) { return false; } }
+        }
+    }
+    return true;
+}
+
+boolean resultOkIs(borrow Result<int, Text> value, int expected) {
+    match (value) {
+        Ok(payload) { return payload == expected; }
+        Err(message) { return false; }
+    }
+}
+
+boolean resultErrIs(borrow Result<int, Text> value, borrow Text expected) {
+    match (value) {
+        Ok(payload) { return false; }
+        Err(message) { return message.equals(expected); }
+    }
+}
+
+boolean rejectIntList(ByteBuffer bytes, int maxElements) {
+    ListCodec<int> codec = new ListCodec<int>(new IntCodec(), maxElements);
+    boolean rejected = false;
+    match (Serialization<List<int>>.decode(move(bytes), codec)) {
+        Err(error) { rejected = true; drop(error); }
+        Ok(values) { drop(values); }
+    }
+    drop(codec);
+    return rejected;
+}
+
+boolean rejectTextList(ByteBuffer bytes, int maxElements) {
+    ListCodec<Text> codec = new ListCodec<Text>(new TextCodec(), maxElements);
+    boolean rejected = false;
+    match (Serialization<List<Text>>.decode(move(bytes), codec)) {
+        Err(error) { rejected = true; drop(error); }
+        Ok(values) { drop(values); }
+    }
+    drop(codec);
+    return rejected;
+}
+
+boolean rejectNestedOptions(ByteBuffer bytes, int maxElements) {
+    ListCodec<Option<Text>> codec = new ListCodec<Option<Text>>(
+        new OptionCodec<Text>(new TextCodec()), maxElements);
+    boolean rejected = false;
+    match (Serialization<List<Option<Text>>>.decode(move(bytes), codec)) {
+        Err(error) { rejected = true; drop(error); }
+        Ok(values) { drop(values); }
+    }
+    drop(codec);
+    return rejected;
+}
+
+boolean rejectOptionTag(ByteBuffer bytes) {
+    OptionCodec<Text> codec = new OptionCodec<Text>(new TextCodec());
+    boolean rejected = false;
+    match (Serialization<Option<Text>>.decode(move(bytes), codec)) {
+        Err(error) { rejected = true; drop(error); }
+        Ok(value) { drop(value); }
+    }
+    drop(codec);
+    return rejected;
+}
+
+boolean rejectResultTag(ByteBuffer bytes) {
+    ResultCodec<int, Text> codec = new ResultCodec<int, Text>(new IntCodec(), new TextCodec());
+    boolean rejected = false;
+    match (Serialization<Result<int, Text>>.decode(move(bytes), codec)) {
+        Err(error) { rejected = true; drop(error); }
+        Ok(value) { drop(value); }
+    }
+    drop(codec);
+    return rejected;
+}
+
 Result<Unit, Text> exercise() {
     ByteBuffer integerFrame = encodeInt(16909060)?;
     boolean canonicalIntegerFrame = integerFrame.length() == 9L
@@ -743,6 +868,180 @@ Result<Unit, Text> exercise() {
     }
     drop(truncatedBytesCodec);
     println(truncatedBytesLengthRejected);
+    List<Option<Text>> nested = new List<Option<Text>>();
+    nested.add(new Option<Text>.None());
+    nested.add(new Option<Text>.Some(new Text("alpha")));
+    nested.add(new Option<Text>.Some(new Text("")));
+    ListCodec<Option<Text>> directEncoder = new ListCodec<Option<Text>>(
+        new OptionCodec<Text>(new TextCodec()), 3);
+    BinaryWriter directWriter = new BinaryWriter(0L, false);
+    directEncoder.encode(nested, directWriter)?;
+    ByteBuffer directPayload = BinaryWriter.finish(move(directWriter));
+    boolean canonicalNestedTags = directPayload.length() == 20L
+        && directPayload.get(0L) == (byte)0 && directPayload.get(1L) == (byte)0
+        && directPayload.get(2L) == (byte)0 && directPayload.get(3L) == (byte)3
+        && directPayload.get(4L) == (byte)0 && directPayload.get(5L) == (byte)1
+        && directPayload.get(15L) == (byte)1;
+    BinaryReader directReader = new BinaryReader(move(directPayload), false);
+    ListCodec<Option<Text>> directDecoder = new ListCodec<Option<Text>>(
+        new OptionCodec<Text>(new TextCodec()), 3);
+    List<Option<Text>> directDecoded = directDecoder.decode(directReader)?;
+    println(canonicalNestedTags && directReader.remaining() == 0L
+        && nestedOptionsMatch(directDecoded) && nestedOptionsMatch(nested));
+    drop(directDecoded);
+    drop(directDecoder);
+    drop(directEncoder);
+
+    ListCodec<Option<Text>> framedEncoder = new ListCodec<Option<Text>>(
+        new OptionCodec<Text>(new TextCodec()), 3);
+    ByteBuffer nestedFrame = Serialization<List<Option<Text>>>.encode(nested, framedEncoder)?;
+    boolean nestedInputSurvivedEncoding = nestedOptionsMatch(nested);
+    ListCodec<Option<Text>> framedDecoder = new ListCodec<Option<Text>>(
+        new OptionCodec<Text>(new TextCodec()), 3);
+    List<Option<Text>> framedDecoded =
+        Serialization<List<Option<Text>>>.decode(move(nestedFrame), framedDecoder)?;
+    println(nestedInputSurvivedEncoding && nestedOptionsMatch(framedDecoded));
+    drop(framedDecoded);
+    drop(framedDecoder);
+    drop(framedEncoder);
+    drop(nested);
+
+    List<Option<Text>> emptyNested = new List<Option<Text>>();
+    ListCodec<Option<Text>> emptyEncoder = new ListCodec<Option<Text>>(
+        new OptionCodec<Text>(new TextCodec()), 0);
+    ByteBuffer emptyFrame = Serialization<List<Option<Text>>>.encode(emptyNested, emptyEncoder)?;
+    ListCodec<Option<Text>> emptyDecoder = new ListCodec<Option<Text>>(
+        new OptionCodec<Text>(new TextCodec()), 0);
+    List<Option<Text>> emptyDecoded =
+        Serialization<List<Option<Text>>>.decode(move(emptyFrame), emptyDecoder)?;
+    println(emptyNested.isEmpty() && emptyDecoded.isEmpty());
+    drop(emptyDecoded);
+    drop(emptyDecoder);
+    drop(emptyEncoder);
+    drop(emptyNested);
+
+    List<int> numbers = new List<int>();
+    numbers.add(17);
+    numbers.add(-9);
+    ListCodec<int> numbersEncoder = new ListCodec<int>(new IntCodec(), 2);
+    ByteBuffer numbersFrame = Serialization<List<int>>.encode(numbers, numbersEncoder)?;
+    ListCodec<int> numbersDecoder = new ListCodec<int>(new IntCodec(), 2);
+    List<int> decodedNumbers =
+        Serialization<List<int>>.decode(move(numbersFrame), numbersDecoder)?;
+    println(decodedNumbers.size() == 2 && decodedNumbers.get(0) == 17
+        && decodedNumbers.get(1) == -9 && numbers.get(0) == 17);
+    drop(decodedNumbers);
+    drop(numbersDecoder);
+    drop(numbersEncoder);
+    drop(numbers);
+
+    Option<int> primitiveOption = new Option<int>.Some(91);
+    OptionCodec<int> primitiveOptionEncoder = new OptionCodec<int>(new IntCodec());
+    ByteBuffer primitiveOptionFrame =
+        Serialization<Option<int>>.encode(primitiveOption, primitiveOptionEncoder)?;
+    OptionCodec<int> primitiveOptionDecoder = new OptionCodec<int>(new IntCodec());
+    Option<int> decodedPrimitiveOption =
+        Serialization<Option<int>>.decode(move(primitiveOptionFrame), primitiveOptionDecoder)?;
+    boolean primitiveOptionRoundTrip = false;
+    match (borrow decodedPrimitiveOption) {
+        None { }
+        Some(value) { primitiveOptionRoundTrip = value == 91; }
+    }
+    println(primitiveOptionRoundTrip);
+    drop(decodedPrimitiveOption);
+    drop(primitiveOptionDecoder);
+    drop(primitiveOptionEncoder);
+    drop(primitiveOption);
+
+    Result<int, Text> successValue = new Result<int, Text>.Ok(73);
+    Text expectedFailure = new Text("rejected");
+    Result<int, Text> failureValue = new Result<int, Text>.Err(new Text("rejected"));
+    ResultCodec<int, Text> resultEncoder =
+        new ResultCodec<int, Text>(new IntCodec(), new TextCodec());
+    ByteBuffer successFrame = Serialization<Result<int, Text>>.encode(successValue, resultEncoder)?;
+    ByteBuffer failureFrame = Serialization<Result<int, Text>>.encode(failureValue, resultEncoder)?;
+    boolean canonicalResultTags = successFrame.get(5L) == (byte)0
+        && failureFrame.get(5L) == (byte)1;
+    ResultCodec<int, Text> resultDecoder =
+        new ResultCodec<int, Text>(new IntCodec(), new TextCodec());
+    Result<int, Text> decodedSuccess =
+        Serialization<Result<int, Text>>.decode(move(successFrame), resultDecoder)?;
+    Result<int, Text> decodedFailure =
+        Serialization<Result<int, Text>>.decode(move(failureFrame), resultDecoder)?;
+    println(canonicalResultTags && resultOkIs(decodedSuccess, 73)
+        && resultErrIs(decodedFailure, expectedFailure)
+        && resultOkIs(successValue, 73) && resultErrIs(failureValue, expectedFailure));
+    drop(decodedSuccess);
+    drop(decodedFailure);
+    drop(resultDecoder);
+    drop(resultEncoder);
+    drop(successValue);
+    drop(failureValue);
+    drop(expectedFailure);
+
+    Text knownUuidText = new Text("00112233-4455-6677-8899-aabbccddeeff");
+    Uuid knownUuid = Uuid.parse(knownUuidText)?;
+    drop(knownUuidText);
+    UuidCodec uuidEncoder = new UuidCodec();
+    ByteBuffer uuidFrame = Serialization<Uuid>.encode(knownUuid, uuidEncoder)?;
+    boolean uuidWireCanonical = uuidFrame.length() == 21L
+        && uuidFrame.get(0L) == (byte)78 && uuidFrame.get(1L) == (byte)67
+        && uuidFrame.get(2L) == (byte)82 && uuidFrame.get(3L) == (byte)83
+        && uuidFrame.get(4L) == (byte)1 && uuidFrame.get(5L) == (byte)0
+        && uuidFrame.get(6L) == (byte)17 && uuidFrame.get(7L) == (byte)34
+        && uuidFrame.get(8L) == (byte)51 && uuidFrame.get(9L) == (byte)68
+        && uuidFrame.get(10L) == (byte)85 && uuidFrame.get(11L) == (byte)102
+        && uuidFrame.get(12L) == (byte)119 && uuidFrame.get(13L) == (byte)136
+        && uuidFrame.get(14L) == (byte)153 && uuidFrame.get(15L) == (byte)170
+        && uuidFrame.get(16L) == (byte)187 && uuidFrame.get(17L) == (byte)204
+        && uuidFrame.get(18L) == (byte)221 && uuidFrame.get(19L) == (byte)238
+        && uuidFrame.get(20L) == (byte)255;
+    UuidCodec uuidDecoder = new UuidCodec();
+    Uuid decodedUuid = Serialization<Uuid>.decode(move(uuidFrame), uuidDecoder)?;
+    println(uuidWireCanonical && knownUuid.equals(decodedUuid));
+    drop(decodedUuid);
+    drop(uuidDecoder);
+    drop(uuidEncoder);
+    drop(knownUuid);
+
+    List<int> tooMany = new List<int>();
+    tooMany.add(7);
+    tooMany.add(8);
+    ListCodec<int> limitedEncoder = new ListCodec<int>(new IntCodec(), 1);
+    BinaryWriter boundedWriter = new BinaryWriter(0L, false);
+    boolean encodeLimitRejected = false;
+    match (limitedEncoder.encode(tooMany, boundedWriter)) {
+        Err(error) { encodeLimitRejected = true; drop(error); }
+        Ok(unit) { }
+    }
+    println(encodeLimitRejected && boundedWriter.position() == 0L
+        && tooMany.size() == 2 && tooMany.get(1) == 8);
+    drop(limitedEncoder);
+    drop(tooMany);
+
+    boolean invalidTagsRejected = rejectOptionTag(tagFrame((byte)2)?)
+        && rejectResultTag(tagFrame((byte)255)?);
+    boolean truncatedVariantPayloadsRejected = rejectOptionTag(tagFrame((byte)1)?)
+        && rejectResultTag(tagFrame((byte)0)?);
+    println(invalidTagsRejected && truncatedVariantPayloadsRejected);
+
+    boolean invalidListCountsRejected = rejectIntList(invalidLengthFrame(-1)?, 4)
+        && rejectIntList(invalidLengthFrame(-2147483648)?, 4)
+        && rejectIntList(invalidLengthFrame(2147483647)?, 4)
+        && rejectIntList(invalidLengthFrame(3)?, 2);
+    println(invalidListCountsRejected);
+    println(rejectTextList(truncatedTextListFrame()?, 4));
+
+    List<int> trailingNumbers = new List<int>();
+    trailingNumbers.add(12);
+    ListCodec<int> trailingEncoder = new ListCodec<int>(new IntCodec(), 1);
+    ByteBuffer aggregateTrailing =
+        Serialization<List<int>>.encode(trailingNumbers, trailingEncoder)?;
+    aggregateTrailing.append((byte)99);
+    println(rejectIntList(move(aggregateTrailing), 1));
+    drop(trailingEncoder);
+    drop(trailingNumbers);
+
     return new Result<Unit, Text>.Ok(());
 }
 
@@ -760,7 +1059,7 @@ fn serialization_codecs_frame_compose_and_return_independent_owned_values() {
     let output = run(&program, &[]);
     assert_eq!(
         output.stdout,
-        b"true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n"
+        b"true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n"
     );
 }
 
