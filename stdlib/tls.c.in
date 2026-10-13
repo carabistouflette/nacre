@@ -1,0 +1,752 @@
+/* nacre-link: ssl */
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+#include <openssl/x509.h>
+#include <openssl/x509v3.h>
+#include <arpa/inet.h>
+#include <errno.h>
+#include <limits.h>
+#include <poll.h>
+#include <pthread.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
+/* TLS_GROUP common */
+static size_t ncr_tls_format_error(char *message, size_t capacity, const char *operation, int failure) {
+    int written = snprintf(message, capacity, "%s failed (code=%d)", operation, failure);
+    if (written < 0) { if (capacity != 0) { message[0] = '\0'; } return 0; }
+    return (size_t)written < capacity ? (size_t)written : capacity - 1;
+}
+
+static size_t ncr_tls_format_timeout(char *message, size_t capacity, const char *operation) {
+    int written = snprintf(message, capacity, "%s timed out", operation);
+    if (written < 0) { if (capacity != 0) { message[0] = '\0'; } return 0; }
+    return (size_t)written < capacity ? (size_t)written : capacity - 1;
+}
+
+#define NCR_TLS_RETURN_ERROR(result_id, operation, failure, line, column) do { \
+    char ncr_tls_message[192]; \
+    size_t ncr_tls_length = ncr_tls_format_error(ncr_tls_message, sizeof(ncr_tls_message), operation, failure); \
+    return ncr_result_error_ ## result_id(ncr_tls_message, ncr_tls_length, line, column); \
+} while (0)
+#define NCR_TLS_RETURN_TIMEOUT(result_id, operation, line, column) do { \
+    char ncr_tls_message[160]; \
+    size_t ncr_tls_length = ncr_tls_format_timeout(ncr_tls_message, sizeof(ncr_tls_message), operation); \
+    return ncr_result_error_ ## result_id(ncr_tls_message, ncr_tls_length, line, column); \
+} while (0)
+/* TLS_GROUP_END common */
+/* TLS_GROUP ssl_release */
+static void ncr_tls_ssl_release(void *ssl) {
+    if (ssl != NULL) { SSL_free((SSL *)ssl); }
+}
+/* TLS_GROUP_END ssl_release */
+
+/* TLS_GROUP config_drop */
+static void ncr_tls_config_release(ncr_obj_@TLS_CONFIG_ID@ *config) {
+    if (config == NULL) { return; }
+    if (config->context != NULL) { SSL_CTX_free((SSL_CTX *)config->context); config->context = NULL; }
+}
+/* TLS_GROUP_END config_drop */
+
+/* TLS_GROUP stream_drop */
+static int ncr_tls_stream_release(ncr_obj_@TLS_STREAM_ID@ *stream) {
+    if (stream == NULL) { return 0; }
+    ncr_tls_ssl_release(stream->ssl);
+    stream->ssl = NULL;
+    if (stream->config != NULL) { ncr_drop_@CONFIG_MUTEX_ID@(stream->config); stream->config = NULL; }
+    int descriptor = stream->fd;
+    stream->fd = -1;
+    if (descriptor >= 0 && close(descriptor) != 0) { return errno; }
+    return 0;
+}
+/* TLS_GROUP_END stream_drop */
+
+/* TLS_GROUP config_core */
+static ncr_obj_@TLS_CONFIG_ID@ *ncr_tls_config_create(
+    bool server, bool require_client_auth, bool system_trust, const char *ca_path,
+    void *certificate, void *key, size_t line, size_t column, int *failure
+) {
+    ncr_obj_@TLS_CONFIG_ID@ *owner = ncr_allocate(sizeof(*owner), line, column);
+    owner->context = NULL;
+    owner->certificate = certificate;
+    owner->key = key;
+    owner->server = server;
+
+    SSL_CTX *context = SSL_CTX_new(server ? TLS_server_method() : TLS_client_method());
+    if (context == NULL) { *failure = EPROTO; goto failed; }
+    owner->context = context;
+    if (SSL_CTX_set_min_proto_version(context, TLS1_2_VERSION) != 1) { *failure = EPROTO; goto failed; }
+    (void)SSL_CTX_set_options(context, SSL_OP_NO_COMPRESSION | SSL_OP_NO_RENEGOTIATION);
+    (void)SSL_CTX_set_mode(context, SSL_MODE_ENABLE_PARTIAL_WRITE | SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER);
+
+    if (ca_path != NULL && SSL_CTX_load_verify_locations(context, ca_path, NULL) != 1) {
+        *failure = EACCES;
+        goto failed;
+    }
+    if (!server && system_trust && SSL_CTX_set_default_verify_paths(context) != 1) {
+        *failure = EACCES;
+        goto failed;
+    }
+    if (server) {
+        int verify = require_client_auth ? (SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT) : SSL_VERIFY_NONE;
+        SSL_CTX_set_verify(context, verify, NULL);
+    } else {
+        SSL_CTX_set_verify(context, SSL_VERIFY_PEER, NULL);
+    }
+    return owner;
+
+failed:
+    ncr_drop_@TLS_CONFIG_ID@(owner);
+    return NULL;
+}
+/* TLS_GROUP_END config_core */
+
+/* TLS_GROUP config_identity */
+static bool ncr_tls_config_set_identity(ncr_obj_@TLS_CONFIG_ID@ *config, int *failure) {
+    ncr_obj_@CERTIFICATE_ID@ *certificate = config->certificate;
+    ncr_obj_@CRYPTO_KEY_ID@ *key = config->key;
+    if (certificate == NULL || certificate->certificate == NULL || key == NULL
+        || key->pkey == NULL || !key->has_private) {
+        *failure = EINVAL;
+        return false;
+    }
+    SSL_CTX *context = (SSL_CTX *)config->context;
+    if (SSL_CTX_use_certificate(context, (X509 *)certificate->certificate) != 1
+        || SSL_CTX_use_PrivateKey(context, (EVP_PKEY *)key->pkey) != 1
+        || SSL_CTX_check_private_key(context) != 1) {
+        *failure = EINVAL;
+        return false;
+    }
+    STACK_OF(X509) *chain = (STACK_OF(X509) *)certificate->chain;
+    int chain_count = chain == NULL ? 0 : sk_X509_num(chain);
+    for (int i = 0; i < chain_count; ++i) {
+        X509 *item = sk_X509_value(chain, i);
+        if (item == NULL || SSL_CTX_add1_chain_cert(context, item) != 1) {
+            *failure = EINVAL;
+            return false;
+        }
+    }
+    return true;
+}
+/* TLS_GROUP_END config_identity */
+
+/* TLS_GROUP config_client */
+static ncr_obj_@CONFIG_RESULT_ID@ @TLS_CONFIG_CLIENT_FN@(size_t ncr_line, size_t ncr_column) {
+    int failure = 0;
+    ncr_obj_@TLS_CONFIG_ID@ *config = ncr_tls_config_create(false, false, true, NULL, NULL, NULL,
+        ncr_line, ncr_column, &failure);
+    if (config == NULL) { NCR_TLS_RETURN_ERROR(@CONFIG_RESULT_ID@, "TlsConfig.client", failure, ncr_line, ncr_column); }
+    return (ncr_obj_@CONFIG_RESULT_ID@){ .tag = @CONFIG_OK_TAG@, .data.v@CONFIG_OK_TAG@.f0 = config };
+}
+/* TLS_GROUP_END config_client */
+
+/* TLS_GROUP config_client_with_ca */
+static ncr_obj_@CONFIG_RESULT_ID@ @TLS_CONFIG_CLIENT_WITH_CA_FN@(
+    ncr_obj_@PATH_ID@ *ncr_v_@CLIENT_WITH_CA_PATH_ID@, size_t ncr_line, size_t ncr_column) {
+    int failure = 0;
+    char *ca_path = ncr_fs_path_cstring_@TEXT_ID@(
+        ncr_v_@CLIENT_WITH_CA_PATH_ID@->text, ncr_line, ncr_column);
+    if (ca_path == NULL) {
+        failure = errno == 0 ? EINVAL : errno;
+        NCR_TLS_RETURN_ERROR(@CONFIG_RESULT_ID@, "TlsConfig.clientWithCa path", failure, ncr_line, ncr_column);
+    }
+    ncr_obj_@TLS_CONFIG_ID@ *config = ncr_tls_config_create(false, false, false, ca_path, NULL, NULL,
+        ncr_line, ncr_column, &failure);
+    ncr_deallocate(ca_path);
+    if (config == NULL) { NCR_TLS_RETURN_ERROR(@CONFIG_RESULT_ID@, "TlsConfig.clientWithCa", failure, ncr_line, ncr_column); }
+    return (ncr_obj_@CONFIG_RESULT_ID@){ .tag = @CONFIG_OK_TAG@, .data.v@CONFIG_OK_TAG@.f0 = config };
+}
+/* TLS_GROUP_END config_client_with_ca */
+
+/* TLS_GROUP config_client_with_identity */
+static ncr_obj_@CONFIG_RESULT_ID@ @TLS_CONFIG_CLIENT_WITH_IDENTITY_FN@(
+    ncr_obj_@CERTIFICATE_ID@ *ncr_v_@CLIENT_WITH_IDENTITY_CERT_ID@,
+    ncr_obj_@CRYPTO_KEY_ID@ *ncr_v_@CLIENT_WITH_IDENTITY_KEY_ID@,
+    ncr_obj_@PATH_ID@ *ncr_v_@CLIENT_WITH_IDENTITY_CA_ID@,
+    size_t ncr_line, size_t ncr_column) {
+    int failure = 0;
+    char *ca_path = ncr_fs_path_cstring_@TEXT_ID@(
+        ncr_v_@CLIENT_WITH_IDENTITY_CA_ID@->text, ncr_line, ncr_column);
+    if (ca_path == NULL) {
+        ncr_drop_@CERTIFICATE_ID@(ncr_v_@CLIENT_WITH_IDENTITY_CERT_ID@);
+        ncr_drop_@CRYPTO_KEY_ID@(ncr_v_@CLIENT_WITH_IDENTITY_KEY_ID@);
+        failure = errno == 0 ? EINVAL : errno;
+        NCR_TLS_RETURN_ERROR(@CONFIG_RESULT_ID@, "TlsConfig.clientWithIdentity path", failure, ncr_line, ncr_column);
+    }
+    ncr_obj_@TLS_CONFIG_ID@ *config = ncr_tls_config_create(false, false, false, ca_path,
+        ncr_v_@CLIENT_WITH_IDENTITY_CERT_ID@, ncr_v_@CLIENT_WITH_IDENTITY_KEY_ID@,
+        ncr_line, ncr_column, &failure);
+    ncr_deallocate(ca_path);
+    if (config == NULL) { NCR_TLS_RETURN_ERROR(@CONFIG_RESULT_ID@, "TlsConfig.clientWithIdentity", failure, ncr_line, ncr_column); }
+    if (!ncr_tls_config_set_identity(config, &failure)) {
+        ncr_drop_@TLS_CONFIG_ID@(config);
+        NCR_TLS_RETURN_ERROR(@CONFIG_RESULT_ID@, "TlsConfig.clientWithIdentity identity", failure, ncr_line, ncr_column);
+    }
+    return (ncr_obj_@CONFIG_RESULT_ID@){ .tag = @CONFIG_OK_TAG@, .data.v@CONFIG_OK_TAG@.f0 = config };
+}
+/* TLS_GROUP_END config_client_with_identity */
+
+/* TLS_GROUP config_server */
+static ncr_obj_@CONFIG_RESULT_ID@ @TLS_CONFIG_SERVER_FN@(
+    ncr_obj_@CERTIFICATE_ID@ *ncr_v_@SERVER_CERT_ID@,
+    ncr_obj_@CRYPTO_KEY_ID@ *ncr_v_@SERVER_KEY_ID@,
+    size_t ncr_line, size_t ncr_column) {
+    int failure = 0;
+    ncr_obj_@TLS_CONFIG_ID@ *config = ncr_tls_config_create(true, false, false, NULL,
+        ncr_v_@SERVER_CERT_ID@, ncr_v_@SERVER_KEY_ID@, ncr_line, ncr_column, &failure);
+    if (config == NULL) { NCR_TLS_RETURN_ERROR(@CONFIG_RESULT_ID@, "TlsConfig.server", failure, ncr_line, ncr_column); }
+    if (!ncr_tls_config_set_identity(config, &failure)) {
+        ncr_drop_@TLS_CONFIG_ID@(config);
+        NCR_TLS_RETURN_ERROR(@CONFIG_RESULT_ID@, "TlsConfig.server identity", failure, ncr_line, ncr_column);
+    }
+    return (ncr_obj_@CONFIG_RESULT_ID@){ .tag = @CONFIG_OK_TAG@, .data.v@CONFIG_OK_TAG@.f0 = config };
+}
+/* TLS_GROUP_END config_server */
+
+/* TLS_GROUP config_server_with_client_auth */
+static ncr_obj_@CONFIG_RESULT_ID@ @TLS_CONFIG_SERVER_WITH_CLIENT_AUTH_FN@(
+    ncr_obj_@CERTIFICATE_ID@ *ncr_v_@SERVER_CLIENT_AUTH_CERT_ID@,
+    ncr_obj_@CRYPTO_KEY_ID@ *ncr_v_@SERVER_CLIENT_AUTH_KEY_ID@,
+    ncr_obj_@PATH_ID@ *ncr_v_@SERVER_CLIENT_AUTH_CA_ID@,
+    size_t ncr_line, size_t ncr_column) {
+    int failure = 0;
+    char *ca_path = ncr_fs_path_cstring_@TEXT_ID@(
+        ncr_v_@SERVER_CLIENT_AUTH_CA_ID@->text, ncr_line, ncr_column);
+    if (ca_path == NULL) {
+        ncr_drop_@CERTIFICATE_ID@(ncr_v_@SERVER_CLIENT_AUTH_CERT_ID@);
+        ncr_drop_@CRYPTO_KEY_ID@(ncr_v_@SERVER_CLIENT_AUTH_KEY_ID@);
+        failure = errno == 0 ? EINVAL : errno;
+        NCR_TLS_RETURN_ERROR(@CONFIG_RESULT_ID@, "TlsConfig.serverWithClientAuth path", failure, ncr_line, ncr_column);
+    }
+    ncr_obj_@TLS_CONFIG_ID@ *config = ncr_tls_config_create(true, true, false, ca_path,
+        ncr_v_@SERVER_CLIENT_AUTH_CERT_ID@, ncr_v_@SERVER_CLIENT_AUTH_KEY_ID@,
+        ncr_line, ncr_column, &failure);
+    ncr_deallocate(ca_path);
+    if (config == NULL) { NCR_TLS_RETURN_ERROR(@CONFIG_RESULT_ID@, "TlsConfig.serverWithClientAuth", failure, ncr_line, ncr_column); }
+    if (!ncr_tls_config_set_identity(config, &failure)) {
+        ncr_drop_@TLS_CONFIG_ID@(config);
+        NCR_TLS_RETURN_ERROR(@CONFIG_RESULT_ID@, "TlsConfig.serverWithClientAuth identity", failure, ncr_line, ncr_column);
+    }
+    return (ncr_obj_@CONFIG_RESULT_ID@){ .tag = @CONFIG_OK_TAG@, .data.v@CONFIG_OK_TAG@.f0 = config };
+}
+/* TLS_GROUP_END config_server_with_client_auth */
+
+/* TLS_GROUP client_host_ascii */
+static bool ncr_tls_ip_literal(const unsigned char *bytes, size_t length) {
+    if (bytes == NULL || length == 0 || length >= 256 || memchr(bytes, 0, length) != NULL) { return false; }
+    char host[256];
+    memcpy(host, bytes, length);
+    host[length] = '\0';
+    struct in_addr ipv4;
+    if (inet_pton(AF_INET, host, &ipv4) == 1) { return true; }
+    char *zone = strchr(host, '%');
+    if (zone != NULL) {
+        if (zone[1] == '\0') { return false; }
+        *zone = '\0';
+    }
+    struct in6_addr ipv6;
+    return inet_pton(AF_INET6, host, &ipv6) == 1;
+}
+
+static bool ncr_tls_configure_client_host(SSL *ssl, ncr_obj_@TEXT_ID@ *host, bool is_ip,
+    size_t line, size_t column, int *failure) {
+    if (host == NULL || host->length <= 0 || host->bytes == NULL
+        || !ncr_utf8_valid(host->bytes, (size_t)host->length)
+        || memchr(host->bytes, 0, (size_t)host->length) != NULL
+        || (size_t)host->length == SIZE_MAX) {
+        *failure = EINVAL;
+        return false;
+    }
+    size_t length = (size_t)host->length;
+    char *name = ncr_allocate(length + 1, line, column);
+    memcpy(name, host->bytes, length);
+    name[length] = '\0';
+    for (size_t i = 0; i < length; ++i) {
+        if ((unsigned char)name[i] > 0x7f) {
+            ncr_deallocate(name);
+            *failure = EILSEQ;
+            return false;
+        }
+    }
+    int configured;
+    if (is_ip) {
+        char *zone = strchr(name, '%');
+        if (zone != NULL) { *zone = '\0'; }
+        configured = X509_VERIFY_PARAM_set1_ip_asc(SSL_get0_param(ssl), name);
+    } else {
+        configured = SSL_set1_host(ssl, name);
+        if (configured == 1) { configured = SSL_set_tlsext_host_name(ssl, name); }
+    }
+    ncr_deallocate(name);
+    if (configured != 1) { *failure = EPROTO; return false; }
+    return true;
+}
+
+static bool ncr_tls_set_client_host_ascii(SSL *ssl, ncr_obj_@TEXT_ID@ *host,
+    size_t line, size_t column, int *failure) {
+    if (host == NULL || host->length <= 0 || host->bytes == NULL
+        || !ncr_utf8_valid(host->bytes, (size_t)host->length)
+        || memchr(host->bytes, 0, (size_t)host->length) != NULL) {
+        *failure = EINVAL;
+        return false;
+    }
+    bool is_ip = ncr_tls_ip_literal(host->bytes, (size_t)host->length);
+    return ncr_tls_configure_client_host(ssl, host, is_ip, line, column, failure);
+}
+/* TLS_GROUP_END client_host_ascii */
+
+/* TLS_GROUP client_host */
+static bool ncr_tls_set_client_host(SSL *ssl, ncr_obj_@TEXT_ID@ *host,
+    size_t line, size_t column, int *failure) {
+    if (host == NULL || host->length <= 0 || host->bytes == NULL
+        || !ncr_utf8_valid(host->bytes, (size_t)host->length)
+        || memchr(host->bytes, 0, (size_t)host->length) != NULL) {
+        *failure = EINVAL;
+        return false;
+    }
+    if (ncr_tls_ip_literal(host->bytes, (size_t)host->length)) {
+        return ncr_tls_configure_client_host(ssl, host, true, line, column, failure);
+    }
+    ncr_obj_@TEXT_ID@ *ascii = NULL;
+    ncr_obj_@TEXT_ID@ *idna_error = NULL;
+    bool idna_ok = ncr_dns_idna_host(host, &ascii, &idna_error, line, column);
+    if (idna_error != NULL) { ncr_drop_@TEXT_ID@(idna_error); }
+    if (!idna_ok || ascii == NULL) {
+        if (ascii != NULL) { ncr_drop_@TEXT_ID@(ascii); }
+        *failure = EINVAL;
+        return false;
+    }
+    bool configured = ncr_tls_set_client_host_ascii(ssl, ascii, line, column, failure);
+    ncr_drop_@TEXT_ID@(ascii);
+    return configured;
+}
+/* TLS_GROUP_END client_host */
+
+/* TLS_GROUP stream_helpers */
+
+static SSL *ncr_tls_ssl_for_config(
+    ncr_obj_@CONFIG_MUTEX_ID@ *config_handle, int fd, bool client, int *failure
+) {
+    if (config_handle == NULL || config_handle->control == NULL || fd < 0) { *failure = EINVAL; return NULL; }
+    struct ncr_mutex_control_@CONFIG_MUTEX_ID@ *control = config_handle->control;
+    int lock_error = pthread_mutex_lock(&control->mutex);
+    if (lock_error != 0) { *failure = lock_error; return NULL; }
+    ncr_obj_@TLS_CONFIG_ID@ *config = control->value;
+    if (config == NULL || config->context == NULL || config->server == client) {
+        int unlock_error = pthread_mutex_unlock(&control->mutex);
+        *failure = unlock_error != 0 ? unlock_error : EINVAL;
+        return NULL;
+    }
+    SSL *ssl = SSL_new((SSL_CTX *)config->context);
+    int unlock_error = pthread_mutex_unlock(&control->mutex);
+    if (unlock_error != 0) {
+        if (ssl != NULL) { SSL_free(ssl); }
+        *failure = unlock_error;
+        return NULL;
+    }
+    if (ssl == NULL) { *failure = EPROTO; return NULL; }
+    if (SSL_set_fd(ssl, fd) != 1) { SSL_free(ssl); *failure = EPROTO; return NULL; }
+    if (client) { SSL_set_connect_state(ssl); }
+    else { SSL_set_accept_state(ssl); }
+    return ssl;
+}
+
+static int ncr_tls_wait_ssl_error(int ssl_error, int fd, bool finite, int64_t deadline,
+    bool *timed_out, int *failure) {
+    short events;
+    if (ssl_error == SSL_ERROR_WANT_READ) { events = POLLIN; }
+    else if (ssl_error == SSL_ERROR_WANT_WRITE) { events = POLLOUT; }
+    else { *failure = EPROTO; return -1; }
+    int ready = ncr_network_poll(fd, events, finite, deadline, failure);
+    if (ready == 0) { *timed_out = true; return 0; }
+    return ready < 0 ? -1 : 1;
+}
+
+
+static int ncr_tls_handshake(SSL *ssl, int fd, bool client, bool finite, int64_t deadline,
+    bool *timed_out, int *failure) {
+    *timed_out = false;
+    for (;;) {
+        int status = client ? SSL_connect(ssl) : SSL_accept(ssl);
+        if (status == 1) { return 1; }
+        int ssl_error = SSL_get_error(ssl, status);
+        int ready = ncr_tls_wait_ssl_error(ssl_error, fd, finite, deadline, timed_out, failure);
+        if (ready <= 0) { return ready; }
+    }
+}
+
+static ssize_t ncr_tls_read(SSL *ssl, int fd, unsigned char *destination, size_t maximum,
+    bool finite, int64_t deadline, bool *timed_out, int *failure) {
+    *timed_out = false;
+    for (;;) {
+        size_t received = 0;
+        int status = SSL_read_ex(ssl, destination, maximum, &received);
+        if (status == 1) { return received > (size_t)SSIZE_MAX ? SSIZE_MAX : (ssize_t)received; }
+        int ssl_error = SSL_get_error(ssl, status);
+        if (ssl_error == SSL_ERROR_ZERO_RETURN) { return 0; }
+        int ready = ncr_tls_wait_ssl_error(ssl_error, fd, finite, deadline, timed_out, failure);
+        if (ready <= 0) { return -1; }
+    }
+}
+
+static ssize_t ncr_tls_write(SSL *ssl, int fd, const unsigned char *source, size_t length,
+    bool finite, int64_t deadline, bool *timed_out, int *failure) {
+    *timed_out = false;
+    for (;;) {
+        size_t written = 0;
+        int status = SSL_write_ex(ssl, source, length, &written);
+        if (status == 1) {
+            if (written == 0) { *failure = EPIPE; return -1; }
+            return written > (size_t)SSIZE_MAX ? SSIZE_MAX : (ssize_t)written;
+        }
+        int ssl_error = SSL_get_error(ssl, status);
+        int ready = ncr_tls_wait_ssl_error(ssl_error, fd, finite, deadline, timed_out, failure);
+        if (ready <= 0) { return -1; }
+    }
+}
+
+static int ncr_tls_shutdown(SSL *ssl, int fd, int64_t timeout_ms, bool *timed_out, int *failure) {
+    bool finite = false;
+    int64_t deadline = 0;
+    *timed_out = false;
+    if (!ncr_network_deadline(timeout_ms, &finite, &deadline, failure)) { return -1; }
+    for (;;) {
+        int status = SSL_shutdown(ssl);
+        if (status == 1) { return 1; }
+        short events = POLLIN;
+        if (status < 0) {
+            int ssl_error = SSL_get_error(ssl, status);
+            if (ssl_error == SSL_ERROR_WANT_READ) { events = POLLIN; }
+            else if (ssl_error == SSL_ERROR_WANT_WRITE) { events = POLLOUT; }
+            else { *failure = EPROTO; return -1; }
+        }
+        int ready = ncr_network_poll(fd, events, finite, deadline, failure);
+        if (ready == 0) { *timed_out = true; return 0; }
+        if (ready < 0) { return -1; }
+    }
+}
+/* TLS_GROUP_END stream_helpers */
+
+/* TLS_GROUP stream_methods */
+/* TLS_GROUP stream_dispose */
+static void ncr_tls_stream_dispose(ncr_obj_@TLS_STREAM_ID@ *stream) {
+    (void)ncr_tls_stream_release(stream);
+}
+/* TLS_GROUP_END stream_dispose */
+
+/* TLS_GROUP stream_connect */
+static ncr_obj_@STREAM_RESULT_TYPE@ @TLS_STREAM_CONNECT_FN@(
+    ncr_obj_@ADDRESS_ID@ *ncr_v_@CONNECT_ADDRESS_ID@,
+    ncr_obj_@CONFIG_MUTEX_ID@ *ncr_v_@CONNECT_CONFIG_ID@,
+    ncr_obj_@TEXT_ID@ *ncr_v_@CONNECT_HOST_ID@,
+    int64_t ncr_v_@CONNECT_TIMEOUT_ID@, size_t ncr_line, size_t ncr_column) {
+    if (!ncr_network_valid_address(ncr_v_@CONNECT_ADDRESS_ID@)) {
+        ncr_drop_@CONFIG_MUTEX_ID@(ncr_v_@CONNECT_CONFIG_ID@);
+        NCR_TLS_RETURN_ERROR(@STREAM_RESULT_ID@, "TlsStream.connect address", EAFNOSUPPORT, ncr_line, ncr_column);
+    }
+    bool finite = false;
+    int64_t deadline = 0;
+    int failure = 0;
+    if (!ncr_network_deadline(ncr_v_@CONNECT_TIMEOUT_ID@, &finite, &deadline, &failure)) {
+        ncr_drop_@CONFIG_MUTEX_ID@(ncr_v_@CONNECT_CONFIG_ID@);
+        NCR_TLS_RETURN_ERROR(@STREAM_RESULT_ID@, "TlsStream.connect timeout", failure, ncr_line, ncr_column);
+    }
+    bool timed_out = false;
+    int fd = ncr_network_connect(ncr_v_@CONNECT_ADDRESS_ID@, finite, deadline, &timed_out, &failure);
+    if (fd < 0) {
+        ncr_drop_@CONFIG_MUTEX_ID@(ncr_v_@CONNECT_CONFIG_ID@);
+        if (timed_out) { NCR_TLS_RETURN_TIMEOUT(@STREAM_RESULT_ID@, "TlsStream.connect", ncr_line, ncr_column); }
+        NCR_TLS_RETURN_ERROR(@STREAM_RESULT_ID@, "TlsStream.connect", failure, ncr_line, ncr_column);
+    }
+    SSL *ssl = ncr_tls_ssl_for_config(ncr_v_@CONNECT_CONFIG_ID@, fd, true, &failure);
+    if (ssl != NULL && !ncr_tls_set_client_host(ssl, ncr_v_@CONNECT_HOST_ID@, ncr_line, ncr_column, &failure)) {
+        SSL_free(ssl);
+        ssl = NULL;
+    }
+    if (ssl == NULL) {
+        (void)close(fd);
+        ncr_drop_@CONFIG_MUTEX_ID@(ncr_v_@CONNECT_CONFIG_ID@);
+        NCR_TLS_RETURN_ERROR(@STREAM_RESULT_ID@, "TlsStream.connect configuration", failure, ncr_line, ncr_column);
+    }
+    int handshake = ncr_tls_handshake(ssl, fd, true, finite, deadline, &timed_out, &failure);
+    if (handshake != 1) {
+        SSL_free(ssl);
+        (void)close(fd);
+        ncr_drop_@CONFIG_MUTEX_ID@(ncr_v_@CONNECT_CONFIG_ID@);
+        if (timed_out) { NCR_TLS_RETURN_TIMEOUT(@STREAM_RESULT_ID@, "TlsStream.connect handshake", ncr_line, ncr_column); }
+        NCR_TLS_RETURN_ERROR(@STREAM_RESULT_ID@, "TlsStream.connect handshake", failure, ncr_line, ncr_column);
+    }
+    ncr_obj_@TLS_STREAM_ID@ *stream = ncr_allocate(sizeof(*stream), ncr_line, ncr_column);
+    stream->fd = fd;
+    stream->ssl = ssl;
+    stream->config = ncr_v_@CONNECT_CONFIG_ID@;
+    return (ncr_obj_@STREAM_RESULT_ID@){ .tag = @STREAM_OK_TAG@, .data.v@STREAM_OK_TAG@.f0 = stream };
+}
+/* TLS_GROUP_END stream_connect */
+
+/* TLS_GROUP stream_accept */
+static ncr_obj_@STREAM_RESULT_TYPE@ @TLS_STREAM_ACCEPT_FN@(
+    ncr_obj_@LISTENER_ID@ *ncr_v_@ACCEPT_LISTENER_ID@,
+    ncr_obj_@CONFIG_MUTEX_ID@ *ncr_v_@ACCEPT_CONFIG_ID@,
+    int64_t ncr_v_@ACCEPT_TIMEOUT_ID@, size_t ncr_line, size_t ncr_column) {
+    if (ncr_v_@ACCEPT_LISTENER_ID@ == NULL || ncr_v_@ACCEPT_LISTENER_ID@->fd < 0) {
+        ncr_drop_@CONFIG_MUTEX_ID@(ncr_v_@ACCEPT_CONFIG_ID@);
+        NCR_TLS_RETURN_ERROR(@STREAM_RESULT_ID@, "TlsStream.accept listener", EBADF, ncr_line, ncr_column);
+    }
+    bool finite = false;
+    int64_t deadline = 0;
+    int failure = 0;
+    if (!ncr_network_deadline(ncr_v_@ACCEPT_TIMEOUT_ID@, &finite, &deadline, &failure)) {
+        ncr_drop_@CONFIG_MUTEX_ID@(ncr_v_@ACCEPT_CONFIG_ID@);
+        NCR_TLS_RETURN_ERROR(@STREAM_RESULT_ID@, "TlsStream.accept timeout", failure, ncr_line, ncr_column);
+    }
+    int fd = -1;
+    for (;;) {
+        int ready = ncr_network_poll(ncr_v_@ACCEPT_LISTENER_ID@->fd, POLLIN, finite, deadline, &failure);
+        if (ready == 0) {
+            ncr_drop_@CONFIG_MUTEX_ID@(ncr_v_@ACCEPT_CONFIG_ID@);
+            NCR_TLS_RETURN_TIMEOUT(@STREAM_RESULT_ID@, "TlsStream.accept", ncr_line, ncr_column);
+        }
+        if (ready < 0) {
+            ncr_drop_@CONFIG_MUTEX_ID@(ncr_v_@ACCEPT_CONFIG_ID@);
+            NCR_TLS_RETURN_ERROR(@STREAM_RESULT_ID@, "TlsStream.accept poll", failure, ncr_line, ncr_column);
+        }
+        fd = accept4(ncr_v_@ACCEPT_LISTENER_ID@->fd, NULL, NULL, SOCK_NONBLOCK | SOCK_CLOEXEC);
+        if (fd >= 0) { break; }
+        failure = errno;
+        if (failure == EINTR || failure == EAGAIN || failure == EWOULDBLOCK) { continue; }
+        ncr_drop_@CONFIG_MUTEX_ID@(ncr_v_@ACCEPT_CONFIG_ID@);
+        NCR_TLS_RETURN_ERROR(@STREAM_RESULT_ID@, "TlsStream.accept", failure, ncr_line, ncr_column);
+    }
+    SSL *ssl = ncr_tls_ssl_for_config(ncr_v_@ACCEPT_CONFIG_ID@, fd, false, &failure);
+    if (ssl == NULL) {
+        (void)close(fd);
+        ncr_drop_@CONFIG_MUTEX_ID@(ncr_v_@ACCEPT_CONFIG_ID@);
+        NCR_TLS_RETURN_ERROR(@STREAM_RESULT_ID@, "TlsStream.accept configuration", failure, ncr_line, ncr_column);
+    }
+    bool timed_out = false;
+    int handshake = ncr_tls_handshake(ssl, fd, false, finite, deadline, &timed_out, &failure);
+    if (handshake != 1) {
+        SSL_free(ssl);
+        (void)close(fd);
+        ncr_drop_@CONFIG_MUTEX_ID@(ncr_v_@ACCEPT_CONFIG_ID@);
+        if (timed_out) { NCR_TLS_RETURN_TIMEOUT(@STREAM_RESULT_ID@, "TlsStream.accept handshake", ncr_line, ncr_column); }
+        NCR_TLS_RETURN_ERROR(@STREAM_RESULT_ID@, "TlsStream.accept handshake", failure, ncr_line, ncr_column);
+    }
+    ncr_obj_@TLS_STREAM_ID@ *stream = ncr_allocate(sizeof(*stream), ncr_line, ncr_column);
+    stream->fd = fd;
+    stream->ssl = ssl;
+    stream->config = ncr_v_@ACCEPT_CONFIG_ID@;
+    return (ncr_obj_@STREAM_RESULT_ID@){ .tag = @STREAM_OK_TAG@, .data.v@STREAM_OK_TAG@.f0 = stream };
+}
+/* TLS_GROUP_END stream_accept */
+
+/* TLS_GROUP stream_read_core */
+static ncr_obj_@LONG_RESULT_TYPE@ ncr_tls_stream_read_core(
+    ncr_obj_@TLS_STREAM_ID@ *stream, ncr_obj_@BUFFER_ID@ *destination,
+    int64_t max_bytes, int64_t timeout_ms, size_t line, size_t column) {
+    if (stream == NULL || stream->fd < 0 || stream->ssl == NULL) { NCR_TLS_RETURN_ERROR(@LONG_RESULT_ID@, "TlsStream.read", EBADF, line, column); }
+    if (destination == NULL || max_bytes < 0) { NCR_TLS_RETURN_ERROR(@LONG_RESULT_ID@, "TlsStream.readSome range", EINVAL, line, column); }
+    if (timeout_ms < 0) { NCR_TLS_RETURN_ERROR(@LONG_RESULT_ID@, "TlsStream.readSome timeout", EINVAL, line, column); }
+    if (max_bytes == 0) { return (ncr_obj_@LONG_RESULT_ID@){ .tag = @LONG_OK_TAG@, .data.v@LONG_OK_TAG@.f0 = 0 }; }
+    bool finite = false;
+    int64_t deadline = 0;
+    int failure = 0;
+    if (!ncr_network_deadline(timeout_ms, &finite, &deadline, &failure)) {
+        NCR_TLS_RETURN_ERROR(@LONG_RESULT_ID@, "TlsStream.readSome timeout", failure, line, column);
+    }
+    size_t amount = max_bytes > INT64_C(16384) ? 16384 : (size_t)max_bytes;
+    if (destination->length > (size_t)INT64_MAX - amount || destination->length > SIZE_MAX - amount) {
+        NCR_TLS_RETURN_ERROR(@LONG_RESULT_ID@, "TlsStream.readSome buffer length", EOVERFLOW, line, column);
+    }
+    @BUFFER_RESERVE@(destination, destination->length + amount, line, column);
+    bool timed_out = false;
+    ssize_t received = ncr_tls_read((SSL *)stream->ssl, stream->fd,
+        destination->bytes + destination->length, amount, finite, deadline, &timed_out, &failure);
+    if (received < 0) {
+        if (timed_out) { NCR_TLS_RETURN_TIMEOUT(@LONG_RESULT_ID@, "TlsStream.readSome", line, column); }
+        NCR_TLS_RETURN_ERROR(@LONG_RESULT_ID@, "TlsStream.readSome", failure, line, column);
+    }
+    destination->length += (size_t)received;
+    return (ncr_obj_@LONG_RESULT_ID@){ .tag = @LONG_OK_TAG@, .data.v@LONG_OK_TAG@.f0 = (int64_t)received };
+}
+/* TLS_GROUP_END stream_read_core */
+
+/* TLS_GROUP stream_write_core */
+static ncr_obj_@LONG_RESULT_TYPE@ ncr_tls_stream_write_core(
+    ncr_obj_@TLS_STREAM_ID@ *stream, ncr_obj_@BUFFER_ID@ *source,
+    int64_t offset, int64_t max_bytes, int64_t timeout_ms, size_t line, size_t column) {
+    if (stream == NULL || stream->fd < 0 || stream->ssl == NULL) { NCR_TLS_RETURN_ERROR(@LONG_RESULT_ID@, "TlsStream.write", EBADF, line, column); }
+    if (source == NULL || offset < 0 || max_bytes < 0
+        || (uint64_t)offset > (uint64_t)source->length
+        || (uint64_t)max_bytes > (uint64_t)source->length - (uint64_t)offset) {
+        NCR_TLS_RETURN_ERROR(@LONG_RESULT_ID@, "TlsStream.writeSome range", EINVAL, line, column);
+    }
+    if (timeout_ms < 0) { NCR_TLS_RETURN_ERROR(@LONG_RESULT_ID@, "TlsStream.writeSome timeout", EINVAL, line, column); }
+    if (max_bytes == 0) { return (ncr_obj_@LONG_RESULT_ID@){ .tag = @LONG_OK_TAG@, .data.v@LONG_OK_TAG@.f0 = 0 }; }
+    bool finite = false;
+    int64_t deadline = 0;
+    int failure = 0;
+    if (!ncr_network_deadline(timeout_ms, &finite, &deadline, &failure)) {
+        NCR_TLS_RETURN_ERROR(@LONG_RESULT_ID@, "TlsStream.writeSome timeout", failure, line, column);
+    }
+    uint64_t requested_value = (uint64_t)max_bytes;
+    if (requested_value > (uint64_t)SSIZE_MAX) { requested_value = (uint64_t)SSIZE_MAX; }
+    bool timed_out = false;
+    ssize_t written = ncr_tls_write((SSL *)stream->ssl, stream->fd,
+        source->bytes + (size_t)offset, (size_t)requested_value, finite, deadline, &timed_out, &failure);
+    if (written <= 0) {
+        ncr_tls_stream_dispose(stream);
+        if (timed_out) { NCR_TLS_RETURN_TIMEOUT(@LONG_RESULT_ID@, "TlsStream.writeSome (connection closed; bytes may have been sent)", line, column); }
+        NCR_TLS_RETURN_ERROR(@LONG_RESULT_ID@, "TlsStream.writeSome (connection closed; bytes may have been sent)", failure, line, column);
+    }
+    return (ncr_obj_@LONG_RESULT_ID@){ .tag = @LONG_OK_TAG@, .data.v@LONG_OK_TAG@.f0 = (int64_t)written };
+}
+/* TLS_GROUP_END stream_write_core */
+
+/* TLS_GROUP stream_read_some */
+static ncr_obj_@LONG_RESULT_TYPE@ @TLS_STREAM_READ_SOME_FN@(
+    ncr_obj_@TLS_STREAM_ID@ *stream, ncr_obj_@BUFFER_ID@ *ncr_v_@READ_DESTINATION_ID@,
+    int64_t ncr_v_@READ_MAX_ID@, int64_t ncr_v_@READ_TIMEOUT_ID@, size_t ncr_line, size_t ncr_column) {
+    return ncr_tls_stream_read_core(stream, ncr_v_@READ_DESTINATION_ID@,
+        ncr_v_@READ_MAX_ID@, ncr_v_@READ_TIMEOUT_ID@, ncr_line, ncr_column);
+}
+/* TLS_GROUP_END stream_read_some */
+
+/* TLS_GROUP stream_write_some */
+static ncr_obj_@LONG_RESULT_TYPE@ @TLS_STREAM_WRITE_SOME_FN@(
+    ncr_obj_@TLS_STREAM_ID@ *stream, ncr_obj_@BUFFER_ID@ *ncr_v_@WRITE_SOURCE_ID@,
+    int64_t ncr_v_@WRITE_OFFSET_ID@, int64_t ncr_v_@WRITE_MAX_ID@,
+    int64_t ncr_v_@WRITE_TIMEOUT_ID@, size_t ncr_line, size_t ncr_column) {
+    return ncr_tls_stream_write_core(stream, ncr_v_@WRITE_SOURCE_ID@,
+        ncr_v_@WRITE_OFFSET_ID@, ncr_v_@WRITE_MAX_ID@, ncr_v_@WRITE_TIMEOUT_ID@, ncr_line, ncr_column);
+}
+/* TLS_GROUP_END stream_write_some */
+
+/* TLS_GROUP stream_write_all */
+static ncr_obj_@UNIT_RESULT_TYPE@ @TLS_STREAM_WRITE_ALL_FN@(
+    ncr_obj_@TLS_STREAM_ID@ *stream, ncr_obj_@BUFFER_ID@ *ncr_v_@WRITE_ALL_SOURCE_ID@,
+    int64_t ncr_v_@WRITE_ALL_TIMEOUT_ID@, size_t ncr_line, size_t ncr_column) {
+    if (stream == NULL || stream->fd < 0 || stream->ssl == NULL) { NCR_TLS_RETURN_ERROR(@UNIT_RESULT_ID@, "TlsStream.writeAll", EBADF, ncr_line, ncr_column); }
+    if (ncr_v_@WRITE_ALL_SOURCE_ID@ == NULL || ncr_v_@WRITE_ALL_TIMEOUT_ID@ < 0) {
+        NCR_TLS_RETURN_ERROR(@UNIT_RESULT_ID@, "TlsStream.writeAll arguments", EINVAL, ncr_line, ncr_column);
+    }
+    bool finite = false;
+    int64_t deadline = 0;
+    int failure = 0;
+    if (!ncr_network_deadline(ncr_v_@WRITE_ALL_TIMEOUT_ID@, &finite, &deadline, &failure)) {
+        NCR_TLS_RETURN_ERROR(@UNIT_RESULT_ID@, "TlsStream.writeAll timeout", failure, ncr_line, ncr_column);
+    }
+    size_t offset = 0;
+    while (offset < ncr_v_@WRITE_ALL_SOURCE_ID@->length) {
+        size_t remaining = ncr_v_@WRITE_ALL_SOURCE_ID@->length - offset;
+        size_t amount = remaining > (size_t)16384 ? (size_t)16384 : remaining;
+        bool timed_out = false;
+        ssize_t written = ncr_tls_write((SSL *)stream->ssl, stream->fd,
+            ncr_v_@WRITE_ALL_SOURCE_ID@->bytes + offset, amount, finite, deadline, &timed_out, &failure);
+        if (written <= 0) {
+            ncr_tls_stream_dispose(stream);
+            if (timed_out) { NCR_TLS_RETURN_TIMEOUT(@UNIT_RESULT_ID@, "TlsStream.writeAll (connection closed; partial bytes may have been sent)", ncr_line, ncr_column); }
+            NCR_TLS_RETURN_ERROR(@UNIT_RESULT_ID@, "TlsStream.writeAll (connection closed; partial bytes may have been sent)", failure, ncr_line, ncr_column);
+        }
+        offset += (size_t)written;
+    }
+    return (ncr_obj_@UNIT_RESULT_ID@){ .tag = @UNIT_OK_TAG@, .data.v@UNIT_OK_TAG@.f0 = UINT8_C(0) };
+}
+/* TLS_GROUP_END stream_write_all */
+
+/* TLS_GROUP stream_text_query */
+static ncr_obj_@TEXT_RESULT_TYPE@ ncr_tls_stream_text_query(
+    ncr_obj_@TLS_STREAM_ID@ *stream, bool cipher, size_t line, size_t column) {
+    if (stream == NULL || stream->fd < 0 || stream->ssl == NULL) {
+        NCR_TLS_RETURN_ERROR(@TEXT_RESULT_ID@, "TlsStream query", EBADF, line, column);
+    }
+    const char *value = cipher
+        ? SSL_get_cipher_name((SSL *)stream->ssl)
+        : SSL_get_version((SSL *)stream->ssl);
+    if (value == NULL) { NCR_TLS_RETURN_ERROR(@TEXT_RESULT_ID@, "TlsStream query", EPROTO, line, column); }
+    ncr_obj_@TEXT_ID@ *text = ncr_text_from_bytes_@TEXT_ID@((const unsigned char *)value, strlen(value), line, column);
+    return (ncr_obj_@TEXT_RESULT_ID@){ .tag = @TEXT_OK_TAG@, .data.v@TEXT_OK_TAG@.f0 = text };
+}
+/* TLS_GROUP_END stream_text_query */
+
+/* TLS_GROUP stream_cipher */
+static ncr_obj_@TEXT_RESULT_TYPE@ @TLS_STREAM_CIPHER_FN@(ncr_obj_@TLS_STREAM_ID@ *stream, size_t ncr_line, size_t ncr_column) {
+    return ncr_tls_stream_text_query(stream, true, ncr_line, ncr_column);
+}
+/* TLS_GROUP_END stream_cipher */
+/* TLS_GROUP stream_protocol */
+static ncr_obj_@TEXT_RESULT_TYPE@ @TLS_STREAM_PROTOCOL_FN@(ncr_obj_@TLS_STREAM_ID@ *stream, size_t ncr_line, size_t ncr_column) {
+    return ncr_tls_stream_text_query(stream, false, ncr_line, ncr_column);
+}
+/* TLS_GROUP_END stream_protocol */
+
+/* TLS_GROUP stream_peer_certificate */
+static ncr_obj_@PEER_RESULT_TYPE@ @TLS_STREAM_PEER_CERTIFICATE_FN@(
+    ncr_obj_@TLS_STREAM_ID@ *stream, size_t ncr_line, size_t ncr_column) {
+    if (stream == NULL || stream->fd < 0 || stream->ssl == NULL) {
+        NCR_TLS_RETURN_ERROR(@PEER_RESULT_ID@, "TlsStream.peerCertificate", EBADF, ncr_line, ncr_column);
+    }
+    X509 *peer = SSL_get1_peer_certificate((SSL *)stream->ssl);
+    if (peer == NULL) {
+        ncr_obj_@PEER_OPTION_ID@ none = { .tag = @PEER_OPTION_NONE_TAG@ };
+        return (ncr_obj_@PEER_RESULT_ID@){ .tag = @PEER_OK_TAG@, .data.v@PEER_OK_TAG@.f0 = none };
+    }
+    X509 *copy = X509_dup(peer);
+    X509_free(peer);
+    if (copy == NULL) { NCR_TLS_RETURN_ERROR(@PEER_RESULT_ID@, "TlsStream.peerCertificate copy", EPROTO, ncr_line, ncr_column); }
+    ncr_obj_@CERTIFICATE_ID@ *certificate = ncr_allocate(sizeof(*certificate), ncr_line, ncr_column);
+    certificate->certificate = copy;
+    certificate->chain = NULL;
+    ncr_obj_@PEER_OPTION_ID@ some = { .tag = @PEER_OPTION_SOME_TAG@, .data.v@PEER_OPTION_SOME_TAG@.f0 = certificate };
+    return (ncr_obj_@PEER_RESULT_ID@){ .tag = @PEER_OK_TAG@, .data.v@PEER_OK_TAG@.f0 = some };
+}
+/* TLS_GROUP_END stream_peer_certificate */
+
+/* TLS_GROUP stream_read */
+static ncr_obj_@LONG_RESULT_TYPE@ @TLS_STREAM_READ_FN@(
+    ncr_obj_@TLS_STREAM_ID@ *stream, ncr_obj_@BUFFER_ID@ *ncr_v_@READ_DESTINATION_ID@,
+    int64_t ncr_v_@READ_MAX_ID@, size_t ncr_line, size_t ncr_column) {
+    return ncr_tls_stream_read_core(stream, ncr_v_@READ_DESTINATION_ID@,
+        ncr_v_@READ_MAX_ID@, 0, ncr_line, ncr_column);
+}
+/* TLS_GROUP_END stream_read */
+/* TLS_GROUP stream_write */
+static ncr_obj_@LONG_RESULT_TYPE@ @TLS_STREAM_WRITE_FN@(
+    ncr_obj_@TLS_STREAM_ID@ *stream, ncr_obj_@BUFFER_ID@ *ncr_v_@WRITE_SOURCE_ID@,
+    int64_t ncr_v_@WRITE_OFFSET_ID@, int64_t ncr_v_@WRITE_MAX_ID@,
+    size_t ncr_line, size_t ncr_column) {
+    return ncr_tls_stream_write_core(stream, ncr_v_@WRITE_SOURCE_ID@,
+        ncr_v_@WRITE_OFFSET_ID@, ncr_v_@WRITE_MAX_ID@, 0, ncr_line, ncr_column);
+}
+/* TLS_GROUP_END stream_write */
+/* TLS_GROUP stream_flush */
+static ncr_obj_@UNIT_RESULT_TYPE@ @TLS_STREAM_FLUSH_FN@(ncr_obj_@TLS_STREAM_ID@ *stream, size_t ncr_line, size_t ncr_column) {
+    if (stream == NULL || stream->fd < 0 || stream->ssl == NULL) {
+        NCR_TLS_RETURN_ERROR(@UNIT_RESULT_ID@, "TlsStream.flush", EBADF, ncr_line, ncr_column);
+    }
+    return (ncr_obj_@UNIT_RESULT_ID@){ .tag = @UNIT_OK_TAG@, .data.v@UNIT_OK_TAG@.f0 = UINT8_C(0) };
+}
+/* TLS_GROUP_END stream_flush */
+
+/* TLS_GROUP stream_close */
+static ncr_obj_@CLOSE_RESULT_TYPE@ @TLS_STREAM_CLOSE_FN@(ncr_obj_@TLS_STREAM_ID@ *stream, size_t ncr_line, size_t ncr_column) {
+    if (stream == NULL || stream->fd < 0 || stream->ssl == NULL) {
+        NCR_TLS_RETURN_ERROR(@CLOSE_RESULT_ID@, "TlsStream.close", EBADF, ncr_line, ncr_column);
+    }
+    bool timed_out = false;
+    int failure = 0;
+    int status = ncr_tls_shutdown((SSL *)stream->ssl, stream->fd, 250, &timed_out, &failure);
+    int close_failure = ncr_tls_stream_release(stream);
+    if (status == 1) {
+        if (close_failure != 0) { NCR_TLS_RETURN_ERROR(@CLOSE_RESULT_ID@, "TlsStream.close fd", close_failure, ncr_line, ncr_column); }
+        return (ncr_obj_@CLOSE_RESULT_ID@){ .tag = @CLOSE_OK_TAG@, .data.v@CLOSE_OK_TAG@.f0 = UINT8_C(0) };
+    }
+    if (timed_out) { NCR_TLS_RETURN_TIMEOUT(@CLOSE_RESULT_ID@, "TlsStream.close notify", ncr_line, ncr_column); }
+    NCR_TLS_RETURN_ERROR(@CLOSE_RESULT_ID@, "TlsStream.close notify", failure, ncr_line, ncr_column);
+}
+/* TLS_GROUP_END stream_close */
+/* TLS_GROUP_END stream_methods */

@@ -95,13 +95,41 @@ pub(super) fn implementation(program: &t::Program) -> String {
         M::DatagramSource, M::DatagramBytesRead, M::DatagramTruncated,
         M::UdpSocketBind, M::UdpSocketSendTo, M::UdpSocketReceiveFrom, M::UdpSocketLocalAddress, M::UdpSocketClose,
     ];
-    if !has_any(program, NETWORK_METHODS) { return String::new(); }
+    const TLS_WAIT_METHODS: &[M] = &[
+        M::TlsStreamConnect, M::TlsStreamAccept,
+        M::TlsStreamReadSome, M::TlsStreamWriteSome, M::TlsStreamWriteAll,
+        M::TlsStreamCipher, M::TlsStreamProtocol, M::TlsStreamPeerCertificate,
+        M::TlsStreamClose, M::TlsStreamRead, M::TlsStreamWrite, M::TlsStreamFlush,
+    ];
+    const WEBSOCKET_METHODS: &[M] = &[
+        M::WebSocketConnect, M::WebSocketConnectTls, M::WebSocketSendText,
+        M::WebSocketSendBinary, M::WebSocketPing, M::WebSocketReceive, M::WebSocketClose,
+    ];
+    const CONNECT_METHODS: &[M] = &[M::TlsStreamConnect, M::WebSocketConnect, M::WebSocketConnectTls];
 
-    let address = native_class_id(program, |native| matches!(native, C::SocketAddress));
+    let has_network_methods = has_any(program, NETWORK_METHODS);
+    let has_tls_io = has_any(program, TLS_WAIT_METHODS);
+    let has_websocket_io = has_any(program, WEBSOCKET_METHODS);
+    let has_dns_resolve = program.functions.iter().any(|function| function.native == Some(M::DnsResolve));
+    let has_shared_connect = has_any(program, CONNECT_METHODS);
+    let need_wait = has_network_methods || has_tls_io || has_websocket_io;
+    let need_address_helpers = has_network_methods || has_dns_resolve || has_shared_connect;
+    let need_descriptor_helper = has_network_methods || has_websocket_io || has_shared_connect;
+    let need_connect_helper = has_network_methods || has_shared_connect;
+    if !need_wait && !need_address_helpers && !need_descriptor_helper { return String::new(); }
+
+    let address = if need_address_helpers || need_connect_helper {
+        Some(native_class_id(program, |native| matches!(native, C::SocketAddress)))
+    } else {
+        None
+    };
     let template = include_str!("../../stdlib/network.c.in");
     let mut body = String::new();
-    body.push_str(&group(template, "common"));
-
+    if has_network_methods || has_dns_resolve { body.push_str(&group(template, "common")); }
+    if need_wait { body.push_str(&group(template, "wait")); }
+    if need_address_helpers { body.push_str(&group(template, "address_helpers")); }
+    if need_descriptor_helper { body.push_str(&group(template, "descriptor_helper")); }
+    if need_connect_helper { body.push_str(&group(template, "connect_helper")); }
     let address_query = [M::TcpListenerLocalAddress, M::TcpStreamPeerAddress, M::TcpStreamLocalAddress, M::UdpSocketLocalAddress];
     let close_methods = [M::TcpListenerClose, M::TcpStreamClose, M::UdpSocketClose];
     let resolve = method_if(program, M::SocketAddressResolve);
@@ -124,7 +152,8 @@ pub(super) fn implementation(program: &t::Program) -> String {
     body.push_str(template.split_once("/* NETWORK_GROUP_END datagram */")
         .expect("network template final group").1);
 
-    let mut substitutions = vec![("@ADDRESS_ID@", address.to_string())];
+    let mut substitutions = vec![];
+    if let Some(address) = address { add(&mut substitutions, "@ADDRESS_ID@", address); }
     if has_any(program, &datagram_methods) || has_any(program, &udp_methods) {
         let datagram = native_class_id(program, |native| matches!(native, C::Datagram));
         add(&mut substitutions, "@DATAGRAM_ID@", datagram);
@@ -150,6 +179,7 @@ pub(super) fn implementation(program: &t::Program) -> String {
         add_ok_tag(&mut substitutions, program, "@UNIT_RESULT_OK_TAG@", close);
     }
     if let Some(function) = resolve {
+        let address = address.expect("SocketAddress.resolve requires its native address class");
         let list = native_class_id(program, |native| matches!(native, C::List(Type::Object(element)) if element == address));
         let text = native_class_id(program, |native| matches!(native, C::Text));
         let list_new = method_for_class(program, list, M::ListNew);

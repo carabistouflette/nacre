@@ -117,6 +117,13 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   UDP sockets and datagrams with poll-based deadlines and direct ByteBuffer appends.
   `stdlib/time_clock.c.in` now owns the monotonic clock/deadline helpers shared by
   Time and networking; no DNS-timeout or descriptor-sharing API is implied.
+
+- OpenSSL-backed TLS adds affine client/server configurations, hostname-verified
+  client streams, mutual-auth server support, bounded monotonic handshakes and
+  I/O, and explicit mutex-handle ownership. URI-driven WebSocket clients add
+  `ws`/`wss` upgrades, masked client frames, bounded message assembly, ping, and
+  peer close handshakes. Both surfaces reuse shared socket, DNS, IDNA, and path
+  helpers rather than duplicating platform conversion logic.
 - Datagram accessors are emitted independently of UdpSocket specialization,
   including unoptimized native compilation of standalone borrowed helpers.
 - `Uri` adds owned RFC 3986 parsing, explicit normalization/resolution,

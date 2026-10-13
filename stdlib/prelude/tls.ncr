@@ -1,0 +1,22 @@
+class TlsConfig {
+    public static Result<TlsConfig, Text> client() {}
+    public static Result<TlsConfig, Text> clientWithCa(borrow Path caFile) {}
+    public static Result<TlsConfig, Text> clientWithIdentity(Certificate certificate, CryptoKey key, borrow Path caFile) {}
+    public static Result<TlsConfig, Text> server(Certificate certificate, CryptoKey key) {}
+    public static Result<TlsConfig, Text> serverWithClientAuth(Certificate certificate, CryptoKey key, borrow Path caFile) {}
+}
+
+class TlsStream implements ByteSource, ByteSink {
+    public static Result<TlsStream, Text> connect(borrow SocketAddress address, Mutex<TlsConfig> config, borrow Text host, long timeoutMs) {}
+    public static Result<TlsStream, Text> accept(borrow mut TcpListener listener, Mutex<TlsConfig> config, long timeoutMs) {}
+    public Result<long, Text> readSome(borrow mut ByteBuffer destination, long maxBytes, long timeoutMs) {}
+    public Result<long, Text> writeSome(borrow ByteBuffer source, long offset, long maxBytes, long timeoutMs) {}
+    public Result<Unit, Text> writeAll(borrow ByteBuffer source, long timeoutMs) {}
+    public readonly Result<Text, Text> cipher() {}
+    public readonly Result<Text, Text> protocol() {}
+    public readonly Result<Option<Certificate>, Text> peerCertificate() {}
+    public Result<Unit, Text> close() {}
+    public Result<long, Text> read(borrow mut ByteBuffer destination, long maxBytes) {}
+    public Result<long, Text> write(borrow ByteBuffer source, long offset, long maxBytes) {}
+    public Result<Unit, Text> flush() {}
+}

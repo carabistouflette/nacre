@@ -36,6 +36,8 @@ mod crypto;
 mod big_numbers;
 mod uri;
 mod dns;
+mod tls;
+mod websocket;
 
 use crate::ir::{self as t, NativeClass as C, Type};
 
@@ -88,6 +90,8 @@ pub fn fields(program: &t::Program, class: C, class_id: usize) -> String {
             cryptokeys::fields(class),
         C::Uri => uri::fields(),
         C::Dns => dns::fields(),
+        C::TlsConfig | C::TlsStream => tls::fields(program, class, class_id),
+        C::WebSocket | C::WebSocketMessage => websocket::fields(program, class, class_id),
         C::Thread(_) | C::Mutex(_) | C::Guard(_) | C::Channel(_) |
         C::Sender(_) | C::Receiver(_) => concurrency::fields(program, class, class_id),
     }
@@ -131,6 +135,8 @@ pub fn drop_fields(program: &t::Program, class: C, class_id: usize) -> String {
             cryptokeys::drop_fields(class, class_id),
         C::Uri => uri::drop_fields(),
         C::Dns => dns::drop_fields(),
+        C::TlsConfig | C::TlsStream => tls::drop_fields(program, class),
+        C::WebSocket | C::WebSocketMessage => websocket::drop_fields(program, class),
         C::Thread(_) | C::Mutex(_) | C::Guard(_) | C::Channel(_) |
         C::Sender(_) | C::Receiver(_) => concurrency::drop_fields(class_id),
     }
@@ -144,6 +150,7 @@ pub(crate) fn drop_helper_prototypes(program: &t::Program) -> String {
     let mut out = concurrency::drop_helper_prototypes(program);
     out.push_str(&http::drop_helper_prototypes(program));
     out.push_str(&cryptokeys::drop_helper_prototypes(program));
+    out.push_str(&tls::drop_helper_prototypes(program));
     out
 }
 
@@ -207,7 +214,8 @@ fn append_body(program: &t::Program, out: &mut String, class: &t::Class, native:
         C::Thread(_) | C::Mutex(_) | C::Guard(_) | C::Channel(_) |
         C::Sender(_) | C::Receiver(_) => return,
         C::HttpRequest | C::HttpResponse | C::Unicode | C::Character | C::Charset | C::Locale |
-        C::CryptoKey | C::CryptoDigest | C::CryptoMac | C::Certificate => return,
+        C::CryptoKey | C::CryptoDigest | C::CryptoMac | C::Certificate |
+        C::TlsConfig | C::TlsStream | C::WebSocket | C::WebSocketMessage => return,
         C::Compression | C::Checksums | C::Regex | C::RegexMatch | C::Console | C::Files | C::Args |
         C::Env | C::Command | C::Process | C::ProcessOutput => return,
         C::BigInt | C::BigDecimal => return,
@@ -285,6 +293,8 @@ pub fn implementations(program: &t::Program) -> String {
         out.push_str(&processes);
     }
     out.push_str(&cryptokeys::implementation(program));
+    out.push_str(&tls::implementation(program));
+    out.push_str(&websocket::implementation(program));
     out
 }
 

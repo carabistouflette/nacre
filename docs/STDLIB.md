@@ -1560,7 +1560,7 @@ capture timeout affects the direct child only; descendants are not guaranteed to
 stop. Spawn/poll/read failures return `Err` after cleanup of a started child and
 its pipes. A child that exits nonzero still produces a successful capture result.
 
-## TCP and UDP
+## Networking
 
 All socket operations are synchronous and blocking at the API level, with
 nonblocking readiness handling underneath where needed. Socket handles are unique
@@ -1734,6 +1734,74 @@ requires ICU. Native emission follows the requested class and method metadata,
 without a separate exhaustive URI-method list or another expression-tree walk.
 DNS helper requests are supplied by the caller; DNS does not depend on higher-level
 transport types.
+## TLS
+
+```java
+static Result<TlsConfig, Text> TlsConfig.client()
+static Result<TlsConfig, Text> TlsConfig.clientWithCa(borrow Path caFile)
+static Result<TlsConfig, Text> TlsConfig.clientWithIdentity(
+    Certificate certificate, CryptoKey key, borrow Path caFile)
+static Result<TlsConfig, Text> TlsConfig.server(Certificate certificate, CryptoKey key)
+static Result<TlsConfig, Text> TlsConfig.serverWithClientAuth(
+    Certificate certificate, CryptoKey key, borrow Path caFile)
+
+static Result<TlsStream, Text> TlsStream.connect(
+    borrow SocketAddress address, Mutex<TlsConfig> config, borrow Text host, long timeoutMs)
+static Result<TlsStream, Text> TlsStream.accept(
+    borrow mut TcpListener listener, Mutex<TlsConfig> config, long timeoutMs)
+Result<long, Text> TlsStream.readSome(borrow mut ByteBuffer destination, long maxBytes, long timeoutMs)
+Result<long, Text> TlsStream.writeSome(borrow ByteBuffer source, long offset, long maxBytes, long timeoutMs)
+Result<Unit, Text> TlsStream.writeAll(borrow ByteBuffer source, long timeoutMs)
+Result<long, Text> TlsStream.read(borrow mut ByteBuffer destination, long maxBytes)
+Result<long, Text> TlsStream.write(borrow ByteBuffer source, long offset, long maxBytes)
+Result<Unit, Text> TlsStream.flush()
+readonly Result<Text, Text> TlsStream.cipher()
+readonly Result<Text, Text> TlsStream.protocol()
+readonly Result<Option<Certificate>, Text> TlsStream.peerCertificate()
+Result<Unit, Text> TlsStream.close()
+```
+
+Client configurations use system trust or an explicit CA file and verify the peer.
+`connect` uses `host` for SNI and certificate hostname/IP verification; it is
+independent of the numeric `SocketAddress`. Configurations that take a certificate
+and private key own those identities. `serverWithClientAuth` also requires and
+verifies client certificates. A stream consumes one `Mutex<TlsConfig>` handle; callers
+need to use a configuration for more than one stream must explicitly clone the
+handle with the mutex API. The TLS context and its owned identity remain alive
+until all such handles have been dropped.
+
+TLS connect, accept, handshake, read, and write timeouts use the same monotonic
+deadline convention as TCP: zero is unbounded, positive values are milliseconds,
+and negative values return `Err`. Reads append to the destination. `writeSome`
+can report partial progress; `writeAll` uses one end-to-end deadline, and an error
+may follow bytes already sent. `cipher`, `protocol`, and `peerCertificate` return
+owned results; the peer certificate is `None` when the remote side supplied no
+certificate.
+
+## WebSocket
+
+```java
+static Result<WebSocket, Text> WebSocket.connect(
+    borrow Uri uri, long timeoutMs, long maxMessageBytes)
+static Result<WebSocket, Text> WebSocket.connectTls(
+    borrow Uri uri, Mutex<TlsConfig> config, long timeoutMs, long maxMessageBytes)
+Result<Unit, Text> WebSocket.sendText(borrow Text text, long timeoutMs)
+Result<Unit, Text> WebSocket.sendBinary(borrow ByteBuffer bytes, long timeoutMs)
+Result<Unit, Text> WebSocket.ping(borrow ByteBuffer payload, long timeoutMs)
+Result<Option<WebSocketMessage>, Text> WebSocket.receive(long timeoutMs)
+Result<Unit, Text> WebSocket.close(int code, borrow Text reason, long timeoutMs)
+readonly boolean WebSocketMessage.isText()
+readonly borrow ByteBuffer WebSocketMessage.body()
+readonly Result<Text, Text> WebSocketMessage.asText()
+```
+
+`connect` accepts `ws` URIs; `connectTls` accepts `wss` URIs and consumes one
+explicit TLS configuration handle. Both perform the HTTP upgrade and validate the
+peer response before returning an affine connection. `maxMessageBytes` limits an
+incoming message. `receive` returns `Ok(None)` after an orderly close; protocol,
+UTF-8, I/O, and timeout failures are owned `Err(Text)` values. `close` sends a
+close frame and completes the peer close handshake, then releases the transport.
+All WebSocket timeouts are monotonic milliseconds; zero means unbounded waiting.
 
 ## Platform, allocation, and timing limits
 

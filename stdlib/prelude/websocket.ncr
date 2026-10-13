@@ -1,0 +1,15 @@
+class WebSocket {
+    public static Result<WebSocket, Text> connect(borrow Uri uri, long timeoutMs, long maxMessageBytes) {}
+    public static Result<WebSocket, Text> connectTls(borrow Uri uri, Mutex<TlsConfig> config, long timeoutMs, long maxMessageBytes) {}
+    public Result<Unit, Text> sendText(borrow Text text, long timeoutMs) {}
+    public Result<Unit, Text> sendBinary(borrow ByteBuffer bytes, long timeoutMs) {}
+    public Result<Unit, Text> ping(borrow ByteBuffer payload, long timeoutMs) {}
+    public Result<Option<WebSocketMessage>, Text> receive(long timeoutMs) {}
+    public Result<Unit, Text> close(int code, borrow Text reason, long timeoutMs) {}
+}
+
+class WebSocketMessage {
+    public readonly boolean isText() {}
+    public readonly borrow ByteBuffer body() {}
+    public readonly Result<Text, Text> asText() {}
+}
