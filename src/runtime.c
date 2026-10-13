@@ -1,6 +1,7 @@
 /* Nacre runtime support: no GC and no VM; unique-owned object allocation.
  * libc is still used for output and process termination.
  */
+#define _XOPEN_SOURCE 700
 #define _POSIX_C_SOURCE 200809L
 #include <stdint.h>
 #include <inttypes.h>
@@ -13,41 +14,60 @@
 #include <errno.h>
 #include <string.h>
 #include <unistd.h>
+#include <locale.h>
+#include <regex.h>
 
 typedef struct {
     const unsigned char *data;
     size_t length;
 } ncr_string;
 
-/* Strict RFC 3629 validation: reject overlong sequences, surrogates and
-   code points above U+10FFFF. NUL is valid UTF-8 and remains length-aware. */
+/* Strict RFC 3629 scalar decoder shared by Text and OS boundary templates.
+   NUL is a valid scalar; callers decide whether their C ABI permits it. */
+static bool ncr_utf8_decode(
+    const unsigned char *data, size_t length, size_t *index, uint32_t *scalar
+) {
+    if (data == NULL || index == NULL || scalar == NULL || *index >= length) { return false; }
+    size_t cursor = *index;
+    unsigned char first = data[cursor++];
+    if (first <= 0x7f) {
+        *index = cursor;
+        *scalar = first;
+        return true;
+    }
+    uint32_t value;
+    uint32_t minimum;
+    size_t continuation_count;
+    if (first >= 0xc2 && first <= 0xdf) {
+        value = (uint32_t)(first & 0x1f); minimum = 0x80; continuation_count = 1;
+    } else if (first >= 0xe0 && first <= 0xef) {
+        value = (uint32_t)(first & 0x0f); minimum = 0x800; continuation_count = 2;
+    } else if (first >= 0xf0 && first <= 0xf4) {
+        value = (uint32_t)(first & 0x07); minimum = 0x10000; continuation_count = 3;
+    } else {
+        return false;
+    }
+    if (continuation_count > length - cursor) { return false; }
+    for (size_t i = 0; i < continuation_count; ++i) {
+        unsigned char next = data[cursor++];
+        if ((next & 0xc0) != 0x80) { return false; }
+        value = (value << 6) | (uint32_t)(next & 0x3f);
+    }
+    if (value < minimum || value > UINT32_C(0x10ffff)
+        || (value >= UINT32_C(0xd800) && value <= UINT32_C(0xdfff))) {
+        return false;
+    }
+    *index = cursor;
+    *scalar = value;
+    return true;
+}
+
 static bool ncr_utf8_valid(const unsigned char *data, size_t length) {
+    if (length > 0 && data == NULL) { return false; }
     size_t index = 0;
+    uint32_t scalar;
     while (index < length) {
-        unsigned char first = data[index++];
-        if (first <= 0x7f) { continue; }
-        uint32_t value;
-        uint32_t minimum;
-        size_t continuation_count;
-        if (first >= 0xc2 && first <= 0xdf) {
-            value = (uint32_t)(first & 0x1f); minimum = 0x80; continuation_count = 1;
-        } else if (first >= 0xe0 && first <= 0xef) {
-            value = (uint32_t)(first & 0x0f); minimum = 0x800; continuation_count = 2;
-        } else if (first >= 0xf0 && first <= 0xf4) {
-            value = (uint32_t)(first & 0x07); minimum = 0x10000; continuation_count = 3;
-        } else {
-            return false;
-        }
-        if (continuation_count > length - index) { return false; }
-        for (size_t i = 0; i < continuation_count; ++i) {
-            unsigned char next = data[index++];
-            if ((next & 0xc0) != 0x80) { return false; }
-            value = (value << 6) | (uint32_t)(next & 0x3f);
-        }
-        if (value < minimum || value > UINT32_C(0x10ffff)
-            || (value >= UINT32_C(0xd800) && value <= UINT32_C(0xdfff))) {
-            return false;
-        }
+        if (!ncr_utf8_decode(data, length, &index, &scalar)) { return false; }
     }
     return true;
 }

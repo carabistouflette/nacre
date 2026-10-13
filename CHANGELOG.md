@@ -17,6 +17,11 @@
 - Math exposes defined IEEE behavior and fallible signed-minimum absolute values.
   Unique-owned SplitMix64 Random supports deterministic reseeding, unbiased bounds
   and real OS entropy. Time clocks and sleeps return structured errors with checked units.
+- Fixed Arrays transfer List storage and preserve affine element ownership;
+  ByteBuffer supports checked long-sized binary storage and shared native I/O reservation.
+- Text supports scalar operations, slicing, search, replacement and splitting.
+  POSIX ERE Regex uses thread-local UTF-8 locale state and owned match captures.
+  Byte-slice endpoint checks remain constant-time under validated Text invariants.
 
 - Postfix `?` unwraps trusted built-in `Result` values or returns the exact
   error payload after cleaning live locals and pending owned C temporaries.

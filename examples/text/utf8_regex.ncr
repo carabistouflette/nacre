@@ -1,0 +1,50 @@
+void main() {
+    Text input = new Text("  alpha 🚀 beta  ");
+    Text trimmed = input.trim();
+    println(trimmed.charCount());
+    Text rocket = new Text("🚀");
+    println(trimmed.indexOf(rocket));
+
+    Text separator = new Text(" ");
+    List<Text> words = trimmed.split(separator);
+    int index = 0;
+    while (index < words.size()) {
+        borrow Text word = words.getRef(index);
+        word.print();
+        index = index + 1;
+    }
+
+    Text pattern = new Text("(🚀)");
+    match (Regex.compile(pattern)) {
+        Err(error) {
+            println("regex compilation failed");
+            drop(error);
+        }
+        Ok(regex) {
+            match (regex.search(trimmed)) {
+                Err(error) {
+                    println("regex search failed");
+                    drop(error);
+                }
+                Ok(found) {
+                    match (found) {
+                        None { println("no rocket found"); }
+                        Some(capture) {
+                            println(capture.groupCount());
+                            println(capture.start(0));
+                            println(capture.end(0));
+                            borrow Text capturedRocket = capture.group(1);
+                            capturedRocket.print();
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Text formatted = new Text("bytes=");
+    formatted.appendInt(trimmed.byteLength());
+    formatted.append(" scalars=");
+    formatted.appendInt(trimmed.charCount());
+    formatted.print();
+}

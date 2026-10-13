@@ -17,9 +17,11 @@ static void ncr_text_append_@ID@(ncr_obj_@ID@ *p, const unsigned char *data, siz
 }
 static void @TEXT_NEW@(ncr_obj_@ID@ *p, ncr_string initial, size_t line, size_t column) {
     p->bytes = NULL; p->length = 0; p->capacity = 0;
+    if (!ncr_utf8_valid(initial.data, initial.length)) { ncr_fail("Text requires valid UTF-8", line, column); }
     ncr_text_append_@ID@(p, initial.data, initial.length, line, column);
 }
 static void @TEXT_APPEND@(ncr_obj_@ID@ *p, ncr_string value, size_t line, size_t column) {
+    if (!ncr_utf8_valid(value.data, value.length)) { ncr_fail("Text append requires valid UTF-8", line, column); }
     ncr_text_append_@ID@(p, value.data, value.length, line, column);
 }
 static void @TEXT_APPEND_INT@(ncr_obj_@ID@ *p, int32_t value, size_t line, size_t column) {
@@ -218,19 +220,284 @@ static ncr_obj_@PARSE_DOUBLE_RESULT@ @TEXT_PARSE_DOUBLE@(ncr_obj_@ID@ *p, size_t
 
 static bool ncr_text_boundary_@ID@(ncr_obj_@ID@ *p, int32_t index) {
     if (index < 0 || index > p->length) { return false; }
-    if (index == 0 || index == p->length) { return true; }
-    return (p->bytes[index] & 0xc0) != 0x80;
+    // Text producers validate UTF-8; only endpoint alignment needs checking here.
+    return index == 0 || index == p->length || (p->bytes[index] & 0xc0u) != 0x80u;
 }
-static ncr_obj_@SLICE_RESULT@ @TEXT_SLICE_BYTES@(ncr_obj_@ID@ *p, int32_t start, int32_t end, size_t line, size_t column) {
+static ncr_obj_@SLICE_BYTES_RESULT@ @TEXT_SLICE_BYTES@(ncr_obj_@ID@ *p, int32_t start, int32_t end, size_t line, size_t column) {
     if (start < 0 || end < start || end > p->length
         || !ncr_text_boundary_@ID@(p, start) || !ncr_text_boundary_@ID@(p, end)) {
-        return @ERROR_SLICE_RESULT@("Text.sliceBytes: invalid byte range", sizeof("Text.sliceBytes: invalid byte range") - 1, line, column);
+        return @ERROR_SLICE_BYTES_RESULT@("Text.sliceBytes: invalid byte range", sizeof("Text.sliceBytes: invalid byte range") - 1, line, column);
     }
     size_t length = (size_t)(end - start);
     const unsigned char *bytes = p->bytes == NULL || length == 0 ? NULL : p->bytes + start;
+    ncr_obj_@ID@ *slice = @TEXT_MAKE@(bytes, length, line, column);
+    return (ncr_obj_@SLICE_BYTES_RESULT@){
+        .tag = @SLICE_BYTES_OK_TAG@,
+        .data.v@SLICE_BYTES_OK_TAG@.f0 = slice
+    };
+}
+static bool ncr_text_scalar_offset_@ID@(ncr_obj_@ID@ *p, int32_t scalar_index, size_t *offset) {
+    if (scalar_index < 0 || offset == NULL) { return false; }
+    size_t cursor = 0;
+    uint32_t scalar;
+    for (int32_t index = 0; index < scalar_index; ++index) {
+        if (!ncr_utf8_decode(p->bytes, (size_t)p->length, &cursor, &scalar)) { return false; }
+    }
+    *offset = cursor;
+    return true;
+}
+
+static int32_t @TEXT_CHAR_COUNT@(ncr_obj_@ID@ *p, size_t line, size_t column) {
+    (void)line; (void)column;
+    size_t cursor = 0;
+    int32_t count = 0;
+    uint32_t scalar;
+    while (cursor < (size_t)p->length) {
+        if (!ncr_utf8_decode(p->bytes, (size_t)p->length, &cursor, &scalar) || count == INT32_MAX) {
+            ncr_fail("Text contains invalid UTF-8", line, column);
+        }
+        ++count;
+    }
+    return count;
+}
+
+static uint32_t @TEXT_CHAR_AT@(ncr_obj_@ID@ *p, int32_t index, size_t line, size_t column) {
+    size_t cursor;
+    if (!ncr_text_scalar_offset_@ID@(p, index, &cursor) || cursor >= (size_t)p->length) {
+        ncr_fail("Text character index out of bounds", line, column);
+    }
+    uint32_t scalar;
+    if (!ncr_utf8_decode(p->bytes, (size_t)p->length, &cursor, &scalar)) {
+        ncr_fail("Text contains invalid UTF-8", line, column);
+    }
+    return scalar;
+}
+
+static int32_t @TEXT_COMPARE_TO@(ncr_obj_@ID@ *p, ncr_obj_@ID@ *other, size_t line, size_t column) {
+    (void)line; (void)column;
+    size_t common = (size_t)(p->length < other->length ? p->length : other->length);
+    int comparison = common == 0 ? 0 : memcmp(p->bytes, other->bytes, common);
+    if (comparison < 0) { return -1; }
+    if (comparison > 0) { return 1; }
+    return (p->length > other->length) - (p->length < other->length);
+}
+
+static size_t ncr_text_find_bytes_@ID@(
+    const unsigned char *bytes, size_t length,
+    const unsigned char *needle, size_t needle_length, size_t start
+) {
+    if (start > length) { return SIZE_MAX; }
+    if (needle_length == 0) { return start; }
+    if (needle_length > length - start) { return SIZE_MAX; }
+    size_t last = length - needle_length;
+    for (size_t index = start; index <= last; ++index) {
+        if (bytes[index] == needle[0]
+            && memcmp(bytes + index, needle, needle_length) == 0) {
+            return index;
+        }
+    }
+    return SIZE_MAX;
+}
+
+static int32_t @TEXT_INDEX_OF@(ncr_obj_@ID@ *p, ncr_obj_@ID@ *needle, size_t line, size_t column) {
+    (void)line; (void)column;
+    size_t found = ncr_text_find_bytes_@ID@(
+        p->bytes, (size_t)p->length, needle->bytes, (size_t)needle->length, 0);
+    return found == SIZE_MAX ? -1 : (int32_t)found;
+}
+
+static bool @TEXT_STARTS_WITH@(ncr_obj_@ID@ *p, ncr_obj_@ID@ *prefix, size_t line, size_t column) {
+    (void)line; (void)column;
+    return prefix->length <= p->length
+        && (prefix->length == 0 || memcmp(p->bytes, prefix->bytes, (size_t)prefix->length) == 0);
+}
+
+static bool @TEXT_ENDS_WITH@(ncr_obj_@ID@ *p, ncr_obj_@ID@ *suffix, size_t line, size_t column) {
+    (void)line; (void)column;
+    return suffix->length <= p->length
+        && (suffix->length == 0
+            || memcmp(p->bytes + p->length - suffix->length, suffix->bytes, (size_t)suffix->length) == 0);
+}
+
+static ncr_obj_@SLICE_RESULT@ @TEXT_SLICE@(
+    ncr_obj_@ID@ *p, int32_t start, int32_t end, size_t line, size_t column
+) {
+    size_t byte_start;
+    size_t byte_end;
+    if (start < 0 || end < start
+        || !ncr_text_scalar_offset_@ID@(p, start, &byte_start)
+        || !ncr_text_scalar_offset_@ID@(p, end, &byte_end)
+        || byte_end > (size_t)p->length) {
+        return @ERROR_SLICE_RESULT@(
+            "Text.slice: invalid scalar range", sizeof("Text.slice: invalid scalar range") - 1, line, column);
+    }
+    size_t length = byte_end - byte_start;
+    const unsigned char *bytes = length == 0 ? NULL : p->bytes + byte_start;
     ncr_obj_@ID@ *slice = @TEXT_MAKE@(bytes, length, line, column);
     return (ncr_obj_@SLICE_RESULT@){
         .tag = @SLICE_OK_TAG@,
         .data.v@SLICE_OK_TAG@.f0 = slice
     };
+}
+
+static bool ncr_text_whitespace_@ID@(uint32_t scalar) {
+    return (scalar >= UINT32_C(0x09) && scalar <= UINT32_C(0x0d))
+        || scalar == UINT32_C(0x20) || scalar == UINT32_C(0x85)
+        || scalar == UINT32_C(0xa0) || scalar == UINT32_C(0x1680)
+        || (scalar >= UINT32_C(0x2000) && scalar <= UINT32_C(0x200a))
+        || scalar == UINT32_C(0x2028) || scalar == UINT32_C(0x2029)
+        || scalar == UINT32_C(0x202f) || scalar == UINT32_C(0x205f)
+        || scalar == UINT32_C(0x3000);
+}
+
+static ncr_obj_@ID@ *@TEXT_TRIM@(ncr_obj_@ID@ *p, size_t line, size_t column) {
+    size_t cursor = 0;
+    size_t start = 0;
+    size_t end = 0;
+    bool seen_non_whitespace = false;
+    uint32_t scalar;
+    while (cursor < (size_t)p->length) {
+        size_t before = cursor;
+        if (!ncr_utf8_decode(p->bytes, (size_t)p->length, &cursor, &scalar)) {
+            ncr_fail("Text contains invalid UTF-8", line, column);
+        }
+        if (!ncr_text_whitespace_@ID@(scalar)) {
+            if (!seen_non_whitespace) { start = before; }
+            end = cursor;
+            seen_non_whitespace = true;
+        }
+    }
+    size_t length = seen_non_whitespace ? end - start : 0;
+    const unsigned char *bytes = length == 0 ? NULL : p->bytes + start;
+    return @TEXT_MAKE@(bytes, length, line, column);
+}
+
+static ncr_obj_@ID@ *@TEXT_REPLACE@(
+    ncr_obj_@ID@ *p, ncr_obj_@ID@ *needle, ncr_obj_@ID@ *replacement, size_t line, size_t column
+) {
+    size_t source_length = (size_t)p->length;
+    size_t needle_length = (size_t)needle->length;
+    size_t replacement_length = (size_t)replacement->length;
+    size_t matches = 0;
+    size_t cursor = 0;
+    size_t output_length;
+    if (needle_length == 0) {
+        matches = 1;
+        uint32_t scalar;
+        while (cursor < source_length) {
+            if (!ncr_utf8_decode(p->bytes, source_length, &cursor, &scalar)) {
+                ncr_fail("Text contains invalid UTF-8", line, column);
+            }
+            ++matches;
+        }
+        if (replacement_length > 0
+            && matches > ((size_t)INT32_MAX - source_length) / replacement_length) {
+            ncr_fail("Text replacement is too large", line, column);
+        }
+        output_length = source_length + matches * replacement_length;
+    } else {
+        while ((cursor = ncr_text_find_bytes_@ID@(
+            p->bytes, source_length, needle->bytes, needle_length, cursor)) != SIZE_MAX) {
+            ++matches;
+            cursor += needle_length;
+        }
+        if (replacement_length >= needle_length) {
+            size_t growth = replacement_length - needle_length;
+            if (growth > 0 && matches > ((size_t)INT32_MAX - source_length) / growth) {
+                ncr_fail("Text replacement is too large", line, column);
+            }
+            output_length = source_length + matches * growth;
+        } else {
+            output_length = source_length - matches * (needle_length - replacement_length);
+        }
+    }
+
+    unsigned char *output = output_length == 0 ? NULL : ncr_allocate(output_length, line, column);
+    size_t written = 0;
+    cursor = 0;
+    if (needle_length == 0) {
+        uint32_t scalar;
+        while (cursor < source_length) {
+            size_t next = cursor;
+            if (!ncr_utf8_decode(p->bytes, source_length, &next, &scalar)) {
+                ncr_fail("Text contains invalid UTF-8", line, column);
+            }
+            if (replacement_length > 0) {
+                memcpy(output + written, replacement->bytes, replacement_length);
+                written += replacement_length;
+            }
+            memcpy(output + written, p->bytes + cursor, next - cursor);
+            written += next - cursor;
+            cursor = next;
+        }
+        if (replacement_length > 0) {
+            memcpy(output + written, replacement->bytes, replacement_length);
+            written += replacement_length;
+        }
+    } else {
+        size_t found;
+        while ((found = ncr_text_find_bytes_@ID@(
+            p->bytes, source_length, needle->bytes, needle_length, cursor)) != SIZE_MAX) {
+            size_t prefix_length = found - cursor;
+            if (prefix_length > 0) {
+                memcpy(output + written, p->bytes + cursor, prefix_length);
+                written += prefix_length;
+            }
+            if (replacement_length > 0) {
+                memcpy(output + written, replacement->bytes, replacement_length);
+                written += replacement_length;
+            }
+            cursor = found + needle_length;
+        }
+        size_t suffix_length = source_length - cursor;
+        if (suffix_length > 0) {
+            memcpy(output + written, p->bytes + cursor, suffix_length);
+            written += suffix_length;
+        }
+    }
+    if (written != output_length) { ncr_fail("Text replacement length invariant failed", line, column); }
+    return @TEXT_TAKE@(output, output_length, output_length, line, column);
+}
+
+static @LIST_TYPE@ @TEXT_SPLIT@(
+    ncr_obj_@ID@ *p, ncr_obj_@ID@ *delimiter, size_t line, size_t column
+) {
+    @LIST_TYPE@ list = ncr_allocate(sizeof(*list), line, column);
+    @LIST_NEW@(list, line, column);
+    size_t source_length = (size_t)p->length;
+    size_t delimiter_length = (size_t)delimiter->length;
+    if (delimiter_length == 0) {
+        size_t cursor = 0;
+        uint32_t scalar;
+        while (cursor < source_length) {
+            size_t next = cursor;
+            if (!ncr_utf8_decode(p->bytes, source_length, &next, &scalar)) {
+                ncr_fail("Text contains invalid UTF-8", line, column);
+            }
+            ncr_obj_@ID@ *part = @TEXT_MAKE@(p->bytes + cursor, next - cursor, line, column);
+            @LIST_ADD@(list, part, line, column);
+            cursor = next;
+        }
+        return list;
+    }
+    size_t item_count = 0;
+    size_t segment_start = 0;
+    size_t cursor = 0;
+    size_t found;
+    while ((found = ncr_text_find_bytes_@ID@(
+        p->bytes, source_length, delimiter->bytes, delimiter_length, cursor)) != SIZE_MAX) {
+        if (item_count == INT32_MAX) { ncr_fail("Text split has too many fields", line, column); }
+        ncr_obj_@ID@ *part = @TEXT_MAKE@(p->bytes == NULL ? NULL : p->bytes + segment_start,
+            found - segment_start, line, column);
+        ++item_count;
+        @LIST_ADD@(list, part, line, column);
+        cursor = found + delimiter_length;
+        segment_start = cursor;
+    }
+    size_t final_length = source_length - segment_start;
+    if (item_count == INT32_MAX) { ncr_fail("Text split has too many fields", line, column); }
+    ncr_obj_@ID@ *last = @TEXT_MAKE@(final_length == 0 ? NULL : p->bytes + segment_start,
+        final_length, line, column);
+    @LIST_ADD@(list, last, line, column);
+    return list;
 }

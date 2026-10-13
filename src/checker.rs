@@ -133,6 +133,8 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
     for (id, class) in program.classes.iter().enumerate() {
         tables.classes[id].native = match &class.native {
             Some(a::NativeClass::Text) => Some(t::NativeClass::Text),
+            Some(a::NativeClass::Regex) => Some(t::NativeClass::Regex),
+            Some(a::NativeClass::RegexMatch) => Some(t::NativeClass::RegexMatch),
             Some(a::NativeClass::List(_)) => Some(t::NativeClass::List(Type::Void)),
             Some(a::NativeClass::Array(_)) => Some(t::NativeClass::Array(Type::Void)),
             Some(a::NativeClass::Map { key_kind: Some(key_kind), .. }) =>

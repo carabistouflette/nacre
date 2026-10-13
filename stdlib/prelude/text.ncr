@@ -1,3 +1,4 @@
+// Text owns validated, length-delimited UTF-8 bytes; embedded NUL is an ordinary scalar.
 class Text {
     public Text(String initial) {}
     public void append(String value) {}
@@ -20,4 +21,22 @@ class Text {
     public readonly Result<long, Text> parseLong() {}
     public readonly Result<double, Text> parseDouble() {}
     public readonly Result<Text, Text> sliceBytes(int start, int end) {}
+    // indexOf searches exact UTF-8 bytes, returns the first byte offset or -1; empty means 0.
+    // Character counts and indexes are Unicode scalars; charAt is zero-based.
+    public readonly int charCount() {}
+    public readonly char charAt(int scalarIndex) {}
+    // compareTo is lexicographic by exact UTF-8 bytes and returns -1, 0, or 1.
+    public readonly int compareTo(borrow Text other) {}
+    public readonly int indexOf(borrow Text needle) {}
+    public readonly boolean startsWith(borrow Text prefix) {}
+    public readonly boolean endsWith(borrow Text suffix) {}
+    // slice uses half-open scalar indexes; invalid ranges return Err.
+    public readonly Result<Text, Text> slice(int startScalar, int endScalar) {}
+    // trim removes Unicode White_Space scalars at both ends.
+    public readonly Text trim() {}
+    // An empty needle inserts replacement at every scalar boundary.
+    public readonly Text replace(borrow Text needle, borrow Text replacement) {}
+    // Non-empty delimiters preserve empty fields; empty delimiters split by scalar.
+    // Empty Text with an empty delimiter yields an empty List.
+    public readonly List<Text> split(borrow Text delimiter) {}
 }

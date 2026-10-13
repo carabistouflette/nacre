@@ -126,7 +126,7 @@ pub enum CallTarget { Function(usize), Println }
 
 /// Trusted standard-library storage, never exposed as source fields.
 #[derive(Debug, Clone, Copy)]
-pub enum NativeClass { List(Type), Array(Type), Map(MapKeyKind, Type), Text, Arrays, ByteBuffer, Console, Files, Args, Math, Random, Time }
+pub enum NativeClass { List(Type), Array(Type), Map(MapKeyKind, Type), Text, Regex, RegexMatch, Arrays, ByteBuffer, Console, Files, Args, Math, Random, Time }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NativeMethod {
     ListNew, ListAdd, ListSize, ListCapacity, ListIsEmpty, ListGet, ListGetRef, ListGetMut,
@@ -141,6 +141,10 @@ pub enum NativeMethod {
     TextAppendBoolean, TextAppendText,
     TextByteLength, TextByteAt, TextIsEmpty, TextClear, TextPrint,
     TextClone, TextEquals, TextEqualsString, TextParseInt, TextParseLong, TextParseDouble, TextSliceBytes,
+    TextCharCount, TextCharAt, TextCompareTo, TextIndexOf, TextStartsWith, TextEndsWith,
+    TextSlice, TextTrim, TextReplace, TextSplit,
+    RegexCompile, RegexMatches, RegexSearch,
+    RegexMatchGroupCount, RegexMatchHasGroup, RegexMatchGroup, RegexMatchStart, RegexMatchEnd,
     ConsoleReadLine, ConsolePrint, ConsolePrintText,
     FilesReadText, FilesWriteText, FilesWriteTextAtomic, ArgsCount, ArgsGet,
     MathAbsInt, MathAbsLong, MathAbsDouble, MathMinInt, MathMinLong, MathMinDouble, MathMaxInt, MathMaxLong, MathMaxDouble,

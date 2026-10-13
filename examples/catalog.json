@@ -1,6 +1,30 @@
 {
   "examples": [
     {
+      "category": "collections",
+      "source": "examples/collections/arrays.ncr",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["5", "9", "20", "21", "30"]
+    },
+    {
+      "category": "io",
+      "source": "examples/io/byte_buffer.ncr",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["40", "39", "255", "41", "true"]
+    },
+    {
+      "category": "text",
+      "source": "examples/text/utf8_regex.ncr",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["alpha", "🚀", "beta", "bytes=15 scalars=12"]
+    },
+    {
       "category": "language",
       "source": "examples/language/math_random_time.ncr",
       "stdin": "",

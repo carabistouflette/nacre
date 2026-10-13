@@ -1,0 +1,48 @@
+static ncr_obj_@TEXT_CLASS@ **ncr_regex_groups_@REGEX_MATCH_CLASS@(
+    ncr_obj_@REGEX_MATCH_CLASS@ *match
+) {
+    return (ncr_obj_@TEXT_CLASS@ **)match->capture_storage;
+}
+
+static int32_t *ncr_regex_starts_@REGEX_MATCH_CLASS@(
+    ncr_obj_@REGEX_MATCH_CLASS@ *match
+) {
+    return (int32_t *)(match->capture_storage
+        + (size_t)match->group_count * sizeof(ncr_obj_@TEXT_CLASS@ *));
+}
+
+static int32_t *ncr_regex_ends_@REGEX_MATCH_CLASS@(
+    ncr_obj_@REGEX_MATCH_CLASS@ *match
+) {
+    return ncr_regex_starts_@REGEX_MATCH_CLASS@(match) + match->group_count;
+}
+
+static int32_t @REGEX_MATCH_GROUP_COUNT@(ncr_obj_@REGEX_MATCH_CLASS@ *match, size_t line, size_t column) {
+    (void)line; (void)column;
+    return match->group_count;
+}
+
+static bool @REGEX_MATCH_HAS_GROUP@(ncr_obj_@REGEX_MATCH_CLASS@ *match, int32_t index, size_t line, size_t column) {
+    if (index < 0 || index >= match->group_count) { ncr_fail("RegexMatch group index out of bounds", line, column); }
+    return ncr_regex_groups_@REGEX_MATCH_CLASS@(match)[index] != NULL;
+}
+
+static ncr_obj_@TEXT_CLASS@ *@REGEX_MATCH_GROUP@(
+    ncr_obj_@REGEX_MATCH_CLASS@ *match, int32_t index, size_t line, size_t column
+) {
+    if (index < 0 || index >= match->group_count) { ncr_fail("RegexMatch group index out of bounds", line, column); }
+    if (ncr_regex_groups_@REGEX_MATCH_CLASS@(match)[index] == NULL) { ncr_fail("RegexMatch group did not participate", line, column); }
+    return ncr_regex_groups_@REGEX_MATCH_CLASS@(match)[index];
+}
+
+static int32_t @REGEX_MATCH_START@(ncr_obj_@REGEX_MATCH_CLASS@ *match, int32_t index, size_t line, size_t column) {
+    if (index < 0 || index >= match->group_count) { ncr_fail("RegexMatch group index out of bounds", line, column); }
+    if (ncr_regex_groups_@REGEX_MATCH_CLASS@(match)[index] == NULL) { ncr_fail("RegexMatch group did not participate", line, column); }
+    return ncr_regex_starts_@REGEX_MATCH_CLASS@(match)[index];
+}
+
+static int32_t @REGEX_MATCH_END@(ncr_obj_@REGEX_MATCH_CLASS@ *match, int32_t index, size_t line, size_t column) {
+    if (index < 0 || index >= match->group_count) { ncr_fail("RegexMatch group index out of bounds", line, column); }
+    if (ncr_regex_groups_@REGEX_MATCH_CLASS@(match)[index] == NULL) { ncr_fail("RegexMatch group did not participate", line, column); }
+    return ncr_regex_ends_@REGEX_MATCH_CLASS@(match)[index];
+}

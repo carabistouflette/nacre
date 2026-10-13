@@ -50,7 +50,8 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
             C::Map(_, _) => M::MapNew,
             C::Text => M::TextNew,
             C::Random => M::RandomNew,
-            C::Arrays | C::ByteBuffer | C::Console | C::Files | C::Args | C::Math | C::Time =>
+            C::Regex | C::RegexMatch | C::Arrays | C::ByteBuffer |
+            C::Console | C::Files | C::Args | C::Math | C::Time =>
                 unreachable!("static or factory-only native class has no constructor"),
         };
     }
@@ -120,6 +121,24 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
         (C::Text, "parseInt") => M::TextParseInt,
         (C::Text, "parseLong") => M::TextParseLong,
         (C::Text, "parseDouble") => M::TextParseDouble,
+        (C::Text, "charCount") => M::TextCharCount,
+        (C::Text, "charAt") => M::TextCharAt,
+        (C::Text, "compareTo") => M::TextCompareTo,
+        (C::Text, "indexOf") => M::TextIndexOf,
+        (C::Text, "startsWith") => M::TextStartsWith,
+        (C::Text, "endsWith") => M::TextEndsWith,
+        (C::Text, "slice") => M::TextSlice,
+        (C::Text, "trim") => M::TextTrim,
+        (C::Text, "replace") => M::TextReplace,
+        (C::Text, "split") => M::TextSplit,
+        (C::Regex, "compile") => M::RegexCompile,
+        (C::Regex, "matches") => M::RegexMatches,
+        (C::Regex, "search") => M::RegexSearch,
+        (C::RegexMatch, "groupCount") => M::RegexMatchGroupCount,
+        (C::RegexMatch, "hasGroup") => M::RegexMatchHasGroup,
+        (C::RegexMatch, "group") => M::RegexMatchGroup,
+        (C::RegexMatch, "start") => M::RegexMatchStart,
+        (C::RegexMatch, "end") => M::RegexMatchEnd,
         (C::Text, "sliceBytes") => M::TextSliceBytes,
         (C::Math, "absInt") => M::MathAbsInt,
         (C::Math, "absLong") => M::MathAbsLong,

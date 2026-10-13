@@ -1,0 +1,189 @@
+/* POSIX ERE operations run under the Regex owner's C.UTF-8 locale via
+   uselocale, which changes only the calling thread's locale. */
+static ncr_obj_@COMPILE_RESULT@ @REGEX_COMPILE@(
+    ncr_obj_@TEXT_CLASS@ *pattern, size_t line, size_t column
+) {
+    static const char invalid_pattern[] = "Regex.compile: invalid POSIX extended regular expression";
+    static const char embedded_nul[] = "Regex.compile: pattern contains NUL";
+    static const char unavailable_locale[] = "Regex.compile: C.UTF-8 locale is unavailable";
+    if (pattern->length < 0 || (pattern->length > 0 && pattern->bytes == NULL)) {
+        return @COMPILE_ERR@(invalid_pattern, sizeof(invalid_pattern) - 1, line, column);
+    }
+    size_t pattern_length = (size_t)pattern->length;
+    if (pattern_length > 0 && memchr(pattern->bytes, 0, pattern_length) != NULL) {
+        return @COMPILE_ERR@(embedded_nul, sizeof(embedded_nul) - 1, line, column);
+    }
+
+    ncr_obj_@REGEX_CLASS@ *compiled = ncr_allocate(sizeof(*compiled), line, column);
+    compiled->locale = newlocale(LC_CTYPE_MASK, "C.UTF-8", (locale_t)0);
+    if (compiled->locale == (locale_t)0) {
+        ncr_deallocate(compiled);
+        return @COMPILE_ERR@(unavailable_locale, sizeof(unavailable_locale) - 1, line, column);
+    }
+    locale_t previous = uselocale(compiled->locale);
+    if (previous == (locale_t)0) {
+        freelocale(compiled->locale);
+        ncr_deallocate(compiled);
+        return @COMPILE_ERR@(unavailable_locale, sizeof(unavailable_locale) - 1, line, column);
+    }
+    char *pattern_c = ncr_allocate(pattern_length + 1, line, column);
+    if (pattern_length > 0) { memcpy(pattern_c, pattern->bytes, pattern_length); }
+    pattern_c[pattern_length] = '\0';
+    int status = regcomp(&compiled->compiled, pattern_c, REG_EXTENDED);
+    ncr_deallocate(pattern_c);
+    if (uselocale(previous) == (locale_t)0) {
+        ncr_fail("Regex locale restore failed", line, column);
+    }
+    if (status != 0) {
+        freelocale(compiled->locale);
+        ncr_deallocate(compiled);
+        return @COMPILE_ERR@(invalid_pattern, sizeof(invalid_pattern) - 1, line, column);
+    }
+    compiled->compiled_ready = true;
+    if (compiled->compiled.re_nsub >= (size_t)INT32_MAX) {
+        ncr_drop_@REGEX_CLASS@(compiled);
+        static const char too_many_groups[] = "Regex.compile: too many capture groups";
+        return @COMPILE_ERR@(too_many_groups, sizeof(too_many_groups) - 1, line, column);
+    }
+    compiled->group_count = (int32_t)(compiled->compiled.re_nsub + 1);
+    return (ncr_obj_@COMPILE_RESULT@){
+        .tag = @COMPILE_OK_TAG@,
+        .data.v@COMPILE_OK_TAG@.f0 = compiled
+    };
+}
+
+static ncr_obj_@MATCHES_RESULT@ @REGEX_MATCHES@(
+    ncr_obj_@REGEX_CLASS@ *regex, ncr_obj_@TEXT_CLASS@ *subject, size_t line, size_t column
+) {
+    static const char invalid_subject[] = "Regex.matches: subject contains NUL or invalid Text state";
+    static const char execution_failed[] = "Regex.matches: POSIX regex execution failed";
+    if (subject->length < 0 || (subject->length > 0 && subject->bytes == NULL)) {
+        return @MATCHES_ERR@(invalid_subject, sizeof(invalid_subject) - 1, line, column);
+    }
+    size_t subject_length = (size_t)subject->length;
+    if (subject_length > 0 && memchr(subject->bytes, 0, subject_length) != NULL) {
+        return @MATCHES_ERR@(invalid_subject, sizeof(invalid_subject) - 1, line, column);
+    }
+    char *subject_c = ncr_allocate(subject_length + 1, line, column);
+    if (subject_length > 0) { memcpy(subject_c, subject->bytes, subject_length); }
+    subject_c[subject_length] = '\0';
+
+    locale_t previous = uselocale(regex->locale);
+    if (previous == (locale_t)0) {
+        ncr_deallocate(subject_c);
+        return @MATCHES_ERR@(execution_failed, sizeof(execution_failed) - 1, line, column);
+    }
+    regmatch_t match;
+    int status = regexec(&regex->compiled, subject_c, 1, &match, 0);
+    if (uselocale(previous) == (locale_t)0) {
+        ncr_fail("Regex locale restore failed", line, column);
+    }
+    ncr_deallocate(subject_c);
+    if (status != 0 && status != REG_NOMATCH) {
+        return @MATCHES_ERR@(execution_failed, sizeof(execution_failed) - 1, line, column);
+    }
+    bool full_match = status == 0 && match.rm_so == 0 && match.rm_eo >= 0
+        && (uintmax_t)match.rm_eo == (uintmax_t)subject_length;
+    return (ncr_obj_@MATCHES_RESULT@){
+        .tag = @MATCHES_OK_TAG@,
+        .data.v@MATCHES_OK_TAG@.f0 = full_match
+    };
+}
+
+static ncr_obj_@SEARCH_RESULT@ @REGEX_SEARCH@(
+    ncr_obj_@REGEX_CLASS@ *regex, ncr_obj_@TEXT_CLASS@ *subject, size_t line, size_t column
+) {
+    static const char invalid_subject[] = "Regex.search: subject contains NUL or invalid Text state";
+    static const char execution_failed[] = "Regex.search: POSIX regex execution failed";
+    if (subject->length < 0 || (subject->length > 0 && subject->bytes == NULL)) {
+        return @SEARCH_ERR@(invalid_subject, sizeof(invalid_subject) - 1, line, column);
+    }
+    size_t subject_length = (size_t)subject->length;
+    if (subject_length > 0 && memchr(subject->bytes, 0, subject_length) != NULL) {
+        return @SEARCH_ERR@(invalid_subject, sizeof(invalid_subject) - 1, line, column);
+    }
+    char *subject_c = ncr_allocate(subject_length + 1, line, column);
+    if (subject_length > 0) { memcpy(subject_c, subject->bytes, subject_length); }
+    subject_c[subject_length] = '\0';
+    size_t capture_count = (size_t)regex->group_count;
+    if (capture_count == 0
+        || capture_count > SIZE_MAX / sizeof(regmatch_t)
+        || capture_count > SIZE_MAX / sizeof(ncr_obj_@TEXT_CLASS@ *)
+        || capture_count > SIZE_MAX / sizeof(int32_t)) {
+        ncr_deallocate(subject_c);
+        return @SEARCH_ERR@(execution_failed, sizeof(execution_failed) - 1, line, column);
+    }
+    regmatch_t *captures = ncr_allocate(capture_count * sizeof(*captures), line, column);
+
+    locale_t previous = uselocale(regex->locale);
+    if (previous == (locale_t)0) {
+        ncr_deallocate(captures);
+        ncr_deallocate(subject_c);
+        return @SEARCH_ERR@(execution_failed, sizeof(execution_failed) - 1, line, column);
+    }
+    int status = regexec(&regex->compiled, subject_c, capture_count, captures, 0);
+    if (uselocale(previous) == (locale_t)0) {
+        ncr_fail("Regex locale restore failed", line, column);
+    }
+    ncr_deallocate(subject_c);
+    if (status == REG_NOMATCH) {
+        ncr_deallocate(captures);
+        @OPTION_TYPE@ none = { .tag = @OPTION_NONE_TAG@ };
+        return (ncr_obj_@SEARCH_RESULT@){
+            .tag = @SEARCH_OK_TAG@,
+            .data.v@SEARCH_OK_TAG@.f0 = none
+        };
+    }
+    if (status != 0) {
+        ncr_deallocate(captures);
+        return @SEARCH_ERR@(execution_failed, sizeof(execution_failed) - 1, line, column);
+    }
+    for (size_t index = 0; index < capture_count; ++index) {
+        if (captures[index].rm_so < 0) {
+            if (captures[index].rm_so != -1 || captures[index].rm_eo != -1) {
+                ncr_deallocate(captures);
+                return @SEARCH_ERR@(execution_failed, sizeof(execution_failed) - 1, line, column);
+            }
+        } else if (captures[index].rm_eo < captures[index].rm_so
+            || (uintmax_t)captures[index].rm_eo > (uintmax_t)subject_length) {
+            ncr_deallocate(captures);
+            return @SEARCH_ERR@(execution_failed, sizeof(execution_failed) - 1, line, column);
+        }
+    }
+
+    size_t pointer_bytes = capture_count * sizeof(ncr_obj_@TEXT_CLASS@ *);
+    size_t offset_bytes = capture_count * sizeof(int32_t);
+    if (offset_bytes > SIZE_MAX / 2 || pointer_bytes > SIZE_MAX - offset_bytes * 2) {
+        ncr_deallocate(captures);
+        return @SEARCH_ERR@(execution_failed, sizeof(execution_failed) - 1, line, column);
+    }
+    size_t storage_bytes = pointer_bytes + offset_bytes * 2;
+    ncr_obj_@REGEX_MATCH_CLASS@ *result = ncr_allocate(sizeof(*result), line, column);
+    result->group_count = regex->group_count;
+    result->capture_storage = ncr_allocate(storage_bytes, line, column);
+    ncr_obj_@TEXT_CLASS@ **groups = (ncr_obj_@TEXT_CLASS@ **)result->capture_storage;
+    int32_t *starts = (int32_t *)(result->capture_storage + pointer_bytes);
+    int32_t *ends = starts + capture_count;
+    for (size_t index = 0; index < capture_count; ++index) {
+        starts[index] = -1;
+        ends[index] = -1;
+        if (captures[index].rm_so < 0) { continue; }
+        size_t start = (size_t)captures[index].rm_so;
+        size_t end = (size_t)captures[index].rm_eo;
+        size_t length = end - start;
+        const unsigned char *bytes = length == 0 ? NULL : subject->bytes + start;
+        groups[index] = @TEXT_MAKE@(bytes, length, line, column);
+        starts[index] = (int32_t)start;
+        ends[index] = (int32_t)end;
+    }
+    ncr_deallocate(captures);
+    @OPTION_TYPE@ some = {
+        .tag = @OPTION_SOME_TAG@,
+        .data.v@OPTION_SOME_TAG@.f0 = result
+    };
+    return (ncr_obj_@SEARCH_RESULT@){
+        .tag = @SEARCH_OK_TAG@,
+        .data.v@SEARCH_OK_TAG@.f0 = some
+    };
+}
+

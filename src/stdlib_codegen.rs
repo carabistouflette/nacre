@@ -9,6 +9,7 @@ mod random;
 mod support;
 mod text;
 mod time;
+mod regex;
 
 use crate::ast::MapKeyKind;
 use crate::ir::{self as t, NativeClass as C, Type};
@@ -23,6 +24,7 @@ pub fn fields(program: &t::Program, class: C, class_id: usize) -> String {
         C::ByteBuffer => buffer::fields(),
         C::Math | C::Time | C::Console | C::Files | C::Args => io::fields(),
         C::Random => random::fields(),
+        C::Regex | C::RegexMatch => regex::fields(program, class),
     }
 }
 
@@ -36,6 +38,7 @@ pub fn drop_fields(program: &t::Program, class: C) -> String {
         C::ByteBuffer => buffer::drop_fields(),
         C::Math | C::Time | C::Console | C::Files | C::Args => io::drop_fields(),
         C::Random => random::drop_fields(),
+        C::Regex | C::RegexMatch => regex::drop_fields(program, class),
     }
 }
 
@@ -70,7 +73,7 @@ pub fn implementations(program: &t::Program) -> String {
             C::Time => time::implementation(program),
             C::Arrays => arrays::zeroed_implementations(program),
             C::ByteBuffer => buffer::implementation(program, class.id),
-            C::Console | C::Files | C::Args => continue,
+            C::Regex | C::RegexMatch | C::Console | C::Files | C::Args => continue,
         };
         body = body.replace("@ID@", &class.id.to_string());
         let receiver = match native { C::Arrays | C::ByteBuffer => None, _ => Some(class.id) };
@@ -79,6 +82,7 @@ pub fn implementations(program: &t::Program) -> String {
         out.push_str(&body);
         out.push('\n');
     }
+    out.push_str(&regex::implementation(program));
     if let Some(io) = io::implementations(program) {
         out.push_str(&io);
     }

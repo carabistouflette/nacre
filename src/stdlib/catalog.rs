@@ -8,6 +8,8 @@ enum NativeBuiltin {
     Text,
     Arrays,
     ByteBuffer,
+    Regex,
+    RegexMatch,
     Console,
     Files,
     Args,
@@ -29,6 +31,8 @@ impl NativeBuiltin {
             Self::Text => NativeClass::Text,
             Self::Arrays => NativeClass::Arrays,
             Self::ByteBuffer => NativeClass::ByteBuffer,
+            Self::Regex => NativeClass::Regex,
+            Self::RegexMatch => NativeClass::RegexMatch,
             Self::Console => NativeClass::Console,
             Self::Files => NativeClass::Files,
             Self::Args => NativeClass::Args,
@@ -76,6 +80,13 @@ pub(super) const PRELUDE_UNITS: &[PreludeUnit] = &[
     PreludeUnit {
         source: include_str!("../../stdlib/prelude/text.ncr"),
         builtins: &[Builtin { name: "Text", native: Some(NativeBuiltin::Text) }],
+    },
+    PreludeUnit {
+        source: include_str!("../../stdlib/prelude/regex.ncr"),
+        builtins: &[
+            Builtin { name: "Regex", native: Some(NativeBuiltin::Regex) },
+            Builtin { name: "RegexMatch", native: Some(NativeBuiltin::RegexMatch) },
+        ],
     },
     PreludeUnit {
         source: include_str!("../../stdlib/prelude/io.ncr"),
