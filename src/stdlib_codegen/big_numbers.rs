@@ -1,5 +1,5 @@
 use crate::ir::{self as t, CallTarget, Expr, ExprKind, NativeClass as C, NativeMethod as M, Stmt};
-use super::support::{native_function, replace_method_ids, result_id, variant_id};
+use super::support::{has_placeholder, native_function, replace_method_ids, result_id, variant_id};
 
 struct MethodBinding {
     name: &'static str,
@@ -145,34 +145,68 @@ pub(super) fn is_numeric_method(method: M) -> bool {
     is_bigint_method(method) || is_bigdecimal_method(method)
 }
 
+fn without_group(body: String, name: &str) -> String {
+    let begin = format!("/* BIG_NUMBERS_GROUP {name} */");
+    let end = format!("/* BIG_NUMBERS_GROUP_END {name} */");
+    let (before, after_begin) = body.split_once(&begin).expect("numeric template group opener");
+    let (_, after_end) = after_begin.split_once(&end).expect("numeric template group closer");
+    let mut without = String::with_capacity(body.len());
+    without.push_str(before);
+    without.push_str(after_end);
+    without
+}
+
 pub(super) fn implementation(program: &t::Program) -> String {
-    if !is_used(program) { return String::new(); }
     let bigint = program.classes.iter().find(|class| matches!(class.native, Some(C::BigInt)))
-        .expect("BigInt prelude class").id;
+        .map(|class| class.id);
     let decimal = program.classes.iter().find(|class| matches!(class.native, Some(C::BigDecimal)))
-        .expect("BigDecimal prelude class").id;
-    let rounding = program.classes.iter().find(|class| class.name == "RoundingMode")
-        .expect("RoundingMode prelude enum").id;
+        .map(|class| class.id);
+    let bigint_used = bigint.is_some() && class_is_used(program, true);
+    let decimal_used = decimal.is_some() && class_is_used(program, false);
+    if !bigint_used && !decimal_used { return String::new(); }
+
     let text = program.classes.iter().find(|class| matches!(class.native, Some(C::Text)))
-        .expect("Text prelude class").id;
+        .expect("numeric prelude requires Text").id;
+    let rounding = decimal_used.then(|| program.classes.iter()
+        .find(|class| class.name == "RoundingMode").expect("BigDecimal API requires RoundingMode").id);
+
     let mut body = include_str!("../../stdlib/big_numbers.c.in").to_owned();
-    for (placeholder, value) in [
-        ("@BIGINT_CLASS@", bigint.to_string()),
-        ("@BIGDECIMAL_CLASS@", decimal.to_string()),
-        ("@ROUNDING_CLASS@", rounding.to_string()),
-        ("@TEXT_CLASS@", text.to_string()),
-        ("@ROUND_DOWN@", variant_id(program, rounding, "Down").to_string()),
-        ("@ROUND_UP@", variant_id(program, rounding, "Up").to_string()),
-        ("@ROUND_FLOOR@", variant_id(program, rounding, "Floor").to_string()),
-        ("@ROUND_CEILING@", variant_id(program, rounding, "Ceiling").to_string()),
-        ("@ROUND_HALF_UP@", variant_id(program, rounding, "HalfUp").to_string()),
-        ("@ROUND_HALF_DOWN@", variant_id(program, rounding, "HalfDown").to_string()),
-        ("@ROUND_HALF_EVEN@", variant_id(program, rounding, "HalfEven").to_string()),
-        ("@ROUND_UNNECESSARY@", variant_id(program, rounding, "Unnecessary").to_string()),
-    ] {
-        body = body.replace(placeholder, &value);
+    if !bigint_used {
+        for group in ["bigint_new", "bigint_power_support", "bigint_parse_support", "bigint_methods"] {
+            body = without_group(body, group);
+        }
+    }
+    if !decimal_used {
+        for group in ["rounding_macros", "decimal_new", "decimal_support", "decimal_rounding", "decimal_methods"] {
+            body = without_group(body, group);
+        }
+    }
+
+    if let Some(bigint) = bigint {
+        body = body.replace("@BIGINT_CLASS@", &bigint.to_string());
+    }
+    if let Some(decimal) = decimal {
+        body = body.replace("@BIGDECIMAL_CLASS@", &decimal.to_string());
+    }
+    body = body.replace("@TEXT_CLASS@", &text.to_string());
+    if let Some(rounding) = rounding {
+        for (placeholder, value) in [
+            ("@ROUNDING_CLASS@", rounding.to_string()),
+            ("@ROUND_DOWN@", variant_id(program, rounding, "Down").to_string()),
+            ("@ROUND_UP@", variant_id(program, rounding, "Up").to_string()),
+            ("@ROUND_FLOOR@", variant_id(program, rounding, "Floor").to_string()),
+            ("@ROUND_CEILING@", variant_id(program, rounding, "Ceiling").to_string()),
+            ("@ROUND_HALF_UP@", variant_id(program, rounding, "HalfUp").to_string()),
+            ("@ROUND_HALF_DOWN@", variant_id(program, rounding, "HalfDown").to_string()),
+            ("@ROUND_HALF_EVEN@", variant_id(program, rounding, "HalfEven").to_string()),
+            ("@ROUND_UNNECESSARY@", variant_id(program, rounding, "Unnecessary").to_string()),
+        ] {
+            body = body.replace(placeholder, &value);
+        }
     }
     for binding in METHODS {
+        let present_class = if is_bigint_method(binding.method) { bigint_used } else { decimal_used };
+        if !present_class { continue; }
         let function = native_function(program, |method| method == binding.method);
         for (placeholder, index) in binding.parameters {
             body = body.replace(placeholder, &format!("ncr_v_{}", function.params[*index].0));
@@ -185,6 +219,6 @@ pub(super) fn implementation(program: &t::Program) -> String {
         }
     }
     body = replace_method_ids(body, program, None);
-    debug_assert!(!body.contains('@'), "unexpanded BigInt/BigDecimal placeholder");
+    debug_assert!(!has_placeholder(&body), "unexpanded BigInt/BigDecimal placeholder");
     body
 }

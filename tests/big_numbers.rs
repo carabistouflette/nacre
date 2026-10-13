@@ -203,6 +203,10 @@ Result<Unit, Text> runDecimalScenarios() {
     showDecimalResult(onePointTwoFive.rescale(1, new RoundingMode.HalfUp()));
     showDecimalResult(onePointTwoFive.rescale(1, new RoundingMode.HalfDown()));
     showDecimalResult(onePointTwoFive.rescale(1, new RoundingMode.HalfEven()));
+    BigDecimal negativeOnePointTwoFive = onePointTwoFive.negate();
+    showDecimalResult(negativeOnePointTwoFive.rescale(1, new RoundingMode.HalfUp()));
+    showDecimalResult(negativeOnePointTwoFive.rescale(1, new RoundingMode.HalfDown()));
+    showDecimalResult(negativeOnePointTwoFive.rescale(1, new RoundingMode.HalfEven()));
     BigDecimal onePointZero = BigDecimal.parse(new Text("1.0"))?;
     BigDecimal onePointZeroZero = BigDecimal.parse(new Text("1.00"))?;
     println(onePointZero.compareTo(onePointZeroZero));
@@ -233,6 +237,93 @@ void main() {
         "2\n123.00\n-2\n1200\n1200\n1.203\n-1.00\n3.600\n-1\n1\n",
         "0.13\n0.12\n0.12\n0.13\n-0.13\n-0.12\n",
         "0.13\n0.12\n0.12\n1.38\nERR\n0.50\n",
+        "-1.3\n-1.2\n-1.2\n",
         "1.3\n1.2\n1.2\n0\n1200\nERR\nERR\nERR\nERR\nERR\nERR\nERR\nERR\n",
     ));
+}
+#[test]
+fn bigint_apis_compile_without_bigdecimal_and_accept_both_signs() {
+    let source = r#"
+void show(Result<BigInt, Text> result) {
+    match (result) {
+        Ok(value) {
+            match (value.toText(10)) {
+                Ok(text) { text.print(); }
+                Err(error) { println("ERR"); }
+            }
+        }
+        Err(error) { println("ERR"); }
+    }
+}
+void main() {
+    show(BigInt.parse(new Text("+123"), 10));
+    show(BigInt.parse(new Text("-123"), 10));
+}
+"#;
+    let output = execute(source);
+    assert_lines(&output, "123\n-123\n");
+}
+
+#[test]
+fn bigdecimal_apis_compile_without_bigint_and_keep_signs_and_rounding() {
+    let source = r#"
+void show(Result<BigDecimal, Text> result) {
+    match (result) {
+        Ok(value) {
+            match (value.toText()) {
+                Ok(text) { text.print(); }
+                Err(error) { println("ERR"); }
+            }
+        }
+        Err(error) { println("ERR"); }
+    }
+}
+void main() {
+    show(BigDecimal.parse(new Text("+12.50")));
+    show(BigDecimal.parse(new Text("-12.50")));
+    BigDecimal one = BigDecimal.fromLong(1L);
+    BigDecimal eight = BigDecimal.fromLong(8L);
+    show(one.divide(eight, 2, new RoundingMode.HalfUp()));
+}
+"#;
+    let output = execute(source);
+    assert_lines(&output, "12.50\n-12.50\n0.13\n");
+}
+
+#[test]
+fn numeric_parse_accepts_exact_coefficient_bit_limits_and_strips_leading_zeroes() {
+    let source = r#"
+void showBigInt(Result<BigInt, Text> result) {
+    match (result) {
+        Ok(value) {
+            match (value.bitLength()) {
+                Ok(bits) { println(bits); }
+                Err(error) { println("ERR"); }
+            }
+        }
+        Err(error) { println("ERR"); }
+    }
+}
+void showBigDecimal(Result<BigDecimal, Text> result) {
+    match (result) {
+        Ok(value) { println(value.signum()); }
+        Err(error) { println("ERR"); }
+    }
+}
+void main() {
+    showBigInt(BigInt.parse(new Text("@BIGINT_MAX@"), 16));
+    showBigInt(BigInt.parse(new Text("@BIGINT_OVER@"), 16));
+    showBigDecimal(BigDecimal.parse(new Text("@BIGDECIMAL_MAX@")));
+    showBigDecimal(BigDecimal.parse(new Text("@BIGDECIMAL_OVER@")));
+    showBigInt(BigInt.parse(new Text("@LEADING_ZEROES@1"), 10));
+    showBigDecimal(BigDecimal.parse(new Text("@LEADING_ZEROES@1")));
+}
+"#
+    .replace("@BIGINT_MAX@", &"f".repeat(250_000))
+    .replace("@BIGINT_OVER@", &format!("1{}", "0".repeat(250_000)))
+    .replace("@BIGDECIMAL_MAX@", &format!("9{}", "0".repeat(301_029)))
+    .replace("@BIGDECIMAL_OVER@", &format!("1{}", "0".repeat(301_030)))
+    .replace("@LEADING_ZEROES@", &"0".repeat(400_000));
+    let output = execute(&source);
+    assert_lines(&output, "1000000\nERR\n1\nERR\n1\n1\n");
 }

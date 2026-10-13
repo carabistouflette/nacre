@@ -34,6 +34,10 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 - Floating min/max normalize signed-zero ties explicitly rather than relying on
   host libm's unspecified tie sign; both operand orders and same-sign zeros are
   covered by generated-program sanitizer regressions.
+- Numeric generation handles BigInt and BigDecimal independently. Parsing accepts
+  either ASCII sign and checks significant coefficient size before GMP conversion;
+  formatted Text adopts its completed buffer and terminal GMP results transfer with
+  `mpz_swap` instead of copying completed limbs.
 - Borrowed channel wakeup regressions synchronize closure after entry into the
   real condition wait, proving blocked receiver EOF and owned sender recovery.
 - Existing composition and lending examples use `ReadJob` and `DeskCommand`

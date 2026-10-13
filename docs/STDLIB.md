@@ -96,11 +96,12 @@ readonly Result<boolean, Text> testBit(int nonnegativeBit)
 readonly Result<long, Text> toLong()
 ```
 
-`BigInt.parse` accepts an optional ASCII sign and digits for radix 2 through 36;
-it rejects whitespace, NUL, prefixes, and digits outside the radix. `toText`
-formats the value in the requested radix. Division truncates toward zero and
-remainder has the dividend's sign. `mod` requires a positive modulus and returns
-the canonical nonnegative residue. `pow` and `modPow` reject negative exponents;
+`BigInt.parse` accepts an optional ASCII `+` or `-` sign and digits for radix 2 through 36;
+leading zeroes do not consume the coefficient bit limit. It rejects whitespace, NUL,
+prefixes, and digits outside the radix. `toText` formats the value in the requested
+radix. Division truncates toward zero and remainder has the dividend's sign. `mod`
+requires a positive modulus and returns the canonical nonnegative residue. `pow`
+and `modPow` reject negative exponents;
 modular operations require a positive modulus. `modInverse` returns `Err` when an
 inverse does not exist. Shifts are arithmetic for negative values; bit operations
 use GMP's infinite two's-complement convention. `bitLength` follows signed
@@ -140,11 +141,12 @@ ties toward zero, HalfEven ties to an even retained digit, and Unnecessary retur
 long conversion return `Err`.
 
 The native numeric limit is 1,000,000 coefficient bits and 1,000,000 input/output
-bytes; `BigDecimal` scales are limited to ±100,000. Parsing, decimal scale
-arithmetic, and fallible numeric operations return `Err` when these limits would
-be exceeded. Plain-returning `BigInt` growth operations report a fatal runtime
-diagnostic rather than truncating a result that crosses the bit limit. GMP's
-default allocator remains in use; native object headers and temporary byte
+bytes; `BigDecimal` scales are limited to ±100,000. Parsing checks significant
+coefficient digits before GMP conversion and checks boundary values exactly.
+Decimal scale arithmetic and fallible numeric operations return `Err` when these
+limits would be exceeded. Plain-returning `BigInt` growth operations report a fatal
+runtime diagnostic rather than truncating a result that crosses the bit limit.
+GMP's default allocator remains in use; native object headers and temporary byte
 buffers use the runtime allocator and are cleaned up explicitly.
 
 ## `Text` and UTF-8

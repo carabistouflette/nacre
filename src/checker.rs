@@ -213,6 +213,8 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
     for (id, class) in program.classes.iter().enumerate() {
         tables.classes[id].native = match &class.native {
             Some(a::NativeClass::Text) => Some(t::NativeClass::Text),
+            Some(a::NativeClass::BigInt) => Some(t::NativeClass::BigInt),
+            Some(a::NativeClass::BigDecimal) => Some(t::NativeClass::BigDecimal),
             Some(a::NativeClass::Regex) => Some(t::NativeClass::Regex),
             Some(a::NativeClass::RegexMatch) => Some(t::NativeClass::RegexMatch),
             Some(a::NativeClass::List(_)) => Some(t::NativeClass::List(Type::Void)),

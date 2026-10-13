@@ -8,6 +8,7 @@
 #define NCR_RESULT_ERROR(result, message) \
     ncr_result_error_##result((message), sizeof(message) - 1, ncr_line, ncr_column)
 
+/* BIG_NUMBERS_GROUP rounding_macros */
 #define NCR_ROUND_DOWN @ROUND_DOWN@
 #define NCR_ROUND_UP @ROUND_UP@
 #define NCR_ROUND_FLOOR @ROUND_FLOOR@
@@ -16,6 +17,7 @@
 #define NCR_ROUND_HALF_DOWN @ROUND_HALF_DOWN@
 #define NCR_ROUND_HALF_EVEN @ROUND_HALF_EVEN@
 #define NCR_ROUND_UNNECESSARY @ROUND_UNNECESSARY@
+/* BIG_NUMBERS_GROUP_END rounding_macros */
 
 static size_t ncr_big_number_bits(mpz_srcptr value) {
     return mpz_sgn(value) == 0 ? 0 : mpz_sizeinbase(value, 2);
@@ -25,13 +27,32 @@ static bool ncr_big_number_within_limit(mpz_srcptr value) {
     return ncr_big_number_bits(value) <= NCR_BIG_NUMBER_MAX_BITS;
 }
 
+/* A conservative radix-aware lower bound rejects obviously oversized input
+ * before GMP conversion; only the narrow boundary range reaches mpz_set_str. */
+static bool ncr_big_number_digits_may_fit(size_t significant_digits, int radix) {
+    static const uint32_t lower_log2_million[37] = {
+        0, 0, 999999, 1584961, 1999999, 2321927, 2584961, 2807353, 2999999,
+        3169924, 3321927, 3459430, 3584961, 3700438, 3807353, 3906889,
+        3999999, 4087461, 4169924, 4247926, 4321927, 4392316, 4459430,
+        4523560, 4584961, 4643855, 4700438, 4754886, 4807353, 4857979,
+        4906889, 4954195, 4999999, 5044393, 5087461, 5129282, 5169924,
+    };
+    if (significant_digits == 0 || radix < 2 || radix > 36) { return false; }
+    uint64_t lower_bits = (uint64_t)(significant_digits - 1) *
+        lower_log2_million[radix];
+    return lower_bits < (uint64_t)NCR_BIG_NUMBER_MAX_BITS * UINT64_C(1000000);
+}
+
+/* BIG_NUMBERS_GROUP bigint_new */
 static ncr_obj_@BIGINT_CLASS@ *ncr_bigint_new(size_t line, size_t column) {
     ncr_obj_@BIGINT_CLASS@ *value = ncr_allocate(sizeof(*value), line, column);
     value->value = ncr_allocate(sizeof(mpz_t), line, column);
     mpz_init((mpz_ptr)value->value);
     return value;
 }
+/* BIG_NUMBERS_GROUP_END bigint_new */
 
+/* BIG_NUMBERS_GROUP decimal_new */
 static ncr_obj_@BIGDECIMAL_CLASS@ *ncr_bigdecimal_new(size_t line, size_t column) {
     ncr_obj_@BIGDECIMAL_CLASS@ *value = ncr_allocate(sizeof(*value), line, column);
     value->coefficient = ncr_allocate(sizeof(mpz_t), line, column);
@@ -39,6 +60,7 @@ static ncr_obj_@BIGDECIMAL_CLASS@ *ncr_bigdecimal_new(size_t line, size_t column
     value->scale = 0;
     return value;
 }
+/* BIG_NUMBERS_GROUP_END decimal_new */
 
 static void ncr_big_number_set_i64(mpz_ptr output, int64_t value) {
     uint64_t magnitude = value < 0 ? (uint64_t)(-(value + 1)) + UINT64_C(1) : (uint64_t)value;
@@ -62,16 +84,18 @@ static bool ncr_big_number_to_i64(mpz_srcptr value, int64_t *output) {
 }
 
 static char *ncr_big_number_string(mpz_srcptr value, int radix, size_t *length,
-                                   size_t line, size_t column) {
+                                   size_t *capacity, size_t line, size_t column) {
     size_t digits = mpz_sizeinbase(value, radix);
     if (digits > NCR_BIG_NUMBER_MAX_TEXT + 1) { return NULL; }
-    char *text = ncr_allocate(digits + 3, line, column);
+    size_t allocation = digits + 3;
+    char *text = ncr_allocate(allocation, line, column);
     mpz_get_str(text, radix, value);
     *length = strlen(text);
     if (*length > NCR_BIG_NUMBER_MAX_TEXT) {
         ncr_deallocate(text);
         return NULL;
     }
+    if (capacity != NULL) { *capacity = allocation; }
     return text;
 }
 
@@ -84,6 +108,7 @@ static bool ncr_big_number_multiply(mpz_ptr output, mpz_srcptr left, mpz_srcptr 
     return ncr_big_number_within_limit(output);
 }
 
+/* BIG_NUMBERS_GROUP bigint_power_support */
 static bool ncr_big_number_power(mpz_ptr output, mpz_srcptr base, uint32_t exponent) {
     if (exponent == 0) {
         mpz_set_ui(output, 1);
@@ -117,7 +142,9 @@ static bool ncr_big_number_power(mpz_ptr output, mpz_srcptr base, uint32_t expon
     mpz_clear(accumulator);
     return valid;
 }
+/* BIG_NUMBERS_GROUP_END bigint_power_support */
 
+/* BIG_NUMBERS_GROUP bigint_parse_support */
 static int ncr_bigint_digit_value(unsigned char value) {
     if (value >= '0' && value <= '9') { return (int)(value - '0'); }
     if (value >= 'a' && value <= 'z') { return (int)(value - 'a') + 10; }
@@ -136,10 +163,14 @@ static bool ncr_bigint_parse_digits(const unsigned char *bytes, size_t length, i
     }
     return true;
 }
+/* BIG_NUMBERS_GROUP_END bigint_parse_support */
 
+/* BIG_NUMBERS_GROUP decimal_support */
+/* floor(log2(10) * 1e6) bounds exponents before GMP; GMP checks the boundary. */
 static bool ncr_bigdecimal_power_of_ten(mpz_ptr output, size_t exponent) {
-    uint64_t upper_bits = ((uint64_t)exponent * UINT64_C(3322) + UINT64_C(999)) / UINT64_C(1000) + UINT64_C(1);
-    if (upper_bits > NCR_BIG_NUMBER_MAX_BITS) { return false; }
+    const uint64_t maximum_exponent =
+        ((uint64_t)NCR_BIG_NUMBER_MAX_BITS * UINT64_C(1000000)) / UINT64_C(3321928);
+    if (exponent > maximum_exponent) { return false; }
     mpz_ui_pow_ui(output, 10, (unsigned long)exponent);
     return ncr_big_number_within_limit(output);
 }
@@ -215,9 +246,15 @@ static bool ncr_bigdecimal_parse_text(const unsigned char *bytes, size_t length,
     if (index != length) { ncr_deallocate(digits); return false; }
     digits[digit_count] = '\0';
     int64_t parsed_scale = (int64_t)fractional_digits - exponent;
+    size_t significant_begin = 0;
+    while (significant_begin + 1 < digit_count && digits[significant_begin] == '0') {
+        ++significant_begin;
+    }
+    bool coefficient_may_fit = ncr_big_number_digits_may_fit(
+        digit_count - significant_begin, 10);
     if (parsed_scale < -(int64_t)NCR_BIG_DECIMAL_MAX_SCALE ||
         parsed_scale > (int64_t)NCR_BIG_DECIMAL_MAX_SCALE ||
-        mpz_set_str(coefficient, digits, 10) != 0) {
+        !coefficient_may_fit || mpz_set_str(coefficient, digits, 10) != 0) {
         ncr_deallocate(digits);
         return false;
     }
@@ -233,8 +270,8 @@ static int ncr_bigdecimal_compare_magnitude(mpz_srcptr left, int32_t left_scale,
                                            size_t line, size_t column) {
     size_t left_length = 0;
     size_t right_length = 0;
-    char *left_text = ncr_big_number_string(left, 10, &left_length, line, column);
-    char *right_text = ncr_big_number_string(right, 10, &right_length, line, column);
+    char *left_text = ncr_big_number_string(left, 10, &left_length, NULL, line, column);
+    char *right_text = ncr_big_number_string(right, 10, &right_length, NULL, line, column);
     if (left_text == NULL || right_text == NULL) {
         ncr_deallocate(left_text);
         ncr_deallocate(right_text);
@@ -264,7 +301,9 @@ static int ncr_bigdecimal_compare_magnitude(mpz_srcptr left, int32_t left_scale,
     ncr_deallocate(right_text);
     return result;
 }
+/* BIG_NUMBERS_GROUP_END decimal_support */
 
+/* BIG_NUMBERS_GROUP decimal_rounding */
 static bool ncr_bigdecimal_round_quotient(mpz_ptr quotient, mpz_srcptr remainder,
                                          mpz_srcptr positive_denominator,
                                          bool negative, int32_t mode) {
@@ -330,7 +369,9 @@ static bool ncr_bigdecimal_divide_rounded(mpz_ptr quotient, mpz_srcptr numerator
     mpz_clear(positive_denominator);
     return within_limit;
 }
+/* BIG_NUMBERS_GROUP_END decimal_rounding */
 
+/* BIG_NUMBERS_GROUP bigint_methods */
 static ncr_obj_@BIGINT_CLASS@ *@BIGINT_FROM_LONG@(int64_t @BIGINT_FROM_LONG_VALUE@,
                                                    size_t ncr_line, size_t ncr_column) {
     ncr_obj_@BIGINT_CLASS@ *value = ncr_bigint_new(ncr_line, ncr_column);
@@ -346,9 +387,22 @@ static ncr_obj_@BIGINT_PARSE_RESULT@ @BIGINT_PARSE@(ncr_obj_@TEXT_CLASS@ *ncr_v_
     if (!ncr_bigint_parse_digits(bytes, length, radix)) {
         return NCR_RESULT_ERROR(@BIGINT_PARSE_RESULT@, "invalid BigInt digits or radix");
     }
-    char *digits = ncr_allocate(length + 1, ncr_line, ncr_column);
-    memcpy(digits, bytes, length);
-    digits[length] = '\0';
+    size_t sign_length = bytes[0] == '+' || bytes[0] == '-' ? 1 : 0;
+    size_t significant_begin = sign_length;
+    while (significant_begin + 1 < length && bytes[significant_begin] == '0') {
+        ++significant_begin;
+    }
+    if (!ncr_big_number_digits_may_fit(length - significant_begin, radix)) {
+        return NCR_RESULT_ERROR(@BIGINT_PARSE_RESULT@, "BigInt exceeds the configured size limit");
+    }
+    bool negative = bytes[0] == '-';
+    size_t digit_length = length - significant_begin;
+    size_t parsed_length = digit_length + (negative ? 1 : 0);
+    char *digits = ncr_allocate(parsed_length + 1, ncr_line, ncr_column);
+    size_t cursor = 0;
+    if (negative) { digits[cursor++] = '-'; }
+    memcpy(digits + cursor, bytes + significant_begin, digit_length);
+    digits[parsed_length] = '\0';
     mpz_t parsed;
     mpz_init(parsed);
     bool valid = mpz_set_str(parsed, digits, radix) == 0 && ncr_big_number_within_limit(parsed);
@@ -358,7 +412,7 @@ static ncr_obj_@BIGINT_PARSE_RESULT@ @BIGINT_PARSE@(ncr_obj_@TEXT_CLASS@ *ncr_v_
         return NCR_RESULT_ERROR(@BIGINT_PARSE_RESULT@, "BigInt exceeds the configured size limit");
     }
     ncr_obj_@BIGINT_CLASS@ *value = ncr_bigint_new(ncr_line, ncr_column);
-    mpz_set(NCR_BI(value), parsed);
+    mpz_swap(NCR_BI(value), parsed);
     mpz_clear(parsed);
     return NCR_RESULT_OK(@BIGINT_PARSE_RESULT@, @BIGINT_PARSE_OK@, value);
 }
@@ -377,13 +431,14 @@ static ncr_obj_@BIGINT_TO_TEXT_RESULT@ @BIGINT_TO_TEXT@(ncr_obj_@BIGINT_CLASS@ *
         return NCR_RESULT_ERROR(@BIGINT_TO_TEXT_RESULT@, "radix must be between 2 and 36");
     }
     size_t length = 0;
-    char *digits = ncr_big_number_string(NCR_BI(ncr_self), radix, &length, ncr_line, ncr_column);
+    size_t capacity = 0;
+    char *digits = ncr_big_number_string(NCR_BI(ncr_self), radix, &length, &capacity,
+        ncr_line, ncr_column);
     if (digits == NULL) {
         return NCR_RESULT_ERROR(@BIGINT_TO_TEXT_RESULT@, "BigInt text exceeds the configured size limit");
     }
-    ncr_obj_@TEXT_CLASS@ *text = ncr_text_from_bytes_@TEXT_CLASS@(
-        (const unsigned char *)digits, length, ncr_line, ncr_column);
-    ncr_deallocate(digits);
+    ncr_obj_@TEXT_CLASS@ *text = ncr_text_take_bytes_@TEXT_CLASS@(
+        (unsigned char *)digits, length, capacity, ncr_line, ncr_column);
     return NCR_RESULT_OK(@BIGINT_TO_TEXT_RESULT@, @BIGINT_TO_TEXT_OK@, text);
 }
 
@@ -620,7 +675,9 @@ static ncr_obj_@BIGINT_TO_LONG_RESULT@ @BIGINT_TO_LONG@(ncr_obj_@BIGINT_CLASS@ *
     }
     return NCR_RESULT_OK(@BIGINT_TO_LONG_RESULT@, @BIGINT_TO_LONG_OK@, value);
 }
+/* BIG_NUMBERS_GROUP_END bigint_methods */
 
+/* BIG_NUMBERS_GROUP decimal_methods */
 static ncr_obj_@BIGDECIMAL_PARSE_RESULT@ @BIGDECIMAL_PARSE@(ncr_obj_@TEXT_CLASS@ *ncr_v_@BIGDECIMAL_PARSE_TEXT@,
     size_t ncr_line, size_t ncr_column) {
     mpz_t coefficient;
@@ -633,7 +690,7 @@ static ncr_obj_@BIGDECIMAL_PARSE_RESULT@ @BIGDECIMAL_PARSE@(ncr_obj_@TEXT_CLASS@
         return NCR_RESULT_ERROR(@BIGDECIMAL_PARSE_RESULT@, "invalid BigDecimal literal or configured size limit exceeded");
     }
     ncr_obj_@BIGDECIMAL_CLASS@ *value = ncr_bigdecimal_new(ncr_line, ncr_column);
-    mpz_set(NCR_BD(value), coefficient);
+    mpz_swap(NCR_BD(value), coefficient);
     value->scale = scale;
     mpz_clear(coefficient);
     return NCR_RESULT_OK(@BIGDECIMAL_PARSE_RESULT@, @BIGDECIMAL_PARSE_OK@, value);
@@ -657,8 +714,9 @@ static ncr_obj_@BIGDECIMAL_CLASS@ *@BIGDECIMAL_CLONE@(ncr_obj_@BIGDECIMAL_CLASS@
 static ncr_obj_@BIGDECIMAL_TO_TEXT_RESULT@ @BIGDECIMAL_TO_TEXT@(ncr_obj_@BIGDECIMAL_CLASS@ *ncr_self,
     size_t ncr_line, size_t ncr_column) {
     size_t coefficient_length = 0;
+    size_t coefficient_capacity = 0;
     char *coefficient = ncr_big_number_string(NCR_BD(ncr_self), 10,
-        &coefficient_length, ncr_line, ncr_column);
+        &coefficient_length, &coefficient_capacity, ncr_line, ncr_column);
     if (coefficient == NULL) {
         return NCR_RESULT_ERROR(@BIGDECIMAL_TO_TEXT_RESULT@, "BigDecimal text exceeds the configured size limit");
     }
@@ -711,8 +769,8 @@ static ncr_obj_@BIGDECIMAL_TO_TEXT_RESULT@ @BIGDECIMAL_TO_TEXT@(ncr_obj_@BIGDECI
         cursor += zeros;
         memcpy(output + cursor, digits, digit_count);
     }
-    ncr_obj_@TEXT_CLASS@ *text = ncr_text_from_bytes_@TEXT_CLASS@(output, output_length, ncr_line, ncr_column);
-    ncr_deallocate(output);
+    ncr_obj_@TEXT_CLASS@ *text = ncr_text_take_bytes_@TEXT_CLASS@(
+        output, output_length, output_length, ncr_line, ncr_column);
     ncr_deallocate(coefficient);
     return NCR_RESULT_OK(@BIGDECIMAL_TO_TEXT_RESULT@, @BIGDECIMAL_TO_TEXT_OK@, text);
 }
@@ -842,7 +900,7 @@ static ncr_obj_@BIGDECIMAL_DIVIDE_RESULT@ @BIGDECIMAL_DIVIDE@(ncr_obj_@BIGDECIMA
         return NCR_RESULT_ERROR(@BIGDECIMAL_DIVIDE_RESULT@, "BigDecimal division is inexact, invalid, or exceeds the configured size limit");
     }
     ncr_obj_@BIGDECIMAL_CLASS@ *value = ncr_bigdecimal_new(ncr_line, ncr_column);
-    mpz_set(NCR_BD(value), quotient);
+    mpz_swap(NCR_BD(value), quotient);
     value->scale = result_scale;
     mpz_clear(quotient); mpz_clear(denominator); mpz_clear(numerator);
     return NCR_RESULT_OK(@BIGDECIMAL_DIVIDE_RESULT@, @BIGDECIMAL_DIVIDE_OK@, value);
@@ -864,20 +922,18 @@ static ncr_obj_@BIGDECIMAL_RESCALE_RESULT@ @BIGDECIMAL_RESCALE@(ncr_obj_@BIGDECI
         valid = ncr_bigdecimal_scale_coefficient(coefficient, NCR_BD(ncr_self), (size_t)shift);
     } else {
         mpz_t denominator;
-        mpz_t quotient;
-        mpz_init(denominator); mpz_init(quotient);
+        mpz_init(denominator);
         valid = ncr_bigdecimal_power_of_ten(denominator, (size_t)(-shift)) &&
-            ncr_bigdecimal_divide_rounded(quotient, NCR_BD(ncr_self), denominator,
+            ncr_bigdecimal_divide_rounded(coefficient, NCR_BD(ncr_self), denominator,
                 ncr_v_@BIGDECIMAL_RESCALE_ROUNDING@.tag);
-        if (valid) { mpz_set(coefficient, quotient); }
-        mpz_clear(quotient); mpz_clear(denominator);
+        mpz_clear(denominator);
     }
     if (!valid) {
         mpz_clear(coefficient);
         return NCR_RESULT_ERROR(@BIGDECIMAL_RESCALE_RESULT@, "BigDecimal rescale is inexact, invalid, or exceeds the configured size limit");
     }
     ncr_obj_@BIGDECIMAL_CLASS@ *value = ncr_bigdecimal_new(ncr_line, ncr_column);
-    mpz_set(NCR_BD(value), coefficient);
+    mpz_swap(NCR_BD(value), coefficient);
     value->scale = scale;
     mpz_clear(coefficient);
     return NCR_RESULT_OK(@BIGDECIMAL_RESCALE_RESULT@, @BIGDECIMAL_RESCALE_OK@, value);
@@ -948,3 +1004,4 @@ static ncr_obj_@BIGDECIMAL_TO_LONG_RESULT@ @BIGDECIMAL_TO_LONG@(ncr_obj_@BIGDECI
     if (!fits) { return NCR_RESULT_ERROR(@BIGDECIMAL_TO_LONG_RESULT@, "BigDecimal does not fit in long"); }
     return NCR_RESULT_OK(@BIGDECIMAL_TO_LONG_RESULT@, @BIGDECIMAL_TO_LONG_OK@, value);
 }
+/* BIG_NUMBERS_GROUP_END decimal_methods */
