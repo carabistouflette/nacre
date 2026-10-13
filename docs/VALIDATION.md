@@ -41,6 +41,16 @@ whole-Java API-parity claim.
 CI exports those paths through `GITHUB_ENV` after the dependency build, rather
 than referencing the unavailable `runner` context in a job-level environment.
 
+The CI long-expression stack-overflow reproduction passed on an unoptimized
+Rust 1.74.0 build with `RUST_MIN_STACK` unset after separating binary formatting
+from recursive operand evaluation. An actual MSRV CLI consumer with 110-term
+arithmetic, `&&`, and `||` chains passed GCC and Clang ASan/UBSan runs: all three
+results were `true`, skipped division-by-zero operands stayed unevaluated, and
+the allocation counters were zero allocations, zero frees, and zero live values.
+The post-fix locked/offline all-targets suites with `fuzzing` each passed 1,255
+tests across 61 executable suites (two ignored): Rust 1.74.0/Clang and stable/GCC,
+both with `RUST_MIN_STACK` unset. Strict Clippy and the package/checksum audits passed.
+
 ## Historical 0.12.0 baseline
 
 The following measurements predate the portable standard-library integration.

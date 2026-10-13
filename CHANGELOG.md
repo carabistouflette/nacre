@@ -3,6 +3,9 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Recursive expression emission keeps binary-operation formatting in a separate
+  non-recursive helper. Long arithmetic and short-circuit chains compile on the
+  default Rust test-thread stack, preserving operand order and conditional evaluation.
 - CI exports isolated native dependency paths through the runner environment file
   after building the corrected ZIP library; workflow admission no longer uses the
   unavailable `runner` context in a job-level environment.

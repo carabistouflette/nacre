@@ -691,57 +691,7 @@ impl Emitter<'_> {
                     return result;
                 }
                 let right_value = self.expression(right);
-                let (line, column) = line_column(self.source, expr.span.start);
-                let operation = match op {
-                    B::Add | B::Sub | B::Mul | B::Div | B::Rem => match expr.ty {
-                        Type::Double => match op {
-                            B::Add => format!("({left_value} + {right_value})"),
-                            B::Sub => format!("({left_value} - {right_value})"),
-                            B::Mul => format!("({left_value} * {right_value})"),
-                            B::Div => format!("({left_value} / {right_value})"),
-                            B::Rem => format!("fmod({left_value}, {right_value})"),
-                            _ => unreachable!("floating arithmetic operation"),
-                        },
-                        Type::Long => match op {
-                            B::Add => format!("ncr_long_add({left_value}, {right_value})"),
-                            B::Sub => format!("ncr_long_sub({left_value}, {right_value})"),
-                            B::Mul => format!("ncr_long_mul({left_value}, {right_value})"),
-                            B::Div => format!("ncr_long_div({left_value}, {right_value}, {line}, {column})"),
-                            B::Rem => format!("ncr_long_rem({left_value}, {right_value}, {line}, {column})"),
-                            _ => unreachable!("long arithmetic operation"),
-                        },
-                        Type::Int => match op {
-                            B::Add => format!("ncr_add({left_value}, {right_value})"),
-                            B::Sub => format!("ncr_sub({left_value}, {right_value})"),
-                            B::Mul => format!("ncr_mul({left_value}, {right_value})"),
-                            B::Div => format!("ncr_div({left_value}, {right_value}, {line}, {column})"),
-                            B::Rem => format!("ncr_rem({left_value}, {right_value}, {line}, {column})"),
-                            _ => unreachable!("integer arithmetic operation"),
-                        },
-                        _ => unreachable!("checked arithmetic result type"),
-                    },
-                    B::Eq => format!("{left_value} == {right_value}"), B::Ne => format!("{left_value} != {right_value}"),
-                    B::Lt => format!("{left_value} < {right_value}"), B::Le => format!("{left_value} <= {right_value}"),
-                    B::Gt => format!("{left_value} > {right_value}"), B::Ge => format!("{left_value} >= {right_value}"),
-                    B::BitAnd | B::BitOr | B::BitXor => match (expr.ty, op) {
-                        (Type::Int, B::BitAnd) => format!("ncr_i32_and({left_value}, {right_value})"),
-                        (Type::Int, B::BitOr) => format!("ncr_i32_or({left_value}, {right_value})"),
-                        (Type::Int, B::BitXor) => format!("ncr_i32_xor({left_value}, {right_value})"),
-                        (Type::Long, B::BitAnd) => format!("ncr_i64_and({left_value}, {right_value})"),
-                        (Type::Long, B::BitOr) => format!("ncr_i64_or({left_value}, {right_value})"),
-                        (Type::Long, B::BitXor) => format!("ncr_i64_xor({left_value}, {right_value})"),
-                        _ => unreachable!("checked bitwise operation"),
-                    },
-                    B::ShiftLeft | B::ShiftRight => match (expr.ty, op) {
-                        (Type::Int, B::ShiftLeft) => format!("ncr_i32_shl({left_value}, {right_value}, {line}, {column})"),
-                        (Type::Int, B::ShiftRight) => format!("ncr_i32_shr({left_value}, {right_value}, {line}, {column})"),
-                        (Type::Long, B::ShiftLeft) => format!("ncr_i64_shl({left_value}, {right_value}, {line}, {column})"),
-                        (Type::Long, B::ShiftRight) => format!("ncr_i64_shr({left_value}, {right_value}, {line}, {column})"),
-                        _ => unreachable!("checked shift operation"),
-                    },
-                    B::And | B::Or => unreachable!("short-circuit handled above"),
-                };
-                self.bind(expr.ty, &operation)
+                self.binary_operation(expr, *op, &left_value, &right_value)
             }
             E::Call { target, receiver, args } => {
                 // Borrow receiver first, then evaluate arguments in source order.
@@ -785,5 +735,60 @@ impl Emitter<'_> {
                 }
             }
         }
+    }
+
+    // Keep formatting temporaries out of the recursive operand-evaluation frame.
+    fn binary_operation(&mut self, expr: &t::Expr, op: B, left_value: &str, right_value: &str) -> String {
+        let (line, column) = line_column(self.source, expr.span.start);
+        let operation = match op {
+            B::Add | B::Sub | B::Mul | B::Div | B::Rem => match expr.ty {
+                Type::Double => match op {
+                    B::Add => format!("({left_value} + {right_value})"),
+                    B::Sub => format!("({left_value} - {right_value})"),
+                    B::Mul => format!("({left_value} * {right_value})"),
+                    B::Div => format!("({left_value} / {right_value})"),
+                    B::Rem => format!("fmod({left_value}, {right_value})"),
+                    _ => unreachable!("floating arithmetic operation"),
+                },
+                Type::Long => match op {
+                    B::Add => format!("ncr_long_add({left_value}, {right_value})"),
+                    B::Sub => format!("ncr_long_sub({left_value}, {right_value})"),
+                    B::Mul => format!("ncr_long_mul({left_value}, {right_value})"),
+                    B::Div => format!("ncr_long_div({left_value}, {right_value}, {line}, {column})"),
+                    B::Rem => format!("ncr_long_rem({left_value}, {right_value}, {line}, {column})"),
+                    _ => unreachable!("long arithmetic operation"),
+                },
+                Type::Int => match op {
+                    B::Add => format!("ncr_add({left_value}, {right_value})"),
+                    B::Sub => format!("ncr_sub({left_value}, {right_value})"),
+                    B::Mul => format!("ncr_mul({left_value}, {right_value})"),
+                    B::Div => format!("ncr_div({left_value}, {right_value}, {line}, {column})"),
+                    B::Rem => format!("ncr_rem({left_value}, {right_value}, {line}, {column})"),
+                    _ => unreachable!("integer arithmetic operation"),
+                },
+                _ => unreachable!("checked arithmetic result type"),
+            },
+            B::Eq => format!("{left_value} == {right_value}"), B::Ne => format!("{left_value} != {right_value}"),
+            B::Lt => format!("{left_value} < {right_value}"), B::Le => format!("{left_value} <= {right_value}"),
+            B::Gt => format!("{left_value} > {right_value}"), B::Ge => format!("{left_value} >= {right_value}"),
+            B::BitAnd | B::BitOr | B::BitXor => match (expr.ty, op) {
+                (Type::Int, B::BitAnd) => format!("ncr_i32_and({left_value}, {right_value})"),
+                (Type::Int, B::BitOr) => format!("ncr_i32_or({left_value}, {right_value})"),
+                (Type::Int, B::BitXor) => format!("ncr_i32_xor({left_value}, {right_value})"),
+                (Type::Long, B::BitAnd) => format!("ncr_i64_and({left_value}, {right_value})"),
+                (Type::Long, B::BitOr) => format!("ncr_i64_or({left_value}, {right_value})"),
+                (Type::Long, B::BitXor) => format!("ncr_i64_xor({left_value}, {right_value})"),
+                _ => unreachable!("checked bitwise operation"),
+            },
+            B::ShiftLeft | B::ShiftRight => match (expr.ty, op) {
+                (Type::Int, B::ShiftLeft) => format!("ncr_i32_shl({left_value}, {right_value}, {line}, {column})"),
+                (Type::Int, B::ShiftRight) => format!("ncr_i32_shr({left_value}, {right_value}, {line}, {column})"),
+                (Type::Long, B::ShiftLeft) => format!("ncr_i64_shl({left_value}, {right_value}, {line}, {column})"),
+                (Type::Long, B::ShiftRight) => format!("ncr_i64_shr({left_value}, {right_value}, {line}, {column})"),
+                _ => unreachable!("checked shift operation"),
+            },
+            B::And | B::Or => unreachable!("short-circuit handled before formatting"),
+        };
+        self.bind(expr.ty, &operation)
     }
 }
