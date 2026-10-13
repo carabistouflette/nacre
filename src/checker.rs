@@ -1094,7 +1094,7 @@ impl Checker<'_> {
                     return Err(Diagnostic::new(header_span, "OrderedMap<K, V> requires two typed bindings: key and value"));
                 }
                 return self.for_each_ordered_map(
-                    stmt, place, value, source_type, source_class, map_key, map_value,
+                    stmt, place, value, source_type, source_class, (map_key, map_value),
                 );
             }
             Some(t::NativeClass::Set { key: set_key, .. }) => {
@@ -1255,9 +1255,9 @@ impl Checker<'_> {
         value: Option<t::Expr>,
         source_type: Type,
         map_class: usize,
-        map_key: Type,
-        map_value: Type,
+        map_entry: (Type, Type),
     ) -> Result<t::Stmt, Diagnostic> {
+        let (map_key, map_value) = map_entry;
         let a::StmtKind::ForEach {
             ty: value_header, name: value_name, key: Some((key_header, key_name)),
             collection, body, header_span, ..

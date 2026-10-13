@@ -261,13 +261,13 @@ pub(super) fn implementations(program: &t::Program) -> Option<String> {
     let template = include_str!("../../stdlib/process.c.in");
     let mut body = template.split_once("/* PROCESS_GROUP common */")
         .expect("process common template group").0.to_owned();
-    if has_env || has_command || has_process { body.push_str(&group(template, "common")); }
-    if has_env { body.push_str(&group(template, "env")); }
-    if has_command { body.push_str(&group(template, "command")); }
-    if has_command || has_process { body.push_str(&group(template, "wait_helpers")); }
-    if has_process { body.push_str(&group(template, "process")); }
-    if has_command { body.push_str(&group(template, "capture")); }
-    if has_output { body.push_str(&group(template, "output")); }
+    if has_env || has_command || has_process { body.push_str(group(template, "common")); }
+    if has_env { body.push_str(group(template, "env")); }
+    if has_command { body.push_str(group(template, "command")); }
+    if has_command || has_process { body.push_str(group(template, "wait_helpers")); }
+    if has_process { body.push_str(group(template, "process")); }
+    if has_command { body.push_str(group(template, "capture")); }
+    if has_output { body.push_str(group(template, "output")); }
 
     let text = text_class(program).expect("process APIs require Text");
     let mut substitutions = vec![

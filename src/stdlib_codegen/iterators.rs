@@ -192,7 +192,7 @@ fn map_iterator(program: &t::Program, class_id: usize, input: Type, output: Type
     let constructor = required_method(program, class_id, M::MapIteratorNew);
     let input_interface = constructor.params[0].1.object_class().expect("MapIterator input interface");
     let mapper_interface = constructor.params[1].1.object_class().expect("MapIterator mapper interface");
-    assert_eq!(program.classes[class_id].fields.get(0), Some(&constructor.params[0].1),
+    assert_eq!(program.classes[class_id].fields.first(), Some(&constructor.params[0].1),
         "MapIterator's first declared field owns its input");
     assert_eq!(program.classes[class_id].fields.get(1), Some(&constructor.params[1].1),
         "MapIterator's second declared field owns its mapper");
@@ -226,7 +226,7 @@ fn filter_iterator(program: &t::Program, class_id: usize, element: Type) -> Stri
     let constructor = required_method(program, class_id, M::FilterIteratorNew);
     let input_interface = constructor.params[0].1.object_class().expect("FilterIterator input interface");
     let predicate_interface = constructor.params[1].1.object_class().expect("FilterIterator predicate interface");
-    assert_eq!(program.classes[class_id].fields.get(0), Some(&constructor.params[0].1),
+    assert_eq!(program.classes[class_id].fields.first(), Some(&constructor.params[0].1),
         "FilterIterator's first declared field owns its input");
     assert_eq!(program.classes[class_id].fields.get(1), Some(&constructor.params[1].1),
         "FilterIterator's second declared field owns its predicate");

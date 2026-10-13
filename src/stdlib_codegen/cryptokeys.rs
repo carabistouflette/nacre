@@ -159,15 +159,15 @@ pub(super) fn implementation(program: &t::Program) -> String {
     let needs_pem = key.is_some() || certificate.is_some();
     let first_group = "/* CRYPTOKEYS_GROUP ALGORITHM */";
     let mut body = template.split_once(first_group).expect("crypto keys template algorithm group").0.to_owned();
-    if needs_algorithm { body.push_str(&group(template, "ALGORITHM")); }
-    if needs_pem { body.push_str(&group(template, "PEM")); }
+    if needs_algorithm { body.push_str(group(template, "ALGORITHM")); }
+    if needs_pem { body.push_str(group(template, "PEM")); }
     let needs_buffer = key.is_some() || digest.is_some() || mac.is_some();
-    if needs_buffer { body.push_str(&group(template, "BUFFER")); }
-    if digest.is_some() || mac.is_some() { body.push_str(&group(template, "BUFFER_COPY")); }
-    if key.is_some() { body.push_str(&group(template, "KEY")); }
-    if digest.is_some() { body.push_str(&group(template, "DIGEST")); }
-    if mac.is_some() { body.push_str(&group(template, "MAC")); }
-    if certificate.is_some() { body.push_str(&group(template, "CERTIFICATE")); }
+    if needs_buffer { body.push_str(group(template, "BUFFER")); }
+    if digest.is_some() || mac.is_some() { body.push_str(group(template, "BUFFER_COPY")); }
+    if key.is_some() { body.push_str(group(template, "KEY")); }
+    if digest.is_some() { body.push_str(group(template, "DIGEST")); }
+    if mac.is_some() { body.push_str(group(template, "MAC")); }
+    if certificate.is_some() { body.push_str(group(template, "CERTIFICATE")); }
 
     let text = text_class(program).expect("crypto key APIs require Text");
     let mut replacements = vec![
@@ -182,8 +182,7 @@ pub(super) fn implementation(program: &t::Program) -> String {
     if let Some(id) = key { replacements.push(("@KEY_TYPE@", ctype(program, Type::Object(id)))); }
     if let Some(id) = digest { replacements.push(("@DIGEST_TYPE@", ctype(program, Type::Object(id)))); }
     if let Some(id) = mac { replacements.push(("@MAC_TYPE@", ctype(program, Type::Object(id)))); }
-    if certificate.is_some() {
-        let id = certificate.unwrap();
+    if let Some(id) = certificate {
         let path = class_id(program, |class| matches!(class, C::Path))
             .expect("Certificate.verify requires Path");
         replacements.push(("@CERTIFICATE_TYPE@", ctype(program, Type::Object(id))));

@@ -444,6 +444,5 @@ pub(super) fn implementation(program: &t::Program) -> String {
         add_param(&mut substitutions, "@FORMAT_CURRENCY_LOCALE@", function, 2);
     }
 
-    let body = replace_placeholders(body, &substitutions);
-    body
+    replace_placeholders(body, &substitutions)
 }

@@ -107,11 +107,11 @@ pub(super) fn implementation(
     };
     let template = include_str!("../../stdlib/network.c.in");
     let mut body = String::new();
-    body.push_str(&group(template, "common"));
-    if need_wait { body.push_str(&group(template, "wait")); }
-    if need_address_helpers { body.push_str(&group(template, "address_helpers")); }
-    if need_descriptor_helper { body.push_str(&group(template, "descriptor_helper")); }
-    if need_connect_helper { body.push_str(&group(template, "connect_helper")); }
+    body.push_str(group(template, "common"));
+    if need_wait { body.push_str(group(template, "wait")); }
+    if need_address_helpers { body.push_str(group(template, "address_helpers")); }
+    if need_descriptor_helper { body.push_str(group(template, "descriptor_helper")); }
+    if need_connect_helper { body.push_str(group(template, "connect_helper")); }
     let address_query = [M::TcpListenerLocalAddress, M::TcpStreamPeerAddress, M::TcpStreamLocalAddress, M::UdpSocketLocalAddress];
     let close_methods = [M::TcpListenerClose, M::TcpStreamClose, M::UdpSocketClose];
     let resolve = method_if(program, M::SocketAddressResolve);
@@ -123,14 +123,14 @@ pub(super) fn implementation(
     let udp_methods = [M::UdpSocketBind, M::UdpSocketSendTo, M::UdpSocketReceiveFrom, M::UdpSocketLocalAddress, M::UdpSocketClose];
     let datagram_methods = [M::DatagramSource, M::DatagramBytesRead, M::DatagramTruncated];
 
-    if has_any(program, &address_query) { body.push_str(&group(template, "address")); }
-    if has_any(program, &close_methods) { body.push_str(&group(template, "close")); }
-    if resolve.is_some() { body.push_str(&group(template, "resolve")); }
-    if to_text.is_some() { body.push_str(&group(template, "text")); }
-    if has_any(program, &listener_methods) { body.push_str(&group(template, "listener")); }
-    if has_any(program, &stream_methods) { body.push_str(&group(template, "stream")); }
-    if has_any(program, &udp_methods) { body.push_str(&group(template, "udp")); }
-    if has_any(program, &datagram_methods) { body.push_str(&group(template, "datagram")); }
+    if has_any(program, &address_query) { body.push_str(group(template, "address")); }
+    if has_any(program, &close_methods) { body.push_str(group(template, "close")); }
+    if resolve.is_some() { body.push_str(group(template, "resolve")); }
+    if to_text.is_some() { body.push_str(group(template, "text")); }
+    if has_any(program, &listener_methods) { body.push_str(group(template, "listener")); }
+    if has_any(program, &stream_methods) { body.push_str(group(template, "stream")); }
+    if has_any(program, &udp_methods) { body.push_str(group(template, "udp")); }
+    if has_any(program, &datagram_methods) { body.push_str(group(template, "datagram")); }
     body.push_str(template.split_once("/* NETWORK_GROUP_END datagram */")
         .expect("network template final group").1);
 

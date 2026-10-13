@@ -190,39 +190,39 @@ pub(super) fn implementation(program: &t::Program) -> String {
     let template = include_str!("../../stdlib/websocket.c.in");
     let mut output = String::new();
     if has_ws_io || has_message_methods {
-        output.push_str(&group(template, "standard_includes_1"));
-        output.push_str(&group(template, "standard_includes_2"));
+        output.push_str(group(template, "standard_includes_1"));
+        output.push_str(group(template, "standard_includes_2"));
     }
     if has_ws_io {
-        output.push_str(&group(template, "ssl_includes"));
-        output.push_str(&group(template, "constants"));
+        output.push_str(group(template, "ssl_includes"));
+        output.push_str(group(template, "constants"));
     }
     if has_connect {
-        output.push_str(&group(template, "connect_text"));
-        output.push_str(&group(template, "connect_uri"));
+        output.push_str(group(template, "connect_text"));
+        output.push_str(group(template, "connect_uri"));
     }
-    if has_read_transport { output.push_str(&group(template, "transport_read")); }
-    if has_ws_io { output.push_str(&group(template, "transport_write")); }
-    if has_frame_transport { output.push_str(&group(template, "transport_frame")); }
-    if has_connect { output.push_str(&group(template, "http")); }
-    if has_ws_io { output.push_str(&group(template, "cleanup")); }
-    if needs_utf8 { output.push_str(&group(template, "utf8")); }
+    if has_read_transport { output.push_str(group(template, "transport_read")); }
+    if has_ws_io { output.push_str(group(template, "transport_write")); }
+    if has_frame_transport { output.push_str(group(template, "transport_frame")); }
+    if has_connect { output.push_str(group(template, "http")); }
+    if has_ws_io { output.push_str(group(template, "cleanup")); }
+    if needs_utf8 { output.push_str(group(template, "utf8")); }
     if has_receive_core {
-        output.push_str(&group(template, "tls_shutdown"));
-        output.push_str(&group(template, "close_core"));
-        output.push_str(&group(template, "receive_core"));
+        output.push_str(group(template, "tls_shutdown"));
+        output.push_str(group(template, "close_core"));
+        output.push_str(group(template, "receive_core"));
     }
-    if has_connect { output.push_str(&group(template, "connect_core")); }
-    if connect.is_some() { output.push_str(&group(template, "connect_method")); }
-    if connect_tls.is_some() { output.push_str(&group(template, "connect_tls_method")); }
-    if send_text.is_some() { output.push_str(&group(template, "send_text_method")); }
-    if send_binary.is_some() { output.push_str(&group(template, "send_binary_method")); }
-    if ping.is_some() { output.push_str(&group(template, "ping_method")); }
-    if receive.is_some() { output.push_str(&group(template, "receive_method")); }
-    if close.is_some() { output.push_str(&group(template, "close_method")); }
-    if is_text.is_some() { output.push_str(&group(template, "message_is_text_method")); }
-    if body.is_some() { output.push_str(&group(template, "message_body_method")); }
-    if as_text.is_some() { output.push_str(&group(template, "message_as_text_method")); }
+    if has_connect { output.push_str(group(template, "connect_core")); }
+    if connect.is_some() { output.push_str(group(template, "connect_method")); }
+    if connect_tls.is_some() { output.push_str(group(template, "connect_tls_method")); }
+    if send_text.is_some() { output.push_str(group(template, "send_text_method")); }
+    if send_binary.is_some() { output.push_str(group(template, "send_binary_method")); }
+    if ping.is_some() { output.push_str(group(template, "ping_method")); }
+    if receive.is_some() { output.push_str(group(template, "receive_method")); }
+    if close.is_some() { output.push_str(group(template, "close_method")); }
+    if is_text.is_some() { output.push_str(group(template, "message_is_text_method")); }
+    if body.is_some() { output.push_str(group(template, "message_body_method")); }
+    if as_text.is_some() { output.push_str(group(template, "message_as_text_method")); }
 
     let mut replacements = Vec::new();
     if let Some(websocket) = websocket {

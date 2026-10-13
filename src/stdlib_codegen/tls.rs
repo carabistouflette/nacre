@@ -173,20 +173,20 @@ pub(super) fn implementation(program: &t::Program) -> String {
     body.push_str(template.split_once("/* TLS_GROUP common */")
         .expect("TLS template common group").0);
 
-    if has_config_methods || has_stream_methods { body.push_str(&group(template, "common")); }
-    if has_stream || has_websocket { body.push_str(&group(template, "ssl_release")); }
-    if has_config { body.push_str(&group(template, "config_drop")); }
-    if has_stream { body.push_str(&group(template, "stream_drop")); }
-    if has_client_host_ascii { body.push_str(&group(template, "client_host_ascii")); }
-    if has_client_host { body.push_str(&group(template, "client_host")); }
-    if has_tls_helpers { body.push_str(&group(template, "stream_helpers")); }
+    if has_config_methods || has_stream_methods { body.push_str(group(template, "common")); }
+    if has_stream || has_websocket { body.push_str(group(template, "ssl_release")); }
+    if has_config { body.push_str(group(template, "config_drop")); }
+    if has_stream { body.push_str(group(template, "stream_drop")); }
+    if has_client_host_ascii { body.push_str(group(template, "client_host_ascii")); }
+    if has_client_host { body.push_str(group(template, "client_host")); }
+    if has_tls_helpers { body.push_str(group(template, "stream_helpers")); }
     if has_config_methods {
-        body.push_str(&group(template, "config_core"));
+        body.push_str(group(template, "config_core"));
         if config_client_with_identity.is_some()
             || config_server.is_some()
             || config_server_with_client_auth.is_some()
         {
-            body.push_str(&group(template, "config_identity"));
+            body.push_str(group(template, "config_identity"));
         }
         for (function, group_name) in [
             (config_client, "config_client"),
@@ -195,21 +195,21 @@ pub(super) fn implementation(program: &t::Program) -> String {
             (config_server, "config_server"),
             (config_server_with_client_auth, "config_server_with_client_auth"),
         ] {
-            if function.is_some() { body.push_str(&group(template, group_name)); }
+            if function.is_some() { body.push_str(group(template, group_name)); }
         }
     }
     if has_stream_methods {
         if stream_write_some.is_some() || stream_write.is_some() || stream_write_all.is_some() {
-            body.push_str(&group(template, "stream_dispose"));
+            body.push_str(group(template, "stream_dispose"));
         }
         if stream_read_some.is_some() || stream_read.is_some() {
-            body.push_str(&group(template, "stream_read_core"));
+            body.push_str(group(template, "stream_read_core"));
         }
         if stream_write_some.is_some() || stream_write.is_some() {
-            body.push_str(&group(template, "stream_write_core"));
+            body.push_str(group(template, "stream_write_core"));
         }
         if stream_cipher.is_some() || stream_protocol.is_some() {
-            body.push_str(&group(template, "stream_text_query"));
+            body.push_str(group(template, "stream_text_query"));
         }
         for (function, group_name) in [
             (stream_connect, "stream_connect"),
@@ -225,7 +225,7 @@ pub(super) fn implementation(program: &t::Program) -> String {
             (stream_flush, "stream_flush"),
             (stream_close, "stream_close"),
         ] {
-            if function.is_some() { body.push_str(&group(template, group_name)); }
+            if function.is_some() { body.push_str(group(template, group_name)); }
         }
     }
 

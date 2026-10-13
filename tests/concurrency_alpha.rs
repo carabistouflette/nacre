@@ -2752,7 +2752,7 @@ void main() {
     let c = observe_condition_node_lifetimes(&c);
     let program = native::compile_c_with_flags(&c, &["-DNACRE_MEMORY_STATS"])
         .unwrap_or_else(|error| panic!("native compile failed: {error}"));
-    let mut process = NativeWaitProcess::start(&program);
+    let process = NativeWaitProcess::start(&program);
     for _ in 0..513 {
         let line = process
             .stdout_rx

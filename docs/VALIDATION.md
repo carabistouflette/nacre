@@ -4,7 +4,44 @@ Nacre is experimental pre-1.0. Executed checks are evidence, not a safety certif
 [validation-0.12.0.json](validation-0.12.0.json) records portable local results.
 Historical reports retain their original release labels; they are not current-release proof.
 
-## Compiler and generated programs
+## Portable standard-library integration
+
+The integrated standard-library feature branch was exercised on Linux with
+GCC and Clang. Each full locked/offline suite with `fuzzing` passed **1,255 tests
+across 62 suites**, with two ordinarily ignored LLVM tests. Rust 1.74.0 also
+passed the locked/offline all-targets check with `fuzzing`.
+
+Targeted actual CLI consumers passed GCC/Clang ASan/UBSan execution with balanced
+native allocation counters: source/sink binary recovery, streamed domain codecs
+in both byte orders, recoverable stream failures, independent SQLite statements,
+certificate persistence, exact locale/temporal conversions, and synchronizer
+waits and condition-node destruction. Independent Python `struct` output matched
+the 39-byte streamed domain representation in both byte orders; OpenSSL DER
+conversion matched the exported leaf and ordered three-certificate chain.
+
+Final principle-review regressions exercise two file-backed SQLite connections:
+closing or dropping a connection releases its uncommitted transaction's locks
+while prepared statements remain owned, and only the second connection's writes
+persist. Negative `ListCodec` limits preserve buffer/source reader positions and
+budgets without invoking source I/O. Both regression suites passed with GCC and
+Clang; the corresponding CLI reproductions passed with sanitizers.
+
+The integrated CLI validator passed 207 successful executions, seven expected
+fatal exits, and 209 invalid-source rejections per C compiler, including native
+sanitizer runs. Generated V2–V5 sources are synchronized. Strict all-targets
+Clippy with `fuzzing` and `-D warnings` passed without lint suppressions; template
+consumers use their borrowed sections directly. An actual ordered-map traversal
+and composed map/filter iterator CLI consumer also passed both compilers'
+sanitizers with ten allocations, ten frees, and zero live allocations.
+
+Native integration uses the corrected libarchive build from
+`scripts/build_libarchive.py`; `CPATH`, `LIBRARY_PATH`, and `LD_LIBRARY_PATH` select
+its isolated prefix. These are local execution results, not a remote-CI or
+whole-Java API-parity claim.
+
+## Historical 0.12.0 baseline
+
+The following measurements predate the portable standard-library integration.
 
 | Check | Observed result |
 |---|---|
