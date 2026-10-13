@@ -297,6 +297,103 @@ void main() {
 }
 
 #[test]
+fn character_native_use_does_not_require_text_or_buffer_calls() {
+    let output = execute(
+        r#"void main() { println(Character.isLetter('A')); }"#,
+        SANITIZERS,
+    );
+    assert_clean(&output);
+    assert_eq!(output.stdout, b"true\n");
+}
+
+#[test]
+fn unicode_native_use_does_not_require_charset_calls() {
+    let output = execute(r#"
+void main() {
+    Text input = new Text("Straße");
+    match (Unicode.caseFold(input)) {
+        Ok(folded) { println(folded.equalsString("strasse")); }
+        Err(error) { println("UNICODE_ERR"); drop(error); }
+    }
+}
+"#, SANITIZERS);
+    assert_clean(&output);
+    assert_eq!(output.stdout, b"true\n");
+}
+
+#[test]
+fn charset_native_use_does_not_require_unicode_calls() {
+    let output = execute(r#"
+void main() {
+    Text input = new Text("A");
+    Text charset = new Text("UTF-8");
+    match (Charset.encode(input, charset)) {
+        Ok(bytes) { println(bytes.length() == 1L); }
+        Err(error) { println("CHARSET_ERR"); drop(error); }
+    }
+}
+"#, SANITIZERS);
+    assert_clean(&output);
+    assert_eq!(output.stdout, b"true\n");
+}
+
+#[test]
+fn locale_inventory_factory_works_without_text_or_number_format_calls() {
+    let output = execute(r#"
+void main() {
+    List<Text> locales = Locale.available();
+    boolean hasRoot = false;
+    int index = 0;
+    while (index < locales.size()) {
+        borrow Text tag = locales.getRef(index);
+        if (tag.equalsString("und")) { hasRoot = true; }
+        index = index + 1;
+    }
+    println(locales.size() > 0);
+    println(hasRoot);
+}
+"#, SANITIZERS);
+    assert_clean(&output);
+    assert_eq!(output.stdout, b"true\ntrue\n");
+}
+
+#[test]
+fn canonical_locale_extensions_configure_services_and_reject_unknown_values() {
+    let output = execute(r#"
+void main() {
+    Text umlaut = new Text("ä");
+    Text digraph = new Text("ae");
+    Text phonebook = new Text("de-DE-u-co-phonebk");
+    match (Unicode.compareLocale(umlaut, digraph, phonebook)) {
+        Ok(order) { println(order > 0); }
+        Err(error) { println("PHONEBOOK_ERR"); drop(error); }
+    }
+
+    Text pattern = new Text("#,##0");
+    Text arabicNumbers = new Text("en-US-u-nu-arab");
+    match (Locale.formatNumber(1234.0, pattern, arabicNumbers)) {
+        Ok(formatted) { println(formatted.charAt(0) == '١'); }
+        Err(error) { println("NUMBERING_EXTENSION_ERR"); drop(error); }
+    }
+
+    Text unknownCollation = new Text("de-DE-u-co-unknown");
+    match (Unicode.compareLocale(umlaut, digraph, unknownCollation)) {
+        Ok(order) { println("UNKNOWN_COLLATION_ACCEPTED"); }
+        Err(error) { println("UNKNOWN_COLLATION_ERR"); drop(error); }
+    }
+    Text unknownNumbering = new Text("en-US-u-nu-unknown");
+    match (Locale.formatNumber(1.0, pattern, unknownNumbering)) {
+        Ok(formatted) { println("UNKNOWN_NUMBERING_ACCEPTED"); drop(formatted); }
+        Err(error) { println("UNKNOWN_NUMBERING_ERR"); drop(error); }
+    }
+}
+"#, SANITIZERS);
+    assert_clean(&output);
+    assert_eq!(output.stdout,
+        b"true\ntrue\nUNKNOWN_COLLATION_ERR\nUNKNOWN_NUMBERING_ERR\n");
+}
+
+#[test]
 fn ordinary_text_programs_remain_usable_without_icu_calls() {
     let output = execute(
         r#"void main() { Text value = new Text("ordinary café text"); println(value.charCount()); value.print(); }"#,

@@ -1,4 +1,7 @@
+/* NACRE_UNICODE_BEGIN ICU_LINK */
 /* nacre-link: icu */
+/* NACRE_UNICODE_END ICU_LINK */
+/* NACRE_UNICODE_BEGIN ICU_HEADERS */
 #include <float.h>
 #include <unicode/ubrk.h>
 #include <unicode/uchar.h>
@@ -10,11 +13,17 @@
 #include <unicode/ustring.h>
 #include <unicode/ucurr.h>
 #include <unicode/unum.h>
+#include <unicode/uenum.h>
+#include <unicode/unumsys.h>
+/* NACRE_UNICODE_END ICU_HEADERS */
 
+/* NACRE_UNICODE_BEGIN PREFLIGHT */
 static bool ncr_unicode_preflight_ok(UErrorCode status) {
     return status == U_BUFFER_OVERFLOW_ERROR || U_SUCCESS(status);
 }
+/* NACRE_UNICODE_END PREFLIGHT */
 
+/* NACRE_UNICODE_BEGIN TEXT_TO_UTF16 */
 static bool ncr_unicode_text_to_utf16(ncr_obj_@TEXT_ID@ *text, UChar **output, int32_t *output_length, size_t line, size_t column) {
     *output = NULL;
     *output_length = 0;
@@ -38,7 +47,9 @@ static bool ncr_unicode_text_to_utf16(ncr_obj_@TEXT_ID@ *text, UChar **output, i
     *output_length = written;
     return true;
 }
+/* NACRE_UNICODE_END TEXT_TO_UTF16 */
 
+/* NACRE_UNICODE_BEGIN UTF16_TO_UTF8 */
 static bool ncr_unicode_utf16_to_utf8(const UChar *source, int32_t source_length, unsigned char **output, int32_t *output_length, size_t line, size_t column) {
     static const UChar empty_source[1] = { 0 };
     *output = NULL;
@@ -62,7 +73,9 @@ static bool ncr_unicode_utf16_to_utf8(const UChar *source, int32_t source_length
     *output_length = written;
     return true;
 }
+/* NACRE_UNICODE_END UTF16_TO_UTF8 */
 
+/* NACRE_UNICODE_BEGIN CHARSET_TO_UCHARS */
 static bool ncr_unicode_to_uchars(UConverter *converter, const char *source, int32_t source_length, UChar **output, int32_t *output_length, size_t line, size_t column) {
     static const char empty_source[1] = { 0 };
     UChar empty_output[1] = { 0 };
@@ -86,7 +99,9 @@ static bool ncr_unicode_to_uchars(UConverter *converter, const char *source, int
     *output_length = written;
     return true;
 }
+/* NACRE_UNICODE_END CHARSET_TO_UCHARS */
 
+/* NACRE_UNICODE_BEGIN CHARSET_FROM_UCHARS */
 static bool ncr_unicode_from_uchars(UConverter *converter, const UChar *source, int32_t source_length, unsigned char **output, int32_t *output_length, size_t line, size_t column) {
     static const UChar empty_source[1] = { 0 };
     unsigned char empty_output[1] = { 0 };
@@ -110,7 +125,9 @@ static bool ncr_unicode_from_uchars(UConverter *converter, const UChar *source, 
     *output_length = written;
     return true;
 }
+/* NACRE_UNICODE_END CHARSET_FROM_UCHARS */
 
+/* NACRE_UNICODE_BEGIN CASE_MAP_HELPER */
 static bool ncr_unicode_case_map(UChar **output, int32_t *output_length, const UChar *source, int32_t source_length, const char *locale, int32_t (*map)(UChar *, int32_t, const UChar *, int32_t, const char *, UErrorCode *), size_t line, size_t column) {
     static const UChar empty_source[1] = { 0 };
     UChar empty_output[1] = { 0 };
@@ -133,7 +150,9 @@ static bool ncr_unicode_case_map(UChar **output, int32_t *output_length, const U
     *output_length = written;
     return true;
 }
+/* NACRE_UNICODE_END CASE_MAP_HELPER */
 
+/* NACRE_UNICODE_BEGIN FOLD_HELPER */
 static bool ncr_unicode_fold(UChar **output, int32_t *output_length, const UChar *source, int32_t source_length, size_t line, size_t column) {
     static const UChar empty_source[1] = { 0 };
     UChar empty_output[1] = { 0 };
@@ -156,7 +175,9 @@ static bool ncr_unicode_fold(UChar **output, int32_t *output_length, const UChar
     *output_length = written;
     return true;
 }
+/* NACRE_UNICODE_END FOLD_HELPER */
 
+/* NACRE_UNICODE_BEGIN NORMALIZE_HELPER */
 static bool ncr_unicode_normalize(UChar **output, int32_t *output_length, const UNormalizer2 *normalizer, const UChar *source, int32_t source_length, size_t line, size_t column) {
     static const UChar empty_source[1] = { 0 };
     UChar empty_output[1] = { 0 };
@@ -179,14 +200,18 @@ static bool ncr_unicode_normalize(UChar **output, int32_t *output_length, const 
     *output_length = written;
     return true;
 }
+/* NACRE_UNICODE_END NORMALIZE_HELPER */
 
+/* NACRE_UNICODE_BEGIN MAKE_TEXT */
 static ncr_obj_@TEXT_ID@ *ncr_unicode_make_text(const UChar *source, int32_t source_length, size_t line, size_t column) {
     unsigned char *bytes = NULL;
     int32_t byte_length = 0;
     if (!ncr_unicode_utf16_to_utf8(source, source_length, &bytes, &byte_length, line, column)) { return NULL; }
     return ncr_text_take_bytes_@TEXT_ID@(bytes, (size_t)byte_length, (size_t)byte_length, line, column);
 }
+/* NACRE_UNICODE_END MAKE_TEXT */
 
+/* NACRE_UNICODE_BEGIN LOCALE */
 static bool ncr_unicode_locale(ncr_obj_@TEXT_ID@ *locale, char output[ULOC_FULLNAME_CAPACITY]) {
     if (locale == NULL || locale->length < 0) { return false; }
     if (locale->length == 0) {
@@ -215,21 +240,82 @@ static bool ncr_unicode_locale(ncr_obj_@TEXT_ID@ *locale, char output[ULOC_FULLN
         memcpy(output, "root", sizeof("root"));
         return true;
     }
-    if (strcmp(locale_id, "root") == 0 || locale_id[0] == '\0') {
-        memcpy(output, "root", sizeof("root"));
-        return true;
-    }
+
+    char base[ULOC_FULLNAME_CAPACITY];
+    status = U_ZERO_ERROR;
+    int32_t base_length = uloc_getBaseName(locale_id, base, ULOC_FULLNAME_CAPACITY, &status);
+    if (U_FAILURE(status) || base_length < 0 || base_length >= ULOC_FULLNAME_CAPACITY) { return false; }
+    base[base_length] = '\0';
+    bool base_is_root = base_length == 0 || strcmp(base, "root") == 0;
+    const char *base_locale = base_is_root ? "root" : base;
     bool available = false;
     int32_t available_count = uloc_countAvailable();
+    if (available_count < 0) { return false; }
     for (int32_t i = 0; i < available_count; ++i) {
         const char *candidate = uloc_getAvailable(i);
-        if (candidate != NULL && strcmp(candidate, locale_id) == 0) { available = true; break; }
+        if (candidate == NULL) { return false; }
+        char candidate_base[ULOC_FULLNAME_CAPACITY];
+        status = U_ZERO_ERROR;
+        int32_t candidate_length = uloc_getBaseName(candidate, candidate_base, ULOC_FULLNAME_CAPACITY, &status);
+        if (U_FAILURE(status) || candidate_length < 0 || candidate_length >= ULOC_FULLNAME_CAPACITY) { return false; }
+        candidate_base[candidate_length] = '\0';
+        bool candidate_is_root = candidate_length == 0 || strcmp(candidate_base, "root") == 0;
+        if ((base_is_root && candidate_is_root) || strcmp(base, candidate_base) == 0) {
+            available = true;
+            break;
+        }
     }
     if (!available) { return false; }
+
+    char collation[ULOC_FULLNAME_CAPACITY];
+    status = U_ZERO_ERROR;
+    int32_t collation_length = uloc_getKeywordValue(locale_id, "collation", collation, ULOC_FULLNAME_CAPACITY, &status);
+    if (U_FAILURE(status) || collation_length < 0 || collation_length >= ULOC_FULLNAME_CAPACITY) { return false; }
+    if (collation_length > 0) {
+        collation[collation_length] = '\0';
+        status = U_ZERO_ERROR;
+        UEnumeration *values = ucol_getKeywordValuesForLocale("collation", base_locale, false, &status);
+        if (U_FAILURE(status) || values == NULL) {
+            if (values != NULL) { uenum_close(values); }
+            return false;
+        }
+        bool collation_available = false;
+        for (;;) {
+            int32_t value_length = 0;
+            status = U_ZERO_ERROR;
+            const char *value = uenum_next(values, &value_length, &status);
+            if (U_FAILURE(status)) {
+                uenum_close(values);
+                return false;
+            }
+            if (value == NULL) { break; }
+            if (value_length == collation_length && memcmp(value, collation, (size_t)collation_length) == 0) {
+                collation_available = true;
+                break;
+            }
+        }
+        uenum_close(values);
+        if (!collation_available) { return false; }
+    }
+
+    char numbering[ULOC_FULLNAME_CAPACITY];
+    status = U_ZERO_ERROR;
+    int32_t numbering_length = uloc_getKeywordValue(locale_id, "numbers", numbering, ULOC_FULLNAME_CAPACITY, &status);
+    if (U_FAILURE(status) || numbering_length < 0 || numbering_length >= ULOC_FULLNAME_CAPACITY) { return false; }
+    if (numbering_length > 0) {
+        UNumberingSystem *system = unumsys_open(locale_id, &status);
+        if (U_FAILURE(status) || system == NULL) {
+            if (system != NULL) { unumsys_close(system); }
+            return false;
+        }
+        unumsys_close(system);
+    }
     memcpy(output, locale_id, (size_t)locale_length + 1);
     return true;
 }
+/* NACRE_UNICODE_END LOCALE */
 
+/* NACRE_UNICODE_BEGIN ASCII_EQUAL */
 static bool ncr_unicode_ascii_equal(const ncr_obj_@TEXT_ID@ *text, const char *name) {
     if (text == NULL || text->length < 0) { return false; }
     size_t length = strlen(name);
@@ -244,7 +330,9 @@ static bool ncr_unicode_ascii_equal(const ncr_obj_@TEXT_ID@ *text, const char *n
     }
     return true;
 }
+/* NACRE_UNICODE_END ASCII_EQUAL */
 
+/* NACRE_UNICODE_BEGIN CHARSET_NAME */
 static const char *ncr_unicode_charset(const ncr_obj_@TEXT_ID@ *name) {
     if (ncr_unicode_ascii_equal(name, "UTF-8")) { return "UTF-8"; }
     if (ncr_unicode_ascii_equal(name, "UTF-16LE")) { return "UTF-16LE"; }
@@ -275,37 +363,57 @@ static UConverter *ncr_unicode_open_converter(const char *name) {
     if (U_FAILURE(status)) { ucnv_close(converter); return NULL; }
     return converter;
 }
+/* NACRE_UNICODE_END CHARSET_NAME */
 
+/* NACRE_UNICODE_BEGIN CHARACTER_IS_LETTER */
 static bool @CHARACTER_IS_LETTER@(uint32_t ncr_v_@CHAR_LETTER@, size_t ncr_line, size_t ncr_column) {
     (void)ncr_line; (void)ncr_column; return u_isalpha((UChar32)ncr_v_@CHAR_LETTER@);
 }
+/* NACRE_UNICODE_END CHARACTER_IS_LETTER */
+/* NACRE_UNICODE_BEGIN CHARACTER_IS_DIGIT */
 static bool @CHARACTER_IS_DIGIT@(uint32_t ncr_v_@CHAR_DIGIT@, size_t ncr_line, size_t ncr_column) {
     (void)ncr_line; (void)ncr_column; return u_isdigit((UChar32)ncr_v_@CHAR_DIGIT@);
 }
+/* NACRE_UNICODE_END CHARACTER_IS_DIGIT */
+/* NACRE_UNICODE_BEGIN CHARACTER_IS_WHITESPACE */
 static bool @CHARACTER_IS_WHITESPACE@(uint32_t ncr_v_@CHAR_WHITESPACE@, size_t ncr_line, size_t ncr_column) {
     (void)ncr_line; (void)ncr_column; return u_isUWhiteSpace((UChar32)ncr_v_@CHAR_WHITESPACE@);
 }
+/* NACRE_UNICODE_END CHARACTER_IS_WHITESPACE */
+/* NACRE_UNICODE_BEGIN CHARACTER_IS_UPPER_CASE */
 static bool @CHARACTER_IS_UPPER_CASE@(uint32_t ncr_v_@CHAR_UPPER@, size_t ncr_line, size_t ncr_column) {
     (void)ncr_line; (void)ncr_column; return u_isupper((UChar32)ncr_v_@CHAR_UPPER@);
 }
+/* NACRE_UNICODE_END CHARACTER_IS_UPPER_CASE */
+/* NACRE_UNICODE_BEGIN CHARACTER_IS_LOWER_CASE */
 static bool @CHARACTER_IS_LOWER_CASE@(uint32_t ncr_v_@CHAR_LOWER@, size_t ncr_line, size_t ncr_column) {
     (void)ncr_line; (void)ncr_column; return u_islower((UChar32)ncr_v_@CHAR_LOWER@);
 }
+/* NACRE_UNICODE_END CHARACTER_IS_LOWER_CASE */
+/* NACRE_UNICODE_BEGIN CHARACTER_TO_UPPER_CASE */
 static uint32_t @CHARACTER_TO_UPPER_CASE@(uint32_t ncr_v_@CHAR_TO_UPPER@, size_t ncr_line, size_t ncr_column) {
     (void)ncr_line; (void)ncr_column; return (uint32_t)u_toupper((UChar32)ncr_v_@CHAR_TO_UPPER@);
 }
+/* NACRE_UNICODE_END CHARACTER_TO_UPPER_CASE */
+/* NACRE_UNICODE_BEGIN CHARACTER_TO_LOWER_CASE */
 static uint32_t @CHARACTER_TO_LOWER_CASE@(uint32_t ncr_v_@CHAR_TO_LOWER@, size_t ncr_line, size_t ncr_column) {
     (void)ncr_line; (void)ncr_column; return (uint32_t)u_tolower((UChar32)ncr_v_@CHAR_TO_LOWER@);
 }
+/* NACRE_UNICODE_END CHARACTER_TO_LOWER_CASE */
+/* NACRE_UNICODE_BEGIN CHARACTER_CATEGORY */
 static int32_t @CHARACTER_CATEGORY@(uint32_t ncr_v_@CHAR_CATEGORY@, size_t ncr_line, size_t ncr_column) {
     (void)ncr_line; (void)ncr_column; return (int32_t)u_charType((UChar32)ncr_v_@CHAR_CATEGORY@);
 }
+/* NACRE_UNICODE_END CHARACTER_CATEGORY */
+/* NACRE_UNICODE_BEGIN CHARACTER_NUMERIC_VALUE */
 static double @CHARACTER_NUMERIC_VALUE@(uint32_t ncr_v_@CHAR_NUMERIC@, size_t ncr_line, size_t ncr_column) {
     (void)ncr_line; (void)ncr_column;
     double value = u_getNumericValue((UChar32)ncr_v_@CHAR_NUMERIC@);
     return value == U_NO_NUMERIC_VALUE ? -1.0 : value;
 }
+/* NACRE_UNICODE_END CHARACTER_NUMERIC_VALUE */
 
+/* NACRE_UNICODE_BEGIN UNICODE_TO_UPPER_CASE */
 static ncr_obj_@UPPER_RESULT@ @UNICODE_TO_UPPER_CASE@(ncr_obj_@TEXT_ID@ *ncr_v_@UPPER_TEXT@, ncr_obj_@TEXT_ID@ *ncr_v_@UPPER_LOCALE@, size_t ncr_line, size_t ncr_column) {
     char locale[ULOC_FULLNAME_CAPACITY];
     if (!ncr_unicode_locale(ncr_v_@UPPER_LOCALE@, locale)) {
@@ -324,7 +432,9 @@ static ncr_obj_@UPPER_RESULT@ @UNICODE_TO_UPPER_CASE@(ncr_obj_@TEXT_ID@ *ncr_v_@
     if (result == NULL) { return ncr_result_error_@UPPER_RESULT@("Unicode uppercase output is invalid", sizeof("Unicode uppercase output is invalid") - 1, ncr_line, ncr_column); }
     return (ncr_obj_@UPPER_RESULT@){ .tag = @UPPER_OK@, .data.v@UPPER_OK@.f0 = result };
 }
+/* NACRE_UNICODE_END UNICODE_TO_UPPER_CASE */
 
+/* NACRE_UNICODE_BEGIN UNICODE_TO_LOWER_CASE */
 static ncr_obj_@LOWER_RESULT@ @UNICODE_TO_LOWER_CASE@(ncr_obj_@TEXT_ID@ *ncr_v_@LOWER_TEXT@, ncr_obj_@TEXT_ID@ *ncr_v_@LOWER_LOCALE@, size_t ncr_line, size_t ncr_column) {
     char locale[ULOC_FULLNAME_CAPACITY];
     if (!ncr_unicode_locale(ncr_v_@LOWER_LOCALE@, locale)) {
@@ -343,7 +453,9 @@ static ncr_obj_@LOWER_RESULT@ @UNICODE_TO_LOWER_CASE@(ncr_obj_@TEXT_ID@ *ncr_v_@
     if (result == NULL) { return ncr_result_error_@LOWER_RESULT@("Unicode lowercase output is invalid", sizeof("Unicode lowercase output is invalid") - 1, ncr_line, ncr_column); }
     return (ncr_obj_@LOWER_RESULT@){ .tag = @LOWER_OK@, .data.v@LOWER_OK@.f0 = result };
 }
+/* NACRE_UNICODE_END UNICODE_TO_LOWER_CASE */
 
+/* NACRE_UNICODE_BEGIN UNICODE_CASE_FOLD */
 static ncr_obj_@FOLD_RESULT@ @UNICODE_CASE_FOLD@(ncr_obj_@TEXT_ID@ *ncr_v_@FOLD_TEXT@, size_t ncr_line, size_t ncr_column) {
     UChar *source = NULL; int32_t source_length = 0;
     if (!ncr_unicode_text_to_utf16(ncr_v_@FOLD_TEXT@, &source, &source_length, ncr_line, ncr_column)) {
@@ -358,7 +470,9 @@ static ncr_obj_@FOLD_RESULT@ @UNICODE_CASE_FOLD@(ncr_obj_@TEXT_ID@ *ncr_v_@FOLD_
     if (result == NULL) { return ncr_result_error_@FOLD_RESULT@("Unicode case-fold output is invalid", sizeof("Unicode case-fold output is invalid") - 1, ncr_line, ncr_column); }
     return (ncr_obj_@FOLD_RESULT@){ .tag = @FOLD_OK@, .data.v@FOLD_OK@.f0 = result };
 }
+/* NACRE_UNICODE_END UNICODE_CASE_FOLD */
 
+/* NACRE_UNICODE_BEGIN UNICODE_NORMALIZE */
 static ncr_obj_@NORMALIZE_RESULT@ @UNICODE_NORMALIZE@(ncr_obj_@TEXT_ID@ *ncr_v_@NORMALIZE_TEXT@, ncr_obj_@TEXT_ID@ *ncr_v_@NORMALIZE_FORM@, size_t ncr_line, size_t ncr_column) {
     const UNormalizer2 *normalizer = NULL;
     UErrorCode status = U_ZERO_ERROR;
@@ -384,7 +498,9 @@ static ncr_obj_@NORMALIZE_RESULT@ @UNICODE_NORMALIZE@(ncr_obj_@TEXT_ID@ *ncr_v_@
     if (result == NULL) { return ncr_result_error_@NORMALIZE_RESULT@("Unicode normalization output is invalid", sizeof("Unicode normalization output is invalid") - 1, ncr_line, ncr_column); }
     return (ncr_obj_@NORMALIZE_RESULT@){ .tag = @NORMALIZE_OK@, .data.v@NORMALIZE_OK@.f0 = result };
 }
+/* NACRE_UNICODE_END UNICODE_NORMALIZE */
 
+/* NACRE_UNICODE_BEGIN UNICODE_GRAPHEME_COUNT */
 static ncr_obj_@COUNT_RESULT@ @UNICODE_GRAPHEME_COUNT@(ncr_obj_@TEXT_ID@ *ncr_v_@COUNT_TEXT@, size_t ncr_line, size_t ncr_column) {
     UChar *source = NULL; int32_t source_length = 0;
     if (!ncr_unicode_text_to_utf16(ncr_v_@COUNT_TEXT@, &source, &source_length, ncr_line, ncr_column)) {
@@ -412,7 +528,9 @@ static ncr_obj_@COUNT_RESULT@ @UNICODE_GRAPHEME_COUNT@(ncr_obj_@TEXT_ID@ *ncr_v_
     if (source != NULL) { ncr_deallocate(source); }
     return (ncr_obj_@COUNT_RESULT@){ .tag = @COUNT_OK@, .data.v@COUNT_OK@.f0 = count };
 }
+/* NACRE_UNICODE_END UNICODE_GRAPHEME_COUNT */
 
+/* NACRE_UNICODE_BEGIN UNICODE_GRAPHEME_AT */
 static ncr_obj_@AT_RESULT@ @UNICODE_GRAPHEME_AT@(ncr_obj_@TEXT_ID@ *ncr_v_@AT_TEXT@, int32_t ncr_v_@AT_INDEX@, size_t ncr_line, size_t ncr_column) {
     if (ncr_v_@AT_INDEX@ < 0) {
         return ncr_result_error_@AT_RESULT@("grapheme index out of bounds", sizeof("grapheme index out of bounds") - 1, ncr_line, ncr_column);
@@ -453,7 +571,9 @@ static ncr_obj_@AT_RESULT@ @UNICODE_GRAPHEME_AT@(ncr_obj_@TEXT_ID@ *ncr_v_@AT_TE
     ncr_obj_@TEXT_ID@ *result = ncr_text_take_bytes_@TEXT_ID@(bytes, (size_t)byte_length, (size_t)byte_length, ncr_line, ncr_column);
     return (ncr_obj_@AT_RESULT@){ .tag = @AT_OK@, .data.v@AT_OK@.f0 = result };
 }
+/* NACRE_UNICODE_END UNICODE_GRAPHEME_AT */
 
+/* NACRE_UNICODE_BEGIN UNICODE_COMPARE_LOCALE */
 static ncr_obj_@COMPARE_RESULT@ @UNICODE_COMPARE_LOCALE@(ncr_obj_@TEXT_ID@ *ncr_v_@COMPARE_LEFT@, ncr_obj_@TEXT_ID@ *ncr_v_@COMPARE_RIGHT@, ncr_obj_@TEXT_ID@ *ncr_v_@COMPARE_LOCALE@, size_t ncr_line, size_t ncr_column) {
     char locale[ULOC_FULLNAME_CAPACITY];
     if (!ncr_unicode_locale(ncr_v_@COMPARE_LOCALE@, locale)) {
@@ -485,7 +605,9 @@ static ncr_obj_@COMPARE_RESULT@ @UNICODE_COMPARE_LOCALE@(ncr_obj_@TEXT_ID@ *ncr_
     int32_t sign = comparison < 0 ? -1 : comparison > 0 ? 1 : 0;
     return (ncr_obj_@COMPARE_RESULT@){ .tag = @COMPARE_OK@, .data.v@COMPARE_OK@.f0 = sign };
 }
+/* NACRE_UNICODE_END UNICODE_COMPARE_LOCALE */
 
+/* NACRE_UNICODE_BEGIN CHARSET_ENCODE */
 static ncr_obj_@ENCODE_RESULT@ @CHARSET_ENCODE@(ncr_obj_@TEXT_ID@ *ncr_v_@ENCODE_TEXT@, ncr_obj_@TEXT_ID@ *ncr_v_@ENCODE_CHARSET@, size_t ncr_line, size_t ncr_column) {
     const char *name = ncr_unicode_charset(ncr_v_@ENCODE_CHARSET@);
     if (name == NULL) {
@@ -514,7 +636,9 @@ static ncr_obj_@ENCODE_RESULT@ @CHARSET_ENCODE@(ncr_obj_@TEXT_ID@ *ncr_v_@ENCODE
     buffer->capacity = byte_length == 0 ? 0 : (size_t)byte_length + 1;
     return (ncr_obj_@ENCODE_RESULT@){ .tag = @ENCODE_OK@, .data.v@ENCODE_OK@.f0 = buffer };
 }
+/* NACRE_UNICODE_END CHARSET_ENCODE */
 
+/* NACRE_UNICODE_BEGIN CHARSET_DECODE */
 static ncr_obj_@DECODE_RESULT@ @CHARSET_DECODE@(ncr_obj_@BUFFER_ID@ *ncr_v_@DECODE_BUFFER@, ncr_obj_@TEXT_ID@ *ncr_v_@DECODE_CHARSET@, size_t ncr_line, size_t ncr_column) {
     const char *name = ncr_unicode_charset(ncr_v_@DECODE_CHARSET@);
     if (name == NULL) {
@@ -545,3 +669,4 @@ static ncr_obj_@DECODE_RESULT@ @CHARSET_DECODE@(ncr_obj_@BUFFER_ID@ *ncr_v_@DECO
     ncr_obj_@TEXT_ID@ *text = ncr_text_take_bytes_@TEXT_ID@(utf8, (size_t)utf8_length, (size_t)utf8_length, ncr_line, ncr_column);
     return (ncr_obj_@DECODE_RESULT@){ .tag = @DECODE_OK@, .data.v@DECODE_OK@.f0 = text };
 }
+/* NACRE_UNICODE_END CHARSET_DECODE */

@@ -1,3 +1,4 @@
+/* NACRE_LOCALE_BEGIN AVAILABLE */
 static @LIST_TYPE@ @LOCALE_AVAILABLE@(size_t ncr_line, size_t ncr_column) {
     @LIST_TYPE@ locales = ncr_allocate(sizeof(*locales), ncr_line, ncr_column);
     @LIST_NEW@(locales, ncr_line, ncr_column);
@@ -39,7 +40,9 @@ static @LIST_TYPE@ @LOCALE_AVAILABLE@(size_t ncr_line, size_t ncr_column) {
     }
     return locales;
 }
+/* NACRE_LOCALE_END AVAILABLE */
 
+/* NACRE_LOCALE_BEGIN OPEN_DECIMAL */
 static bool ncr_locale_open_decimal(ncr_obj_@TEXT_ID@ *pattern, ncr_obj_@TEXT_ID@ *locale, UNumberFormat **output, size_t line, size_t column) {
     *output = NULL;
     if (pattern == NULL || pattern->length <= 0 || memchr(pattern->bytes, 0, (size_t)pattern->length) != NULL) { return false; }
@@ -61,7 +64,9 @@ static bool ncr_locale_open_decimal(ncr_obj_@TEXT_ID@ *pattern, ncr_obj_@TEXT_ID
     *output = format;
     return true;
 }
+/* NACRE_LOCALE_END OPEN_DECIMAL */
 
+/* NACRE_LOCALE_BEGIN CURRENCY */
 static bool ncr_locale_currency_code(ncr_obj_@TEXT_ID@ *text, UChar code[4]) {
     if (text == NULL || text->length != 3) { return false; }
     for (int32_t index = 0; index < 3; ++index) {
@@ -93,7 +98,9 @@ static bool ncr_locale_open_currency(ncr_obj_@TEXT_ID@ *currency_text, ncr_obj_@
     *output = format;
     return true;
 }
+/* NACRE_LOCALE_END CURRENCY */
 
+/* NACRE_LOCALE_BEGIN FORMAT_DOUBLE */
 static bool ncr_locale_format_double(const UNumberFormat *format, double value, UChar **output, int32_t *output_length, size_t line, size_t column) {
     *output = NULL;
     *output_length = 0;
@@ -109,7 +116,9 @@ static bool ncr_locale_format_double(const UNumberFormat *format, double value, 
     *output_length = written;
     return true;
 }
+/* NACRE_LOCALE_END FORMAT_DOUBLE */
 
+/* NACRE_LOCALE_BEGIN FORMAT_DECIMAL */
 static bool ncr_locale_format_decimal(const UNumberFormat *format, const char *decimal, int32_t decimal_length, UChar **output, int32_t *output_length, size_t line, size_t column) {
     *output = NULL;
     *output_length = 0;
@@ -125,7 +134,9 @@ static bool ncr_locale_format_decimal(const UNumberFormat *format, const char *d
     *output_length = written;
     return true;
 }
+/* NACRE_LOCALE_END FORMAT_DECIMAL */
 
+/* NACRE_LOCALE_BEGIN EXACT_DECIMAL */
 static bool ncr_locale_exact_decimal(ncr_obj_@TEXT_ID@ *text) {
     if (text == NULL || text->length <= 0) { return false; }
     for (int32_t index = 0; index < text->length; ++index) {
@@ -133,7 +144,9 @@ static bool ncr_locale_exact_decimal(ncr_obj_@TEXT_ID@ *text) {
     }
     return true;
 }
+/* NACRE_LOCALE_END EXACT_DECIMAL */
 
+/* NACRE_LOCALE_BEGIN FORMAT_NUMBER */
 static ncr_obj_@FORMAT_NUMBER_RESULT@ @LOCALE_FORMAT_NUMBER@(double ncr_v_@FORMAT_NUMBER_VALUE@, ncr_obj_@TEXT_ID@ *ncr_v_@FORMAT_NUMBER_PATTERN@, ncr_obj_@TEXT_ID@ *ncr_v_@FORMAT_NUMBER_LOCALE@, size_t ncr_line, size_t ncr_column) {
     UNumberFormat *format = NULL;
     if (!ncr_locale_open_decimal(ncr_v_@FORMAT_NUMBER_PATTERN@, ncr_v_@FORMAT_NUMBER_LOCALE@, &format, ncr_line, ncr_column)) {
@@ -148,7 +161,9 @@ static ncr_obj_@FORMAT_NUMBER_RESULT@ @LOCALE_FORMAT_NUMBER@(double ncr_v_@FORMA
     if (text == NULL) { return ncr_result_error_@FORMAT_NUMBER_RESULT@("formatted number is not valid Unicode", sizeof("formatted number is not valid Unicode") - 1, ncr_line, ncr_column); }
     return (ncr_obj_@FORMAT_NUMBER_RESULT@){ .tag = @FORMAT_NUMBER_OK@, .data.v@FORMAT_NUMBER_OK@.f0 = text };
 }
+/* NACRE_LOCALE_END FORMAT_NUMBER */
 
+/* NACRE_LOCALE_BEGIN FORMAT_DECIMAL_API */
 static ncr_obj_@FORMAT_DECIMAL_RESULT@ @LOCALE_FORMAT_DECIMAL@(ncr_obj_@TEXT_ID@ *ncr_v_@FORMAT_DECIMAL_VALUE@, ncr_obj_@TEXT_ID@ *ncr_v_@FORMAT_DECIMAL_PATTERN@, ncr_obj_@TEXT_ID@ *ncr_v_@FORMAT_DECIMAL_LOCALE@, size_t ncr_line, size_t ncr_column) {
     if (!ncr_locale_exact_decimal(ncr_v_@FORMAT_DECIMAL_VALUE@)) {
         return ncr_result_error_@FORMAT_DECIMAL_RESULT@("exact decimal must be nonempty ASCII numeric text without NUL", sizeof("exact decimal must be nonempty ASCII numeric text without NUL") - 1, ncr_line, ncr_column);
@@ -167,7 +182,9 @@ static ncr_obj_@FORMAT_DECIMAL_RESULT@ @LOCALE_FORMAT_DECIMAL@(ncr_obj_@TEXT_ID@
     if (text == NULL) { return ncr_result_error_@FORMAT_DECIMAL_RESULT@("formatted decimal is not valid Unicode", sizeof("formatted decimal is not valid Unicode") - 1, ncr_line, ncr_column); }
     return (ncr_obj_@FORMAT_DECIMAL_RESULT@){ .tag = @FORMAT_DECIMAL_OK@, .data.v@FORMAT_DECIMAL_OK@.f0 = text };
 }
+/* NACRE_LOCALE_END FORMAT_DECIMAL_API */
 
+/* NACRE_LOCALE_BEGIN PARSE_NUMBER */
 static ncr_obj_@PARSE_NUMBER_RESULT@ @LOCALE_PARSE_NUMBER@(ncr_obj_@TEXT_ID@ *ncr_v_@PARSE_NUMBER_VALUE@, ncr_obj_@TEXT_ID@ *ncr_v_@PARSE_NUMBER_PATTERN@, ncr_obj_@TEXT_ID@ *ncr_v_@PARSE_NUMBER_LOCALE@, size_t ncr_line, size_t ncr_column) {
     if (ncr_v_@PARSE_NUMBER_VALUE@ == NULL || ncr_v_@PARSE_NUMBER_VALUE@->length < 0 ||
         memchr(ncr_v_@PARSE_NUMBER_VALUE@->bytes, 0, (size_t)ncr_v_@PARSE_NUMBER_VALUE@->length) != NULL) {
@@ -193,7 +210,9 @@ static ncr_obj_@PARSE_NUMBER_RESULT@ @LOCALE_PARSE_NUMBER@(ncr_obj_@TEXT_ID@ *nc
     }
     return (ncr_obj_@PARSE_NUMBER_RESULT@){ .tag = @PARSE_NUMBER_OK@, .data.v@PARSE_NUMBER_OK@.f0 = number };
 }
+/* NACRE_LOCALE_END PARSE_NUMBER */
 
+/* NACRE_LOCALE_BEGIN FORMAT_CURRENCY */
 static ncr_obj_@FORMAT_CURRENCY_RESULT@ @LOCALE_FORMAT_CURRENCY@(double ncr_v_@FORMAT_CURRENCY_VALUE@, ncr_obj_@TEXT_ID@ *ncr_v_@FORMAT_CURRENCY_CODE@, ncr_obj_@TEXT_ID@ *ncr_v_@FORMAT_CURRENCY_LOCALE@, size_t ncr_line, size_t ncr_column) {
     UNumberFormat *format = NULL;
     if (!ncr_locale_open_currency(ncr_v_@FORMAT_CURRENCY_CODE@, ncr_v_@FORMAT_CURRENCY_LOCALE@, &format)) {
@@ -208,3 +227,4 @@ static ncr_obj_@FORMAT_CURRENCY_RESULT@ @LOCALE_FORMAT_CURRENCY@(double ncr_v_@F
     if (text == NULL) { return ncr_result_error_@FORMAT_CURRENCY_RESULT@("formatted currency is not valid Unicode", sizeof("formatted currency is not valid Unicode") - 1, ncr_line, ncr_column); }
     return (ncr_obj_@FORMAT_CURRENCY_RESULT@){ .tag = @FORMAT_CURRENCY_OK@, .data.v@FORMAT_CURRENCY_OK@.f0 = text };
 }
+/* NACRE_LOCALE_END FORMAT_CURRENCY */

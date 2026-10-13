@@ -239,7 +239,9 @@ collation.
 
 Locale arguments accept canonical BCP-47 tags supported by ICU. The empty locale
 selects ICU root explicitly. Malformed, noncanonical, or unavailable locales
-return `Err`; they never use the process default or silently fall back.
+return `Err`; they never use the process default or silently fall back. Unicode
+extension keywords are preserved for ICU services: `u-co-...` selects collation
+and `u-nu-...` selects the numbering system. Unsupported values return `Err`.
 
 `Character` exposes ICU Unicode scalar properties and simple, non-expanding
 single-character mappings:
@@ -412,7 +414,9 @@ operations remain unsupported; gzip is not a ZIP substitute.
 `Locale.available()` returns the ICU-installed locales as canonical BCP-47
 `Text` tags (including `und` for root). Locale arguments use the same rules as
 `Unicode`: empty selects ICU root; malformed, noncanonical, or unavailable tags
-return `Err`, with no process-default locale or fallback.
+return `Err`, with no process-default locale or fallback. `u-co-...` and
+`u-nu-...` extensions configure collation and numbering respectively; unsupported
+values return `Err`.
 
 ```java
 static List<Text> available()

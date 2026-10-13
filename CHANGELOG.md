@@ -38,8 +38,9 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   gzip is not presented as ZIP compatibility.
 - Optional ICU-backed Unicode text transforms, grapheme boundaries, locale collation,
   Unicode scalar properties, strict charset conversion, and locale-aware number
-  formatting use explicit root/BCP-47 locale rules and preserve affine ownership.
-  Ordinary Text operations remain usable without ICU.
+  formatting use explicit root/BCP-47 locale rules, preserve supported Unicode
+  collation/numbering extensions, and preserve affine ownership. Ordinary Text
+  operations remain usable without ICU.
 - Floating min/max normalize signed-zero ties explicitly rather than relying on
   host libm's unspecified tie sign; both operand orders and same-sign zeros are
   covered by generated-program sanitizer regressions.
