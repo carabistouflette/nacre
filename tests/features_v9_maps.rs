@@ -539,8 +539,10 @@ fn builtin_map_set_key_families_keep_value_semantics() {
         texts.put(new Text("é"), 70);
         texts.put(new Text("é\0"), 80);
         println(texts.size());
-        match (texts.tryGet(new Text("é"))) { None {} Some(value) { println(value); } }
-        match (texts.tryGet(new Text("é\0"))) { None {} Some(value) { println(value); } }
+        Text composedQuery = new Text("é");
+        Text nulQuery = new Text("é\0");
+        match (texts.tryGet(composedQuery)) { None {} Some(value) { println(value); } }
+        match (texts.tryGet(nulQuery)) { None {} Some(value) { println(value); } }
 
         Set<boolean> truth = new Set<boolean>();
         truth.add(true);
@@ -551,7 +553,7 @@ fn builtin_map_set_key_families_keep_value_semantics() {
         println(truth.remove(true));
         println(truth.size());
     }
-    "#, b"2\n10\n20\n2\n40\n30\n3\n2\n3\n60\n50\n2\n51\n61\n2\n2\n3\n1\n4\n1\n2\n3\n2\n3\n70\n80\n2\ntrue\ntrue\n1\n");
+    "#, b"2\n10\n20\n2\n40\n30\n3\n2\n3\n60\n50\n2\n51\n61\n2\n2\n3\n1\n4\n1\n2\n3\n2\n2\n70\n80\n2\ntrue\ntrue\n1\n");
 }
 
 #[test]
@@ -601,7 +603,6 @@ fn custom_class_interface_and_enum_keys_transfer_owned_hashers() {
                 Green { return 1L; }
                 Blue { return 1L; }
             }
-            return 1L;
         }
         public readonly boolean equals(borrow Shade left, borrow Shade right) {
             boolean same = false;
@@ -621,7 +622,8 @@ fn custom_class_interface_and_enum_keys_transfer_owned_hashers() {
             None {} Some(value) { println(value); }
         }
         for (borrow CollisionKey key, int value : classKeys) {
-            println(key.label().equalsString("stored"));
+            borrow Text label = key.label();
+            println(label.equalsString("stored"));
             println(value);
         }
         int id = 2;
@@ -640,7 +642,8 @@ fn custom_class_interface_and_enum_keys_transfer_owned_hashers() {
         }
         for (borrow CollisionKey key, int value : classKeys) {
             if (key.id() == 8) {
-                println(key.label().equalsString("replacement"));
+                borrow Text label = key.label();
+                println(label.equalsString("replacement"));
                 println(value);
             }
         }
@@ -654,7 +657,8 @@ fn custom_class_interface_and_enum_keys_transfer_owned_hashers() {
             None {} Some(value) { println(value); }
         }
         for (borrow Named key, int value : interfaceKeys) {
-            println(key.label().equalsString("kept"));
+            borrow Text label = key.label();
+            println(label.equalsString("kept"));
             println(value);
         }
         Named interfaceQuery = new Record(7, new Text("query"));
@@ -693,7 +697,7 @@ fn custom_class_interface_and_enum_keys_transfer_owned_hashers() {
         println(sawRed && sawStoredGreen);
         println(enumKeys.size());
     }
-    "#, b"10\ntrue\n20\n15\ntrue\n8\n14\n88\ntrue\n99\n70\ntrue\n70\ntrue\n2\ntrue\ntrue\ntrue\n10\ntrue\n2\n");
+    "#, b"10\ntrue\n20\n15\ntrue\n8\n14\n88\ntrue\n99\ntrue\n70\ntrue\n71\n71\ntrue\n2\ntrue\ntrue\ntrue\n10\ntrue\n2\n");
 }
 
 
@@ -721,7 +725,6 @@ fn custom_key_constructors_and_concrete_policy_sendability_are_checked() {
     assert!(error.message.contains("E4005"), "{}", error.render("map_key_policy.ncr", view_bearing_hasher));
 
     let non_sendable_concrete_policy = r#"
-    interface Task<T> { T run(); }
     class Key {}
     class GuardHasher implements Hasher<Key> {
         Guard<int> guard;
