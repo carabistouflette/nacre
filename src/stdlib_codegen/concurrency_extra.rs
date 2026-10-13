@@ -552,8 +552,15 @@ fn synchronizer_clone(program: &t::Program, function: &t::Function) -> String {
         C::Condition(value) => mutex_class(program, value),
         _ => unit_mutex(program),
     };
+    let condition_retain = if matches!(program.classes[id].native, Some(C::Condition(_))) {
+        format!(
+            "    if (!ncr_condition_node_retain(ncr_self->condition)) {{\n        ncr_mutex_release_{control_type}(control);\n        {}\n    }}\n",
+            result_error_literal(program, function, "Condition node reference count overflow"));
+    } else {
+        String::new()
+    };
     let body = format!(
-        "    struct ncr_mutex_control_{control_type} *control = ncr_self->control;\n    if (!ncr_sync_ref_acquire(&control->references)) {{ {} }}\n    ncr_obj_{id} *handle = ncr_allocate(sizeof(*handle), ncr_line, ncr_column);\n    handle->control = control;\n    handle->condition = ncr_self->condition;\n    return {};",
+        "    struct ncr_mutex_control_{control_type} *control = ncr_self->control;\n    if (!ncr_sync_ref_acquire(&control->references)) {{ {} }}\n{condition_retain}    ncr_obj_{id} *handle = ncr_allocate(sizeof(*handle), ncr_line, ncr_column);\n    handle->control = control;\n    handle->condition = ncr_self->condition;\n    return {};",
         result_error_literal(program, function, "synchronizer handle reference count overflow"),
         result_ok(program, function, "handle"));
     method_body(program, function, body)
@@ -576,13 +583,14 @@ fn semaphore_acquire(program: &t::Program, function: &t::Function) -> String {
     let id = function.receiver.unwrap();
     let timeout = function.params[0].0;
     let body = format!(
-        "    if (ncr_v_{timeout} < 0) {{ {} }}\n    struct timespec deadline;\n    int error = 0;\n    if (ncr_v_{timeout} > 0) {{\n        error = ncr_sync_deadline_after_millis(ncr_v_{timeout}, &deadline);\n        if (error != 0) {{ {} }}\n    }}\n    struct ncr_mutex_control_{} *control = ncr_self->control;\n    error = pthread_mutex_lock(&control->mutex);\n    if (error != 0) {{ {} }}\n    struct ncr_semaphore_state_{id} *state = control->aux_payload;\n    while (state->permits == 0) {{\n        if (ncr_v_{timeout} == 0) {{\n            error = pthread_mutex_unlock(&control->mutex);\n            if (error != 0) {{ ncr_sync_fatal(\"pthread_mutex_unlock(Semaphore try acquire)\", error); }}\n            return {};\n        }}\n        error = pthread_cond_timedwait(&ncr_self->condition->condition, &control->mutex, &deadline);\n        if (error == ETIMEDOUT && state->permits == 0) {{\n            error = pthread_mutex_unlock(&control->mutex);\n            if (error != 0) {{ ncr_sync_fatal(\"pthread_mutex_unlock(Semaphore timeout)\", error); }}\n            return {};\n        }}\n        if (error != 0 && error != ETIMEDOUT) {{\n            int unlock_error = pthread_mutex_unlock(&control->mutex);\n            if (unlock_error != 0) {{ ncr_sync_fatal(\"pthread_mutex_unlock(Semaphore wait error)\", unlock_error); }}\n            {}\n        }}\n    }}\n    --state->permits;\n    error = pthread_mutex_unlock(&control->mutex);\n    if (error != 0) {{ ncr_sync_fatal(\"pthread_mutex_unlock(Semaphore acquire)\", error); }}\n    return {};",
-        result_error_literal(program, function, "timeout must be nonnegative"),
+        "    if (ncr_v_{timeout} < -1) {{ {} }}\n    struct timespec deadline;\n    int error = 0;\n    if (ncr_v_{timeout} > 0) {{\n        error = ncr_sync_deadline_after_millis(ncr_v_{timeout}, &deadline);\n        if (error != 0) {{ {} }}\n    }}\n    struct ncr_mutex_control_{} *control = ncr_self->control;\n    error = pthread_mutex_lock(&control->mutex);\n    if (error != 0) {{ {} }}\n    struct ncr_semaphore_state_{id} *state = control->aux_payload;\n    while (state->permits == 0) {{\n        if (ncr_v_{timeout} == 0) {{\n            error = pthread_mutex_unlock(&control->mutex);\n            if (error != 0) {{ ncr_sync_fatal(\"pthread_mutex_unlock(Semaphore try acquire)\", error); }}\n            return {};\n        }}\n        if (ncr_v_{timeout} == -1) {{\n            error = pthread_cond_wait(&ncr_self->condition->condition, &control->mutex);\n        }} else {{\n            error = pthread_cond_timedwait(&ncr_self->condition->condition, &control->mutex, &deadline);\n        }}\n        if (error == ETIMEDOUT && state->permits == 0) {{\n            error = pthread_mutex_unlock(&control->mutex);\n            if (error != 0) {{ ncr_sync_fatal(\"pthread_mutex_unlock(Semaphore timeout)\", error); }}\n            return {};\n        }}\n        if (error != 0 && error != ETIMEDOUT) {{\n            int unlock_error = pthread_mutex_unlock(&control->mutex);\n            if (unlock_error != 0) {{ ncr_sync_fatal(\"pthread_mutex_unlock(Semaphore wait error)\", unlock_error); }}\n            if (ncr_v_{timeout} == -1) {{ {} }} else {{ {} }}\n        }}\n    }}\n    --state->permits;\n    error = pthread_mutex_unlock(&control->mutex);\n    if (error != 0) {{ ncr_sync_fatal(\"pthread_mutex_unlock(Semaphore acquire)\", error); }}\n    return {};",
+        result_error_literal(program, function, "timeout must be -1 or nonnegative"),
         result_error_code(program, function, "monotonic deadline", "error"),
         unit_mutex(program),
         result_error_code(program, function, "pthread_mutex_lock(Semaphore acquire)", "error"),
         result_ok(program, function, "false"),
         result_ok(program, function, "false"),
+        result_error_code(program, function, "pthread_cond_wait(Semaphore acquire)", "error"),
         result_error_code(program, function, "pthread_cond_timedwait(Semaphore acquire)", "error"),
         result_ok(program, function, "true"));
     method_body(program, function, body)
@@ -630,13 +638,14 @@ fn latch_wait(program: &t::Program, function: &t::Function) -> String {
     let id = function.receiver.unwrap();
     let timeout = function.params[0].0;
     let body = format!(
-        "    if (ncr_v_{timeout} < 0) {{ {} }}\n    struct timespec deadline;\n    int error = 0;\n    if (ncr_v_{timeout} > 0) {{\n        error = ncr_sync_deadline_after_millis(ncr_v_{timeout}, &deadline);\n        if (error != 0) {{ {} }}\n    }}\n    struct ncr_mutex_control_{} *control = ncr_self->control;\n    error = pthread_mutex_lock(&control->mutex);\n    if (error != 0) {{ {} }}\n    struct ncr_latch_state_{id} *state = control->aux_payload;\n    while (state->count != 0) {{\n        if (ncr_v_{timeout} == 0) {{\n            error = pthread_mutex_unlock(&control->mutex);\n            if (error != 0) {{ ncr_sync_fatal(\"pthread_mutex_unlock(CountDownLatch try wait)\", error); }}\n            return {};\n        }}\n        error = pthread_cond_timedwait(&ncr_self->condition->condition, &control->mutex, &deadline);\n        if (error == ETIMEDOUT && state->count != 0) {{\n            error = pthread_mutex_unlock(&control->mutex);\n            if (error != 0) {{ ncr_sync_fatal(\"pthread_mutex_unlock(CountDownLatch timeout)\", error); }}\n            return {};\n        }}\n        if (error != 0 && error != ETIMEDOUT) {{\n            int unlock_error = pthread_mutex_unlock(&control->mutex);\n            if (unlock_error != 0) {{ ncr_sync_fatal(\"pthread_mutex_unlock(CountDownLatch wait error)\", unlock_error); }}\n            {}\n        }}\n    }}\n    error = pthread_mutex_unlock(&control->mutex);\n    if (error != 0) {{ ncr_sync_fatal(\"pthread_mutex_unlock(CountDownLatch wait)\", error); }}\n    return {};",
-        result_error_literal(program, function, "timeout must be nonnegative"),
+        "    if (ncr_v_{timeout} < -1) {{ {} }}\n    struct timespec deadline;\n    int error = 0;\n    if (ncr_v_{timeout} > 0) {{\n        error = ncr_sync_deadline_after_millis(ncr_v_{timeout}, &deadline);\n        if (error != 0) {{ {} }}\n    }}\n    struct ncr_mutex_control_{} *control = ncr_self->control;\n    error = pthread_mutex_lock(&control->mutex);\n    if (error != 0) {{ {} }}\n    struct ncr_latch_state_{id} *state = control->aux_payload;\n    while (state->count != 0) {{\n        if (ncr_v_{timeout} == 0) {{\n            error = pthread_mutex_unlock(&control->mutex);\n            if (error != 0) {{ ncr_sync_fatal(\"pthread_mutex_unlock(CountDownLatch try wait)\", error); }}\n            return {};\n        }}\n        if (ncr_v_{timeout} == -1) {{\n            error = pthread_cond_wait(&ncr_self->condition->condition, &control->mutex);\n        }} else {{\n            error = pthread_cond_timedwait(&ncr_self->condition->condition, &control->mutex, &deadline);\n        }}\n        if (error == ETIMEDOUT && state->count != 0) {{\n            error = pthread_mutex_unlock(&control->mutex);\n            if (error != 0) {{ ncr_sync_fatal(\"pthread_mutex_unlock(CountDownLatch timeout)\", error); }}\n            return {};\n        }}\n        if (error != 0 && error != ETIMEDOUT) {{\n            int unlock_error = pthread_mutex_unlock(&control->mutex);\n            if (unlock_error != 0) {{ ncr_sync_fatal(\"pthread_mutex_unlock(CountDownLatch wait error)\", unlock_error); }}\n            if (ncr_v_{timeout} == -1) {{ {} }} else {{ {} }}\n        }}\n    }}\n    error = pthread_mutex_unlock(&control->mutex);\n    if (error != 0) {{ ncr_sync_fatal(\"pthread_mutex_unlock(CountDownLatch wait)\", error); }}\n    return {};",
+        result_error_literal(program, function, "timeout must be -1 or nonnegative"),
         result_error_code(program, function, "monotonic deadline", "error"),
         unit_mutex(program),
         result_error_code(program, function, "pthread_mutex_lock(CountDownLatch wait)", "error"),
         result_ok(program, function, "false"),
         result_ok(program, function, "false"),
+        result_error_code(program, function, "pthread_cond_wait(CountDownLatch wait)", "error"),
         result_error_code(program, function, "pthread_cond_timedwait(CountDownLatch wait)", "error"),
         result_ok(program, function, "true"));
     method_body(program, function, body)
@@ -666,7 +675,7 @@ fn barrier_wait(program: &t::Program, function: &t::Function) -> String {
     let id = function.receiver.unwrap();
     let unit = unit_mutex(program);
     let timeout = function.params[0].0;
-    let body = format!(r#"    if (ncr_v_{timeout} < 0) {{ {negative_timeout} }}
+    let body = format!(r#"    if (ncr_v_{timeout} < -1) {{ {negative_timeout} }}
     struct timespec deadline;
     int error = 0;
     if (ncr_v_{timeout} > 0) {{
@@ -714,8 +723,12 @@ fn barrier_wait(program: &t::Program, function: &t::Function) -> String {
         {wait_timeout}
     }}
     while (!state->broken && state->generation == generation) {{
-        error = pthread_cond_timedwait(&ncr_self->condition->condition, &control->mutex, &deadline);
-        if (error == ETIMEDOUT && state->generation == generation && !state->broken) {{
+        if (ncr_v_{timeout} == -1) {{
+            error = pthread_cond_wait(&ncr_self->condition->condition, &control->mutex);
+        }} else {{
+            error = pthread_cond_timedwait(&ncr_self->condition->condition, &control->mutex, &deadline);
+        }}
+        if (ncr_v_{timeout} != -1 && error == ETIMEDOUT && state->generation == generation && !state->broken) {{
             state->broken = true;
             state->arrived = 0;
             --state->waiters;
@@ -725,7 +738,7 @@ fn barrier_wait(program: &t::Program, function: &t::Function) -> String {
             if (error != 0) {{ ncr_sync_fatal("pthread_mutex_unlock(Barrier timeout)", error); }}
             {wait_timeout}
         }}
-        if (error != 0 && error != ETIMEDOUT) {{
+        if (error != 0 && (ncr_v_{timeout} == -1 || error != ETIMEDOUT)) {{
             int wait_error = error;
             state->broken = true;
             state->arrived = 0;
@@ -735,7 +748,7 @@ fn barrier_wait(program: &t::Program, function: &t::Function) -> String {
             error = pthread_mutex_unlock(&control->mutex);
             if (error != 0) {{ ncr_sync_fatal("pthread_mutex_unlock(Barrier wait error)", error); }}
             error = wait_error;
-            {wait_error}
+            if (ncr_v_{timeout} == -1) {{ {wait_error_unbounded} }} else {{ {wait_error_timed} }}
         }}
     }}
     --state->waiters;
@@ -744,14 +757,15 @@ fn barrier_wait(program: &t::Program, function: &t::Function) -> String {
     if (error != 0) {{ ncr_sync_fatal("pthread_mutex_unlock(Barrier wait)", error); }}
     if (broken) {{ {already_broken} }}
     return {normal_arrival};"#,
-        negative_timeout = result_error_literal(program, function, "timeout must be nonnegative"),
+        negative_timeout = result_error_literal(program, function, "timeout must be -1 or nonnegative"),
         deadline_error = result_error_code(program, function, "monotonic deadline", "error"),
         lock_error = result_error_code(program, function, "pthread_mutex_lock(Barrier wait)", "error"),
         already_broken = result_error_literal(program, function, "Barrier generation is broken"),
         generation_overflow = result_error_literal(program, function, "Barrier generation overflow"),
         last_arrival = result_ok(program, function, "arrival_index"),
         wait_timeout = result_error_literal(program, function, "Barrier generation timed out"),
-        wait_error = result_error_code(program, function, "pthread_cond_timedwait(Barrier wait)", "error"),
+        wait_error_unbounded = result_error_code(program, function, "pthread_cond_wait(Barrier wait)", "error"),
+        wait_error_timed = result_error_code(program, function, "pthread_cond_timedwait(Barrier wait)", "error"),
         normal_arrival = result_ok(program, function, "arrival_index"));
     method_body(program, function, body)
 }
@@ -777,7 +791,7 @@ fn condition_create(program: &t::Program, function: &t::Function) -> String {
     let mutex = mutex_class(program, value);
     let associated = function.params[0].0;
     let body = format!(
-        "    struct ncr_mutex_control_{mutex} *control = ncr_v_{associated}->control;\n    if (!ncr_sync_ref_acquire(&control->references)) {{ {} }}\n    int error = 0;\n    struct ncr_condition_node *condition = ncr_mutex_condition_new_{mutex}(control, &error);\n    if (condition == NULL) {{\n        ncr_mutex_release_{mutex}(control);\n        {}\n    }}\n    ncr_obj_{id} *handle = ncr_allocate(sizeof(*handle), ncr_line, ncr_column);\n    handle->control = control;\n    handle->condition = condition;\n    return {};",
+        "    struct ncr_mutex_control_{mutex} *control = ncr_v_{associated}->control;\n    if (!ncr_sync_ref_acquire(&control->references)) {{ {} }}\n    int error = 0;\n    struct ncr_condition_node *condition = ncr_mutex_public_condition_new_{mutex}(&error);\n    if (condition == NULL) {{\n        ncr_mutex_release_{mutex}(control);\n        {}\n    }}\n    ncr_obj_{id} *handle = ncr_allocate(sizeof(*handle), ncr_line, ncr_column);\n    handle->control = control;\n    handle->condition = condition;\n    return {};",
         result_error_literal(program, function, "Mutex control reference count overflow"),
         result_error_code(program, function, "pthread_cond_init(Condition)", "error"),
         result_ok(program, function, "handle"));
@@ -802,9 +816,10 @@ fn condition_wait(program: &t::Program, function: &t::Function) -> String {
     let guard_arg = function.params[0].0;
     let timeout = function.params[1].0;
     let body = format!(
-        "    if (ncr_v_{timeout} < 0) {{ {} }}\n    if (!ncr_v_{guard_arg}->locked || ncr_v_{guard_arg}->control != ncr_self->control) {{ {} }}\n    struct timespec deadline;\n    int error = ncr_sync_deadline_after_millis(ncr_v_{timeout}, &deadline);\n    if (error != 0) {{ {} }}\n    struct ncr_mutex_control_{mutex} *control = ncr_self->control;\n    error = pthread_cond_timedwait(&ncr_self->condition->condition, &control->mutex, &deadline);\n    if (error == ETIMEDOUT) {{ return {}; }}\n    if (error != 0) {{ {} }}\n    return {};",
-        result_error_literal(program, function, "timeout must be nonnegative"),
+        "    if (ncr_v_{timeout} < -1) {{ {} }}\n    if (!ncr_v_{guard_arg}->locked || ncr_v_{guard_arg}->control != ncr_self->control) {{ {} }}\n    struct ncr_mutex_control_{mutex} *control = ncr_self->control;\n    int error = 0;\n    if (ncr_v_{timeout} == -1) {{\n        error = pthread_cond_wait(&ncr_self->condition->condition, &control->mutex);\n        if (error != 0) {{ {} }}\n    }} else {{\n        struct timespec deadline;\n        error = ncr_sync_deadline_after_millis(ncr_v_{timeout}, &deadline);\n        if (error != 0) {{ {} }}\n        error = pthread_cond_timedwait(&ncr_self->condition->condition, &control->mutex, &deadline);\n        if (error == ETIMEDOUT) {{ return {}; }}\n        if (error != 0) {{ {} }}\n    }}\n    return {};",
+        result_error_literal(program, function, "timeout must be -1 or nonnegative"),
         result_error_literal(program, function, "Guard does not belong to this Condition"),
+        result_error_code(program, function, "pthread_cond_wait(Condition.wait)", "error"),
         result_error_code(program, function, "monotonic deadline", "error"),
         result_ok(program, function, "false"),
         result_error_code(program, function, "pthread_cond_timedwait(Condition.wait)", "error"),
@@ -890,12 +905,13 @@ fn future_await(program: &t::Program, function: &t::Function) -> String {
     let task_ok = task_layout.ok_variant;
     let text = text_class(program);
     let body = format!(
-        "    if (ncr_v_{timeout} < 0) {{ {} }}\n    struct timespec deadline;\n    int error = 0;\n    if (ncr_v_{timeout} > 0) {{\n        error = ncr_sync_deadline_after_millis(ncr_v_{timeout}, &deadline);\n        if (error != 0) {{ {} }}\n    }}\n    struct ncr_mutex_control_{unit} *control = ncr_self->state_control;\n    error = pthread_mutex_lock(&control->mutex);\n    if (error != 0) {{ {} }}\n    struct ncr_future_state_{id} *state = control->aux_payload;\n    while (!state->done) {{\n        if (ncr_v_{timeout} == 0) {{\n            error = pthread_mutex_unlock(&control->mutex);\n            if (error != 0) {{ ncr_sync_fatal(\"pthread_mutex_unlock(Future try await)\", error); }}\n            return {};\n        }}\n        error = pthread_cond_timedwait(&ncr_self->state_condition->condition, &control->mutex, &deadline);\n        if (error == ETIMEDOUT && !state->done) {{\n            error = pthread_mutex_unlock(&control->mutex);\n            if (error != 0) {{ ncr_sync_fatal(\"pthread_mutex_unlock(Future timeout)\", error); }}\n            return {};\n        }}\n        if (error != 0 && error != ETIMEDOUT) {{\n            int unlock_error = pthread_mutex_unlock(&control->mutex);\n            if (unlock_error != 0) {{ ncr_sync_fatal(\"pthread_mutex_unlock(Future wait error)\", unlock_error); }}\n            {}\n        }}\n    }}\n    if (state->consumed) {{\n        error = pthread_mutex_unlock(&control->mutex);\n        if (error != 0) {{ ncr_sync_fatal(\"pthread_mutex_unlock(Future already consumed)\", error); }}\n        {}\n    }}\n    ncr_obj_{task_result} outcome = state->outcome;\n    state->outcome.tag = -1;\n    state->consumed = true;\n    error = pthread_mutex_unlock(&control->mutex);\n    if (error != 0) {{ ncr_sync_fatal(\"pthread_mutex_unlock(Future await)\", error); }}\n    if (outcome.tag == {task_error}) {{\n        ncr_obj_{text} *message = outcome.data.v{task_error}.f0;\n        outcome.tag = -1;\n        return (ncr_obj_{outer}){{ .tag = {outer_error}, .data.v{outer_error}.f0 = message }};\n    }}\n    {} result_value = outcome.data.v{task_ok}.f0;\n    outcome.tag = -1;\n    ncr_obj_{option} option_value = {{ .tag = {option_some}, .data.v{option_some}.f0 = result_value }};\n    return {};",
-        result_error_literal(program, function, "timeout must be nonnegative"),
+        "    if (ncr_v_{timeout} < -1) {{ {} }}\n    struct timespec deadline;\n    int error = 0;\n    if (ncr_v_{timeout} > 0) {{\n        error = ncr_sync_deadline_after_millis(ncr_v_{timeout}, &deadline);\n        if (error != 0) {{ {} }}\n    }}\n    struct ncr_mutex_control_{unit} *control = ncr_self->state_control;\n    error = pthread_mutex_lock(&control->mutex);\n    if (error != 0) {{ {} }}\n    struct ncr_future_state_{id} *state = control->aux_payload;\n    while (!state->done) {{\n        if (ncr_v_{timeout} == 0) {{\n            error = pthread_mutex_unlock(&control->mutex);\n            if (error != 0) {{ ncr_sync_fatal(\"pthread_mutex_unlock(Future try await)\", error); }}\n            return {};\n        }}\n        if (ncr_v_{timeout} == -1) {{\n            error = pthread_cond_wait(&ncr_self->state_condition->condition, &control->mutex);\n        }} else {{\n            error = pthread_cond_timedwait(&ncr_self->state_condition->condition, &control->mutex, &deadline);\n        }}\n        if (error == ETIMEDOUT && !state->done) {{\n            error = pthread_mutex_unlock(&control->mutex);\n            if (error != 0) {{ ncr_sync_fatal(\"pthread_mutex_unlock(Future timeout)\", error); }}\n            return {};\n        }}\n        if (error != 0 && error != ETIMEDOUT) {{\n            int unlock_error = pthread_mutex_unlock(&control->mutex);\n            if (unlock_error != 0) {{ ncr_sync_fatal(\"pthread_mutex_unlock(Future wait error)\", unlock_error); }}\n            if (ncr_v_{timeout} == -1) {{ {} }} else {{ {} }}\n        }}\n    }}\n    if (state->consumed) {{\n        error = pthread_mutex_unlock(&control->mutex);\n        if (error != 0) {{ ncr_sync_fatal(\"pthread_mutex_unlock(Future already consumed)\", error); }}\n        {}\n    }}\n    ncr_obj_{task_result} outcome = state->outcome;\n    state->outcome.tag = -1;\n    state->consumed = true;\n    error = pthread_mutex_unlock(&control->mutex);\n    if (error != 0) {{ ncr_sync_fatal(\"pthread_mutex_unlock(Future await)\", error); }}\n    if (outcome.tag == {task_error}) {{\n        ncr_obj_{text} *message = outcome.data.v{task_error}.f0;\n        outcome.tag = -1;\n        return (ncr_obj_{outer}){{ .tag = {outer_error}, .data.v{outer_error}.f0 = message }};\n    }}\n    {} result_value = outcome.data.v{task_ok}.f0;\n    outcome.tag = -1;\n    ncr_obj_{option} option_value = {{ .tag = {option_some}, .data.v{option_some}.f0 = result_value }};\n    return {};",
+        result_error_literal(program, function, "timeout must be -1 or nonnegative"),
         result_error_code(program, function, "monotonic deadline", "error"),
         result_error_code(program, function, "pthread_mutex_lock(Future await)", "error"),
         result_ok(program, function, &format!("(ncr_obj_{option}){{ .tag = {option_none} }}")),
         result_ok(program, function, &format!("(ncr_obj_{option}){{ .tag = {option_none} }}")),
+        result_error_code(program, function, "pthread_cond_wait(Future await)", "error"),
         result_error_code(program, function, "pthread_cond_timedwait(Future await)", "error"),
         result_error_literal(program, function, "Future result has already been taken"),
         ctype(program, value),
@@ -1209,7 +1225,7 @@ pub(super) fn drop_helpers(program: &t::Program) -> String {
             C::Condition(value) => {
                 let mutex = mutex_class(program, value);
                 out.push_str(&format!(
-                    "static void ncr_concurrency_drop_{0}(ncr_obj_{0} *p) {{ struct ncr_mutex_control_{1} *control = p->control; p->control = NULL; p->condition = NULL; if (control != NULL) {{ ncr_mutex_release_{1}(control); }} }}\n",
+                    "static void ncr_concurrency_drop_{0}(ncr_obj_{0} *p) {{ struct ncr_mutex_control_{1} *control = p->control; struct ncr_condition_node *condition = p->condition; p->control = NULL; p->condition = NULL; if (condition != NULL) {{ ncr_condition_node_release(condition); }} if (control != NULL) {{ ncr_mutex_release_{1}(control); }} }}\n",
                     class.id, mutex));
             }
             C::Future(_) => {

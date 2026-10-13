@@ -2041,38 +2041,47 @@ sequentially consistent ordering. `compareExchange(expected, desired)` returns
 the value observed before the operation, whether or not it matched `expected`.
 `cloneHandle()` explicitly shares the atomic control block.
 
-`Semaphore.create` accepts a nonnegative permit count. `acquire(timeoutMs)` returns
-`Ok(true)` after consuming a permit and `Ok(false)` when a zero or positive
-monotonic timeout expires; zero is a nonblocking attempt. `release(count)` rejects
-negative counts and reports permit overflow. `CountDownLatch` accepts a
-nonnegative count; `countDown()` saturates at zero, while `wait(timeoutMs)` has the
-same boolean timeout convention as `Semaphore.acquire`.
+`Semaphore.create` accepts a nonnegative permit count. `acquire(timeoutMs)` accepts
+`-1` for an unbounded wait, `0` for a nonblocking attempt, or a positive monotonic
+millisecond timeout; values below `-1` are errors. It returns `Ok(true)` after
+consuming a permit and `Ok(false)` when a zero poll finds none or a positive timeout expires.
+`release(count)` rejects negative counts and reports permit overflow. `CountDownLatch` accepts a
+nonnegative count; `countDown()` saturates at zero, while `wait(timeoutMs)` uses
+the same timeout and boolean result convention as `Semaphore.acquire`.
 
 `cloneHandle()` on `Semaphore`, `CountDownLatch`, and `Barrier` shares the
 control and its wait-condition node. A cloned `Condition<T>` shares its original
-condition node and retains the associated mutex control.
-Condition nodes live until the associated mutex control is released, not merely
-until an individual condition handle is dropped. Repeatedly creating conditions
-on a long-lived mutex therefore retains those nodes; reuse a condition handle
-when the wait predicate is unchanged.
+condition node and retains the associated mutex control. Condition nodes are
+released when the final `Condition<T>` handle, including clones, is dropped, even
+if the associated mutex remains alive. A `Guard<T>` independently retains the mutex
+control, so dropping the last condition handle while holding that guard does not
+reacquire the mutex. Repeated create/drop cycles therefore do not accumulate
+condition nodes. Private semaphore, latch, barrier, future, and pool nodes remain
+owned by their synchronization control.
 
-`Barrier.create` requires at least one party. Each generation returns a distinct
-arrival index. A timeout or zero-timeout arrival breaks only that generation and
-wakes its other waiters with `Err`; a successfully released generation remains
-successful for its waiters even if a later generation breaks before they resume.
-`reset()` succeeds only after the broken generation's waiters have left. A spurious
-condition wake is not a predicate result.
+`Barrier.create` requires at least one party. `wait(timeoutMs)` accepts `-1` for
+an unbounded wait, `0` for an immediate poll that breaks the incomplete generation,
+or a positive monotonic millisecond timeout; values below `-1` are errors. Each
+generation returns a distinct arrival index. A timeout or zero-timeout arrival
+breaks only that generation and wakes its other waiters with `Err`; a successfully
+released generation remains successful for its waiters even if a later generation
+breaks before they resume. `reset()` succeeds only after the broken generation's
+waiters have left. A spurious condition wake is not a predicate result.
 
 `Condition<T>` is created from a `Mutex<T>` and accepts only a `Guard<T>` belonging
-to that same mutex.
-`wait(guard, timeoutMs)` atomically releases and reacquires the guard's mutex,
+to that same mutex. `wait(guard, timeoutMs)` accepts `-1` for an unbounded wait,
+`0` for an immediate poll, or a positive monotonic millisecond timeout; values
+below `-1` are errors. It atomically releases and reacquires the guard's mutex,
 including for a zero-timeout poll; it returns `Ok(false)` on timeout and `Ok(true)`
 on any notification. Spurious notifications are possible, so always recheck the
 protected predicate while holding the guard. `signal()` and `broadcast()` do not
 acquire the mutex: update the predicate under its guard and notify before releasing
-that guard.
+that guard. Synchronizer timeout conventions intentionally differ from networking:
+here `-1` is unbounded and `0` polls, while network APIs use `0` for unbounded waits.
 Synchronization constructors and fallible operations report pthread/range errors
 as `Text`.
+
+
 
 ## Cancellation, futures, and thread pools
 
@@ -2099,10 +2108,12 @@ Result<Unit, Text> ThreadPool.shutdown(boolean drain)
 enum SubmitError<T> { Closed(CancelableTask<T>); Full(CancelableTask<T>); System(Text, CancelableTask<T>); }
 ```
 
-`Future.await` returns `Ok(None)` on a zero-timeout poll or positive monotonic
-timeout, and `Ok(Some(value))` when the task succeeds. A task's `Err(Text)` is
-returned as the future's `Err(Text)`. The affine result is transferred exactly
-once; later completed awaits return an error. Dropping a standalone future requests
+`Future.await(timeoutMs)` accepts `-1` for an unbounded wait, `0` for a nonblocking
+poll, or a positive monotonic millisecond timeout; values below `-1` are errors.
+It returns `Ok(None)` when a zero-timeout poll or positive timeout expires, and
+`Ok(Some(value))` when the task succeeds. A task's `Err(Text)` is returned as the
+future's `Err(Text)`. The affine result is transferred exactly once; later completed
+awaits return an error. Dropping a standalone future requests
 cancellation and joins its worker, so drop may block until a noncooperative task
 finishes. Dropping a pool future does not join a worker; the pool owns queued and
 running work.
@@ -2284,8 +2295,9 @@ has no timeout; socket timeouts begin only after resolution completes.
 
 Listener `bind` requires a positive backlog. `localAddress` reports an ephemeral
 port selected by the OS. TCP `connect` and listener `accept` accept zero for an
-unbounded wait, a positive monotonic millisecond timeout, and return `Err` for a
-negative timeout. A timeout closes an in-progress connect descriptor. TCP reads
+unbounded wait (unlike synchronizers, where zero polls and `-1` is unbounded), a
+positive monotonic millisecond timeout, and return `Err` for negative values. A timeout
+closes an in-progress connect descriptor. TCP reads
 append to the existing destination and return a positive count, `0` for orderly
 EOF, or `Err` (including timeout); a zero maximum returns zero immediately.
 `writeSome` returns one partial count. `writeAll` retries partial progress against
@@ -2330,7 +2342,8 @@ HTTP tokens; values reject NUL, CR/LF, and other prohibited control bytes. Repea
 `setHeader` calls append request fields. `setBody` copies the source buffer's
 current bytes into the request and retains no borrow or reference.
 
-Timeouts must be nonnegative; zero means unbounded. The default response-body limit
+HTTP timeouts must be nonnegative; zero means unbounded, unlike synchronizer
+timeouts where zero polls and `-1` is unbounded. The default response-body limit
 is 16 MiB; `setMaxResponseBytes` accepts any nonnegative byte count, with zero
 allowing only an empty body. The write callback checks the bound before growing
 the response buffer, so a failed oversized response never escapes in a partial

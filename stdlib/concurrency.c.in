@@ -41,6 +41,26 @@ struct ncr_condition_node {
     struct ncr_condition_node *next;
 };
 
+struct ncr_condition_handle_node {
+    struct ncr_condition_node node;
+    _Atomic size_t references;
+};
+
+static bool ncr_condition_node_retain(struct ncr_condition_node *node) {
+    struct ncr_condition_handle_node *handle =
+        (struct ncr_condition_handle_node *)node;
+    return ncr_sync_ref_acquire(&handle->references);
+}
+
+static void ncr_condition_node_release(struct ncr_condition_node *node) {
+    struct ncr_condition_handle_node *handle =
+        (struct ncr_condition_handle_node *)node;
+    if (!ncr_sync_ref_release(&handle->references)) { return; }
+    int error = pthread_cond_destroy(&node->condition);
+    if (error != 0) { ncr_sync_fatal("pthread_cond_destroy(condition handle release)", error); }
+    ncr_deallocate(handle);
+}
+
 static int ncr_sync_deadline_after_millis(int64_t timeout_ms, struct timespec *deadline) {
     if (timeout_ms < 0) { return EINVAL; }
     int64_t now;

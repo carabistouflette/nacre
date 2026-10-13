@@ -49,6 +49,11 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   opaque abstract interface from a recursive concrete ownership cycle. Concurrency
   smoke checks cover owned Text result transfer, single consumption and cleanup
   of an abandoned result, without changing ordinary affine ownership.
+- Synchronizer waits use `-1` for an unbounded wait, preserve `0` as a poll, and
+  reject values below `-1`; networking retains its separate zero-is-unbounded
+  timeout convention. Public Condition nodes are released with their final handle,
+  including clones, rather than retained by a long-lived Mutex; guards retain the
+  mutex independently. Blocking and lifetime regressions cover all five wait APIs.
 - PCRE2 Regex rejects byte-wise `\C` patterns at compilation to preserve validated
   UTF-8 capture invariants. Each compiled Regex owns an immutable bounded match
   context reused across calls; execution data remains private to each call.

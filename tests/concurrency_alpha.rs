@@ -146,6 +146,80 @@ static int ncr_test_fail_condition_init(pthread_cond_t *condition,
     observed.push_str(&instrumented);
     observed
 }
+fn observe_unbounded_sync_waits(c: &str) -> String {
+    let mutex_wait = "pthread_cond_wait(&ncr_self->condition->condition, &control->mutex)";
+    let future_wait = "pthread_cond_wait(&ncr_self->state_condition->condition, &control->mutex)";
+    let instrumented = c
+        .replace(
+            mutex_wait,
+            "ncr_test_sync_wait(&ncr_self->condition->condition, &control->mutex)",
+        )
+        .replace(
+            future_wait,
+            "ncr_test_sync_wait(&ncr_self->state_condition->condition, &control->mutex)",
+        );
+    let mut observed = r#"
+#define _GNU_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#include <pthread.h>
+#include <stdatomic.h>
+#include <stdbool.h>
+static _Atomic unsigned ncr_test_sync_wait_count = 0;
+static _Thread_local bool ncr_test_sync_wait_reported = false;
+static int ncr_test_sync_wait(pthread_cond_t *condition, pthread_mutex_t *mutex) {
+    if (!ncr_test_sync_wait_reported) {
+        unsigned index = atomic_fetch_add_explicit(&ncr_test_sync_wait_count, 1, memory_order_relaxed);
+        ncr_test_sync_wait_reported = true;
+        printf("NCR_TEST_SYNC_WAIT:%u\n", index);
+        fflush(stdout);
+    }
+    return pthread_cond_wait(condition, mutex);
+}
+"#
+    .to_owned();
+    observed.push_str(&instrumented);
+    observed
+}
+
+fn observe_condition_node_lifetimes(c: &str) -> String {
+    let initializer = "pthread_cond_init(&node->condition, &attributes)";
+    let instrumented = c
+        .replace(
+            initializer,
+            "ncr_test_condition_init(&node->condition, &attributes)",
+        )
+        .replace("pthread_cond_destroy(", "ncr_test_condition_destroy(");
+    let mut observed = r#"
+#define _GNU_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#include <pthread.h>
+#include <stdatomic.h>
+#include <stdio.h>
+static _Atomic size_t ncr_test_live_conditions = 0;
+static int ncr_test_condition_init(pthread_cond_t *condition,
+        const pthread_condattr_t *attributes) {
+    int error = pthread_cond_init(condition, attributes);
+    if (error == 0) {
+        atomic_fetch_add_explicit(&ncr_test_live_conditions, 1, memory_order_relaxed);
+    }
+    return error;
+}
+static int ncr_test_condition_destroy(pthread_cond_t *condition) {
+    int error = pthread_cond_destroy(condition);
+    if (error == 0) {
+        size_t live = atomic_fetch_sub_explicit(&ncr_test_live_conditions, 1,
+            memory_order_relaxed) - 1;
+        printf("NCR_TEST_CONDITION_LIVE:%zu\n", live);
+        fflush(stdout);
+    }
+    return error;
+}
+"#
+    .to_owned();
+    observed.push_str(&instrumented);
+    observed
+}
+
 
 fn fail_second_pool_worker_creation(c: &str) -> String {
     let create = "return pthread_create(thread, NULL, start, context);";
@@ -272,12 +346,12 @@ impl NativeWaitProcess {
         let line = self
             .stdout_rx
             .recv_timeout(Duration::from_secs(10))
-            .expect("native channel operation did not enter pthread_cond_wait");
+            .expect("native operation did not enter pthread_cond_wait");
         assert_eq!(line.trim_end_matches(['\r', '\n']), expected);
     }
 
     fn release(&mut self) {
-        let mut stdin = self.stdin.take().expect("native stdin is piped");
+        let stdin = self.stdin.as_mut().expect("native stdin is piped");
         stdin.write_all(b"\n").unwrap();
         stdin.flush().unwrap();
     }
@@ -290,7 +364,7 @@ impl NativeWaitProcess {
             }
             assert!(
                 Instant::now() < deadline,
-                "native channel operation exceeded its finite test deadline"
+                "native operation exceeded its finite test deadline"
             );
             thread::sleep(Duration::from_millis(10));
         };
@@ -2354,5 +2428,337 @@ void main() {
 }
 "#;
     let output = execute(source, &["-DNACRE_MEMORY_STATS"]);
+    assert_clean(&output, "true\n");
+}
+#[test]
+fn unbounded_synchronizer_waits_block_then_wake_on_real_transitions() {
+    let source = r#"
+class SemaphoreWaitTask implements Task<boolean> {
+    private Semaphore semaphore;
+    public SemaphoreWaitTask(Semaphore semaphore) { this.semaphore = semaphore; }
+    public boolean run() {
+        match (this.semaphore.acquire(-1L)) {
+            Ok(value) { return value; }
+            Err(error) { drop(error); return false; }
+        }
+    }
+}
+
+class LatchWaitTask implements Task<boolean> {
+    private CountDownLatch latch;
+    public LatchWaitTask(CountDownLatch latch) { this.latch = latch; }
+    public boolean run() {
+        match (this.latch.wait(-1L)) {
+            Ok(value) { return value; }
+            Err(error) { drop(error); return false; }
+        }
+    }
+}
+
+class BarrierWaitTask implements Task<int> {
+    private Barrier barrier;
+    public BarrierWaitTask(Barrier barrier) { this.barrier = barrier; }
+    public int run() {
+        match (this.barrier.wait(-1L)) {
+            Ok(index) { return index; }
+            Err(error) { drop(error); return -1; }
+        }
+    }
+}
+
+class ConditionWaitTask implements Task<boolean> {
+    private Mutex<int> mutex;
+    private Condition<int> condition;
+    public ConditionWaitTask(Mutex<int> mutex, Condition<int> condition) {
+        this.mutex = mutex;
+        this.condition = condition;
+    }
+    public boolean run() {
+        Guard<int> guard;
+        match (this.mutex.lock()) {
+            Ok(value) { guard = value; }
+            Err(error) { drop(error); return false; }
+        }
+        while (guard.read() == 0) {
+            boolean notified = false;
+            match (this.condition.wait(guard, -1L)) {
+                Ok(value) { notified = value; }
+                Err(error) { drop(error); drop(guard); return false; }
+            }
+            if (!notified) { drop(guard); return false; }
+        }
+        boolean observed = guard.read() == 7;
+        drop(guard);
+        return observed;
+    }
+}
+
+class ReadLineTask implements CancelableTask<int> {
+    public Result<int, Text> run(borrow CancellationToken token) {
+        Option<Text> line = Console.readLine()?;
+        drop(line);
+        return new Result<int, Text>.Ok(42);
+    }
+}
+
+Result<Unit, Text> awaitHarnessRelease() {
+    Option<Text> line = Console.readLine()?;
+    drop(line);
+    return new Result<Unit, Text>.Ok(());
+}
+
+Result<Unit, Text> exercise() {
+    Semaphore semaphore = Semaphore.create(0L)?;
+    Semaphore semaphoreHandle = semaphore.cloneHandle()?;
+    Thread<boolean> semaphoreWaiter =
+        Thread<boolean>.spawn(new SemaphoreWaitTask(semaphoreHandle))?;
+    awaitHarnessRelease()?;
+    semaphore.release(1L)?;
+    boolean acquired = false;
+    match (semaphoreWaiter.join()) {
+        Ok(value) { acquired = value; }
+        Err(error) { drop(error); }
+    }
+    drop(semaphoreWaiter);
+    drop(semaphore);
+
+    CountDownLatch latch = CountDownLatch.create(1L)?;
+    CountDownLatch latchHandle = latch.cloneHandle()?;
+    Thread<boolean> latchWaiter = Thread<boolean>.spawn(new LatchWaitTask(latchHandle))?;
+    awaitHarnessRelease()?;
+    latch.countDown()?;
+    boolean countedDown = false;
+    match (latchWaiter.join()) {
+        Ok(value) { countedDown = value; }
+        Err(error) { drop(error); }
+    }
+    drop(latchWaiter);
+    drop(latch);
+
+    Barrier barrier = Barrier.create(2)?;
+    Barrier barrierHandle = barrier.cloneHandle()?;
+    Thread<int> barrierWaiter = Thread<int>.spawn(new BarrierWaitTask(barrierHandle))?;
+    awaitHarnessRelease()?;
+    int mainIndex = -1;
+    match (barrier.wait(-1L)) {
+        Ok(index) { mainIndex = index; }
+        Err(error) { drop(error); }
+    }
+    int workerIndex = -1;
+    match (barrierWaiter.join()) {
+        Ok(index) { workerIndex = index; }
+        Err(error) { drop(error); }
+    }
+    drop(barrierWaiter);
+    drop(barrier);
+
+    Mutex<int> mutex = Mutex<int>.create(0)?;
+    Condition<int> condition = Condition<int>.create(mutex)?;
+    Mutex<int> waiterMutex = mutex.cloneHandle()?;
+    Condition<int> waiterCondition = condition.cloneHandle()?;
+    Thread<boolean> conditionWaiter = Thread<boolean>.spawn(
+        new ConditionWaitTask(waiterMutex, waiterCondition))?;
+    awaitHarnessRelease()?;
+    Guard<int> guard = mutex.lock()?;
+    guard.write(7)?;
+    condition.signal()?;
+    drop(guard);
+    boolean observed = false;
+    match (conditionWaiter.join()) {
+        Ok(value) { observed = value; }
+        Err(error) { drop(error); }
+    }
+    drop(conditionWaiter);
+    drop(condition);
+    drop(mutex);
+
+    Future<int> future = Future<int>.spawn(new ReadLineTask())?;
+    Option<int> result = future.await(-1L)?;
+    int value = -1;
+    match (result) {
+        Some(resultValue) { value = resultValue; }
+        None {}
+    }
+    drop(future);
+
+    if (!acquired || !countedDown || mainIndex < 0 || workerIndex < 0 ||
+            mainIndex == workerIndex || !observed || value != 42) {
+        return new Result<Unit, Text>.Err(new Text("unbounded wait transition failed"));
+    }
+    println("unbounded synchronizer waits passed");
+    return new Result<Unit, Text>.Ok(());
+}
+
+void main() {
+    match (exercise()) {
+        Ok(unit) {}
+        Err(error) { error.print(); }
+    }
+}
+"#;
+    let c = compile_to_c(source)
+        .unwrap_or_else(|error| panic!("{}", error.render("concurrency_alpha.ncr", source)));
+    let c = observe_unbounded_sync_waits(&c);
+    let program = native::compile_c_with_flags(&c, &["-DNACRE_MEMORY_STATS"])
+        .unwrap_or_else(|error| panic!("native compile failed: {error}"));
+    let mut process = NativeWaitProcess::start(&program);
+    for index in 0..5 {
+        process.wait_for_entry(&format!("NCR_TEST_SYNC_WAIT:{index}"));
+        process.release();
+    }
+    let output = process.finish_for(Duration::from_secs(10));
+    assert_clean(&output, "unbounded synchronizer waits passed\n");
+}
+
+#[test]
+fn synchronizer_timeout_sentinel_and_zero_poll_boundaries_are_distinct() {
+    let source = r#"
+class PendingTask implements CancelableTask<int> {
+    private CountDownLatch gate;
+    public PendingTask(CountDownLatch gate) { this.gate = gate; }
+    public Result<int, Text> run(borrow CancellationToken token) {
+        boolean opened = this.gate.wait(-1L)?;
+        if (!opened) { return new Result<int, Text>.Err(new Text("gate wait failed")); }
+        return new Result<int, Text>.Ok(42);
+    }
+}
+
+Result<Unit, Text> exercise() {
+    Semaphore semaphore = Semaphore.create(0L)?;
+    boolean semaphoreInvalidAccepted = false;
+    match (semaphore.acquire(-2L)) {
+        Ok(value) { semaphoreInvalidAccepted = true; }
+        Err(error) { drop(error); }
+    }
+    boolean semaphoreEmptyPoll = !semaphore.acquire(0L)?;
+    semaphore.release(1L)?;
+    boolean semaphoreReadyPoll = semaphore.acquire(0L)?;
+
+    CountDownLatch latch = CountDownLatch.create(1L)?;
+    boolean latchInvalidAccepted = false;
+    match (latch.wait(-2L)) {
+        Ok(value) { latchInvalidAccepted = true; }
+        Err(error) { drop(error); }
+    }
+    boolean latchEmptyPoll = !latch.wait(0L)?;
+    latch.countDown()?;
+    boolean latchReadyPoll = latch.wait(0L)?;
+
+    Barrier barrier = Barrier.create(2)?;
+    boolean barrierInvalidAccepted = false;
+    match (barrier.wait(-2L)) {
+        Ok(index) { barrierInvalidAccepted = true; }
+        Err(error) { drop(error); }
+    }
+    boolean invalidWaitLeftBarrierUnbroken = false;
+    match (barrier.reset()) {
+        Ok(unit) {}
+        Err(error) { invalidWaitLeftBarrierUnbroken = true; drop(error); }
+    }
+    boolean barrierPollBrokeGeneration = false;
+    match (barrier.wait(0L)) {
+        Ok(index) {}
+        Err(error) { barrierPollBrokeGeneration = true; drop(error); }
+    }
+    barrier.reset()?;
+
+    Mutex<int> mutex = Mutex<int>.create(17)?;
+    Condition<int> condition = Condition<int>.create(mutex)?;
+    Guard<int> guard = mutex.lock()?;
+    boolean conditionInvalidAccepted = false;
+    match (condition.wait(guard, -2L)) {
+        Ok(value) { conditionInvalidAccepted = true; }
+        Err(error) { drop(error); }
+    }
+    boolean conditionGuardRetained = guard.read() == 17;
+    condition.wait(guard, 0L)?;
+    boolean conditionGuardReacquired = guard.read() == 17;
+    drop(guard);
+
+    CountDownLatch gate = CountDownLatch.create(1L)?;
+    CountDownLatch workerGate = gate.cloneHandle()?;
+    Future<int> future = Future<int>.spawn(new PendingTask(workerGate))?;
+    boolean futureInvalidAccepted = false;
+    match (future.await(-2L)) {
+        Ok(value) { futureInvalidAccepted = true; drop(value); }
+        Err(error) { drop(error); }
+    }
+    boolean futureEmptyPoll = false;
+    Option<int> pending = future.await(0L)?;
+    match (pending) {
+        None { futureEmptyPoll = true; }
+        Some(value) { drop(value); }
+    }
+    gate.countDown()?;
+    int futureValue = -1;
+    match (future.await(-1L)?) {
+        Some(value) { futureValue = value; }
+        None {}
+    }
+
+    println(!semaphoreInvalidAccepted && semaphoreEmptyPoll && semaphoreReadyPoll &&
+        !latchInvalidAccepted && latchEmptyPoll && latchReadyPoll &&
+        !barrierInvalidAccepted && invalidWaitLeftBarrierUnbroken &&
+        barrierPollBrokeGeneration && !conditionInvalidAccepted &&
+        conditionGuardRetained && conditionGuardReacquired &&
+        !futureInvalidAccepted && futureEmptyPoll && futureValue == 42);
+    return new Result<Unit, Text>.Ok(());
+}
+
+void main() {
+    match (exercise()) {
+        Ok(unit) {}
+        Err(error) { error.print(); }
+    }
+}
+"#;
+    let output = execute(source, &["-DNACRE_MEMORY_STATS"]);
+    assert_clean(&output, "true\n");
+}
+
+#[test]
+fn condition_nodes_follow_last_clone_lifetime_not_mutex_lifetime() {
+    let source = r#"
+Result<Unit, Text> exercise() {
+    Mutex<int> mutex = Mutex<int>.create(0)?;
+    int iterations = 0;
+    while (iterations < 512) {
+        Condition<int> condition = Condition<int>.create(mutex)?;
+        drop(condition);
+        iterations += 1;
+    }
+
+    Condition<int> original = Condition<int>.create(mutex)?;
+    Condition<int> lastClone = original.cloneHandle()?;
+    drop(original);
+    Guard<int> held = mutex.lock()?;
+    drop(lastClone);
+    int protectedValue = held.read();
+    drop(held);
+    println(iterations == 512 && protectedValue == 0);
+    return new Result<Unit, Text>.Ok(());
+}
+
+void main() {
+    match (exercise()) {
+        Ok(unit) {}
+        Err(error) { error.print(); }
+    }
+}
+"#;
+    let c = compile_to_c(source)
+        .unwrap_or_else(|error| panic!("{}", error.render("concurrency_alpha.ncr", source)));
+    let c = observe_condition_node_lifetimes(&c);
+    let program = native::compile_c_with_flags(&c, &["-DNACRE_MEMORY_STATS"])
+        .unwrap_or_else(|error| panic!("native compile failed: {error}"));
+    let mut process = NativeWaitProcess::start(&program);
+    for _ in 0..513 {
+        let line = process
+            .stdout_rx
+            .recv_timeout(Duration::from_secs(10))
+            .expect("condition node destruction was not observed");
+        assert_eq!(line.trim_end_matches(['\r', '\n']), "NCR_TEST_CONDITION_LIVE:0");
+    }
+    let output = process.finish_for(Duration::from_secs(10));
     assert_clean(&output, "true\n");
 }
