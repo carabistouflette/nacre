@@ -1751,7 +1751,7 @@ ncr_obj_@TEMPORAL_TEXT_RESULT@ @TEMPORAL_FORMAT@(
     if (has_fraction) {
         number_formatter = unum_open(UNUM_DECIMAL, NULL, 0, locale, NULL, &status);
         if (U_FAILURE(status) || number_formatter == NULL) { goto format_error; }
-        unum_setAttribute(number_formatter, UNUM_GROUPING_USED, UNUM_FALSE);
+        unum_setAttribute(number_formatter, UNUM_GROUPING_USED, 0);
         if (!ncr_tv_localized_digits(number_formatter, &digits, ncr_line, ncr_column)) {
             goto format_error;
         }

@@ -64,7 +64,7 @@ pub(super) fn implementation(program: &t::Program) -> String {
     let int_result = result_id(offset_seconds);
     let text_result = result_id(format);
     let body = replace_placeholders(include_str!("../../stdlib/temporal.c.in").to_owned(), &[
-        ("@TEMPORAL_FORMAT@", format.to_string()),
+        ("@TEMPORAL_FORMAT@", format!("ncr_fn_{}", format.id)),
         ("@TEMPORAL_ID@", temporal.to_string()),
         ("@TEMPORAL_TEXT_ID@", text.to_string()),
         ("@TEMPORAL_TEXT_INLINE_CAPACITY@", TEXT_INLINE_CAPACITY.to_string()),
