@@ -72,7 +72,8 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
             C::Sender(_) | C::Receiver(_) | C::Env | C::Command | C::Process | C::ProcessOutput =>
                 unreachable!("static or factory-only native class has no constructor"),
             C::SocketAddress | C::TcpListener | C::TcpStream | C::Datagram | C::UdpSocket |
-            C::HttpRequest | C::HttpResponse | C::ListIterator(_) | C::Iterators(_) =>
+            C::HttpRequest | C::HttpResponse | C::ListIterator(_) | C::Iterators(_) |
+            C::Database =>
                 unreachable!("factory-only native class has no constructor"),
         };
     }
@@ -462,6 +463,31 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
         (C::Crypto, "aesGcmEncrypt") => M::CryptoAesGcmEncrypt,
         (C::Crypto, "aesGcmDecrypt") => M::CryptoAesGcmDecrypt,
         (C::Crypto, "constantTimeEquals") => M::CryptoConstantTimeEquals,
+        (C::Database, "open") => M::DatabaseOpen,
+        (C::Database, "prepare") => M::DatabasePrepare,
+        (C::Database, "bindNull") => M::DatabaseBindNull,
+        (C::Database, "bindLong") => M::DatabaseBindLong,
+        (C::Database, "bindDouble") => M::DatabaseBindDouble,
+        (C::Database, "bindText") => M::DatabaseBindText,
+        (C::Database, "bindBlob") => M::DatabaseBindBlob,
+        (C::Database, "step") => M::DatabaseStep,
+        (C::Database, "reset") => M::DatabaseReset,
+        (C::Database, "clearBindings") => M::DatabaseClearBindings,
+        (C::Database, "columnCount") => M::DatabaseColumnCount,
+        (C::Database, "columnName") => M::DatabaseColumnName,
+        (C::Database, "columnType") => M::DatabaseColumnType,
+        (C::Database, "columnLong") => M::DatabaseColumnLong,
+        (C::Database, "columnDouble") => M::DatabaseColumnDouble,
+        (C::Database, "columnText") => M::DatabaseColumnText,
+        (C::Database, "columnBlob") => M::DatabaseColumnBlob,
+        (C::Database, "changes") => M::DatabaseChanges,
+        (C::Database, "lastInsertRowId") => M::DatabaseLastInsertRowId,
+        (C::Database, "execute") => M::DatabaseExecute,
+        (C::Database, "begin") => M::DatabaseBegin,
+        (C::Database, "commit") => M::DatabaseCommit,
+        (C::Database, "rollback") => M::DatabaseRollback,
+        (C::Database, "setBusyTimeoutMillis") => M::DatabaseSetBusyTimeoutMillis,
+        (C::Database, "close") => M::DatabaseClose,
         (C::Compression, "deflate") => M::CompressionDeflate,
         (C::Compression, "inflate") => M::CompressionInflate,
         (C::Compression, "gzip") => M::CompressionGzip,

@@ -53,6 +53,10 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   formatting use explicit root/BCP-47 locale rules, preserve supported Unicode
   collation/numbering extensions, and preserve affine ownership. Ordinary Text
   operations remain usable without ICU.
+- Adds affine SQLite `Database` with one explicitly owned internal prepared
+  statement, copied length-delimited bindings/rows, strict type accessors,
+  transactions, foreign-key enforcement, and bounded busy timeouts. This native
+  SQL API documents its single-cursor limit and does not claim JDBC parity.
 - Floating min/max normalize signed-zero ties explicitly rather than relying on
   host libm's unspecified tie sign; both operand orders and same-sign zeros are
   covered by generated-program sanitizer regressions.

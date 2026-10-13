@@ -148,7 +148,7 @@ impl Tables {
                         t::NativeClass::CryptoDigest | t::NativeClass::CryptoMac |
                         t::NativeClass::Certificate | t::NativeClass::Env |
                         t::NativeClass::Command | t::NativeClass::Process |
-                        t::NativeClass::ProcessOutput) | None => (None, None, None),
+                        t::NativeClass::ProcessOutput | t::NativeClass::Database) | None => (None, None, None),
                 };
                 for native_type in [native_first, native_second, native_third].into_iter().flatten() {
                     sendable &= value_sendable(tables, native_type, states);
@@ -286,12 +286,13 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
             Some(a::NativeClass::WatchEvent) => Some(t::NativeClass::WatchEvent),
             Some(a::NativeClass::BinaryReader) => Some(t::NativeClass::BinaryReader),
             Some(a::NativeClass::BinaryWriter) => Some(t::NativeClass::BinaryWriter),
+            Some(a::NativeClass::Crypto) => Some(t::NativeClass::Crypto),
             Some(a::NativeClass::Console) => Some(t::NativeClass::Console),
             Some(a::NativeClass::Files) => Some(t::NativeClass::Files),
             Some(a::NativeClass::Args) => Some(t::NativeClass::Args),
             Some(a::NativeClass::Math) => Some(t::NativeClass::Math),
             Some(a::NativeClass::Random) => Some(t::NativeClass::Random),
-            Some(a::NativeClass::Crypto) => Some(t::NativeClass::Crypto),
+            Some(a::NativeClass::Database) => Some(t::NativeClass::Database),
             Some(a::NativeClass::Compression) => Some(t::NativeClass::Compression),
             Some(a::NativeClass::Checksums) => Some(t::NativeClass::Checksums),
             Some(a::NativeClass::Time) => Some(t::NativeClass::Time),

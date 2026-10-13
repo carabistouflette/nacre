@@ -139,7 +139,7 @@ pub enum NativeClass {
     CryptoKey, CryptoDigest, CryptoMac, Certificate,
     Watcher, WatchEvent, BinaryReader, BinaryWriter,
     Datagram, UdpSocket, HttpRequest, HttpResponse, Thread(Type), Mutex(Type), Guard(Type), Channel(Type),
-    Sender(Type), Receiver(Type), Env, Command, Process, ProcessOutput
+    Sender(Type), Receiver(Type), Env, Command, Process, ProcessOutput, Database,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NativeMethod {
@@ -262,4 +262,10 @@ pub enum NativeMethod {
     CharacterIsLowerCase, CharacterToUpperCase, CharacterToLowerCase, CharacterCategory,
     CharacterNumericValue, CharsetEncode, CharsetDecode,
     LocaleAvailable, LocaleFormatNumber, LocaleFormatDecimal, LocaleParseNumber, LocaleFormatCurrency,
+    DatabaseOpen, DatabasePrepare, DatabaseBindNull, DatabaseBindLong, DatabaseBindDouble,
+    DatabaseBindText, DatabaseBindBlob, DatabaseStep, DatabaseReset, DatabaseClearBindings,
+    DatabaseColumnCount, DatabaseColumnName, DatabaseColumnType, DatabaseColumnLong,
+    DatabaseColumnDouble, DatabaseColumnText, DatabaseColumnBlob, DatabaseChanges,
+    DatabaseLastInsertRowId, DatabaseExecute, DatabaseBegin, DatabaseCommit,
+    DatabaseRollback, DatabaseSetBusyTimeoutMillis, DatabaseClose,
 }

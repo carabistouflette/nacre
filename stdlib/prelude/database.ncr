@@ -1,0 +1,27 @@
+class Database {
+    public static Result<Database, Text> open(borrow Text path) {}
+    public Result<Unit, Text> prepare(borrow Text sql) {}
+    public Result<Unit, Text> bindNull(int index) {}
+    public Result<Unit, Text> bindLong(int index, long value) {}
+    public Result<Unit, Text> bindDouble(int index, double value) {}
+    public Result<Unit, Text> bindText(int index, borrow Text value) {}
+    public Result<Unit, Text> bindBlob(int index, borrow ByteBuffer value) {}
+    public Result<boolean, Text> step() {}
+    public Result<Unit, Text> reset() {}
+    public Result<Unit, Text> clearBindings() {}
+    public readonly Result<int, Text> columnCount() {}
+    public readonly Result<Text, Text> columnName(int index) {}
+    public readonly Result<int, Text> columnType(int index) {}
+    public readonly Result<Option<long>, Text> columnLong(int index) {}
+    public readonly Result<Option<double>, Text> columnDouble(int index) {}
+    public readonly Result<Option<Text>, Text> columnText(int index) {}
+    public readonly Result<Option<ByteBuffer>, Text> columnBlob(int index) {}
+    public readonly Result<long, Text> changes() {}
+    public readonly Result<long, Text> lastInsertRowId() {}
+    public Result<long, Text> execute(borrow Text sql) {}
+    public Result<Unit, Text> begin() {}
+    public Result<Unit, Text> commit() {}
+    public Result<Unit, Text> rollback() {}
+    public Result<Unit, Text> setBusyTimeoutMillis(long milliseconds) {}
+    public Result<Unit, Text> close() {}
+}

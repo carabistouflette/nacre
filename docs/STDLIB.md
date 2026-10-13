@@ -533,6 +533,83 @@ name. `verify` checks the supplied CA file trust store, chain, server purpose,
 explicit Unix time, and SAN hostname; it does not fetch certificates or use the
 network.
 
+## `Database`
+
+`Database` is an affine SQLite connection with one internally owned prepared
+statement. It is a small native SQL API, not JDBC or a driver framework. A
+connection cannot own multiple independent statement handles or simultaneous
+result cursors; open another `Database` for another connection/cursor.
+
+```java
+static Result<Database, Text> open(borrow Text path)
+Result<Unit, Text> prepare(borrow Text sql)
+Result<Unit, Text> bindNull(int index)
+Result<Unit, Text> bindLong(int index, long value)
+Result<Unit, Text> bindDouble(int index, double value)
+Result<Unit, Text> bindText(int index, borrow Text value)
+Result<Unit, Text> bindBlob(int index, borrow ByteBuffer value)
+Result<boolean, Text> step()
+Result<Unit, Text> reset()
+Result<Unit, Text> clearBindings()
+readonly Result<int, Text> columnCount()
+readonly Result<Text, Text> columnName(int index)
+readonly Result<int, Text> columnType(int index)
+readonly Result<Option<long>, Text> columnLong(int index)
+readonly Result<Option<double>, Text> columnDouble(int index)
+readonly Result<Option<Text>, Text> columnText(int index)
+readonly Result<Option<ByteBuffer>, Text> columnBlob(int index)
+readonly Result<long, Text> changes()
+readonly Result<long, Text> lastInsertRowId()
+Result<long, Text> execute(borrow Text sql)
+Result<Unit, Text> begin()
+Result<Unit, Text> commit()
+Result<Unit, Text> rollback()
+Result<Unit, Text> setBusyTimeoutMillis(long milliseconds)
+Result<Unit, Text> close()
+```
+
+`open` accepts nonempty strict UTF-8 paths without embedded NUL; `:memory:` opens
+an in-memory database. Connections use SQLite `SQLITE_OPEN_FULLMUTEX` and enable
+foreign-key enforcement. SQL text is also strict UTF-8 and NUL-free. `prepare`
+accepts exactly one statement (with optional trailing whitespace/comments), and
+replaces the previous prepared statement only after the new SQL parses. Failed
+SQL/tail validation keeps the previous statement; a failure while finalizing that
+previous statement is reported after SQLite has finalized it, so no statement
+remains installed. SQLite failures use generic Text diagnostics and do not echo SQL
+or expose SQLite's diagnostic message.
+
+Binding indices are one-based SQLite parameter indices; invalid indices return
+`Err`. Text and ByteBuffer inputs are copied using SQLite's transient-binding
+semantics, preserving embedded NUL in values. `step` returns `Ok(true)` for a row,
+`Ok(false)` at completion, or `Err` on SQLite failure. `reset` resets the current
+statement and reports a prior evaluation error; call it before rebinding for reuse.
+`clearBindings` clears all parameters.
+
+Column indices are zero-based. `columnType` returns SQLite's documented
+`SQLITE_INTEGER` (1), `SQLITE_FLOAT` (2), `SQLITE_TEXT` (3), `SQLITE_BLOB` (4), or
+`SQLITE_NULL` (5) code. `columnType` and typed value accessors require a current
+row. Typed accessors accept only their exact corresponding SQLite storage type:
+integer, float, text, or blob. `NULL` becomes `None`; a different type or an
+invalid column index returns `Err` rather than silently coercing. SQLite text
+results must be valid UTF-8. Returned Text and ByteBuffer values are owned copies,
+not SQLite-cell borrows, and remain valid after another step, reset, or
+closing/dropping the Database.
+
+`execute` runs one unparameterized command without result columns and returns
+SQLite's 64-bit change count. For values, use `prepare` and bind parameters rather
+than concatenating untrusted data into SQL. `changes` and `lastInsertRowId` report
+SQLite's corresponding connection-local 64-bit values. Busy timeout milliseconds
+must be in `0..=INT_MAX`; an expired lock wait returns `Err`.
+
+`close` finalizes the internal statement and is idempotent after success. Dropping
+an open connection performs the same cleanup; SQLite automatically rolls back an
+uncommitted transaction on close. Programs that use `Database` require SQLite's
+development headers and `libsqlite3`; unrelated programs do not link SQLite.
+
+If automatic destruction cannot close the SQLite connection after finalizing the
+owned statement, the runtime aborts rather than releasing a wrapper around live
+SQLite state.
+
 ## `Option<T>` and `Result<T, E>`
 
 ```java

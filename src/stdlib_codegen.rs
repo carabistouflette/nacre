@@ -187,6 +187,7 @@ fn append_body(program: &t::Program, out: &mut String, class: &t::Class, native:
         C::Text => text::implementation(program, class.id),
         C::Math => math::implementation(program),
         C::Random => random::implementation(program),
+        C::Encoding => encoding::implementation(program, class.id),
         C::Crypto => crypto::implementation(program),
         C::Time => time::implementation(program),
         C::DateTime => date_time::implementation(program),

@@ -1,0 +1,648 @@
+/* nacre-link: sqlite */
+#include <sqlite3.h>
+#include <limits.h>
+
+#define NCR_DB_ERROR(result_id, message, line, column) \
+    ncr_result_error_##result_id((message), sizeof(message) - 1, (line), (column))
+#define NCR_DB_UNIT_OK() ((ncr_obj_@DB_UNIT_RESULT@){ \
+    .tag = @DB_UNIT_OK_TAG@, \
+    .data.v@DB_UNIT_OK_TAG@.f0 = UINT8_C(0) \
+})
+
+static bool ncr_database_text_valid_@DATABASE_CLASS_ID@(const ncr_obj_@TEXT_CLASS_ID@ *text, bool reject_nul) {
+    if (text == NULL || text->length < 0 || (text->length > 0 && text->bytes == NULL)) { return false; }
+    const size_t length = (size_t)text->length;
+    if (!ncr_utf8_valid(text->bytes, length)) { return false; }
+    return !reject_nul || length == 0 || memchr(text->bytes, 0, length) == NULL;
+}
+
+/* Parse one prepared statement and reject any executable tail. SQLite consumes
+   trailing whitespace and comments while probing the tail. */
+static int ncr_database_prepare_one_@DATABASE_CLASS_ID@(
+    sqlite3 *database, const char *sql, size_t length, sqlite3_stmt **output
+) {
+    *output = NULL;
+    if (length > (size_t)INT_MAX) { return SQLITE_TOOBIG; }
+    const char *tail = NULL;
+    int result = sqlite3_prepare_v2(database, sql, (int)length, output, &tail);
+    if (result != SQLITE_OK) {
+        if (*output != NULL) { (void)sqlite3_finalize(*output); *output = NULL; }
+        return result;
+    }
+    if (*output == NULL || tail == NULL) {
+        if (*output != NULL) { (void)sqlite3_finalize(*output); *output = NULL; }
+        return SQLITE_ERROR;
+    }
+
+    const char *end = sql + length;
+    if (tail < sql || tail > end) {
+        (void)sqlite3_finalize(*output);
+        *output = NULL;
+        return SQLITE_ERROR;
+    }
+    const size_t remaining = (size_t)(end - tail);
+    static const char empty_sql[] = "";
+    const char *tail_sql = remaining == 0 ? empty_sql : tail;
+    sqlite3_stmt *trailing = NULL;
+    const char *after_trailing = NULL;
+    result = sqlite3_prepare_v2(database, tail_sql, (int)remaining, &trailing, &after_trailing);
+    (void)after_trailing;
+    if (result != SQLITE_OK || trailing != NULL) {
+        if (trailing != NULL) { (void)sqlite3_finalize(trailing); }
+        (void)sqlite3_finalize(*output);
+        *output = NULL;
+        return result == SQLITE_OK ? SQLITE_ERROR : result;
+    }
+    return SQLITE_OK;
+}
+
+static sqlite3 *ncr_database_handle_@DATABASE_CLASS_ID@(ncr_obj_@DATABASE_CLASS_ID@ *database) {
+    return database == NULL ? NULL : (sqlite3 *)database->database;
+}
+
+static sqlite3_stmt *ncr_database_statement_@DATABASE_CLASS_ID@(ncr_obj_@DATABASE_CLASS_ID@ *database) {
+    return database == NULL ? NULL : (sqlite3_stmt *)database->statement;
+}
+
+/* finalize always destroys its statement, even when returning the previous
+   step error. A failed close is different: SQLite still owns a live connection,
+   so dropping the affine Database must stop rather than free its wrapper. */
+static void ncr_database_destroy_@DATABASE_CLASS_ID@(void *opaque) {
+    ncr_obj_@DATABASE_CLASS_ID@ *database = (ncr_obj_@DATABASE_CLASS_ID@ *)opaque;
+    if (database == NULL) { return; }
+    sqlite3_stmt *statement = ncr_database_statement_@DATABASE_CLASS_ID@(database);
+    database->statement = NULL;
+    database->row_active = false;
+    if (statement != NULL) { (void)sqlite3_finalize(statement); }
+    sqlite3 *handle = ncr_database_handle_@DATABASE_CLASS_ID@(database);
+    if (handle != NULL) {
+        if (sqlite3_close(handle) != SQLITE_OK) { abort(); }
+        database->database = NULL;
+    }
+}
+
+static ncr_obj_@DB_OPEN_RESULT@ @DATABASE_OPEN@(
+    ncr_obj_@TEXT_CLASS_ID@ *ncr_v_@DB_OPEN_PATH_ID@, size_t ncr_line, size_t ncr_column
+) {
+    ncr_obj_@TEXT_CLASS_ID@ *path = ncr_v_@DB_OPEN_PATH_ID@;
+    if (!ncr_database_text_valid_@DATABASE_CLASS_ID@(path, true)) {
+        return NCR_DB_ERROR(@DB_OPEN_RESULT@, "Database.open requires valid UTF-8 path text without NUL", ncr_line, ncr_column);
+    }
+    if (path->length == 0) {
+        return NCR_DB_ERROR(@DB_OPEN_RESULT@, "Database.open requires a nonempty path", ncr_line, ncr_column);
+    }
+
+    const size_t path_length = (size_t)path->length;
+    if (path_length == SIZE_MAX) {
+        return NCR_DB_ERROR(@DB_OPEN_RESULT@, "Database.open path is too large", ncr_line, ncr_column);
+    }
+    char *filename = ncr_allocate(path_length + 1, ncr_line, ncr_column);
+    memcpy(filename, path->bytes, path_length);
+    filename[path_length] = '\0';
+    sqlite3 *handle = NULL;
+    int result = sqlite3_open_v2(filename, &handle,
+        SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX, NULL);
+    ncr_deallocate(filename);
+    if (result != SQLITE_OK) {
+        if (handle != NULL && sqlite3_close(handle) != SQLITE_OK) { abort(); }
+        return NCR_DB_ERROR(@DB_OPEN_RESULT@, "Database.open failed", ncr_line, ncr_column);
+    }
+    result = sqlite3_exec(handle, "PRAGMA foreign_keys = ON", NULL, NULL, NULL);
+    if (result != SQLITE_OK) {
+        if (sqlite3_close(handle) != SQLITE_OK) { abort(); }
+        return NCR_DB_ERROR(@DB_OPEN_RESULT@, "Database.open failed", ncr_line, ncr_column);
+    }
+
+    ncr_obj_@DATABASE_CLASS_ID@ *database = ncr_allocate(sizeof(*database), ncr_line, ncr_column);
+    database->database = handle;
+    database->statement = NULL;
+    database->row_active = false;
+    database->destroy = ncr_database_destroy_@DATABASE_CLASS_ID@;
+    return (ncr_obj_@DB_OPEN_RESULT@){
+        .tag = @DB_OPEN_OK_TAG@,
+        .data.v@DB_OPEN_OK_TAG@.f0 = database
+    };
+}
+
+static ncr_obj_@DB_PREPARE_RESULT@ @DATABASE_PREPARE@(
+    ncr_obj_@DATABASE_CLASS_ID@ *ncr_self,
+    ncr_obj_@TEXT_CLASS_ID@ *ncr_v_@DB_PREPARE_SQL_ID@,
+    size_t ncr_line, size_t ncr_column
+) {
+    sqlite3 *database = ncr_database_handle_@DATABASE_CLASS_ID@(ncr_self);
+    if (database == NULL) {
+        return NCR_DB_ERROR(@DB_PREPARE_RESULT@, "Database is closed", ncr_line, ncr_column);
+    }
+    ncr_obj_@TEXT_CLASS_ID@ *sql = ncr_v_@DB_PREPARE_SQL_ID@;
+    if (!ncr_database_text_valid_@DATABASE_CLASS_ID@(sql, true)) {
+        return NCR_DB_ERROR(@DB_PREPARE_RESULT@, "Database.prepare requires valid UTF-8 SQL text without NUL", ncr_line, ncr_column);
+    }
+
+    sqlite3_stmt *replacement = NULL;
+    static const char empty_sql[] = "";
+    const char *sql_bytes = sql->length == 0 ? empty_sql : (const char *)sql->bytes;
+    int result = ncr_database_prepare_one_@DATABASE_CLASS_ID@(
+        database, sql_bytes, (size_t)sql->length, &replacement);
+    if (result != SQLITE_OK) {
+        return NCR_DB_ERROR(@DB_PREPARE_RESULT@, "Database.prepare requires exactly one valid statement", ncr_line, ncr_column);
+    }
+
+    sqlite3_stmt *previous = ncr_database_statement_@DATABASE_CLASS_ID@(ncr_self);
+    ncr_self->statement = NULL;
+    ncr_self->row_active = false;
+    if (previous != NULL && sqlite3_finalize(previous) != SQLITE_OK) {
+        (void)sqlite3_finalize(replacement);
+        return NCR_DB_ERROR(@DB_PREPARE_RESULT@, "Database.prepare could not finalize the previous statement", ncr_line, ncr_column);
+    }
+    ncr_self->statement = replacement;
+    return NCR_DB_UNIT_OK();
+}
+
+static ncr_obj_@DB_UNIT_RESULT@ @DATABASE_BIND_NULL@(
+    ncr_obj_@DATABASE_CLASS_ID@ *ncr_self, int32_t ncr_v_@DB_BIND_NULL_INDEX_ID@,
+    size_t ncr_line, size_t ncr_column
+) {
+    sqlite3_stmt *statement = ncr_database_statement_@DATABASE_CLASS_ID@(ncr_self);
+    if (ncr_database_handle_@DATABASE_CLASS_ID@(ncr_self) == NULL) {
+        return NCR_DB_ERROR(@DB_UNIT_RESULT@, "Database is closed", ncr_line, ncr_column);
+    }
+    if (statement == NULL) { return NCR_DB_ERROR(@DB_UNIT_RESULT@, "Database has no prepared statement", ncr_line, ncr_column); }
+    if (ncr_self->row_active) { return NCR_DB_ERROR(@DB_UNIT_RESULT@, "Database.bindNull requires reset after a row", ncr_line, ncr_column); }
+    if (ncr_v_@DB_BIND_NULL_INDEX_ID@ <= 0 || ncr_v_@DB_BIND_NULL_INDEX_ID@ > sqlite3_bind_parameter_count(statement)) {
+        return NCR_DB_ERROR(@DB_UNIT_RESULT@, "Database bind index is out of range", ncr_line, ncr_column);
+    }
+    if (sqlite3_bind_null(statement, ncr_v_@DB_BIND_NULL_INDEX_ID@) != SQLITE_OK) {
+        return NCR_DB_ERROR(@DB_UNIT_RESULT@, "Database.bindNull failed", ncr_line, ncr_column);
+    }
+    return NCR_DB_UNIT_OK();
+}
+
+static ncr_obj_@DB_UNIT_RESULT@ @DATABASE_BIND_LONG@(
+    ncr_obj_@DATABASE_CLASS_ID@ *ncr_self, int32_t ncr_v_@DB_BIND_LONG_INDEX_ID@,
+    int64_t ncr_v_@DB_BIND_LONG_VALUE_ID@, size_t ncr_line, size_t ncr_column
+) {
+    sqlite3_stmt *statement = ncr_database_statement_@DATABASE_CLASS_ID@(ncr_self);
+    if (ncr_database_handle_@DATABASE_CLASS_ID@(ncr_self) == NULL) {
+        return NCR_DB_ERROR(@DB_UNIT_RESULT@, "Database is closed", ncr_line, ncr_column);
+    }
+    if (statement == NULL) { return NCR_DB_ERROR(@DB_UNIT_RESULT@, "Database has no prepared statement", ncr_line, ncr_column); }
+    if (ncr_self->row_active) { return NCR_DB_ERROR(@DB_UNIT_RESULT@, "Database.bindLong requires reset after a row", ncr_line, ncr_column); }
+    if (ncr_v_@DB_BIND_LONG_INDEX_ID@ <= 0 || ncr_v_@DB_BIND_LONG_INDEX_ID@ > sqlite3_bind_parameter_count(statement)) {
+        return NCR_DB_ERROR(@DB_UNIT_RESULT@, "Database bind index is out of range", ncr_line, ncr_column);
+    }
+    if (sqlite3_bind_int64(statement, ncr_v_@DB_BIND_LONG_INDEX_ID@, ncr_v_@DB_BIND_LONG_VALUE_ID@) != SQLITE_OK) {
+        return NCR_DB_ERROR(@DB_UNIT_RESULT@, "Database.bindLong failed", ncr_line, ncr_column);
+    }
+    return NCR_DB_UNIT_OK();
+}
+
+static ncr_obj_@DB_UNIT_RESULT@ @DATABASE_BIND_DOUBLE@(
+    ncr_obj_@DATABASE_CLASS_ID@ *ncr_self, int32_t ncr_v_@DB_BIND_DOUBLE_INDEX_ID@,
+    double ncr_v_@DB_BIND_DOUBLE_VALUE_ID@, size_t ncr_line, size_t ncr_column
+) {
+    sqlite3_stmt *statement = ncr_database_statement_@DATABASE_CLASS_ID@(ncr_self);
+    if (ncr_database_handle_@DATABASE_CLASS_ID@(ncr_self) == NULL) {
+        return NCR_DB_ERROR(@DB_UNIT_RESULT@, "Database is closed", ncr_line, ncr_column);
+    }
+    if (statement == NULL) { return NCR_DB_ERROR(@DB_UNIT_RESULT@, "Database has no prepared statement", ncr_line, ncr_column); }
+    if (ncr_self->row_active) { return NCR_DB_ERROR(@DB_UNIT_RESULT@, "Database.bindDouble requires reset after a row", ncr_line, ncr_column); }
+    if (ncr_v_@DB_BIND_DOUBLE_INDEX_ID@ <= 0 || ncr_v_@DB_BIND_DOUBLE_INDEX_ID@ > sqlite3_bind_parameter_count(statement)) {
+        return NCR_DB_ERROR(@DB_UNIT_RESULT@, "Database bind index is out of range", ncr_line, ncr_column);
+    }
+    if (sqlite3_bind_double(statement, ncr_v_@DB_BIND_DOUBLE_INDEX_ID@, ncr_v_@DB_BIND_DOUBLE_VALUE_ID@) != SQLITE_OK) {
+        return NCR_DB_ERROR(@DB_UNIT_RESULT@, "Database.bindDouble failed", ncr_line, ncr_column);
+    }
+    return NCR_DB_UNIT_OK();
+}
+
+static ncr_obj_@DB_UNIT_RESULT@ @DATABASE_BIND_TEXT@(
+    ncr_obj_@DATABASE_CLASS_ID@ *ncr_self, int32_t ncr_v_@DB_BIND_TEXT_INDEX_ID@,
+    ncr_obj_@TEXT_CLASS_ID@ *ncr_v_@DB_BIND_TEXT_VALUE_ID@, size_t ncr_line, size_t ncr_column
+) {
+    sqlite3_stmt *statement = ncr_database_statement_@DATABASE_CLASS_ID@(ncr_self);
+    if (ncr_database_handle_@DATABASE_CLASS_ID@(ncr_self) == NULL) {
+        return NCR_DB_ERROR(@DB_UNIT_RESULT@, "Database is closed", ncr_line, ncr_column);
+    }
+    if (statement == NULL) { return NCR_DB_ERROR(@DB_UNIT_RESULT@, "Database has no prepared statement", ncr_line, ncr_column); }
+    if (ncr_self->row_active) { return NCR_DB_ERROR(@DB_UNIT_RESULT@, "Database.bindText requires reset after a row", ncr_line, ncr_column); }
+    if (ncr_v_@DB_BIND_TEXT_INDEX_ID@ <= 0 || ncr_v_@DB_BIND_TEXT_INDEX_ID@ > sqlite3_bind_parameter_count(statement)) {
+        return NCR_DB_ERROR(@DB_UNIT_RESULT@, "Database bind index is out of range", ncr_line, ncr_column);
+    }
+    ncr_obj_@TEXT_CLASS_ID@ *value = ncr_v_@DB_BIND_TEXT_VALUE_ID@;
+    if (!ncr_database_text_valid_@DATABASE_CLASS_ID@(value, false)) {
+        return NCR_DB_ERROR(@DB_UNIT_RESULT@, "Database.bindText requires valid UTF-8 Text", ncr_line, ncr_column);
+    }
+    const char *bytes = value->length == 0 ? "" : (const char *)value->bytes;
+    if (sqlite3_bind_text(statement, ncr_v_@DB_BIND_TEXT_INDEX_ID@, bytes,
+            value->length, SQLITE_TRANSIENT) != SQLITE_OK) {
+        return NCR_DB_ERROR(@DB_UNIT_RESULT@, "Database.bindText failed", ncr_line, ncr_column);
+    }
+    return NCR_DB_UNIT_OK();
+}
+
+static ncr_obj_@DB_UNIT_RESULT@ @DATABASE_BIND_BLOB@(
+    ncr_obj_@DATABASE_CLASS_ID@ *ncr_self, int32_t ncr_v_@DB_BIND_BLOB_INDEX_ID@,
+    ncr_obj_@BUFFER_CLASS_ID@ *ncr_v_@DB_BIND_BLOB_VALUE_ID@, size_t ncr_line, size_t ncr_column
+) {
+    sqlite3_stmt *statement = ncr_database_statement_@DATABASE_CLASS_ID@(ncr_self);
+    if (ncr_database_handle_@DATABASE_CLASS_ID@(ncr_self) == NULL) {
+        return NCR_DB_ERROR(@DB_UNIT_RESULT@, "Database is closed", ncr_line, ncr_column);
+    }
+    if (statement == NULL) { return NCR_DB_ERROR(@DB_UNIT_RESULT@, "Database has no prepared statement", ncr_line, ncr_column); }
+    if (ncr_self->row_active) { return NCR_DB_ERROR(@DB_UNIT_RESULT@, "Database.bindBlob requires reset after a row", ncr_line, ncr_column); }
+    if (ncr_v_@DB_BIND_BLOB_INDEX_ID@ <= 0 || ncr_v_@DB_BIND_BLOB_INDEX_ID@ > sqlite3_bind_parameter_count(statement)) {
+        return NCR_DB_ERROR(@DB_UNIT_RESULT@, "Database bind index is out of range", ncr_line, ncr_column);
+    }
+    ncr_obj_@BUFFER_CLASS_ID@ *value = ncr_v_@DB_BIND_BLOB_VALUE_ID@;
+    if (value == NULL || value->length > (size_t)INT_MAX || (value->length > 0 && value->bytes == NULL)) {
+        return NCR_DB_ERROR(@DB_UNIT_RESULT@, "Database.bindBlob value is too large or invalid", ncr_line, ncr_column);
+    }
+    static const unsigned char empty_blob = 0;
+    const void *bytes = value->length == 0 ? (const void *)&empty_blob : (const void *)value->bytes;
+    if (sqlite3_bind_blob(statement, ncr_v_@DB_BIND_BLOB_INDEX_ID@, bytes,
+            (int)value->length, SQLITE_TRANSIENT) != SQLITE_OK) {
+        return NCR_DB_ERROR(@DB_UNIT_RESULT@, "Database.bindBlob failed", ncr_line, ncr_column);
+    }
+    return NCR_DB_UNIT_OK();
+}
+
+static ncr_obj_@DB_STEP_RESULT@ @DATABASE_STEP@(
+    ncr_obj_@DATABASE_CLASS_ID@ *ncr_self, size_t ncr_line, size_t ncr_column
+) {
+    if (ncr_database_handle_@DATABASE_CLASS_ID@(ncr_self) == NULL) {
+        return NCR_DB_ERROR(@DB_STEP_RESULT@, "Database is closed", ncr_line, ncr_column);
+    }
+    sqlite3_stmt *statement = ncr_database_statement_@DATABASE_CLASS_ID@(ncr_self);
+    if (statement == NULL) { return NCR_DB_ERROR(@DB_STEP_RESULT@, "Database has no prepared statement", ncr_line, ncr_column); }
+    int result = sqlite3_step(statement);
+    if (result == SQLITE_ROW) {
+        ncr_self->row_active = true;
+        return (ncr_obj_@DB_STEP_RESULT@){
+            .tag = @DB_STEP_OK_TAG@,
+            .data.v@DB_STEP_OK_TAG@.f0 = true
+        };
+    }
+    ncr_self->row_active = false;
+    if (result == SQLITE_DONE) {
+        return (ncr_obj_@DB_STEP_RESULT@){
+            .tag = @DB_STEP_OK_TAG@,
+            .data.v@DB_STEP_OK_TAG@.f0 = false
+        };
+    }
+    return NCR_DB_ERROR(@DB_STEP_RESULT@, "Database.step failed", ncr_line, ncr_column);
+}
+
+static ncr_obj_@DB_UNIT_RESULT@ @DATABASE_RESET@(
+    ncr_obj_@DATABASE_CLASS_ID@ *ncr_self, size_t ncr_line, size_t ncr_column
+) {
+    if (ncr_database_handle_@DATABASE_CLASS_ID@(ncr_self) == NULL) {
+        return NCR_DB_ERROR(@DB_UNIT_RESULT@, "Database is closed", ncr_line, ncr_column);
+    }
+    sqlite3_stmt *statement = ncr_database_statement_@DATABASE_CLASS_ID@(ncr_self);
+    if (statement == NULL) { return NCR_DB_ERROR(@DB_UNIT_RESULT@, "Database has no prepared statement", ncr_line, ncr_column); }
+    int result = sqlite3_reset(statement);
+    ncr_self->row_active = false;
+    if (result != SQLITE_OK) { return NCR_DB_ERROR(@DB_UNIT_RESULT@, "Database.reset failed", ncr_line, ncr_column); }
+    return NCR_DB_UNIT_OK();
+}
+
+static ncr_obj_@DB_UNIT_RESULT@ @DATABASE_CLEAR_BINDINGS@(
+    ncr_obj_@DATABASE_CLASS_ID@ *ncr_self, size_t ncr_line, size_t ncr_column
+) {
+    if (ncr_database_handle_@DATABASE_CLASS_ID@(ncr_self) == NULL) {
+        return NCR_DB_ERROR(@DB_UNIT_RESULT@, "Database is closed", ncr_line, ncr_column);
+    }
+    sqlite3_stmt *statement = ncr_database_statement_@DATABASE_CLASS_ID@(ncr_self);
+    if (statement == NULL) { return NCR_DB_ERROR(@DB_UNIT_RESULT@, "Database has no prepared statement", ncr_line, ncr_column); }
+    if (sqlite3_clear_bindings(statement) != SQLITE_OK) {
+        return NCR_DB_ERROR(@DB_UNIT_RESULT@, "Database.clearBindings failed", ncr_line, ncr_column);
+    }
+    return NCR_DB_UNIT_OK();
+}
+
+static ncr_obj_@DB_COLUMN_COUNT_RESULT@ @DATABASE_COLUMN_COUNT@(
+    ncr_obj_@DATABASE_CLASS_ID@ *ncr_self, size_t ncr_line, size_t ncr_column
+) {
+    if (ncr_database_handle_@DATABASE_CLASS_ID@(ncr_self) == NULL) {
+        return NCR_DB_ERROR(@DB_COLUMN_COUNT_RESULT@, "Database is closed", ncr_line, ncr_column);
+    }
+    sqlite3_stmt *statement = ncr_database_statement_@DATABASE_CLASS_ID@(ncr_self);
+    if (statement == NULL) { return NCR_DB_ERROR(@DB_COLUMN_COUNT_RESULT@, "Database has no prepared statement", ncr_line, ncr_column); }
+    return (ncr_obj_@DB_COLUMN_COUNT_RESULT@){
+        .tag = @DB_COLUMN_COUNT_OK_TAG@,
+        .data.v@DB_COLUMN_COUNT_OK_TAG@.f0 = (int32_t)sqlite3_column_count(statement)
+    };
+}
+
+static ncr_obj_@DB_COLUMN_NAME_RESULT@ @DATABASE_COLUMN_NAME@(
+    ncr_obj_@DATABASE_CLASS_ID@ *ncr_self, int32_t ncr_v_@DB_COLUMN_NAME_INDEX_ID@,
+    size_t ncr_line, size_t ncr_column
+) {
+    if (ncr_database_handle_@DATABASE_CLASS_ID@(ncr_self) == NULL) {
+        return NCR_DB_ERROR(@DB_COLUMN_NAME_RESULT@, "Database is closed", ncr_line, ncr_column);
+    }
+    sqlite3_stmt *statement = ncr_database_statement_@DATABASE_CLASS_ID@(ncr_self);
+    if (statement == NULL) { return NCR_DB_ERROR(@DB_COLUMN_NAME_RESULT@, "Database has no prepared statement", ncr_line, ncr_column); }
+    if (ncr_v_@DB_COLUMN_NAME_INDEX_ID@ < 0 || ncr_v_@DB_COLUMN_NAME_INDEX_ID@ >= sqlite3_column_count(statement)) {
+        return NCR_DB_ERROR(@DB_COLUMN_NAME_RESULT@, "Database column index is out of range", ncr_line, ncr_column);
+    }
+    const char *name = sqlite3_column_name(statement, ncr_v_@DB_COLUMN_NAME_INDEX_ID@);
+    if (name == NULL) { return NCR_DB_ERROR(@DB_COLUMN_NAME_RESULT@, "Database.columnName failed", ncr_line, ncr_column); }
+    size_t length = strlen(name);
+    if (!ncr_utf8_valid((const unsigned char *)name, length)) {
+        return NCR_DB_ERROR(@DB_COLUMN_NAME_RESULT@, "Database.columnName returned invalid UTF-8", ncr_line, ncr_column);
+    }
+    ncr_obj_@TEXT_CLASS_ID@ *copy = ncr_text_from_bytes_@TEXT_CLASS_ID@(
+        (const unsigned char *)name, length, ncr_line, ncr_column);
+    return (ncr_obj_@DB_COLUMN_NAME_RESULT@){
+        .tag = @DB_COLUMN_NAME_OK_TAG@,
+        .data.v@DB_COLUMN_NAME_OK_TAG@.f0 = copy
+    };
+}
+
+static ncr_obj_@DB_COLUMN_TYPE_RESULT@ @DATABASE_COLUMN_TYPE@(
+    ncr_obj_@DATABASE_CLASS_ID@ *ncr_self, int32_t ncr_v_@DB_COLUMN_TYPE_INDEX_ID@,
+    size_t ncr_line, size_t ncr_column
+) {
+    if (ncr_database_handle_@DATABASE_CLASS_ID@(ncr_self) == NULL) {
+        return NCR_DB_ERROR(@DB_COLUMN_TYPE_RESULT@, "Database is closed", ncr_line, ncr_column);
+    }
+    sqlite3_stmt *statement = ncr_database_statement_@DATABASE_CLASS_ID@(ncr_self);
+    if (statement == NULL) { return NCR_DB_ERROR(@DB_COLUMN_TYPE_RESULT@, "Database has no prepared statement", ncr_line, ncr_column); }
+    if (!ncr_self->row_active) { return NCR_DB_ERROR(@DB_COLUMN_TYPE_RESULT@, "Database.columnType requires a current row", ncr_line, ncr_column); }
+    if (ncr_v_@DB_COLUMN_TYPE_INDEX_ID@ < 0 || ncr_v_@DB_COLUMN_TYPE_INDEX_ID@ >= sqlite3_column_count(statement)) {
+        return NCR_DB_ERROR(@DB_COLUMN_TYPE_RESULT@, "Database column index is out of range", ncr_line, ncr_column);
+    }
+    return (ncr_obj_@DB_COLUMN_TYPE_RESULT@){
+        .tag = @DB_COLUMN_TYPE_OK_TAG@,
+        .data.v@DB_COLUMN_TYPE_OK_TAG@.f0 = (int32_t)sqlite3_column_type(statement, ncr_v_@DB_COLUMN_TYPE_INDEX_ID@)
+    };
+}
+
+static ncr_obj_@DB_COLUMN_LONG_RESULT@ @DATABASE_COLUMN_LONG@(
+    ncr_obj_@DATABASE_CLASS_ID@ *ncr_self, int32_t ncr_v_@DB_COLUMN_LONG_INDEX_ID@,
+    size_t ncr_line, size_t ncr_column
+) {
+    if (ncr_database_handle_@DATABASE_CLASS_ID@(ncr_self) == NULL) {
+        return NCR_DB_ERROR(@DB_COLUMN_LONG_RESULT@, "Database is closed", ncr_line, ncr_column);
+    }
+    sqlite3_stmt *statement = ncr_database_statement_@DATABASE_CLASS_ID@(ncr_self);
+    if (statement == NULL) { return NCR_DB_ERROR(@DB_COLUMN_LONG_RESULT@, "Database has no prepared statement", ncr_line, ncr_column); }
+    if (!ncr_self->row_active) { return NCR_DB_ERROR(@DB_COLUMN_LONG_RESULT@, "Database.columnLong requires a current row", ncr_line, ncr_column); }
+    if (ncr_v_@DB_COLUMN_LONG_INDEX_ID@ < 0 || ncr_v_@DB_COLUMN_LONG_INDEX_ID@ >= sqlite3_column_count(statement)) {
+        return NCR_DB_ERROR(@DB_COLUMN_LONG_RESULT@, "Database column index is out of range", ncr_line, ncr_column);
+    }
+    int type = sqlite3_column_type(statement, ncr_v_@DB_COLUMN_LONG_INDEX_ID@);
+    ncr_obj_@DB_COLUMN_LONG_OPTION@ option = { .tag = @DB_COLUMN_LONG_NONE_TAG@ };
+    if (type != SQLITE_NULL) {
+        if (type != SQLITE_INTEGER) {
+            return NCR_DB_ERROR(@DB_COLUMN_LONG_RESULT@, "Database.columnLong requires INTEGER or NULL", ncr_line, ncr_column);
+        }
+        option.tag = @DB_COLUMN_LONG_SOME_TAG@;
+        option.data.v@DB_COLUMN_LONG_SOME_TAG@.f0 = (int64_t)sqlite3_column_int64(statement, ncr_v_@DB_COLUMN_LONG_INDEX_ID@);
+    }
+    return (ncr_obj_@DB_COLUMN_LONG_RESULT@){
+        .tag = @DB_COLUMN_LONG_OK_TAG@,
+        .data.v@DB_COLUMN_LONG_OK_TAG@.f0 = option
+    };
+}
+
+static ncr_obj_@DB_COLUMN_DOUBLE_RESULT@ @DATABASE_COLUMN_DOUBLE@(
+    ncr_obj_@DATABASE_CLASS_ID@ *ncr_self, int32_t ncr_v_@DB_COLUMN_DOUBLE_INDEX_ID@,
+    size_t ncr_line, size_t ncr_column
+) {
+    if (ncr_database_handle_@DATABASE_CLASS_ID@(ncr_self) == NULL) {
+        return NCR_DB_ERROR(@DB_COLUMN_DOUBLE_RESULT@, "Database is closed", ncr_line, ncr_column);
+    }
+    sqlite3_stmt *statement = ncr_database_statement_@DATABASE_CLASS_ID@(ncr_self);
+    if (statement == NULL) { return NCR_DB_ERROR(@DB_COLUMN_DOUBLE_RESULT@, "Database has no prepared statement", ncr_line, ncr_column); }
+    if (!ncr_self->row_active) { return NCR_DB_ERROR(@DB_COLUMN_DOUBLE_RESULT@, "Database.columnDouble requires a current row", ncr_line, ncr_column); }
+    if (ncr_v_@DB_COLUMN_DOUBLE_INDEX_ID@ < 0 || ncr_v_@DB_COLUMN_DOUBLE_INDEX_ID@ >= sqlite3_column_count(statement)) {
+        return NCR_DB_ERROR(@DB_COLUMN_DOUBLE_RESULT@, "Database column index is out of range", ncr_line, ncr_column);
+    }
+    int type = sqlite3_column_type(statement, ncr_v_@DB_COLUMN_DOUBLE_INDEX_ID@);
+    ncr_obj_@DB_COLUMN_DOUBLE_OPTION@ option = { .tag = @DB_COLUMN_DOUBLE_NONE_TAG@ };
+    if (type != SQLITE_NULL) {
+        if (type != SQLITE_FLOAT) {
+            return NCR_DB_ERROR(@DB_COLUMN_DOUBLE_RESULT@, "Database.columnDouble requires FLOAT or NULL", ncr_line, ncr_column);
+        }
+        option.tag = @DB_COLUMN_DOUBLE_SOME_TAG@;
+        option.data.v@DB_COLUMN_DOUBLE_SOME_TAG@.f0 = sqlite3_column_double(statement, ncr_v_@DB_COLUMN_DOUBLE_INDEX_ID@);
+    }
+    return (ncr_obj_@DB_COLUMN_DOUBLE_RESULT@){
+        .tag = @DB_COLUMN_DOUBLE_OK_TAG@,
+        .data.v@DB_COLUMN_DOUBLE_OK_TAG@.f0 = option
+    };
+}
+
+static ncr_obj_@DB_COLUMN_TEXT_RESULT@ @DATABASE_COLUMN_TEXT@(
+    ncr_obj_@DATABASE_CLASS_ID@ *ncr_self, int32_t ncr_v_@DB_COLUMN_TEXT_INDEX_ID@,
+    size_t ncr_line, size_t ncr_column
+) {
+    if (ncr_database_handle_@DATABASE_CLASS_ID@(ncr_self) == NULL) {
+        return NCR_DB_ERROR(@DB_COLUMN_TEXT_RESULT@, "Database is closed", ncr_line, ncr_column);
+    }
+    sqlite3_stmt *statement = ncr_database_statement_@DATABASE_CLASS_ID@(ncr_self);
+    if (statement == NULL) { return NCR_DB_ERROR(@DB_COLUMN_TEXT_RESULT@, "Database has no prepared statement", ncr_line, ncr_column); }
+    if (!ncr_self->row_active) { return NCR_DB_ERROR(@DB_COLUMN_TEXT_RESULT@, "Database.columnText requires a current row", ncr_line, ncr_column); }
+    if (ncr_v_@DB_COLUMN_TEXT_INDEX_ID@ < 0 || ncr_v_@DB_COLUMN_TEXT_INDEX_ID@ >= sqlite3_column_count(statement)) {
+        return NCR_DB_ERROR(@DB_COLUMN_TEXT_RESULT@, "Database column index is out of range", ncr_line, ncr_column);
+    }
+    int type = sqlite3_column_type(statement, ncr_v_@DB_COLUMN_TEXT_INDEX_ID@);
+    ncr_obj_@DB_COLUMN_TEXT_OPTION@ option = { .tag = @DB_COLUMN_TEXT_NONE_TAG@ };
+    if (type != SQLITE_NULL) {
+        if (type != SQLITE_TEXT) {
+            return NCR_DB_ERROR(@DB_COLUMN_TEXT_RESULT@, "Database.columnText requires TEXT or NULL", ncr_line, ncr_column);
+        }
+        const unsigned char *bytes = sqlite3_column_text(statement, ncr_v_@DB_COLUMN_TEXT_INDEX_ID@);
+        int count = sqlite3_column_bytes(statement, ncr_v_@DB_COLUMN_TEXT_INDEX_ID@);
+        static const unsigned char empty_text = 0;
+        if (count < 0 || (count > 0 && bytes == NULL)) {
+            return NCR_DB_ERROR(@DB_COLUMN_TEXT_RESULT@, "Database.columnText failed", ncr_line, ncr_column);
+        }
+        if (!ncr_utf8_valid(count == 0 ? &empty_text : bytes, (size_t)count)) {
+            return NCR_DB_ERROR(@DB_COLUMN_TEXT_RESULT@, "Database.columnText returned invalid UTF-8", ncr_line, ncr_column);
+        }
+        ncr_obj_@TEXT_CLASS_ID@ *copy = ncr_text_from_bytes_@TEXT_CLASS_ID@(
+            count == 0 ? &empty_text : bytes, (size_t)count, ncr_line, ncr_column);
+        option.tag = @DB_COLUMN_TEXT_SOME_TAG@;
+        option.data.v@DB_COLUMN_TEXT_SOME_TAG@.f0 = copy;
+    }
+    return (ncr_obj_@DB_COLUMN_TEXT_RESULT@){
+        .tag = @DB_COLUMN_TEXT_OK_TAG@,
+        .data.v@DB_COLUMN_TEXT_OK_TAG@.f0 = option
+    };
+}
+
+static ncr_obj_@DB_COLUMN_BLOB_RESULT@ @DATABASE_COLUMN_BLOB@(
+    ncr_obj_@DATABASE_CLASS_ID@ *ncr_self, int32_t ncr_v_@DB_COLUMN_BLOB_INDEX_ID@,
+    size_t ncr_line, size_t ncr_column
+) {
+    if (ncr_database_handle_@DATABASE_CLASS_ID@(ncr_self) == NULL) {
+        return NCR_DB_ERROR(@DB_COLUMN_BLOB_RESULT@, "Database is closed", ncr_line, ncr_column);
+    }
+    sqlite3_stmt *statement = ncr_database_statement_@DATABASE_CLASS_ID@(ncr_self);
+    if (statement == NULL) { return NCR_DB_ERROR(@DB_COLUMN_BLOB_RESULT@, "Database has no prepared statement", ncr_line, ncr_column); }
+    if (!ncr_self->row_active) { return NCR_DB_ERROR(@DB_COLUMN_BLOB_RESULT@, "Database.columnBlob requires a current row", ncr_line, ncr_column); }
+    if (ncr_v_@DB_COLUMN_BLOB_INDEX_ID@ < 0 || ncr_v_@DB_COLUMN_BLOB_INDEX_ID@ >= sqlite3_column_count(statement)) {
+        return NCR_DB_ERROR(@DB_COLUMN_BLOB_RESULT@, "Database column index is out of range", ncr_line, ncr_column);
+    }
+    int type = sqlite3_column_type(statement, ncr_v_@DB_COLUMN_BLOB_INDEX_ID@);
+    ncr_obj_@DB_COLUMN_BLOB_OPTION@ option = { .tag = @DB_COLUMN_BLOB_NONE_TAG@ };
+    if (type != SQLITE_NULL) {
+        if (type != SQLITE_BLOB) {
+            return NCR_DB_ERROR(@DB_COLUMN_BLOB_RESULT@, "Database.columnBlob requires BLOB or NULL", ncr_line, ncr_column);
+        }
+        const void *bytes = sqlite3_column_blob(statement, ncr_v_@DB_COLUMN_BLOB_INDEX_ID@);
+        int count = sqlite3_column_bytes(statement, ncr_v_@DB_COLUMN_BLOB_INDEX_ID@);
+        if (count < 0 || (count > 0 && bytes == NULL)) {
+            return NCR_DB_ERROR(@DB_COLUMN_BLOB_RESULT@, "Database.columnBlob failed", ncr_line, ncr_column);
+        }
+        ncr_obj_@BUFFER_CLASS_ID@ *copy = ncr_allocate(sizeof(*copy), ncr_line, ncr_column);
+        copy->bytes = NULL;
+        copy->length = (size_t)count;
+        copy->capacity = (size_t)count;
+        if (count > 0) {
+            copy->bytes = ncr_allocate((size_t)count, ncr_line, ncr_column);
+            memcpy(copy->bytes, bytes, (size_t)count);
+        }
+        option.tag = @DB_COLUMN_BLOB_SOME_TAG@;
+        option.data.v@DB_COLUMN_BLOB_SOME_TAG@.f0 = copy;
+    }
+    return (ncr_obj_@DB_COLUMN_BLOB_RESULT@){
+        .tag = @DB_COLUMN_BLOB_OK_TAG@,
+        .data.v@DB_COLUMN_BLOB_OK_TAG@.f0 = option
+    };
+}
+
+static ncr_obj_@DB_CHANGES_RESULT@ @DATABASE_CHANGES@(
+    ncr_obj_@DATABASE_CLASS_ID@ *ncr_self, size_t ncr_line, size_t ncr_column
+) {
+    sqlite3 *database = ncr_database_handle_@DATABASE_CLASS_ID@(ncr_self);
+    if (database == NULL) { return NCR_DB_ERROR(@DB_CHANGES_RESULT@, "Database is closed", ncr_line, ncr_column); }
+    return (ncr_obj_@DB_CHANGES_RESULT@){
+        .tag = @DB_CHANGES_OK_TAG@,
+        .data.v@DB_CHANGES_OK_TAG@.f0 = (int64_t)sqlite3_changes64(database)
+    };
+}
+
+static ncr_obj_@DB_ROWID_RESULT@ @DATABASE_LAST_INSERT_ROW_ID@(
+    ncr_obj_@DATABASE_CLASS_ID@ *ncr_self, size_t ncr_line, size_t ncr_column
+) {
+    sqlite3 *database = ncr_database_handle_@DATABASE_CLASS_ID@(ncr_self);
+    if (database == NULL) { return NCR_DB_ERROR(@DB_ROWID_RESULT@, "Database is closed", ncr_line, ncr_column); }
+    return (ncr_obj_@DB_ROWID_RESULT@){
+        .tag = @DB_ROWID_OK_TAG@,
+        .data.v@DB_ROWID_OK_TAG@.f0 = (int64_t)sqlite3_last_insert_rowid(database)
+    };
+}
+
+static ncr_obj_@DB_EXECUTE_RESULT@ @DATABASE_EXECUTE@(
+    ncr_obj_@DATABASE_CLASS_ID@ *ncr_self, ncr_obj_@TEXT_CLASS_ID@ *ncr_v_@DB_EXECUTE_SQL_ID@,
+    size_t ncr_line, size_t ncr_column
+) {
+    sqlite3 *database = ncr_database_handle_@DATABASE_CLASS_ID@(ncr_self);
+    if (database == NULL) { return NCR_DB_ERROR(@DB_EXECUTE_RESULT@, "Database is closed", ncr_line, ncr_column); }
+    ncr_obj_@TEXT_CLASS_ID@ *sql = ncr_v_@DB_EXECUTE_SQL_ID@;
+    if (!ncr_database_text_valid_@DATABASE_CLASS_ID@(sql, true)) {
+        return NCR_DB_ERROR(@DB_EXECUTE_RESULT@, "Database.execute requires valid UTF-8 SQL text without NUL", ncr_line, ncr_column);
+    }
+    sqlite3_stmt *statement = NULL;
+    static const char empty_sql[] = "";
+    const char *sql_bytes = sql->length == 0 ? empty_sql : (const char *)sql->bytes;
+    int result = ncr_database_prepare_one_@DATABASE_CLASS_ID@(
+        database, sql_bytes, (size_t)sql->length, &statement);
+    if (result != SQLITE_OK) {
+        return NCR_DB_ERROR(@DB_EXECUTE_RESULT@, "Database.execute requires exactly one valid command", ncr_line, ncr_column);
+    }
+    if (sqlite3_bind_parameter_count(statement) != 0 || sqlite3_column_count(statement) != 0) {
+        (void)sqlite3_finalize(statement);
+        return NCR_DB_ERROR(@DB_EXECUTE_RESULT@, "Database.execute accepts only unparameterized commands without result columns", ncr_line, ncr_column);
+    }
+    result = sqlite3_step(statement);
+    int finalize_result = sqlite3_finalize(statement);
+    if (result != SQLITE_DONE || finalize_result != SQLITE_OK) {
+        return NCR_DB_ERROR(@DB_EXECUTE_RESULT@, "Database.execute failed", ncr_line, ncr_column);
+    }
+    return (ncr_obj_@DB_EXECUTE_RESULT@){
+        .tag = @DB_EXECUTE_OK_TAG@,
+        .data.v@DB_EXECUTE_OK_TAG@.f0 = (int64_t)sqlite3_changes64(database)
+    };
+}
+
+static ncr_obj_@DB_UNIT_RESULT@ @DATABASE_BEGIN@(
+    ncr_obj_@DATABASE_CLASS_ID@ *ncr_self, size_t ncr_line, size_t ncr_column
+) {
+    sqlite3 *database = ncr_database_handle_@DATABASE_CLASS_ID@(ncr_self);
+    if (database == NULL) { return NCR_DB_ERROR(@DB_UNIT_RESULT@, "Database is closed", ncr_line, ncr_column); }
+    if (sqlite3_exec(database, "BEGIN", NULL, NULL, NULL) != SQLITE_OK) {
+        return NCR_DB_ERROR(@DB_UNIT_RESULT@, "Database.begin failed", ncr_line, ncr_column);
+    }
+    return NCR_DB_UNIT_OK();
+}
+
+static ncr_obj_@DB_UNIT_RESULT@ @DATABASE_COMMIT@(
+    ncr_obj_@DATABASE_CLASS_ID@ *ncr_self, size_t ncr_line, size_t ncr_column
+) {
+    sqlite3 *database = ncr_database_handle_@DATABASE_CLASS_ID@(ncr_self);
+    if (database == NULL) { return NCR_DB_ERROR(@DB_UNIT_RESULT@, "Database is closed", ncr_line, ncr_column); }
+    if (sqlite3_exec(database, "COMMIT", NULL, NULL, NULL) != SQLITE_OK) {
+        return NCR_DB_ERROR(@DB_UNIT_RESULT@, "Database.commit failed", ncr_line, ncr_column);
+    }
+    return NCR_DB_UNIT_OK();
+}
+
+static ncr_obj_@DB_UNIT_RESULT@ @DATABASE_ROLLBACK@(
+    ncr_obj_@DATABASE_CLASS_ID@ *ncr_self, size_t ncr_line, size_t ncr_column
+) {
+    sqlite3 *database = ncr_database_handle_@DATABASE_CLASS_ID@(ncr_self);
+    if (database == NULL) { return NCR_DB_ERROR(@DB_UNIT_RESULT@, "Database is closed", ncr_line, ncr_column); }
+    if (sqlite3_exec(database, "ROLLBACK", NULL, NULL, NULL) != SQLITE_OK) {
+        return NCR_DB_ERROR(@DB_UNIT_RESULT@, "Database.rollback failed", ncr_line, ncr_column);
+    }
+    return NCR_DB_UNIT_OK();
+}
+
+static ncr_obj_@DB_UNIT_RESULT@ @DATABASE_SET_BUSY_TIMEOUT_MILLIS@(
+    ncr_obj_@DATABASE_CLASS_ID@ *ncr_self, int64_t ncr_v_@DB_TIMEOUT_MILLIS_ID@,
+    size_t ncr_line, size_t ncr_column
+) {
+    sqlite3 *database = ncr_database_handle_@DATABASE_CLASS_ID@(ncr_self);
+    if (database == NULL) { return NCR_DB_ERROR(@DB_UNIT_RESULT@, "Database is closed", ncr_line, ncr_column); }
+    if (ncr_v_@DB_TIMEOUT_MILLIS_ID@ < 0 || ncr_v_@DB_TIMEOUT_MILLIS_ID@ > INT_MAX) {
+        return NCR_DB_ERROR(@DB_UNIT_RESULT@, "Database busy timeout is outside the supported range", ncr_line, ncr_column);
+    }
+    if (sqlite3_busy_timeout(database, (int)ncr_v_@DB_TIMEOUT_MILLIS_ID@) != SQLITE_OK) {
+        return NCR_DB_ERROR(@DB_UNIT_RESULT@, "Database.setBusyTimeoutMillis failed", ncr_line, ncr_column);
+    }
+    return NCR_DB_UNIT_OK();
+}
+
+static ncr_obj_@DB_UNIT_RESULT@ @DATABASE_CLOSE@(
+    ncr_obj_@DATABASE_CLASS_ID@ *ncr_self, size_t ncr_line, size_t ncr_column
+) {
+    if (ncr_self->database == NULL) {
+        if (ncr_self->statement == NULL) { return NCR_DB_UNIT_OK(); }
+        sqlite3_stmt *orphan = ncr_database_statement_@DATABASE_CLASS_ID@(ncr_self);
+        ncr_self->statement = NULL;
+        ncr_self->row_active = false;
+        if (sqlite3_finalize(orphan) != SQLITE_OK) {
+            return NCR_DB_ERROR(@DB_UNIT_RESULT@, "Database.close failed", ncr_line, ncr_column);
+        }
+        return NCR_DB_UNIT_OK();
+    }
+    sqlite3_stmt *statement = ncr_database_statement_@DATABASE_CLASS_ID@(ncr_self);
+    ncr_self->statement = NULL;
+    ncr_self->row_active = false;
+    int finalize_result = statement == NULL ? SQLITE_OK : sqlite3_finalize(statement);
+    sqlite3 *database = ncr_database_handle_@DATABASE_CLASS_ID@(ncr_self);
+    int close_result = sqlite3_close(database);
+    if (close_result == SQLITE_OK) { ncr_self->database = NULL; }
+    if (finalize_result != SQLITE_OK || close_result != SQLITE_OK) {
+        return NCR_DB_ERROR(@DB_UNIT_RESULT@, "Database.close failed", ncr_line, ncr_column);
+    }
+    return NCR_DB_UNIT_OK();
+}
+
+#undef NCR_DB_UNIT_OK
+#undef NCR_DB_ERROR

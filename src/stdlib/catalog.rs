@@ -37,6 +37,7 @@ enum NativeBuiltin {
     WatchEvent,
     BinaryReader,
     BinaryWriter,
+    Console,
     Files,
     Args,
     Math,
@@ -70,6 +71,7 @@ enum NativeBuiltin {
     Character,
     Charset,
     Locale,
+    Database,
 }
 
 impl NativeBuiltin {
@@ -125,6 +127,7 @@ impl NativeBuiltin {
             Self::WatchEvent => NativeClass::WatchEvent,
             Self::BinaryReader => NativeClass::BinaryReader,
             Self::BinaryWriter => NativeClass::BinaryWriter,
+            Self::Regex => NativeClass::Regex,
             Self::RegexMatch => NativeClass::RegexMatch,
             Self::Console => NativeClass::Console,
             Self::Files => NativeClass::Files,
@@ -156,6 +159,7 @@ impl NativeBuiltin {
             Self::Command => NativeClass::Command,
             Self::Process => NativeClass::Process,
             Self::ProcessOutput => NativeClass::ProcessOutput,
+            Self::Database => NativeClass::Database,
         }
     }
 }
@@ -351,6 +355,10 @@ pub(super) const PRELUDE_UNITS: &[PreludeUnit] = &[
             Builtin { name: "ProcessOutput", native: Some(NativeBuiltin::ProcessOutput) },
             Builtin { name: "ExitStatus", native: None }
         ],
+    },
+    PreludeUnit {
+        source: include_str!("../../stdlib/prelude/database.ncr"),
+        builtins: &[Builtin { name: "Database", native: Some(NativeBuiltin::Database) }],
     },
 ];
 

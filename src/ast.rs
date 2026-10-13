@@ -33,7 +33,7 @@ pub enum NativeClass {
     CryptoKey, CryptoDigest, CryptoMac, Certificate,
     Watcher, WatchEvent, BinaryReader, BinaryWriter,
     Thread(Type), Mutex(Type), Guard(Type), Channel(Type), Sender(Type), Receiver(Type),
-    Env, Command, Process, ProcessOutput,
+    Env, Command, Process, ProcessOutput, Database,
 }
 #[derive(Debug, Clone)]
 pub struct Variant { pub name: String, pub fields: Vec<Type>, pub span: Span }
