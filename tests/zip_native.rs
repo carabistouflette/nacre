@@ -428,7 +428,7 @@ fn reader_handles_independent_store_deflate_directories_empty_entries_and_bounds
 }
 
 #[test]
-fn reader_rejects_truncated_payload_and_crc_corruption() {
+fn reader_rejects_truncated_archives_and_preserves_utf8_errors() {
     let scratch = Scratch::new();
     let fixture = fixture_bytes();
     let truncated = scratch.path("truncated.zip");
