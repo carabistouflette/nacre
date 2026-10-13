@@ -1,6 +1,6 @@
 # Contact book
 
-`examples/contact_book.ncr` is a complete interactive contact manager. Each
+`examples/io/contact_book.ncr` is a complete interactive contact manager. Each
 contact owns a `Text` name and an optional `Text` phone number. Display uses
 shared references into the list; edits use an exclusive element reference and
 replace the owned fields in place.
@@ -10,7 +10,7 @@ replace the owned fields in place.
 From the repository root, start it with:
 
 ```sh
-cargo run --offline --locked -- run examples/contact_book.ncr
+cargo run --offline --locked -- run examples/io/contact_book.ncr
 ```
 
 The program starts with an empty in-memory book. Type a command on its own line:

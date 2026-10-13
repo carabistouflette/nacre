@@ -1,6 +1,6 @@
 # Built-in map traversal
 
-Target release: Nacre 0.11.0, pre-1.0 and not a stability promise.
+Target release: Nacre 0.12.0, experimental pre-1.0 and not a stability promise.
 
 ```java
 for (int key, int value : counts) { println(key); println(value); }
@@ -8,12 +8,14 @@ for (int key, borrow Counter value : counters) { println(value.value()); }
 for (int key, borrow mut Counter value : counters) { value.increment(); }
 ```
 
-- A map header has two typed bindings separated by a comma: an `int` key and a
-  copied primitive value (`int`, `boolean`, `String`) or explicit `borrow V` /
-  `borrow mut V` for affine values. Existing one-binding list traversal is unchanged.
+- A map header has two typed bindings separated by a comma. Integer keys use
+  `int key`; owned Text keys use shared `borrow Text key`. Values copy primitive
+  representations (`byte`, `char`, `int`, `long`, `double`, `Unit`, `boolean`,
+  `String`) or explicitly use `borrow V` / `borrow mut V` for affine values.
 - Each live entry is visited once; empty maps visit none. Order is unspecified,
-  including after growth, deletion or reinsertion. Keys are copies, not mutable
-  references to storage. Altering the local key does not alter the map.
+  including after growth, deletion or reinsertion. Integer keys are copies;
+  altering a local integer key does not alter the map. Text keys stay immutable.
+  See [TEXT_MAP_KEYS.md](TEXT_MAP_KEYS.md) for borrowed key/value pairs.
 - Evaluate the collection expression once. Require a stable owner place or an
   existing borrowed return; reject temporary owned maps.
 - Copied/shared traversal holds a shared whole-map/root loan. Exclusive value
@@ -30,7 +32,7 @@ for (int key, borrow mut Counter value : counters) { value.increment(); }
   permitted again after the loop and all surviving result loans end.
 - Scan occupied storage directly without allocating an iterator, copying affine
   owners, rehashing keys for value access, or cloning the user-body AST.
-- Built-in traversal is not a first-class iterator API. Text/custom keys, NLL,
+- Built-in traversal is not a first-class iterator API. Custom keys, NLL,
   lifetime parameters, disjoint-entry borrowing, fallible allocation and exception
   unwinding remain excluded.
 

@@ -1,0 +1,32 @@
+{
+  "release": "0.12.0",
+  "status": "passed",
+  "scope": "Observed local compiler, generated programs, fuzz campaigns and editor source/package checks; desktop and remote CI recorded separately",
+  "rust_suite": {"passed": 1111, "suites": 45, "ignored": 2, "features": ["fuzzing"], "toolchain": "1.99.0-nightly"},
+  "msrv_suite": {"passed": 1106, "suites": 45, "ignored": 2, "toolchain": "1.74.0", "locked": true, "offline": true},
+  "clippy": {"status": "passed", "all_targets": true, "features": ["fuzzing"], "deny_warnings": true},
+  "native_validator": {"status": "passed", "compilers": ["gcc", "clang"], "successful_runs": 414, "expected_fatal_runs": 14, "invalid_source_rejections": 420, "address_undefined_sanitizers": true},
+  "llvm": {"emission_round_trip_cases": 11, "explicitly_executed_ignored_tests": 2, "status": "passed"},
+  "catalog": {"passed": 55, "total": 55},
+  "systems_regressions": {
+    "process": {"passed_per_compiler": 11, "compilers": ["gcc", "clang"], "standalone_types_at_O0": true, "sigterm_resistant_child_drop_reaped": true},
+    "concurrency": {"passed_per_compiler": 21, "compilers": ["gcc", "clang"]},
+    "blocked_channel_tsan": {"passed": 2, "real_pthread_wait_entry_observed": true, "scenarios": ["receiver abort returns blocked sender original payload", "last sender close wakes blocked receiver to EOF"]},
+    "process_example": {"allocations": 31, "frees": 31, "live": 0}
+  },
+  "fuzz": {
+    "frontend": {"runs": 75775, "seconds": 31, "seed_files": 8, "peak_rss_mib": 297, "observed_crashes": 0},
+    "lsp_frames": {"runs": 3319006, "seconds": 31, "seed_files": 8, "peak_rss_mib": 387, "observed_crashes": 0},
+    "isolated_campaign_corpora": true,
+    "limits": "Finite successful campaigns are not a safety proof."
+  },
+  "editors": {"vscode_extension": "0.7.0", "zed_extension": "0.7.0", "grammar": "0.6.0", "grammar_corpus_passed": 6, "compiler_checked_snippets": 34, "zed_examples_parsed": 62, "zed_queries_executed": 4, "locked_wasip2_release_build": "passed", "actual_desktop_evidence": "editors-0.12.0.json"},
+  "equivalent_work_benchmark": {
+    "command": "python3 benchmarks/run.py --size 10000 --repeats 3 --warmups 1 --allocation-stats --output results.json",
+    "checksums": "validated for both actual programs against independently calculated expected lines",
+    "text_map": {"nacre_allocations": 40017, "nacre_frees": 40017, "nacre_live": 0, "rust_allocation_events": 40021, "nacre_median_ms": 8.766314, "rust_median_ms": 8.707004},
+    "limits": ["Three noisy process-level samples support no general speed claim.", "Target startup, setup, output and shutdown remain included.", "Nacre runtime counters and Rust GlobalAlloc hooks have different scopes.", "Rust live=3 at report snapshot includes runtime/global scope and is not a leak verdict.", "Peak RSS is direct-child wait4 data from a fresh native supervisor, excluding the Python launcher's resident set."]
+  },
+  "platform": "Linux x86_64; Windows and macOS are not certified",
+  "publication": "Curated source only; original MIT attribution preserved; no private desktop profiles, screenshots or workstation paths included"
+}

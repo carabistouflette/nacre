@@ -1,4 +1,4 @@
-enum Command {
+enum DeskCommand {
     AddBook;
     AddTool;
     AddMember;
@@ -20,26 +20,26 @@ enum Command {
     Unknown;
 }
 
-Command parseCommand(borrow Text text) {
-    if (text.equalsString("add-book")) { return new Command.AddBook(); }
-    if (text.equalsString("add-tool")) { return new Command.AddTool(); }
-    if (text.equalsString("add-member")) { return new Command.AddMember(); }
-    if (text.equalsString("list")) { return new Command.List(); }
-    if (text.equalsString("members")) { return new Command.Members(); }
-    if (text.equalsString("show")) { return new Command.Show(); }
-    if (text.equalsString("lend")) { return new Command.Lend(); }
-    if (text.equalsString("return")) { return new Command.Return(); }
-    if (text.equalsString("maintenance")) { return new Command.Maintenance(); }
-    if (text.equalsString("rename")) { return new Command.Rename(); }
-    if (text.equalsString("remove")) { return new Command.Remove(); }
-    if (text.equalsString("remove-member")) { return new Command.RemoveMember(); }
-    if (text.equalsString("advance")) { return new Command.Advance(); }
-    if (text.equalsString("load")) { return new Command.Load(); }
-    if (text.equalsString("save")) { return new Command.Save(); }
-    if (text.equalsString("help")) { return new Command.Help(); }
-    if (text.equalsString("quit")) { return new Command.Quit(); }
-    if (text.isEmpty()) { return new Command.Empty(); }
-    return new Command.Unknown();
+DeskCommand parseCommand(borrow Text text) {
+    if (text.equalsString("add-book")) { return new DeskCommand.AddBook(); }
+    if (text.equalsString("add-tool")) { return new DeskCommand.AddTool(); }
+    if (text.equalsString("add-member")) { return new DeskCommand.AddMember(); }
+    if (text.equalsString("list")) { return new DeskCommand.List(); }
+    if (text.equalsString("members")) { return new DeskCommand.Members(); }
+    if (text.equalsString("show")) { return new DeskCommand.Show(); }
+    if (text.equalsString("lend")) { return new DeskCommand.Lend(); }
+    if (text.equalsString("return")) { return new DeskCommand.Return(); }
+    if (text.equalsString("maintenance")) { return new DeskCommand.Maintenance(); }
+    if (text.equalsString("rename")) { return new DeskCommand.Rename(); }
+    if (text.equalsString("remove")) { return new DeskCommand.Remove(); }
+    if (text.equalsString("remove-member")) { return new DeskCommand.RemoveMember(); }
+    if (text.equalsString("advance")) { return new DeskCommand.Advance(); }
+    if (text.equalsString("load")) { return new DeskCommand.Load(); }
+    if (text.equalsString("save")) { return new DeskCommand.Save(); }
+    if (text.equalsString("help")) { return new DeskCommand.Help(); }
+    if (text.equalsString("quit")) { return new DeskCommand.Quit(); }
+    if (text.isEmpty()) { return new DeskCommand.Empty(); }
+    return new DeskCommand.Unknown();
 }
 
 class Desk {
@@ -608,7 +608,7 @@ class Desk {
     }
 
     private void handleCommand(borrow Text text) {
-        Command command = parseCommand(text);
+        DeskCommand command = parseCommand(text);
         match (command) {
             AddBook { this.addBook(); }
             AddTool { this.addTool(); }

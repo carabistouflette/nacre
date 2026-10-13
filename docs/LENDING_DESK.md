@@ -1,6 +1,6 @@
 # Lending desk
 
-`examples/lending_desk/` is a multi-file Nacre source bundle. It starts with an
+`examples/apps/lending_desk/` is a multi-file Nacre source bundle. It starts with an
 empty catalog and member registry. Books and tools implement the same `Loanable`
 interface and share owned label/availability data. The generic `Catalog<T>`
 combines `Map<int,T>` with a separate insertion-ordered ID list; built-in map
@@ -19,20 +19,20 @@ persistence continue to use the ordered `idsRef()` list.
 From the repository root:
 
 ```sh
-cargo run --offline --locked -- run examples/lending_desk
+cargo run --offline --locked -- run examples/apps/lending_desk
 ```
 
 An optional initial save file can be supplied through program arguments:
 
 ```sh
-cargo run --offline --locked -- run examples/lending_desk -- "path with spaces/book Ω.data"
+cargo run --offline --locked -- run examples/apps/lending_desk -- "path with spaces/book Ω.data"
 ```
 
 The desk does not use a built-in data file or workstation path. Enter paths at
 the `File path:` prompt without quotes; spaces and Unicode are accepted. The
 logical day starts at zero. Resource and member IDs are positive, stable, and
 never reused. `advance` changes the explicit logical day; due dates are computed
-from that day and each resource's lending period, without a wall-clock API.
+from that day and each resource's lending period, independently of wall-clock time.
 
 ## Commands and prompts
 

@@ -31,7 +31,7 @@
   },
   {
     "name": "example_interface_composition",
-    "source": "interface Readable { readonly int read(); }\n\nclass Number implements Readable {\n    private int value;\n    Number(int value) { this.value = value; }\n    readonly int read() { return this.value; }\n}\n\nclass Task {\n    private Readable source;\n    Task(Readable source) { this.source = source; }\n    readonly int execute() { return this.source.read(); }\n}\n\nReadable make(boolean first) {\n    if (first) { return new Number(42); }\n    else { return new Number(7); }\n}\n\nvoid main() {\n    Task task = new Task(make(true));\n    println(task.execute());\n    Readable other = make(false);\n    println(other.read());\n}\n",
+    "source": "interface Readable { readonly int read(); }\n\nclass Number implements Readable {\n    private int value;\n    Number(int value) { this.value = value; }\n    readonly int read() { return this.value; }\n}\n\nclass ReadJob {\n    private Readable source;\n    ReadJob(Readable source) { this.source = source; }\n    readonly int execute() { return this.source.read(); }\n}\n\nReadable make(boolean first) {\n    if (first) { return new Number(42); }\n    else { return new Number(7); }\n}\n\nvoid main() {\n    ReadJob task = new ReadJob(make(true));\n    println(task.execute());\n    Readable other = make(false);\n    println(other.read());\n}\n",
     "valid": true,
     "stdout": "42\n7\n"
   },

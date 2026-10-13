@@ -1,6 +1,14 @@
 # Nacre changelog
 
-## Unreleased
+## 0.12.0
+Experimental native alpha; Linux systems APIs, breaking source changes permitted.
+
+- Borrowed channel wakeup regressions synchronize closure after entry into the
+  real condition wait, proving blocked receiver EOF and owned sender recovery.
+- Existing composition and lending examples use `ReadJob` and `DeskCommand`
+  rather than shadowing the new reserved Task and Command builtins.
+- Public references describe the settled alpha in English; obsolete milestone
+  documents are removed and examples retain their organized domain paths.
 - The mandatory design-principles review found `src/stdlib_codegen/io.rs` mixing
   Console, Args and filesystem lowering (SRP), while `stdlib/files.c.in` kept a
   separate whole-file stdio path (DRY). Filesystem declarations/emission now have
@@ -130,7 +138,7 @@
 - Editor packages 0.5.0, grammar 0.4.0 and 24 snippets cover map access and transfer.
   Generated C identifies the compiler package version rather than a pinned banner.
 - Text/custom keys, map traversal, lifetime refinements, fallible allocation,
-  exception unwinding and new backends remain excluded; see docs/V9.md.
+  exception unwinding and new backends remained excluded from 0.10.0.
 
 ## 0.9.0
 
@@ -146,7 +154,7 @@
   exercise traversal and recoverable extraction. Unicode persistence and
   candidate-load rollback retain the existing version-1 file format.
 - Editor packages 0.4.0, grammar 0.3.0, and 20 snippets include list traversal and
-  recoverable removal. The historical release contract is in `docs/V8.md`.
+  recoverable removal.
 - First-class iterators, maps, lifetime refinements, fallible allocation, exception
   unwinding, and new backends remain outside this release.
 
