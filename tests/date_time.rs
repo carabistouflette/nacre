@@ -665,3 +665,46 @@ void main() {
     assert_eq!(String::from_utf8(output.stdout).unwrap(),
         "positive local precision rejected\nnegative local precision rejected\n59\n999000001\ntrue\n");
 }
+
+#[test]
+fn datetime_rejects_local_precision_loss_and_preserves_exact_utc_fields() {
+    let output = execute(r#"
+Result<Unit, Text> check() {
+    Text east = new Text("Asia/Kathmandu");
+    Text west = new Text("Etc/GMT+12");
+    Text utc = new Text("UTC");
+    Text pattern = new Text("ss.SSS");
+    Text locale = new Text("");
+    match (DateTime.parts(9007199254739999L, east)) {
+        Ok(fields) { println("rounded positive fields accepted"); }
+        Err(error) { println("positive fields rejected"); }
+    }
+    match (DateTime.parts(-9007199254739999L, west)) {
+        Ok(fields) { println("rounded negative fields accepted"); }
+        Err(error) { println("negative fields rejected"); }
+    }
+    match (DateTime.format(9007199254739999L, pattern, east, locale)) {
+        Ok(value) { println("rounded format accepted"); }
+        Err(error) { println("rounded format rejected"); }
+    }
+    match (DateTime.addCalendar(9007199254739999L, 0, 0, 0, east)) {
+        Ok(value) { println("rounded arithmetic accepted"); }
+        Err(error) { println("rounded arithmetic rejected"); }
+    }
+    DateFields exact = DateTime.parts(9007199254739999L, utc)?;
+    println(exact.second());
+    println(exact.millisecond());
+    Text formatted = DateTime.format(9007199254739999L, pattern, utc, locale)?;
+    formatted.print();
+    return new Result<Unit, Text>.Ok(());
+}
+void main() {
+    match (check()) { Ok(unit) {} Err(error) { error.print(); } }
+}
+"#);
+    assert_native_success(&output);
+    assert_eq!(String::from_utf8(output.stdout).unwrap(), concat!(
+        "positive fields rejected\nnegative fields rejected\nrounded format rejected\n",
+        "rounded arithmetic rejected\n59\n999\n59.999\n"
+    ));
+}

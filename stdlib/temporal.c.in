@@ -396,10 +396,8 @@ static bool ncr_tv_offset_seconds(UCalendar *calendar, int32_t *offset_seconds) 
 static bool ncr_tv_read_instant_fields(
     UCalendar *calendar, int64_t millis, struct ncr_tv_fields *fields, int32_t *offset
 ) {
-    int64_t local_millis;
     return ncr_tv_offset_seconds(calendar, offset)
-        && ncr_tv_add_i64(millis, (int64_t)*offset * 1000, &local_millis)
-        && ncr_dt_epoch_in_range(local_millis)
+        && ncr_dt_local_epoch_in_range(millis, (int64_t)*offset * 1000)
         && ncr_tv_read_fields(calendar, fields);
 }
 

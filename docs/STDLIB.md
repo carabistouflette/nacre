@@ -1615,8 +1615,9 @@ time. It returns `Err` if the result is invalid, falls in a daylight-saving gap
 or overlap, or exceeds ICU's exact-millisecond range.
 
 ICU represents time as a double millisecond value. Calendar conversions accept
-only epoch milliseconds from -9007199254740991 through 9007199254740991 so every
-millisecond remains exactly representable. `durationMillis` is instead a fixed
+only epoch milliseconds from -9007199254740991 through 9007199254740991; the
+offset-adjusted local milliseconds must also lie inside that range before civil
+fields or formatted text are accepted. `durationMillis` is instead a fixed
 signed `end - start` calculation, independent of calendar days, and returns
 `Err` on signed overflow. `DateFields.offsetSeconds` is the total zone offset
 from UTC; `isDst` reports ICU's daylight-time status. `DateFields` is an owned

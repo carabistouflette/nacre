@@ -62,7 +62,7 @@ ncr_obj_@DATE_TIME_PARTS_RESULT@ @DATE_TIME_PARTS@(
     UErrorCode status = U_ZERO_ERROR;
     ucal_setMillis(calendar, (UDate)ncr_v_0, &status);
     struct ncr_dt_fields fields;
-    bool valid = U_SUCCESS(status) && ncr_dt_calendar_fields(calendar, &fields);
+    bool valid = U_SUCCESS(status);
     int64_t offset_millis = 0;
     bool daylight = false;
     if (valid) {
@@ -70,7 +70,8 @@ ncr_obj_@DATE_TIME_PARTS_RESULT@ @DATE_TIME_PARTS@(
         offset_millis = (int64_t)ucal_get(calendar, UCAL_ZONE_OFFSET, &status)
             + (int64_t)ucal_get(calendar, UCAL_DST_OFFSET, &status);
         daylight = ucal_inDaylightTime(calendar, &status);
-        valid = U_SUCCESS(status);
+        valid = U_SUCCESS(status) && ncr_dt_local_epoch_in_range(ncr_v_0, offset_millis)
+            && ncr_dt_calendar_fields(calendar, &fields);
     }
     ucal_close(calendar);
     if (!valid) {
@@ -104,13 +105,23 @@ ncr_obj_@DATE_TIME_FORMAT_RESULT@ @DATE_TIME_FORMAT@(
             "DateTime.format: epoch milliseconds exceed exact ICU precision", ncr_line, ncr_column);
     }
     const char *failure = NULL;
+    UCalendar *calendar = NULL;
     UDateFormat *formatter = ncr_dt_open_formatter(ncr_v_1, ncr_v_2, ncr_v_3,
-        &failure, ncr_line, ncr_column);
+        &failure, &calendar, ncr_line, ncr_column);
     if (formatter == NULL) {
         return ncr_result_error_@DATE_TIME_FORMAT_RESULT@(failure, strlen(failure), ncr_line, ncr_column);
     }
 
     UErrorCode status = U_ZERO_ERROR;
+    ucal_setMillis(calendar, (UDate)ncr_v_0, &status);
+    bool exact = U_SUCCESS(status) && ncr_dt_calendar_epoch_exact(calendar, ncr_v_0);
+    ucal_close(calendar);
+    if (!exact) {
+        udat_close(formatter);
+        return NCR_DT_RESULT_ERROR(@DATE_TIME_FORMAT_RESULT@,
+            "DateTime.format: local milliseconds exceed exact ICU precision", ncr_line, ncr_column);
+    }
+    status = U_ZERO_ERROR;
     int32_t required = udat_formatForFields(formatter, (UDate)ncr_v_0, NULL, 0, NULL, &status);
     if ((status != U_BUFFER_OVERFLOW_ERROR && U_FAILURE(status)) || required < 0
         || required == INT32_MAX) {
@@ -146,7 +157,7 @@ ncr_obj_@DATE_TIME_PARSE_RESULT@ @DATE_TIME_PARSE@(
 ) {
     const char *failure = NULL;
     UDateFormat *formatter = ncr_dt_open_formatter(ncr_v_1, ncr_v_2, ncr_v_3,
-        &failure, ncr_line, ncr_column);
+        &failure, NULL, ncr_line, ncr_column);
     if (formatter == NULL) {
         return ncr_result_error_@DATE_TIME_PARSE_RESULT@(failure, strlen(failure), ncr_line, ncr_column);
     }
@@ -224,7 +235,8 @@ ncr_obj_@DATE_TIME_ADD_RESULT@ @DATE_TIME_ADD_CALENDAR@(
     UErrorCode status = U_ZERO_ERROR;
     ucal_setMillis(calendar, (UDate)ncr_v_0, &status);
     struct ncr_dt_fields fields;
-    bool valid = U_SUCCESS(status) && ncr_dt_calendar_fields(calendar, &fields);
+    bool valid = U_SUCCESS(status) && ncr_dt_calendar_epoch_exact(calendar, ncr_v_0)
+        && ncr_dt_calendar_fields(calendar, &fields);
     if (!valid) {
         ucal_close(calendar);
         return NCR_DT_RESULT_ERROR(@DATE_TIME_ADD_RESULT@,

@@ -25,6 +25,21 @@ static bool ncr_dt_epoch_in_range(int64_t value) {
     return value >= -NCR_DT_MAX_EXACT_MILLIS && value <= NCR_DT_MAX_EXACT_MILLIS;
 }
 
+static bool ncr_dt_local_epoch_in_range(int64_t epoch, int64_t offset_millis) {
+    /* Compare before adding; these subtractions are safe for signed offsets. */
+    return ncr_dt_epoch_in_range(epoch)
+        && (offset_millis > 0
+            ? epoch <= NCR_DT_MAX_EXACT_MILLIS - offset_millis
+            : epoch >= -NCR_DT_MAX_EXACT_MILLIS - offset_millis);
+}
+
+static bool ncr_dt_calendar_epoch_exact(UCalendar *calendar, int64_t epoch) {
+    UErrorCode status = U_ZERO_ERROR;
+    int64_t offset = (int64_t)ucal_get(calendar, UCAL_ZONE_OFFSET, &status)
+        + (int64_t)ucal_get(calendar, UCAL_DST_OFFSET, &status);
+    return U_SUCCESS(status) && ncr_dt_local_epoch_in_range(epoch, offset);
+}
+
 static bool ncr_dt_udate_to_epoch(UDate value, int64_t *result) {
     if (!isfinite(value) || value < -(double)NCR_DT_MAX_EXACT_MILLIS
         || value > (double)NCR_DT_MAX_EXACT_MILLIS || trunc(value) != value) {
@@ -395,9 +410,11 @@ static UDateFormat *ncr_dt_open_formatter(
     const ncr_obj_@DATE_TIME_TEXT_ID@ *zone_text,
     const ncr_obj_@DATE_TIME_TEXT_ID@ *locale_text,
     const char **failure,
+    UCalendar **owned_calendar,
     size_t line,
     size_t column
 ) {
+    if (owned_calendar != NULL) { *owned_calendar = NULL; }
     UChar *pattern = NULL;
     int32_t pattern_length = 0;
     if (!ncr_dt_utf8_to_uchar(pattern_text, true, &pattern, &pattern_length, line, column)
@@ -461,7 +478,6 @@ static UDateFormat *ncr_dt_open_formatter(
         return NULL;
     }
     udat_setCalendar(formatter, calendar);
-    ucal_close(calendar);
     udat_setLenient(formatter, false);
     status = U_ZERO_ERROR;
     udat_setBooleanAttribute(formatter, UDAT_PARSE_ALLOW_WHITESPACE, false, &status);
@@ -470,10 +486,13 @@ static UDateFormat *ncr_dt_open_formatter(
     udat_setBooleanAttribute(formatter, UDAT_PARSE_MULTIPLE_PATTERNS_FOR_MATCH, false, &status);
     udat_set2DigitYearStart(formatter, century_start, &status);
     if (U_FAILURE(status)) {
+        ucal_close(calendar);
         udat_close(formatter);
         *failure = "DateTime: ICU strict formatter initialization failed";
         return NULL;
     }
+    if (owned_calendar != NULL) { *owned_calendar = calendar; }
+    else { ucal_close(calendar); }
     return formatter;
 }
 

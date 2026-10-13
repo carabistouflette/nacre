@@ -18,7 +18,7 @@
     "tests/contact_book_v8.rs": 2,
     "tests/crypto.rs": 2,
     "tests/crypto_keys.rs": 9,
-    "tests/date_time.rs": 9,
+    "tests/date_time.rs": 10,
     "tests/encoding.rs": 4,
     "tests/error_propagation.rs": 3,
     "tests/features_v4_frontend.rs": 109,
@@ -65,5 +65,5 @@
     "src/ownership.rs": 4,
     "src/project.rs": 2
   },
-  "total": 1229
+  "total": 1230
 }

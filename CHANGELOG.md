@@ -44,6 +44,9 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   Civil lookup and ISO formatting also check offset-adjusted milliseconds before
   accepting ICU fields. Short text results use inline storage; fixed-offset
   scratch and canonical zone conversion buffers are reused rather than copied.
+  The same guard now protects existing `DateTime` parts, formatting and calendar
+  arithmetic from local-field rounding near the exact range limits. Formatting
+  reuses its already-open calendar for the check instead of allocating a clone.
 - Ordered-key queries preserve affine borrows and specialize every copied-key
   query consistently. Native iterator interface adapters include their diagnostic
   arguments, and mapper extraction uses the element representation, not the
