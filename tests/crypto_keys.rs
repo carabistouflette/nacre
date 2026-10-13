@@ -17,6 +17,9 @@ boolean byteBufferHex(Result<ByteBuffer, Text> result, String expected) {
         Ok(value) { return Encoding.hexEncode(value).equalsString(expected); }
     }
 }
+Result<ByteBuffer, Text> hexBuffer(String value) {
+    return Encoding.hexDecode(new Text(value));
+}
 boolean booleanResultIs(Result<boolean, Text> result, boolean expected) {
     match (result) { Err(error) { return false; } Ok(value) { return value == expected; } }
 }
@@ -53,8 +56,16 @@ boolean macSuccess(Result<CryptoMac, Text> result) {
         Ok(mac) { return !byteBufferError(mac.finish()); }
     }
 }
-long longResultValue(Result<long, Text> result) {
-    match (result) { Err(error) { return -1L; } Ok(value) { return value; } }
+boolean certificateTimesMatch(borrow Certificate certificate, long expectedBefore, long expectedAfter) {
+    match (certificate.notBeforeUnixSeconds()) {
+        Err(error) { return false; }
+        Ok(before) {
+            match (certificate.notAfterUnixSeconds()) {
+                Err(error) { return false; }
+                Ok(after) { return before == expectedBefore && after == expectedAfter; }
+            }
+        }
+    }
 }
 boolean certificateError(Result<Certificate, Text> result) {
     match (result) { Err(error) { return true; } Ok(value) { return false; } }
@@ -66,6 +77,20 @@ boolean byteBufferResultsEqual(Result<ByteBuffer, Text> first, Result<ByteBuffer
             match (second) {
                 Err(error) { return false; }
                 Ok(b) { return Encoding.hexEncode(a).equals(Encoding.hexEncode(b)); }
+            }
+        }
+    }
+}
+boolean publishedAgreementMatches(String firstPem, String secondPem, String expected) {
+    match (CryptoKey.parsePrivatePem(new Text(firstPem))) {
+        Err(error) { return false; }
+        Ok(first) {
+            match (CryptoKey.parsePrivatePem(new Text(secondPem))) {
+                Err(error) { return false; }
+                Ok(second) {
+                    return byteBufferHex(first.agree(second), expected)
+                        && byteBufferHex(second.agree(first), expected);
+                }
             }
         }
     }
@@ -294,6 +319,7 @@ void main() {{
                     }}
                 }}
             }}
+        }}
     }}
     println(keyError(CryptoKey.generate(new Text("RSA"), 1024)));
     println(keyError(CryptoKey.generate(new Text("RSA"), 8448)));
@@ -325,8 +351,23 @@ boolean agreementMatches(String algorithm) {{
         Ok(first) {{
             match (CryptoKey.generate(name, 0)) {{
                 Err(error) {{ return false; }}
-                Ok(second) {{ return byteBufferResultsEqual(first.agree(second), second.agree(first)) && signsWith(first); }}
+                Ok(second) {{ return byteBufferResultsEqual(first.agree(second), second.agree(first)); }}
             }}
+        }}
+    }}
+}}
+boolean ecSigningMatches(String algorithm) {{
+    match (CryptoKey.generate(new Text(algorithm), 0)) {{
+        Err(error) {{ return false; }}
+        Ok(key) {{ return signsWith(key); }}
+    }}
+}}
+boolean x25519SigningUnsupported() {{
+    match (CryptoKey.generate(new Text("X25519"), 0)) {{
+        Err(error) {{ return false; }}
+        Ok(key) {{
+            ByteBuffer data = Encoding.utf8Encode(new Text("curve signature"));
+            return byteBufferError(key.sign(new Text("SHA256"), data));
         }}
     }}
 }}
@@ -345,11 +386,135 @@ void main() {{
     println(agreementMatches("X25519"));
     println(agreementMatches("EC-P256"));
     println(agreementMatches("EC-P384"));
+    println(ecSigningMatches("EC-P256"));
+    println(ecSigningMatches("EC-P384"));
+    println(x25519SigningUnsupported());
     println(crossGroupRejected());
 }}
 "#
     );
-    assert_native(&source, b"true\ntrue\ntrue\ntrue\n");
+    assert_native(&source, b"true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n");
+}
+
+#[test]
+fn nist_rsa_pss_verification_fixes_digest_mgf1_and_salt_length() {
+    const PUBLIC_PEM: &str = include_str!("fixtures/crypto_rsapss_nist.pub.pem");
+    const MESSAGE_HEX: &str = "e002377affb04f0fe4598de9d92d31d6c786040d5776976556a2cfc55e54a1dcb3cb1b126bd6a4bed2a184990ccea773fcc79d246553e6c64f686d21ad4152673cafec22aeb40f6a084e8a5b4991f4c64cf8a927effd0fd775e71e8329e41fdd4457b3911173187b4f09a817d79ea2397fc12dfe3d9c9a0290c8ead31b6690a6";
+    const SIGNATURE_HEX: &str = "4f9b425c2058460e4ab2f5c96384da2327fd29150f01955a76b4efe956af06dc08779a374ee4607eab61a93adc5608f4ec36e47f2a0f754e8ff839a8a19b1db1e884ea4cf348cd455069eb87afd53645b44e28a0a56808f5031da5ba9112768dfbfca44ebe63a0c0572b731d66122fb71609be1480faa4e4f75e43955159d70f081e2a32fbb19a48b9f162cf6b2fb445d2d6994bc58910a26b5943477803cdaaa1bd74b0da0a5d053d8b1dc593091db5388383c26079f344e2aea600d0e324164b450f7b9b465111b7265f3b1b063089ae7e2623fc0fda8052cf4bf3379102fbf71d7c98e8258664ceed637d20f95ff0111881e650ce61f251d9c3a629ef222d";
+    const WRONG_MGF1_HEX: &str = include_str!("fixtures/crypto_rsapss_mgf1_sha384.sig.hex").trim();
+    const WRONG_SALT_HEX: &str = include_str!("fixtures/crypto_rsapss_salt20.sig.hex").trim();
+    // NIST CAVP SigVerPSS_186-3.rsp: 2048-bit RSA, SHA-256, MGF1-SHA256, and 32-byte salt.
+    // Negative controls use the same published private key with MGF1-SHA384 or a 20-byte salt.
+    let source = format!(
+        r#"{HELPERS}
+boolean rsaPssVectorChecks(borrow CryptoKey key, String messageHex, String signatureHex,
+    String wrongMgfHex, String wrongSaltHex) {{
+    match (hexBuffer(messageHex)) {{
+        Err(error) {{ return false; }}
+        Ok(message) {{
+            match (hexBuffer(signatureHex)) {{
+                Err(error) {{ return false; }}
+                Ok(signature) {{
+                    match (hexBuffer(wrongMgfHex)) {{
+                        Err(error) {{ return false; }}
+                        Ok(wrongMgf) {{
+                            match (hexBuffer(wrongSaltHex)) {{
+                                Err(error) {{ return false; }}
+                                Ok(wrongSalt) {{
+                                    boolean knownAnswer = booleanResultIs(key.verify(new Text("SHA256"), message, signature), true);
+                                    boolean wrongDigest = booleanResultIs(key.verify(new Text("SHA384"), message, signature), false);
+                                    boolean wrongMgfParameters = booleanResultIs(key.verify(new Text("SHA256"), message, wrongMgf), false);
+                                    boolean wrongSaltParameters = booleanResultIs(key.verify(new Text("SHA256"), message, wrongSalt), false);
+                                    message.set(0L, (byte)(message.get(0L) + 1));
+                                    boolean changedMessage = booleanResultIs(key.verify(new Text("SHA256"), message, signature), false);
+                                    return knownAnswer && wrongDigest && wrongMgfParameters
+                                        && wrongSaltParameters && changedMessage;
+                                }}
+                            }}
+                        }}
+                    }}
+                }}
+            }}
+        }}
+    }}
+}}
+void main() {{
+    match (CryptoKey.parsePublicPem(new Text({}))) {{
+        Err(error) {{ println(false); }}
+        Ok(key) {{
+            println(rsaPssVectorChecks(key, {}, {}, {}, {}));
+        }}
+    }}
+}}
+"#,
+        nacre_literal(PUBLIC_PEM),
+        nacre_literal(MESSAGE_HEX),
+        nacre_literal(SIGNATURE_HEX),
+        nacre_literal(WRONG_MGF1_HEX),
+        nacre_literal(WRONG_SALT_HEX),
+    );
+    assert_native(&source, b"true\n");
+}
+
+#[test]
+fn nist_ecdsa_verification_accepts_binary_p256_vector() {
+    const PUBLIC_PEM: &str = include_str!("fixtures/crypto_ecdsa_nist.pub.pem");
+    const MESSAGE_HEX: &str = "73c5f6a67456ae48209b5f85d1e7de7758bf235300c6ae2bdceb1dcb27a7730fb68c950b7fcada0ecc4661d3578230f225a875e69aaa17f1e71c6be5c831f22663bac63d0c7a9635edb0043ff8c6f26470f02a7bc56556f1437f06dfa27b487a6c4290d8bad38d4879b334e341ba092dde4e4ae694a9c09302e2dbf443581c08";
+    const SIGNATURE_HEX: &str = "304502201d75830cd36f4c9aa181b2c4221e87f176b7f05b7c87824e82e396c88315c407022100cb2acb01dac96efc53a32d4a0d85d0c2e48955214783ecf50a4f0414a319c05a";
+    // NIST CAVP FIPS 186-4 SigVer.rsp, P-256/SHA-256; the 128-byte message contains NUL and non-text bytes.
+    let source = format!(
+        r#"{HELPERS}
+boolean ecdsaVectorChecks(borrow CryptoKey key, String messageHex, String signatureHex) {{
+    match (hexBuffer(messageHex)) {{
+        Err(error) {{ return false; }}
+        Ok(message) {{
+            match (hexBuffer(signatureHex)) {{
+                Err(error) {{ return false; }}
+                Ok(signature) {{
+                    boolean knownAnswer = booleanResultIs(key.verify(new Text("SHA256"), message, signature), true);
+                    boolean wrongDigest = booleanResultIs(key.verify(new Text("SHA384"), message, signature), false);
+                    message.set(0L, (byte)(message.get(0L) + 1));
+                    boolean changedMessage = booleanResultIs(key.verify(new Text("SHA256"), message, signature), false);
+                    return knownAnswer && wrongDigest && changedMessage;
+                }}
+            }}
+        }}
+    }}
+}}
+void main() {{
+    match (CryptoKey.parsePublicPem(new Text({}))) {{
+        Err(error) {{ println(false); }}
+        Ok(key) {{ println(ecdsaVectorChecks(key, {}, {})); }}
+    }}
+}}
+"#,
+        nacre_literal(PUBLIC_PEM),
+        nacre_literal(MESSAGE_HEX),
+        nacre_literal(SIGNATURE_HEX),
+    );
+    assert_native(&source, b"true\n");
+}
+
+#[test]
+fn rfc7748_and_rfc5903_agreement_match_known_secrets() {
+    const X25519_ALICE: &str = include_str!("fixtures/crypto_x25519_alice.private.pem");
+    const X25519_BOB: &str = include_str!("fixtures/crypto_x25519_bob.private.pem");
+    const P256_INITIATOR: &str = include_str!("fixtures/crypto_ecdh_rfc5903_initiator.private.pem");
+    const P256_RESPONDER: &str = include_str!("fixtures/crypto_ecdh_rfc5903_responder.private.pem");
+    // RFC 7748 Section 5.2 and RFC 5903 Section 8.1 independent shared-secret answers.
+    let source = format!(
+        r#"{HELPERS}
+void main() {{
+    println(publishedAgreementMatches({}, {}, "4a5d9d5ba4ce2de1728e3bf480350f25e07e21c947d19e3376f09b3c1e161742"));
+    println(publishedAgreementMatches({}, {}, "d6840f6b42f6edafd13116e0e12565202fef8e9ece7dce03812464d04b9442de"));
+}}
+"#,
+        nacre_literal(X25519_ALICE),
+        nacre_literal(X25519_BOB),
+        nacre_literal(P256_INITIATOR),
+        nacre_literal(P256_RESPONDER),
+    );
+    assert_native(&source, b"true\ntrue\n");
 }
 
 #[test]
@@ -368,21 +533,19 @@ void main() {{
             println(textResultEquals(leaf.subject(), "CN=wrong.example"));
             println(textResultEquals(leaf.issuer(), "CN=Nacre Test Intermediate"));
             println(textResultNonempty(leaf.serialText()));
-            long start = longResultValue(leaf.notBeforeUnixSeconds());
-            long end = longResultValue(leaf.notAfterUnixSeconds());
-            println(start >= 0L && end > start);
+            println(certificateTimesMatch(leaf, 1791881336L, 2107241336L));
             println(booleanResultIs(leaf.matchesHost(new Text("good.example")), true));
             println(booleanResultIs(leaf.matchesHost(new Text("wrong.example")), false));
             match (Path.fromText(new Text({}))) {{
                 Err(error) {{ println(false); println(false); println(false); println(false); }}
                 Ok(caFile) {{
-                    println(unitError(leaf.verify(new Text("good.example"), caFile, start)));
+                    println(unitError(leaf.verify(new Text("good.example"), caFile, 1791881337L)));
                     match (Certificate.parsePemChain(new Text({}))) {{
                         Err(error) {{ println(false); println(false); println(false); }}
                         Ok(chain) {{
-                            println(unitOk(chain.verify(new Text("good.example"), caFile, start)));
-                            println(unitError(chain.verify(new Text("wrong.example"), caFile, start)));
-                            println(unitError(chain.verify(new Text("good.example"), caFile, end + 1L)));
+                            println(unitOk(chain.verify(new Text("good.example"), caFile, 1791881337L)));
+                            println(unitError(chain.verify(new Text("wrong.example"), caFile, 1791881337L)));
+                            println(unitError(chain.verify(new Text("good.example"), caFile, 2107241337L)));
                         }}
                     }}
                 }}
@@ -402,4 +565,27 @@ void main() {{
         &source,
         b"true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n",
     );
+}
+#[test]
+fn certificate_times_preserve_pre_epoch_and_reject_invalid_intervals() {
+    // Parser-only leaf copies have changed validity bytes and are not used for signature verification.
+    const PRE_EPOCH: &str = include_str!("fixtures/crypto_leaf_pre_epoch.pem");
+    const MALFORMED: &str = include_str!("fixtures/crypto_leaf_malformed_time.pem");
+    const REVERSED: &str = include_str!("fixtures/crypto_leaf_reversed_time.pem");
+    let source = format!(
+        r#"{HELPERS}
+void main() {{
+    match (Certificate.parsePem(new Text({}))) {{
+        Err(error) {{ println(false); }}
+        Ok(certificate) {{ println(certificateTimesMatch(certificate, -1L, 1L)); }}
+    }}
+    println(certificateError(Certificate.parsePem(new Text({}))));
+    println(certificateError(Certificate.parsePem(new Text({}))));
+}}
+"#,
+        nacre_literal(PRE_EPOCH),
+        nacre_literal(MALFORMED),
+        nacre_literal(REVERSED),
+    );
+    assert_native(&source, b"true\ntrue\ntrue\n");
 }

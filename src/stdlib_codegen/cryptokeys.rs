@@ -1,7 +1,8 @@
 use crate::codegen::ctype;
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
 use super::support::{
-    native_function, replace_method_ids, replace_placeholders, result_id, text_class, variant_id,
+    native_function, replace_method_ids, replace_placeholders, result_id,
+    template_section, text_class, variant_id,
 };
 
 pub(super) fn fields(class: C) -> String {
@@ -76,11 +77,10 @@ fn add_result(
     replacements.push((error_result_placeholder, result.to_string()));
 }
 
-fn group(source: &str, name: &str) -> String {
+fn group<'a>(source: &'a str, name: &str) -> &'a str {
     let start = format!("/* CRYPTOKEYS_GROUP {name} */");
     let end = format!("/* CRYPTOKEYS_GROUP_END {name} */");
-    source.split_once(&start).expect("crypto keys template group opener").1
-        .split_once(&end).expect("crypto keys template group closer").0.to_owned()
+    template_section(source, &start, &end)
 }
 
 fn add_method_placeholders(
@@ -190,6 +190,6 @@ pub(super) fn implementation(program: &t::Program) -> String {
     add_method_placeholders(program, &mut replacements, key.is_some(), digest.is_some(), mac.is_some(), certificate.is_some());
     body = replace_placeholders(body, &replacements);
     body = replace_method_ids(body, program, None);
-    debug_assert!(!body.contains('@'), "unexpanded crypto keys placeholder");
+    debug_assert!(!super::support::has_placeholder(&body), "unexpanded crypto keys placeholder");
     body
 }

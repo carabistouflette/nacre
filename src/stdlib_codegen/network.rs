@@ -1,5 +1,8 @@
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
-use super::support::{native_function, replace_method_ids, replace_placeholders, result_id, variant_id};
+use super::support::{
+    native_function, replace_method_ids, replace_placeholders, result_id,
+    template_section, variant_id,
+};
 
 pub(super) fn fields(program: &t::Program, class: C, _class_id: usize) -> String {
     match class {
@@ -73,11 +76,10 @@ fn add_ok_tag(substitutions: &mut Vec<(&'static str, String)>, program: &t::Prog
     add(substitutions, key, variant_id(program, result_id(function), "Ok"));
 }
 
-fn group(source: &str, name: &str) -> String {
+fn group<'a>(source: &'a str, name: &str) -> &'a str {
     let start = format!("/* NETWORK_GROUP {name} */");
     let end = format!("/* NETWORK_GROUP_END {name} */");
-    source.split_once(&start).expect("network template group opener").1
-        .split_once(&end).expect("network template group closer").0.to_owned()
+    template_section(source, &start, &end)
 }
 
 fn has_any(program: &t::Program, methods: &[M]) -> bool {

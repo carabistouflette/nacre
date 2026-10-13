@@ -524,6 +524,9 @@ included in backend error text.
 Certificates reject malformed PEM and trailing non-whitespace. `parsePem` accepts
 one certificate; `parsePemChain` owns the first certificate and its PEM
 intermediates. Subject and issuer use RFC 2253 text, and the serial is decimal.
+Validity accessors convert ASN.1 times to checked signed Unix seconds, including
+dates before the epoch; malformed dates or intervals with `notBefore` after
+`notAfter` are rejected during parsing.
 Hostname checks use subject alternative names without falling back to the common
 name. `verify` checks the supplied CA file trust store, chain, server purpose,
 explicit Unix time, and SAN hostname; it does not fetch certificates or use the

@@ -1,6 +1,6 @@
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
 use super::support::{
-    native_function, replace_method_ids, replace_placeholders, result_id,
+    native_function, replace_method_ids, replace_placeholders, result_id, template_section,
     text_class, variant, variant_id,
 };
 
@@ -80,10 +80,10 @@ pub(super) fn drop_fields(program: &t::Program, native: C) -> String {
     }
 }
 
-fn group(source: &str, name: &str) -> String {
+fn group<'a>(source: &'a str, name: &str) -> &'a str {
     let start = format!("/* PROCESS_GROUP {name} */");
     let end = format!("/* PROCESS_GROUP_END {name} */");
-    super::support::template_section(source, &start, &end).to_owned()
+    template_section(source, &start, &end)
 }
 
 fn has_any(program: &t::Program, methods: &[M]) -> bool {

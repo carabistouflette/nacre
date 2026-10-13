@@ -14,6 +14,7 @@
 #include <openssl/x509v3.h>
 #include <errno.h>
 #include <limits.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
@@ -541,10 +542,20 @@ static void ncr_cryptokeys_certificate_destroy(void *certificate, void *chain) {
 static bool ncr_cryptokeys_certificate_time(X509 *certificate, bool before, int64_t *seconds) {
     const ASN1_TIME *value = before ? X509_get0_notBefore(certificate) : X509_get0_notAfter(certificate);
     struct tm parsed = {0};
+    if (value == NULL || ASN1_TIME_to_tm(value, &parsed) != 1) { return false; }
     errno = 0;
     time_t converted = timegm(&parsed);
     if (converted == (time_t)-1 && errno == EOVERFLOW) { return false; }
-    int64_t result = (int64_t)converted;
+    int64_t result;
+    if ((time_t)-1 < (time_t)0) {
+        intmax_t wide = (intmax_t)converted;
+        if (wide < INT64_MIN || wide > INT64_MAX) { return false; }
+        result = (int64_t)wide;
+    } else {
+        uintmax_t wide = (uintmax_t)converted;
+        if (wide > (uintmax_t)INT64_MAX) { return false; }
+        result = (int64_t)wide;
+    }
     if ((time_t)result != converted) { return false; }
     *seconds = result;
     return true;

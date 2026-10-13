@@ -27,7 +27,9 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   signatures, X25519/EC agreement, streaming digest/HMAC, and X.509 parsing with
   explicit-time CA-chain and SAN-host verification. RSA generation is bounded
   to 2048–8192 bits in 256-bit steps; Ed25519, X25519, EC-P256, and EC-P384 use
-  a zero size argument. Private PEM import rejects encryption.
+  a zero size argument. Private PEM import rejects encryption. Certificate
+  parsing validates ASN.1 validity times and preserves checked signed Unix
+  seconds, including dates before the epoch.
 
 - Native `Encoding` converts affine byte buffers to lowercase hex, canonical
   padded RFC 4648 Base64, canonical unpadded Base64URL, and strict UTF-8 `Text`.
