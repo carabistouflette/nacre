@@ -203,8 +203,16 @@ int ncr_test_close(int descriptor) {
 fn time_uses_monotonic_nanoseconds_wall_milliseconds_and_checked_sleep() {
     let source = r#"
 void main() {
-    long before = Time.monotonicNanos();
-    long next = Time.monotonicNanos();
+    long before = 0L;
+    match (Time.monotonicNanos()) {
+        Ok(value) { before = value; }
+        Err(error) { println("MONOTONIC_ERR"); }
+    }
+    long next = 0L;
+    match (Time.monotonicNanos()) {
+        Ok(value) { next = value; }
+        Err(error) { println("MONOTONIC_ERR"); }
+    }
     println(before >= 0L);
     println(next >= before);
 
@@ -235,7 +243,11 @@ void main() {
         Ok(value) { println(value); }
         Err(error) { println("SLEEP_ERR"); }
     }
-    long after = Time.monotonicNanos();
+    long after = 0L;
+    match (Time.monotonicNanos()) {
+        Ok(value) { after = value; }
+        Err(error) { println("MONOTONIC_ERR"); }
+    }
     println(after >= next);
     match (Time.sleepMillis(-1L)) {
         Ok(value) { println("unexpected"); }
@@ -248,6 +260,39 @@ void main() {
     assert_eq!(String::from_utf8_lossy(&output.stdout), concat!(
         "true\ntrue\ntrue\ntrue\ntrue\nNEGATIVE_DEADLINE_ERR\nOVERFLOW_DEADLINE_ERR\n()\n()\ntrue\nNEGATIVE_SLEEP_ERR\n"
     ));
+    assert_live_zero(&output);
+}
+
+#[test]
+fn monotonic_clock_failure_returns_err_and_drops_text() {
+    let source = r#"
+void main() {
+    match (Time.monotonicNanos()) {
+        Ok(value) { println("unexpected"); }
+        Err(error) { error.print(); }
+    }
+}
+"#;
+    let mut c = compile_to_c(source).unwrap();
+    c.push_str(r#"
+int ncr_test_clock_gettime(clockid_t clock_id, struct timespec *timestamp) {
+    (void)clock_id; (void)timestamp;
+    errno = EIO;
+    return -1;
+}
+"#);
+    let output = native::compile_c_with_flags(&c, &[
+        "-DNACRE_MEMORY_STATS",
+        "-Dclock_gettime=ncr_test_clock_gettime",
+        "-fsanitize=address,undefined",
+        "-fno-omit-frame-pointer",
+    ]).unwrap_or_else(|error| panic!("native compile failed: {error}"))
+        .output().unwrap_or_else(|error| panic!("native execution failed: {error}"));
+    assert_native_success(&output);
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "Time.monotonicNanos/CLOCK_MONOTONIC failed (errno=5)\n",
+    );
     assert_live_zero(&output);
 }
 

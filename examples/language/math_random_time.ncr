@@ -57,12 +57,20 @@ void main() {
         Err(error) { println("entropy unavailable"); }
     }
 
-    long before = Time.monotonicNanos();
+    long before = 0L;
+    match (Time.monotonicNanos()) {
+        Ok(value) { before = value; }
+        Err(error) { error.print(); }
+    }
     match (Time.sleepMillis(1L)) {
         Ok(value) { println(value); }
         Err(error) { println("sleep error"); }
     }
-    long after = Time.monotonicNanos();
+    long after = 0L;
+    match (Time.monotonicNanos()) {
+        Ok(value) { after = value; }
+        Err(error) { error.print(); }
+    }
     println(after >= before);
     printLongResult(Time.unixMillis());
     printLongResult(Time.deadlineAfterMillis(10L));

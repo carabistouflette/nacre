@@ -1,5 +1,5 @@
 class Time {
-    public static long monotonicNanos() {}
+    public static Result<long, Text> monotonicNanos() {}
     public static Result<long, Text> unixMillis() {}
     public static Result<Unit, Text> sleepMillis(long milliseconds) {}
     public static Result<long, Text> deadlineAfterMillis(long timeoutMillis) {}

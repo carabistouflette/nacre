@@ -84,7 +84,7 @@ pub(super) fn text_helpers(program: &t::Program, text: usize) -> String {
             Some(M::ConsoleReadLine | M::FilesReadText | M::FilesWriteText | M::FilesWriteTextAtomic
                 | M::ArgsGet | M::TextParseInt | M::TextParseLong | M::TextParseDouble | M::TextSliceBytes
                 | M::MathAbsInt | M::MathAbsLong | M::RandomFromSystem | M::RandomNextInt
-                | M::TimeUnixMillis | M::TimeSleepMillis | M::TimeDeadlineAfterMillis)) {
+                | M::TimeMonotonicNanos | M::TimeUnixMillis | M::TimeSleepMillis | M::TimeDeadlineAfterMillis)) {
             continue;
         }
         let class = result_id(function);

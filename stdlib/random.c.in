@@ -12,10 +12,6 @@ static uint64_t ncr_random_next_bits(ncr_obj_@RANDOM_CLASS@ *random) {
     return value ^ (value >> 31);
 }
 
-static int64_t ncr_random_signed_long(uint64_t bits) {
-    if (bits <= (uint64_t)INT64_MAX) { return (int64_t)bits; }
-    return -INT64_C(1) - (int64_t)(UINT64_MAX - bits);
-}
 
 static double ncr_random_unit_double(uint64_t bits) {
     return (double)(bits >> 11) * 0x1.0p-53;
@@ -76,7 +72,7 @@ void @RANDOM_RESEED@(ncr_obj_@RANDOM_CLASS@ *ncr_self, int64_t ncr_v_0, size_t n
 
 int64_t @RANDOM_NEXT_LONG@(ncr_obj_@RANDOM_CLASS@ *ncr_self, size_t ncr_line, size_t ncr_column) {
     (void)ncr_line; (void)ncr_column;
-    return ncr_random_signed_long(ncr_random_next_bits(ncr_self));
+    return ncr_i64_from_bits(ncr_random_next_bits(ncr_self));
 }
 
 ncr_obj_@RANDOM_INT_RESULT@ @RANDOM_NEXT_INT@(ncr_obj_@RANDOM_CLASS@ *ncr_self, int32_t ncr_v_0, size_t ncr_line, size_t ncr_column) {

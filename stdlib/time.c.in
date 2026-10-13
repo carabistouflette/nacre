@@ -75,15 +75,15 @@ static size_t ncr_time_error_message(char *buffer, size_t capacity, const char *
     return (size_t)length < capacity ? (size_t)length : capacity - 1;
 }
 
-int64_t @TIME_MONOTONIC_NANOS@(size_t ncr_line, size_t ncr_column) {
+ncr_obj_@TIME_MONOTONIC_RESULT@ @TIME_MONOTONIC_NANOS@(size_t ncr_line, size_t ncr_column) {
     int64_t value = 0;
     int failure = 0;
     if (!ncr_time_monotonic_value(&value, &failure)) {
         char message[128];
-        ncr_time_error_message(message, sizeof(message), "Time.monotonicNanos", failure);
-        ncr_fail(message, ncr_line, ncr_column);
+        size_t length = ncr_time_error_message(message, sizeof(message), "Time.monotonicNanos/CLOCK_MONOTONIC", failure);
+        return ncr_result_error_@TIME_MONOTONIC_RESULT@(message, length, ncr_line, ncr_column);
     }
-    return value;
+    return (ncr_obj_@TIME_MONOTONIC_RESULT@){.tag = @TIME_MONOTONIC_OK_TAG@, .data.v@TIME_MONOTONIC_OK_TAG@.f0 = value};
 }
 
 ncr_obj_@TIME_UNIX_RESULT@ @TIME_UNIX_MILLIS@(size_t ncr_line, size_t ncr_column) {
