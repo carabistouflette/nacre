@@ -16,11 +16,6 @@ class Console {
     public static void printText(borrow Text value) {}
 }
 
-class Files {
-    public static Result<Text, Text> readText(borrow Text path) {}
-    public static Result<boolean, Text> writeText(borrow Text path, borrow Text content) {}
-    public static Result<boolean, Text> writeTextAtomic(borrow Text path, borrow Text content) {}
-}
 
 class Args {
     public static int count() {}

@@ -75,7 +75,7 @@ void main() {
         Ok(path) {
             Text first = new Text("A\0é🙂");
             match (Files.writeTextAtomic(path, first)) {
-                Ok(success) { println(success); }
+                Ok(unit) { println(unit); }
                 Err(error) { println("WRITE_ERROR"); }
             }
             match (Files.readText(path)) {
@@ -84,7 +84,7 @@ void main() {
             }
             Text second = new Text("B\0世界");
             match (Files.writeTextAtomic(path, second)) {
-                Ok(success) { println(success); }
+                Ok(unit) { println(unit); }
                 Err(error) { println("WRITE_ERROR"); }
             }
         }
@@ -94,7 +94,7 @@ void main() {
 "#;
     let program = compile(source);
     let output = run(&program, &[target.as_path()]);
-    assert_eq!(output.stdout, b"true\ntrue\ntrue\n");
+    assert_eq!(output.stdout, b"()\ntrue\n()\n");
     assert_eq!(fs::read(&target).unwrap(), "B\0世界".as_bytes());
     #[cfg(unix)] {
         use std::os::unix::fs::PermissionsExt;

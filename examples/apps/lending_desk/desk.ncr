@@ -574,12 +574,9 @@ class Desk {
 
     private void savePath(borrow Text path) {
         Text content = encodeDesk(this.state);
-        Result<boolean,Text> written = Files.writeTextAtomic(path, content);
+        Result<Unit,Text> written = Files.writeTextAtomic(path, content);
         match (written) {
-            Ok(success) {
-                if (success) { println("Lending desk saved."); }
-                else { println("The lending desk was not saved."); }
-            }
+            Ok(unit) { println("Lending desk saved."); }
             Err(error) { this.reportError(error); }
         }
     }

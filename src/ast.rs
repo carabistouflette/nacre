@@ -41,7 +41,8 @@ pub enum NativeClass {
     List(Type), Array(Type), Deque(Type),
     Map { key: Type, value: Type, key_kind: Option<MapKeyKind> },
     Set { key: Type, key_kind: Option<MapKeyKind> }, Comparator(Type),
-    Text, Regex, RegexMatch, Arrays, ByteBuffer, Console, Files, Args, Math, Random, Time,
+    Text, Regex, RegexMatch, Arrays, ByteBuffer, Path, File, Directory, FileInfo,
+    Console, Files, Args, Math, Random, Time,
     SocketAddress, TcpListener, TcpStream, Datagram, UdpSocket,
 }
 #[derive(Debug, Clone)]

@@ -81,3 +81,29 @@ fn postfix_try_rejects_invalid_contexts_and_carriers() {
         "class Factory { public Factory() { int value = new Result<int, Text>.Ok(1)?; } } void main() {}",
     );
 }
+
+#[test]
+fn standalone_propagation_drops_ignored_success_owners_and_preserves_errors() {
+    let source = r#"
+Result<Text, Text> value(boolean successful) {
+    if (successful) { return new Result<Text, Text>.Ok(new Text("discarded owner")); }
+    return new Result<Text, Text>.Err(new Text("failure"));
+}
+Result<int, Text> number() { return new Result<int, Text>.Ok(42); }
+Result<Unit, Text> unit() { return new Result<Unit, Text>.Ok(()); }
+Result<Unit, Text> exercise(boolean fail) {
+    Text local = new Text("live local");
+    unit()?;
+    number()?;
+    value(true)?;
+    if (fail) { value(false)?; }
+    println("continued");
+    return new Result<Unit, Text>.Ok(());
+}
+void main() {
+    match (exercise(false)) { Ok(done) { println(done); } Err(error) { println("unexpected"); } }
+    match (exercise(true)) { Ok(done) { println("unexpected"); } Err(error) { println(error.equalsString("failure")); } }
+}
+"#;
+    assert_eq!(execute(source).stdout, b"continued\n()\ntrue\n");
+}

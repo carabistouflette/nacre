@@ -616,6 +616,7 @@ def main() -> int:
             "-Wno-unused-parameter",
             "-Wno-unused-but-set-variable",
             "-lm",
+            "-pthread",
         ],
         "measurement_supervisor_c": [
             "-O2",

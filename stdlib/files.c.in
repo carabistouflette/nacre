@@ -1,88 +1,98 @@
-static bool ncr_io_path_valid_@TEXT_ID@(ncr_obj_@TEXT_ID@ *path) {
-    return path->length >= 0 && (path->length == 0 || path->bytes != NULL)
-        && ncr_utf8_valid(path->bytes, (size_t)path->length)
-        && (path->length == 0 || memchr(path->bytes, 0, (size_t)path->length) == NULL);
+static ncr_obj_@FILES_METADATA_RESULT@ @FILES_METADATA@(ncr_obj_@PATH_ID@ *@FILES_METADATA_PATH@, size_t ncr_line, size_t ncr_column) {
+    char *path = ncr_fs_path_cstring_@TEXT_ID@(@FILES_METADATA_PATH@->text, ncr_line, ncr_column);
+    if (path == NULL) { NCR_FS_RETURN_ERROR(@FILES_METADATA_RESULT@, "Files.metadata", errno, ncr_line, ncr_column); }
+    struct stat status;
+    int result = lstat(path, &status);
+    int error = errno;
+    ncr_deallocate(path);
+    if (result != 0) { NCR_FS_RETURN_ERROR(@FILES_METADATA_RESULT@, "Files.metadata", error, ncr_line, ncr_column); }
+    if (status.st_size < 0 || (uintmax_t)status.st_size > (uintmax_t)INT64_MAX) {
+        NCR_FS_RETURN_ERROR(@FILES_METADATA_RESULT@, "Files.metadata size", EOVERFLOW, ncr_line, ncr_column);
+    }
+    ncr_obj_@FILE_INFO_ID@ *info = ncr_allocate(sizeof(*info), ncr_line, ncr_column);
+    info->size = (int64_t)status.st_size;
+    info->is_file = S_ISREG(status.st_mode);
+    info->is_directory = S_ISDIR(status.st_mode);
+    info->is_symlink = S_ISLNK(status.st_mode);
+    return (ncr_obj_@FILES_METADATA_RESULT@){ .tag = @FILES_METADATA_OK_TAG@, .data.v@FILES_METADATA_OK_TAG@.f0 = info };
 }
 
-static ncr_obj_@RESULT_TEXT@ @FILES_READ_TEXT@(ncr_obj_@TEXT_ID@ *path, size_t line, size_t column) {
-    if (!ncr_io_path_valid_@TEXT_ID@(path)) {
-        return @ERROR_TEXT_RESULT@("Files.readText: invalid path", sizeof("Files.readText: invalid path") - 1, line, column);
-    }
-    size_t path_length = (size_t)path->length;
-    unsigned char *terminated = ncr_allocate(path_length + 1, line, column);
-    if (path_length > 0) { memcpy(terminated, path->bytes, path_length); }
-    terminated[path_length] = 0;
-    FILE *file = fopen((const char *)terminated, "rb");
-    ncr_deallocate(terminated);
-    if (file == NULL) {
-        return @ERROR_TEXT_RESULT@("Files.readText: cannot open file", sizeof("Files.readText: cannot open file") - 1, line, column);
-    }
-    unsigned char *bytes = NULL;
-    size_t capacity = 0;
-    size_t length = 0;
-    const char *failure = NULL;
-    for (;;) {
-        if (length == capacity) {
-            // Peek before growing so exact-capacity EOF needs no extra buffer.
-            int next = fgetc(file);
-            if (next == EOF) {
-                if (ferror(file)) { failure = "Files.readText: read failed"; }
-                break;
-            }
-            size_t required = capacity == 0 ? 4096 : length + 1;
-            if (length == (size_t)INT32_MAX
-                || !@IO_RESERVE@(&bytes, &capacity, required, length, line, column)) {
-                failure = "Files.readText: file too large";
-                break;
-            }
-            bytes[length++] = (unsigned char)next;
-        }
-        size_t available = capacity - length;
-        size_t count = fread(bytes + length, 1, available, file);
-        length += count;
-        if (count < available) {
-            if (ferror(file) || !feof(file)) { failure = "Files.readText: read failed"; }
-            break;
-        }
-    }
-    if (fclose(file) != 0 && failure == NULL) { failure = "Files.readText: close failed"; }
-    if (failure == NULL && !ncr_utf8_valid(bytes, length)) { failure = "Files.readText: invalid UTF-8"; }
-    if (failure != NULL) {
-        ncr_deallocate(bytes);
-        return @ERROR_TEXT_RESULT@(failure, strlen(failure), line, column);
-    }
-    ncr_obj_@TEXT_ID@ *text = @TEXT_TAKE@(bytes, length, capacity, line, column);
-    return (ncr_obj_@RESULT_TEXT@){
-        .tag = @TEXT_RESULT_OK_TAG@,
-        .data.v@TEXT_RESULT_OK_TAG@.f0 = text
-    };
+
+static ncr_obj_@FILES_CREATE_DIRECTORY_RESULT@ @FILES_CREATE_DIRECTORY@(ncr_obj_@PATH_ID@ *@FILES_CREATE_DIRECTORY_PATH@, int32_t @FILES_CREATE_DIRECTORY_MODE@, size_t ncr_line, size_t ncr_column) {
+    char *path = ncr_fs_path_cstring_@TEXT_ID@(@FILES_CREATE_DIRECTORY_PATH@->text, ncr_line, ncr_column);
+    if (path == NULL) { NCR_FS_RETURN_ERROR(@FILES_CREATE_DIRECTORY_RESULT@, "Files.createDirectory", errno, ncr_line, ncr_column); }
+    int result = mkdir(path, (mode_t)@FILES_CREATE_DIRECTORY_MODE@);
+    int error = errno;
+    ncr_deallocate(path);
+    if (result != 0) { NCR_FS_RETURN_ERROR(@FILES_CREATE_DIRECTORY_RESULT@, "Files.createDirectory", error, ncr_line, ncr_column); }
+    return (ncr_obj_@FILES_CREATE_DIRECTORY_RESULT@){ .tag = @FILES_CREATE_DIRECTORY_OK_TAG@, .data.v@FILES_CREATE_DIRECTORY_OK_TAG@.f0 = UINT8_C(0) };
 }
 
-static ncr_obj_@RESULT_BOOL@ @FILES_WRITE_TEXT@(ncr_obj_@TEXT_ID@ *path, ncr_obj_@TEXT_ID@ *content, size_t line, size_t column) {
-    if (!ncr_io_path_valid_@TEXT_ID@(path)) {
-        return @ERROR_BOOL_RESULT@("Files.writeText: invalid path", sizeof("Files.writeText: invalid path") - 1, line, column);
+static ncr_obj_@FILES_REMOVE_FILE_RESULT@ @FILES_REMOVE_FILE@(ncr_obj_@PATH_ID@ *@FILES_REMOVE_FILE_PATH@, size_t ncr_line, size_t ncr_column) {
+    char *path = ncr_fs_path_cstring_@TEXT_ID@(@FILES_REMOVE_FILE_PATH@->text, ncr_line, ncr_column);
+    if (path == NULL) { NCR_FS_RETURN_ERROR(@FILES_REMOVE_FILE_RESULT@, "Files.removeFile", errno, ncr_line, ncr_column); }
+    int result = unlink(path);
+    int error = errno;
+    ncr_deallocate(path);
+    if (result != 0) { NCR_FS_RETURN_ERROR(@FILES_REMOVE_FILE_RESULT@, "Files.removeFile", error, ncr_line, ncr_column); }
+    return (ncr_obj_@FILES_REMOVE_FILE_RESULT@){ .tag = @FILES_REMOVE_FILE_OK_TAG@, .data.v@FILES_REMOVE_FILE_OK_TAG@.f0 = UINT8_C(0) };
+}
+
+static ncr_obj_@FILES_REMOVE_DIRECTORY_RESULT@ @FILES_REMOVE_DIRECTORY@(ncr_obj_@PATH_ID@ *@FILES_REMOVE_DIRECTORY_PATH@, size_t ncr_line, size_t ncr_column) {
+    char *path = ncr_fs_path_cstring_@TEXT_ID@(@FILES_REMOVE_DIRECTORY_PATH@->text, ncr_line, ncr_column);
+    if (path == NULL) { NCR_FS_RETURN_ERROR(@FILES_REMOVE_DIRECTORY_RESULT@, "Files.removeDirectory", errno, ncr_line, ncr_column); }
+    int result = rmdir(path);
+    int error = errno;
+    ncr_deallocate(path);
+    if (result != 0) { NCR_FS_RETURN_ERROR(@FILES_REMOVE_DIRECTORY_RESULT@, "Files.removeDirectory", error, ncr_line, ncr_column); }
+    return (ncr_obj_@FILES_REMOVE_DIRECTORY_RESULT@){ .tag = @FILES_REMOVE_DIRECTORY_OK_TAG@, .data.v@FILES_REMOVE_DIRECTORY_OK_TAG@.f0 = UINT8_C(0) };
+}
+
+static ncr_obj_@FILES_RENAME_RESULT@ @FILES_RENAME@(ncr_obj_@PATH_ID@ *@FILES_RENAME_FROM@, ncr_obj_@PATH_ID@ *@FILES_RENAME_TO@, size_t ncr_line, size_t ncr_column) {
+    char *from = ncr_fs_path_cstring_@TEXT_ID@(@FILES_RENAME_FROM@->text, ncr_line, ncr_column);
+    if (from == NULL) { NCR_FS_RETURN_ERROR(@FILES_RENAME_RESULT@, "Files.rename source", errno, ncr_line, ncr_column); }
+    char *to = ncr_fs_path_cstring_@TEXT_ID@(@FILES_RENAME_TO@->text, ncr_line, ncr_column);
+    if (to == NULL) {
+        int error = errno;
+        ncr_deallocate(from);
+        NCR_FS_RETURN_ERROR(@FILES_RENAME_RESULT@, "Files.rename destination", error, ncr_line, ncr_column);
     }
-    size_t path_length = (size_t)path->length;
-    unsigned char *terminated = ncr_allocate(path_length + 1, line, column);
-    if (path_length > 0) { memcpy(terminated, path->bytes, path_length); }
-    terminated[path_length] = 0;
-    FILE *file = fopen((const char *)terminated, "wb");
-    ncr_deallocate(terminated);
-    if (file == NULL) {
-        return @ERROR_BOOL_RESULT@("Files.writeText: cannot open file", sizeof("Files.writeText: cannot open file") - 1, line, column);
-    }
-    bool success = true;
-    if (content->length > 0
-        && fwrite(content->bytes, 1, (size_t)content->length, file) != (size_t)content->length) {
-        success = false;
-    }
-    if (fflush(file) != 0) { success = false; }
-    if (fclose(file) != 0) { success = false; }
+    int result = rename(from, to);
+    int error = errno;
+    ncr_deallocate(from);
+    ncr_deallocate(to);
+    if (result != 0) { NCR_FS_RETURN_ERROR(@FILES_RENAME_RESULT@, "Files.rename", error, ncr_line, ncr_column); }
+    return (ncr_obj_@FILES_RENAME_RESULT@){ .tag = @FILES_RENAME_OK_TAG@, .data.v@FILES_RENAME_OK_TAG@.f0 = UINT8_C(0) };
+}
+
+static ncr_obj_@FILES_READ_TEXT_RESULT@ @FILES_READ_TEXT@(ncr_obj_@TEXT_ID@ *@FILES_READ_TEXT_PATH@, size_t ncr_line, size_t ncr_column) {
+    int descriptor = ncr_fs_open_@TEXT_ID@(@FILES_READ_TEXT_PATH@, O_RDONLY, 0, ncr_line, ncr_column);
+    if (descriptor < 0) { NCR_FS_RETURN_ERROR(@FILES_READ_TEXT_RESULT@, "Files.readText", errno, ncr_line, ncr_column); }
+    ncr_obj_@BUFFER_ID@ buffer = { .bytes = NULL, .length = 0, .capacity = 0 };
+    int failure = 0;
+    bool success = ncr_fs_read_all_text_@BUFFER_ID@(descriptor, &buffer, ncr_line, ncr_column, &failure);
+    int saved_failure = success ? 0 : failure;
+    if (close(descriptor) != 0 && saved_failure == 0) { saved_failure = errno; success = false; }
     if (!success) {
-        return @ERROR_BOOL_RESULT@("Files.writeText: write failed", sizeof("Files.writeText: write failed") - 1, line, column);
+        ncr_deallocate(buffer.bytes);
+        NCR_FS_RETURN_ERROR(@FILES_READ_TEXT_RESULT@, "Files.readText", saved_failure, ncr_line, ncr_column);
     }
-    return (ncr_obj_@RESULT_BOOL@){
-        .tag = @BOOL_RESULT_OK_TAG@,
-        .data.v@BOOL_RESULT_OK_TAG@.f0 = true
-    };
+    if (buffer.length > 0 && !ncr_utf8_valid(buffer.bytes, buffer.length)) {
+        ncr_deallocate(buffer.bytes);
+        return ncr_result_error_@FILES_READ_TEXT_RESULT@("Files.readText: file is not valid UTF-8", sizeof("Files.readText: file is not valid UTF-8") - 1, ncr_line, ncr_column);
+    }
+    size_t text_capacity = buffer.capacity > (size_t)INT32_MAX ? (size_t)INT32_MAX : buffer.capacity;
+    ncr_obj_@TEXT_ID@ *text = @TEXT_TAKE_BYTES@(buffer.bytes, buffer.length, text_capacity, ncr_line, ncr_column);
+    return (ncr_obj_@FILES_READ_TEXT_RESULT@){ .tag = @FILES_READ_TEXT_OK_TAG@, .data.v@FILES_READ_TEXT_OK_TAG@.f0 = text };
+}
+
+static ncr_obj_@FILES_WRITE_TEXT_RESULT@ @FILES_WRITE_TEXT@(ncr_obj_@TEXT_ID@ *@FILES_WRITE_TEXT_PATH@, ncr_obj_@TEXT_ID@ *@FILES_WRITE_TEXT_CONTENT@, size_t ncr_line, size_t ncr_column) {
+    int descriptor = ncr_fs_open_@TEXT_ID@(@FILES_WRITE_TEXT_PATH@, O_WRONLY | O_CREAT | O_TRUNC, (mode_t)0666, ncr_line, ncr_column);
+    if (descriptor < 0) { NCR_FS_RETURN_ERROR(@FILES_WRITE_TEXT_RESULT@, "Files.writeText open", errno, ncr_line, ncr_column); }
+    int failure = 0;
+    bool written = ncr_fs_write_all(descriptor, @FILES_WRITE_TEXT_CONTENT@->bytes, (size_t)@FILES_WRITE_TEXT_CONTENT@->length, &failure);
+    int saved_failure = written ? 0 : failure;
+    if (close(descriptor) != 0 && saved_failure == 0) { saved_failure = errno; written = false; }
+    if (!written) { NCR_FS_RETURN_ERROR(@FILES_WRITE_TEXT_RESULT@, "Files.writeText", saved_failure, ncr_line, ncr_column); }
+    return (ncr_obj_@FILES_WRITE_TEXT_RESULT@){ .tag = @FILES_WRITE_TEXT_OK_TAG@, .data.v@FILES_WRITE_TEXT_OK_TAG@.f0 = UINT8_C(0) };
 }

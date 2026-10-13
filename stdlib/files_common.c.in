@@ -1,0 +1,43 @@
+/* Length-delimited Text is copied only at the POSIX C-string boundary. */
+static bool ncr_fs_path_valid_text_@TEXT_ID@(ncr_obj_@TEXT_ID@ *path) {
+    return path != NULL && path->length > 0 && path->bytes != NULL
+        && ncr_utf8_valid(path->bytes, (size_t)path->length)
+        && memchr(path->bytes, 0, (size_t)path->length) == NULL;
+}
+
+static char *ncr_fs_path_cstring_@TEXT_ID@(ncr_obj_@TEXT_ID@ *path, size_t line, size_t column) {
+    if (!ncr_fs_path_valid_text_@TEXT_ID@(path)) { errno = EINVAL; return NULL; }
+    size_t length = (size_t)path->length;
+    if (length == SIZE_MAX) { errno = ENAMETOOLONG; return NULL; }
+    char *copy = ncr_allocate(length + 1, line, column);
+    memcpy(copy, path->bytes, length);
+    copy[length] = '\0';
+    return copy;
+}
+
+static int ncr_fs_open_@TEXT_ID@(ncr_obj_@TEXT_ID@ *path, int flags, mode_t mode, size_t line, size_t column) {
+    char *copy = ncr_fs_path_cstring_@TEXT_ID@(path, line, column);
+    if (copy == NULL) { return -1; }
+    int descriptor = open(copy, flags | O_CLOEXEC, mode);
+    int error = errno;
+    ncr_deallocate(copy);
+    errno = error;
+    return descriptor;
+}
+
+static DIR *ncr_fs_opendir_@TEXT_ID@(ncr_obj_@TEXT_ID@ *path, size_t line, size_t column) {
+    char *copy = ncr_fs_path_cstring_@TEXT_ID@(path, line, column);
+    if (copy == NULL) { return NULL; }
+    DIR *directory = opendir(copy);
+    int error = errno;
+    ncr_deallocate(copy);
+    errno = error;
+    return directory;
+}
+
+#define NCR_FS_RETURN_ERROR(result_id, operation, error_code, line, column) do { \
+    char ncr_fs_message[192]; \
+    int ncr_fs_code = (error_code); \
+    (void)snprintf(ncr_fs_message, sizeof(ncr_fs_message), "%s failed (errno=%d)", (operation), ncr_fs_code); \
+    return ncr_result_error_##result_id(ncr_fs_message, strlen(ncr_fs_message), (line), (column)); \
+} while (0)

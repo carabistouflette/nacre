@@ -181,7 +181,7 @@ void main() {
         Ok(path) {
             Text content = new Text("A\0Bé");
             match (Files.writeText(path, content)) {
-                Ok(success) { println(success); }
+                Ok(unit) { println(unit); }
                 Err(error) { println("WRITE_ERROR"); }
             }
             match (Files.readText(path)) {
@@ -194,7 +194,7 @@ void main() {
 }
 "#;
     let output = execute(source, b"", &args);
-    assert_stdout(&output, "true\nA\0Bé\n".as_bytes());
+    assert_stdout(&output, "()\nA\0Bé\n".as_bytes());
     assert_eq!(std::fs::read(&path).unwrap(), "A\0Bé".as_bytes());
     std::fs::remove_file(path).unwrap();
 }

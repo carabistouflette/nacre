@@ -422,9 +422,9 @@ class Sudoku {
         }
     }
 
-    private Result<boolean,Text> saveFileContent(borrow Text path) {
+    private Result<Unit,Text> saveFileContent(borrow Text path) {
         if (!this.isValidGameState()) {
-            return new Result<boolean,Text>.Err(new Text("Cannot save an invalid Sudoku board."));
+            return new Result<Unit,Text>.Err(new Text("Cannot save an invalid Sudoku board."));
         }
         Text content = new Text("SUDOKU1\n");
         int i = 0;
@@ -447,15 +447,9 @@ class Sudoku {
     }
 
     private void saveFile(Text path) {
-        Result<boolean,Text> saved = this.saveFileContent(path);
+        Result<Unit,Text> saved = this.saveFileContent(path);
         match (saved) {
-            Ok(success) {
-                if (success) {
-                    println("Game saved.");
-                } else {
-                    println("Save failed.");
-                }
-            }
+            Ok(unit) { println("Game saved."); }
             Err(error) { this.reportError(error); }
         }
     }

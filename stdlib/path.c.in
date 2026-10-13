@@ -1,0 +1,50 @@
+static ncr_obj_@PATH_FROM_TEXT_RESULT@ @PATH_FROM_TEXT@(ncr_obj_@TEXT_ID@ *@PATH_FROM_TEXT_ARG@, size_t ncr_line, size_t ncr_column) {
+    ncr_obj_@TEXT_ID@ *text = @PATH_FROM_TEXT_ARG@;
+    if (!ncr_fs_path_valid_text_@TEXT_ID@(text)) {
+        ncr_drop_@TEXT_ID@(text);
+        return ncr_result_error_@PATH_FROM_TEXT_RESULT@("Path.fromText: path must be non-empty and contain no NUL", sizeof("Path.fromText: path must be non-empty and contain no NUL") - 1, ncr_line, ncr_column);
+    }
+    ncr_obj_@PATH_ID@ *path = ncr_allocate(sizeof(*path), ncr_line, ncr_column);
+    path->text = text;
+    return (ncr_obj_@PATH_FROM_TEXT_RESULT@){ .tag = @PATH_FROM_TEXT_OK_TAG@, .data.v@PATH_FROM_TEXT_OK_TAG@.f0 = path };
+}
+
+static ncr_obj_@PATH_ID@ *@PATH_CLONE@(ncr_obj_@PATH_ID@ *ncr_self, size_t ncr_line, size_t ncr_column) {
+    ncr_obj_@PATH_ID@ *copy = ncr_allocate(sizeof(*copy), ncr_line, ncr_column);
+    copy->text = @TEXT_FROM_BYTES@(ncr_self->text->bytes, (size_t)ncr_self->text->length, ncr_line, ncr_column);
+    return copy;
+}
+
+static ncr_obj_@PATH_JOIN_RESULT@ @PATH_JOIN@(ncr_obj_@PATH_ID@ *@PATH_JOIN_BASE@, ncr_obj_@PATH_ID@ *@PATH_JOIN_CHILD@, size_t ncr_line, size_t ncr_column) {
+    ncr_obj_@TEXT_ID@ *base = @PATH_JOIN_BASE@->text;
+    ncr_obj_@TEXT_ID@ *child = @PATH_JOIN_CHILD@->text;
+    if (child->bytes[0] == '/') {
+        return ncr_result_error_@PATH_JOIN_RESULT@("Path.join: child must be relative", sizeof("Path.join: child must be relative") - 1, ncr_line, ncr_column);
+    }
+    size_t base_length = (size_t)base->length;
+    size_t child_length = (size_t)child->length;
+    bool separator = base->bytes[base_length - 1] != '/';
+    size_t limit = (size_t)INT32_MAX;
+    if (child_length > limit - base_length || (separator && child_length == limit - base_length)) {
+        return ncr_result_error_@PATH_JOIN_RESULT@("Path.join: joined path is too long", sizeof("Path.join: joined path is too long") - 1, ncr_line, ncr_column);
+    }
+    size_t length = base_length + child_length + (separator ? 1 : 0);
+    unsigned char *bytes = ncr_allocate(length, ncr_line, ncr_column);
+    memcpy(bytes, base->bytes, base_length);
+    size_t cursor = base_length;
+    if (separator) { bytes[cursor++] = '/'; }
+    memcpy(bytes + cursor, child->bytes, child_length);
+    ncr_obj_@PATH_ID@ *path = ncr_allocate(sizeof(*path), ncr_line, ncr_column);
+    path->text = @TEXT_TAKE_BYTES@(bytes, length, length, ncr_line, ncr_column);
+    return (ncr_obj_@PATH_JOIN_RESULT@){ .tag = @PATH_JOIN_OK_TAG@, .data.v@PATH_JOIN_OK_TAG@.f0 = path };
+}
+
+static bool @PATH_IS_ABSOLUTE@(ncr_obj_@PATH_ID@ *ncr_self, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column;
+    return ncr_self->text->bytes[0] == '/';
+}
+
+static ncr_obj_@TEXT_ID@ *@PATH_AS_TEXT@(ncr_obj_@PATH_ID@ *ncr_self, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column;
+    return ncr_self->text;
+}

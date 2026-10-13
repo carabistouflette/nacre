@@ -1,0 +1,37 @@
+static ncr_obj_@DIRECTORY_OPEN_RESULT@ @DIRECTORY_OPEN@(ncr_obj_@PATH_ID@ *@DIRECTORY_OPEN_PATH@, size_t ncr_line, size_t ncr_column) {
+    DIR *directory = ncr_fs_opendir_@TEXT_ID@(@DIRECTORY_OPEN_PATH@->text, ncr_line, ncr_column);
+    if (directory == NULL) { NCR_FS_RETURN_ERROR(@DIRECTORY_OPEN_RESULT@, "Directory.open", errno, ncr_line, ncr_column); }
+    ncr_obj_@DIRECTORY_ID@ *owner = ncr_allocate(sizeof(*owner), ncr_line, ncr_column);
+    owner->directory = directory;
+    return (ncr_obj_@DIRECTORY_OPEN_RESULT@){ .tag = @DIRECTORY_OPEN_OK_TAG@, .data.v@DIRECTORY_OPEN_OK_TAG@.f0 = owner };
+}
+
+static ncr_obj_@DIRECTORY_NEXT_RESULT@ @DIRECTORY_NEXT_NAME@(ncr_obj_@DIRECTORY_ID@ *@DIRECTORY_NEXT_SELF@, size_t ncr_line, size_t ncr_column) {
+    if (@DIRECTORY_NEXT_SELF@->directory == NULL) return ncr_result_error_@DIRECTORY_NEXT_RESULT@("Directory.nextName: handle is closed", sizeof("Directory.nextName: handle is closed") - 1, ncr_line, ncr_column);
+    DIR *directory = (DIR *)@DIRECTORY_NEXT_SELF@->directory;
+    for (;;) {
+        errno = 0;
+        struct dirent *entry = readdir(directory);
+        if (entry == NULL) {
+            if (errno != 0) { NCR_FS_RETURN_ERROR(@DIRECTORY_NEXT_RESULT@, "Directory.nextName", errno, ncr_line, ncr_column); }
+            ncr_obj_@DIRECTORY_OPTION_ID@ option = { .tag = @DIRECTORY_OPTION_NONE_TAG@, .data.v@DIRECTORY_OPTION_NONE_TAG@.ncr_empty = 0 };
+            return (ncr_obj_@DIRECTORY_NEXT_RESULT@){ .tag = @DIRECTORY_NEXT_OK_TAG@, .data.v@DIRECTORY_NEXT_OK_TAG@.f0 = option };
+        }
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) { continue; }
+        size_t length = strlen(entry->d_name);
+        if (!ncr_utf8_valid((const unsigned char *)entry->d_name, length)) {
+            return ncr_result_error_@DIRECTORY_NEXT_RESULT@("Directory.nextName: entry name is not valid UTF-8", sizeof("Directory.nextName: entry name is not valid UTF-8") - 1, ncr_line, ncr_column);
+        }
+        ncr_obj_@TEXT_ID@ *name = @TEXT_FROM_BYTES@((const unsigned char *)entry->d_name, length, ncr_line, ncr_column);
+        ncr_obj_@DIRECTORY_OPTION_ID@ option = { .tag = @DIRECTORY_OPTION_SOME_TAG@, .data.v@DIRECTORY_OPTION_SOME_TAG@.f0 = name };
+        return (ncr_obj_@DIRECTORY_NEXT_RESULT@){ .tag = @DIRECTORY_NEXT_OK_TAG@, .data.v@DIRECTORY_NEXT_OK_TAG@.f0 = option };
+    }
+}
+
+static ncr_obj_@DIRECTORY_CLOSE_RESULT@ @DIRECTORY_CLOSE@(ncr_obj_@DIRECTORY_ID@ *@DIRECTORY_CLOSE_SELF@, size_t ncr_line, size_t ncr_column) {
+    if (@DIRECTORY_CLOSE_SELF@->directory == NULL) return ncr_result_error_@DIRECTORY_CLOSE_RESULT@("Directory.close: handle is closed", sizeof("Directory.close: handle is closed") - 1, ncr_line, ncr_column);
+    DIR *directory = (DIR *)@DIRECTORY_CLOSE_SELF@->directory;
+    @DIRECTORY_CLOSE_SELF@->directory = NULL;
+    if (closedir(directory) != 0) { NCR_FS_RETURN_ERROR(@DIRECTORY_CLOSE_RESULT@, "Directory.close", errno, ncr_line, ncr_column); }
+    return (ncr_obj_@DIRECTORY_CLOSE_RESULT@){ .tag = @DIRECTORY_CLOSE_OK_TAG@, .data.v@DIRECTORY_CLOSE_OK_TAG@.f0 = UINT8_C(0) };
+}

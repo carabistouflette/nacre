@@ -1,0 +1,83 @@
+Result<Unit, Text> run(borrow Path root) {
+    Random random = Random.fromSystem()?;
+    Text directoryName = new Text("nacre-filesystem-");
+    directoryName.appendLong(random.nextLong());
+    Path directoryPart = Path.fromText(directoryName)?;
+    Path workspace = Path.join(root, directoryPart)?;
+    Files.createDirectory(workspace, 448)?;
+
+    Path binaryPart = Path.fromText(new Text("payload.bin"))?;
+    Path binaryPath = Path.join(workspace, binaryPart)?;
+    File output = File.create(binaryPath, 384)?;
+    ByteBuffer payload = ByteBuffer.withCapacity(0L)?;
+    payload.append((byte)65);
+    payload.append((byte)0);
+    payload.append((byte)66);
+    payload.append((byte)67);
+    output.writeAll(payload)?;
+    output.flush()?;
+    output.close()?;
+
+    File input = File.openRead(binaryPath)?;
+    ByteBuffer read = ByteBuffer.withCapacity(0L)?;
+    long total = 0L;
+    boolean eof = false;
+    while (!eof) {
+        long count = input.readSome(read, 2L)?;
+        if (count == 0L) { eof = true; }
+        else { total = total + count; }
+    }
+    input.close()?;
+    println(total);
+    println(read.get(1L) == (byte)0);
+    FileInfo binaryInfo = Files.metadata(binaryPath)?;
+    println(binaryInfo.size());
+    println(binaryInfo.isFile());
+
+    Path textPart = Path.fromText(new Text("note-é.txt"))?;
+    Path textPath = Path.join(workspace, textPart)?;
+    Text note = new Text("hello\0filesystem");
+    borrow Text textPathText = textPath.asText();
+    Unit textWritten = Files.writeText(textPathText, note)?;
+    Text recovered = Files.readText(textPathText)?;
+    println(textWritten);
+    println(recovered.equals(note));
+
+    Directory entries = Directory.open(workspace)?;
+    int entryCount = 0;
+    boolean finished = false;
+    while (!finished) {
+        match (entries.nextName()?) {
+            Some(name) { Console.printText(name); println(""); entryCount = entryCount + 1; }
+            None { finished = true; }
+        }
+    }
+    entries.close()?;
+    println(entryCount);
+
+    Path renamedPart = Path.fromText(new Text("renamed.bin"))?;
+    Path renamedPath = Path.join(workspace, renamedPart)?;
+    Files.rename(binaryPath, renamedPath)?;
+    Files.removeFile(renamedPath)?;
+    Files.removeFile(textPath)?;
+    Files.removeDirectory(workspace)?;
+    println("cleaned");
+    return new Result<Unit, Text>.Ok(());
+}
+
+void main() {
+    match (Args.get(0)) {
+        Err(error) { Console.printText(error); println(""); }
+        Ok(rootText) {
+            match (Path.fromText(rootText)) {
+                Err(error) { Console.printText(error); println(""); }
+                Ok(root) {
+                    match (run(root)) {
+                        Ok(unit) { println("filesystem complete"); }
+                        Err(error) { Console.printText(error); println(""); }
+                    }
+                }
+            }
+        }
+    }
+}

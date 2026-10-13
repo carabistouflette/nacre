@@ -262,6 +262,10 @@ impl Expander {
         if !erase_comparator_marker {
             class.native = native;
         }
+        // Files' native text I/O uses the shared ByteBuffer reserve implementation.
+        if matches!(class.native.as_ref(), Some(&a::NativeClass::Files)) {
+            self.ty(&Type::Named("ByteBuffer".to_owned()), env, class.span, 0)?;
+        }
         for interface in &mut class.implements { *interface = self.ty(interface, env, class.span, 0)?; }
         if let Some(variants) = &mut class.variants {
             for variant in variants {

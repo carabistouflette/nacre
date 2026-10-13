@@ -1,6 +1,18 @@
 # Nacre changelog
 
 ## Unreleased
+- The mandatory design-principles review found `src/stdlib_codegen/io.rs` mixing
+  Console, Args and filesystem lowering (SRP), while `stdlib/files.c.in` kept a
+  separate whole-file stdio path (DRY). Filesystem declarations/emission now have
+  a dedicated prelude unit and backend leaf; `Files.readText`/`writeText` reuse the
+  direct ByteBuffer/descriptor helpers, and atomic replacement reuses path/write
+  helpers with close-on-exec temporary descriptors. The remediation stays within
+  the filesystem contract; no universal stream abstraction was added.
+- Linux filesystem support adds immutable Path, binary descriptor-backed File
+  and Directory, `lstat` metadata, and nonrecursive Files operations. Files writes
+  return Result<Unit,Text>; standalone postfix `?` preserves ordinary call-statement
+  success cleanup and propagates owned errors.
+  FIFO write failures preserve the caller's signal mask and pending SIGPIPE state.
 
 - Linux networking adds immutable IPv4/IPv6 `SocketAddress`, owned TCP listeners/streams,
   UDP sockets and datagrams with poll-based deadlines and direct ByteBuffer appends.
@@ -11,11 +23,8 @@
 - Design-principles review keeps TCP, UDP and address resolution in one cohesive
   networking unit, hides descriptor/sockaddr state, and keeps Datagram source
   ownership closed over its value. Results report timeouts; TCP EOF is Ok(0),
-  while datagram truncation is successful metadata (CQS/DbC/POLA). Existing
-  `src/stdlib_codegen/io.rs::implementations` still emits Console, Files and Args
-  together (SRP boundary); bounded follow-up: split those emitters when the
-  integration owner next changes the central IO router, preserving the current
-  native IDs and public signatures.
+  while datagram truncation is successful metadata (CQS/DbC/POLA). Console and Args
+  now have separate backend leaves; the IO storage helper has no emitter routing.
 
 - Per-file modules and imports resolve public/private type and function names
   before generic expansion, preserving file-local diagnostics and editor overlays.

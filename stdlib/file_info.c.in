@@ -1,0 +1,16 @@
+static int64_t @FILE_INFO_SIZE@(ncr_obj_@FILE_INFO_ID@ *ncr_self, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column;
+    return ncr_self->size;
+}
+static bool @FILE_INFO_IS_FILE@(ncr_obj_@FILE_INFO_ID@ *ncr_self, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column;
+    return ncr_self->is_file;
+}
+static bool @FILE_INFO_IS_DIRECTORY@(ncr_obj_@FILE_INFO_ID@ *ncr_self, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column;
+    return ncr_self->is_directory;
+}
+static bool @FILE_INFO_IS_SYMLINK@(ncr_obj_@FILE_INFO_ID@ *ncr_self, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column;
+    return ncr_self->is_symlink;
+}

@@ -1,0 +1,42 @@
+class Path {
+    public static Result<Path, Text> fromText(Text path) {}
+    public readonly Path clone() {}
+    public static Result<Path, Text> join(borrow Path base, borrow Path child) {}
+    public readonly boolean isAbsolute() {}
+    public readonly borrow Text asText() {}
+}
+
+class File {
+    public static Result<File, Text> openRead(borrow Path path) {}
+    public static Result<File, Text> create(borrow Path path, int mode) {}
+    public static Result<File, Text> openAppend(borrow Path path, int mode) {}
+    public Result<long, Text> readSome(borrow mut ByteBuffer destination, long maxBytes) {}
+    public Result<long, Text> writeSome(borrow ByteBuffer source, long offset, long maxBytes) {}
+    public Result<Unit, Text> writeAll(borrow ByteBuffer source) {}
+    public Result<Unit, Text> flush() {}
+    public Result<Unit, Text> close() {}
+}
+
+class Directory {
+    public static Result<Directory, Text> open(borrow Path path) {}
+    public Result<Option<Text>, Text> nextName() {}
+    public Result<Unit, Text> close() {}
+}
+
+class FileInfo {
+    public readonly long size() {}
+    public readonly boolean isFile() {}
+    public readonly boolean isDirectory() {}
+    public readonly boolean isSymlink() {}
+}
+
+class Files {
+    public static Result<Text, Text> readText(borrow Text path) {}
+    public static Result<Unit, Text> writeText(borrow Text path, borrow Text content) {}
+    public static Result<Unit, Text> writeTextAtomic(borrow Text path, borrow Text content) {}
+    public static Result<FileInfo, Text> metadata(borrow Path path) {}
+    public static Result<Unit, Text> createDirectory(borrow Path path, int mode) {}
+    public static Result<Unit, Text> removeFile(borrow Path path) {}
+    public static Result<Unit, Text> removeDirectory(borrow Path path) {}
+    public static Result<Unit, Text> rename(borrow Path from, borrow Path to) {}
+}

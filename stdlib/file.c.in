@@ -1,0 +1,68 @@
+static ncr_obj_@FILE_OPEN_READ_RESULT@ @FILE_OPEN_READ@(ncr_obj_@PATH_ID@ *@FILE_OPEN_READ_PATH@, size_t ncr_line, size_t ncr_column) {
+    int descriptor = ncr_fs_open_@TEXT_ID@(@FILE_OPEN_READ_PATH@->text, O_RDONLY, 0, ncr_line, ncr_column);
+    if (descriptor < 0) { NCR_FS_RETURN_ERROR(@FILE_OPEN_READ_RESULT@, "File.openRead", errno, ncr_line, ncr_column); }
+    ncr_obj_@FILE_ID@ *file = ncr_allocate(sizeof(*file), ncr_line, ncr_column);
+    file->fd = descriptor;
+    return (ncr_obj_@FILE_OPEN_READ_RESULT@){ .tag = @FILE_OPEN_READ_OK_TAG@, .data.v@FILE_OPEN_READ_OK_TAG@.f0 = file };
+}
+
+static ncr_obj_@FILE_CREATE_RESULT@ @FILE_CREATE@(ncr_obj_@PATH_ID@ *@FILE_CREATE_PATH@, int32_t @FILE_CREATE_MODE@, size_t ncr_line, size_t ncr_column) {
+    int descriptor = ncr_fs_open_@TEXT_ID@(@FILE_CREATE_PATH@->text, O_WRONLY | O_CREAT | O_TRUNC, (mode_t)@FILE_CREATE_MODE@, ncr_line, ncr_column);
+    if (descriptor < 0) { NCR_FS_RETURN_ERROR(@FILE_CREATE_RESULT@, "File.create", errno, ncr_line, ncr_column); }
+    ncr_obj_@FILE_ID@ *file = ncr_allocate(sizeof(*file), ncr_line, ncr_column);
+    file->fd = descriptor;
+    return (ncr_obj_@FILE_CREATE_RESULT@){ .tag = @FILE_CREATE_OK_TAG@, .data.v@FILE_CREATE_OK_TAG@.f0 = file };
+}
+
+static ncr_obj_@FILE_OPEN_APPEND_RESULT@ @FILE_OPEN_APPEND@(ncr_obj_@PATH_ID@ *@FILE_OPEN_APPEND_PATH@, int32_t @FILE_OPEN_APPEND_MODE@, size_t ncr_line, size_t ncr_column) {
+    int descriptor = ncr_fs_open_@TEXT_ID@(@FILE_OPEN_APPEND_PATH@->text, O_WRONLY | O_CREAT | O_APPEND, (mode_t)@FILE_OPEN_APPEND_MODE@, ncr_line, ncr_column);
+    if (descriptor < 0) { NCR_FS_RETURN_ERROR(@FILE_OPEN_APPEND_RESULT@, "File.openAppend", errno, ncr_line, ncr_column); }
+    ncr_obj_@FILE_ID@ *file = ncr_allocate(sizeof(*file), ncr_line, ncr_column);
+    file->fd = descriptor;
+    return (ncr_obj_@FILE_OPEN_APPEND_RESULT@){ .tag = @FILE_OPEN_APPEND_OK_TAG@, .data.v@FILE_OPEN_APPEND_OK_TAG@.f0 = file };
+}
+
+static ncr_obj_@FILE_READ_RESULT@ @FILE_READ_SOME@(ncr_obj_@FILE_ID@ *@FILE_READ_SELF@, ncr_obj_@BUFFER_ID@ *@FILE_READ_DESTINATION@, int64_t @FILE_READ_MAX@, size_t ncr_line, size_t ncr_column) {
+    if (@FILE_READ_SELF@->fd < 0) return ncr_result_error_@FILE_READ_RESULT@("File.readSome: handle is closed", sizeof("File.readSome: handle is closed") - 1, ncr_line, ncr_column);
+    if (@FILE_READ_MAX@ < 0) return ncr_result_error_@FILE_READ_RESULT@("File.readSome: maxBytes must be non-negative", sizeof("File.readSome: maxBytes must be non-negative") - 1, ncr_line, ncr_column);
+    ssize_t count = ncr_fs_read_buffer_@BUFFER_ID@(@FILE_READ_SELF@->fd, @FILE_READ_DESTINATION@, @FILE_READ_MAX@, ncr_line, ncr_column);
+    if (count < 0) { NCR_FS_RETURN_ERROR(@FILE_READ_RESULT@, "File.readSome", errno, ncr_line, ncr_column); }
+    return (ncr_obj_@FILE_READ_RESULT@){ .tag = @FILE_READ_OK_TAG@, .data.v@FILE_READ_OK_TAG@.f0 = (int64_t)count };
+}
+
+static ncr_obj_@FILE_WRITE_RESULT@ @FILE_WRITE_SOME@(ncr_obj_@FILE_ID@ *@FILE_WRITE_SELF@, ncr_obj_@BUFFER_ID@ *@FILE_WRITE_SOURCE@, int64_t @FILE_WRITE_OFFSET@, int64_t @FILE_WRITE_MAX@, size_t ncr_line, size_t ncr_column) {
+    if (@FILE_WRITE_SELF@->fd < 0) return ncr_result_error_@FILE_WRITE_RESULT@("File.writeSome: handle is closed", sizeof("File.writeSome: handle is closed") - 1, ncr_line, ncr_column);
+    if (@FILE_WRITE_OFFSET@ < 0 || @FILE_WRITE_MAX@ < 0 || @FILE_WRITE_OFFSET@ > (int64_t)@FILE_WRITE_SOURCE@->length
+        || @FILE_WRITE_MAX@ > (int64_t)@FILE_WRITE_SOURCE@->length - @FILE_WRITE_OFFSET@) {
+        return ncr_result_error_@FILE_WRITE_RESULT@("File.writeSome: invalid source range", sizeof("File.writeSome: invalid source range") - 1, ncr_line, ncr_column);
+    }
+    if (@FILE_WRITE_MAX@ == 0) return (ncr_obj_@FILE_WRITE_RESULT@){ .tag = @FILE_WRITE_OK_TAG@, .data.v@FILE_WRITE_OK_TAG@.f0 = INT64_C(0) };
+    ssize_t count = ncr_fs_write_once(@FILE_WRITE_SELF@->fd, @FILE_WRITE_SOURCE@->bytes + (size_t)@FILE_WRITE_OFFSET@, (size_t)@FILE_WRITE_MAX@);
+    if (count < 0) { NCR_FS_RETURN_ERROR(@FILE_WRITE_RESULT@, "File.writeSome", errno, ncr_line, ncr_column); }
+    return (ncr_obj_@FILE_WRITE_RESULT@){ .tag = @FILE_WRITE_OK_TAG@, .data.v@FILE_WRITE_OK_TAG@.f0 = (int64_t)count };
+}
+
+static ncr_obj_@FILE_WRITE_ALL_RESULT@ @FILE_WRITE_ALL@(ncr_obj_@FILE_ID@ *@FILE_WRITE_ALL_SELF@, ncr_obj_@BUFFER_ID@ *@FILE_WRITE_ALL_SOURCE@, size_t ncr_line, size_t ncr_column) {
+    if (@FILE_WRITE_ALL_SELF@->fd < 0) return ncr_result_error_@FILE_WRITE_ALL_RESULT@("File.writeAll: handle is closed", sizeof("File.writeAll: handle is closed") - 1, ncr_line, ncr_column);
+    int failure = 0;
+    if (!ncr_fs_write_all(@FILE_WRITE_ALL_SELF@->fd, @FILE_WRITE_ALL_SOURCE@->bytes, @FILE_WRITE_ALL_SOURCE@->length, &failure)) {
+        NCR_FS_RETURN_ERROR(@FILE_WRITE_ALL_RESULT@, "File.writeAll", failure, ncr_line, ncr_column);
+    }
+    return (ncr_obj_@FILE_WRITE_ALL_RESULT@){ .tag = @FILE_WRITE_ALL_OK_TAG@, .data.v@FILE_WRITE_ALL_OK_TAG@.f0 = UINT8_C(0) };
+}
+
+static ncr_obj_@FILE_FLUSH_RESULT@ @FILE_FLUSH@(ncr_obj_@FILE_ID@ *@FILE_FLUSH_SELF@, size_t ncr_line, size_t ncr_column) {
+    if (@FILE_FLUSH_SELF@->fd < 0) return ncr_result_error_@FILE_FLUSH_RESULT@("File.flush: handle is closed", sizeof("File.flush: handle is closed") - 1, ncr_line, ncr_column);
+    int status;
+    do { status = fsync(@FILE_FLUSH_SELF@->fd); } while (status != 0 && errno == EINTR);
+    if (status != 0) { NCR_FS_RETURN_ERROR(@FILE_FLUSH_RESULT@, "File.flush", errno, ncr_line, ncr_column); }
+    return (ncr_obj_@FILE_FLUSH_RESULT@){ .tag = @FILE_FLUSH_OK_TAG@, .data.v@FILE_FLUSH_OK_TAG@.f0 = UINT8_C(0) };
+}
+
+static ncr_obj_@FILE_CLOSE_RESULT@ @FILE_CLOSE@(ncr_obj_@FILE_ID@ *@FILE_CLOSE_SELF@, size_t ncr_line, size_t ncr_column) {
+    if (@FILE_CLOSE_SELF@->fd < 0) return ncr_result_error_@FILE_CLOSE_RESULT@("File.close: handle is closed", sizeof("File.close: handle is closed") - 1, ncr_line, ncr_column);
+    int descriptor = @FILE_CLOSE_SELF@->fd;
+    @FILE_CLOSE_SELF@->fd = -1;
+    if (close(descriptor) != 0) { NCR_FS_RETURN_ERROR(@FILE_CLOSE_RESULT@, "File.close", errno, ncr_line, ncr_column); }
+    return (ncr_obj_@FILE_CLOSE_RESULT@){ .tag = @FILE_CLOSE_OK_TAG@, .data.v@FILE_CLOSE_OK_TAG@.f0 = UINT8_C(0) };
+}

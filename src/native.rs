@@ -90,7 +90,7 @@ pub fn compile_c_optimized(source: &str, optimization: &str, flags: &[&str]) -> 
         .args(["-std=c11", "-Wall", "-Wextra", "-pedantic", "-Wno-unused-function", "-Wno-unused-variable", "-Wno-unused-parameter", "-Wno-unused-but-set-variable"])
         .args(flags)
         .arg(&c_path).arg("-o").arg(&executable)
-        .args(if cfg!(unix) { &["-lm"][..] } else { &[][..] })
+        .args(if cfg!(unix) { &["-lm", "-pthread"][..] } else { &[][..] })
         .output().map_err(|e| format!("failed to start {compiler:?}: {e}"))?;
     if !output.status.success() {
         return Err(format!("C compiler {compiler:?} failed:\n{}\nTo inspect the generated code: nacre emit-c source.ncr -o debug.c", String::from_utf8_lossy(&output.stderr)));
@@ -114,7 +114,7 @@ pub fn emit_llvm(source: &str, optimization: &str) -> Result<String, String> {
     let c_path = directory.0.join("program.c");
     fs::write(&c_path, source).map_err(|e| e.to_string())?;
     let output = Command::new(&compiler)
-        .args(["-std=c11", optimization, "-S", "-emit-llvm", "-fno-ident"])
+        .args(["-std=c11", optimization, "-pthread", "-S", "-emit-llvm", "-fno-ident"])
         .arg(&c_path).args(["-o", "-"])
         .output().map_err(|e| format!("emit-llvm requires Clang (NACRE_CLANG={compiler:?}): {e}"))?;
     if !output.status.success() {

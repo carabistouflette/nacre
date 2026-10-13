@@ -13,16 +13,24 @@
 #include <math.h>
 #include <float.h>
 #include <errno.h>
+#include <limits.h>
 #include <string.h>
 #include <unistd.h>
 #include <locale.h>
 #include <regex.h>
-#include <limits.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <poll.h>
 #include <sys/socket.h>
 #include <sys/uio.h>
+#include <dirent.h>
+#include <fcntl.h>
+#include <pthread.h>
+#include <signal.h>
+#include <time.h>
+#include <stdatomic.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 typedef struct {
     const unsigned char *data;

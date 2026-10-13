@@ -126,7 +126,7 @@ pub enum CallTarget { Function(usize), Println }
 
 /// Trusted standard-library storage, never exposed as source fields.
 #[derive(Debug, Clone, Copy)]
-pub enum NativeClass { List(Type), Array(Type), Deque(Type), Map(MapKeyKind, Type), Set(MapKeyKind), Text, Regex, RegexMatch, Arrays, ByteBuffer, Console, Files, Args, Math, Random, Time, SocketAddress, TcpListener, TcpStream, Datagram, UdpSocket }
+pub enum NativeClass { List(Type), Array(Type), Deque(Type), Map(MapKeyKind, Type), Set(MapKeyKind), Text, Regex, RegexMatch, Arrays, ByteBuffer, Path, File, Directory, FileInfo, Console, Files, Args, Math, Random, Time, SocketAddress, TcpListener, TcpStream, Datagram, UdpSocket }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NativeMethod {
     ListNew, ListAdd, ListSize, ListCapacity, ListIsEmpty, ListGet, ListGetRef, ListGetMut,
@@ -139,6 +139,11 @@ pub enum NativeMethod {
     ArraysBytes, ArraysChars, ArraysInts, ArraysLongs, ArraysDoubles, ArraysBooleans, ArraysUnits,
     ByteBufferWithCapacity, ByteBufferLength, ByteBufferCapacity, ByteBufferGet, ByteBufferSet,
     ByteBufferAppend, ByteBufferAppendBytes, ByteBufferClear, ByteBufferTruncate,
+    PathFromText, PathClone, PathJoin, PathIsAbsolute, PathAsText,
+    FileOpenRead, FileCreate, FileOpenAppend, FileReadSome, FileWriteSome, FileWriteAll, FileFlush, FileClose,
+    DirectoryOpen, DirectoryNextName, DirectoryClose,
+    FileInfoSize, FileInfoIsFile, FileInfoIsDirectory, FileInfoIsSymlink,
+    FilesMetadata, FilesCreateDirectory, FilesRemoveFile, FilesRemoveDirectory, FilesRename,
     MapNew, MapContainsKey, MapSize, MapIsEmpty, MapPut, MapTryRemove, MapTryGet,
     MapGetRef, MapGetMut, MapClear,
     SetNew, SetAdd, SetContains, SetSize, SetIsEmpty, SetRemove, SetClear,

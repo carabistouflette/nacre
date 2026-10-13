@@ -149,6 +149,10 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
             Some(a::NativeClass::Set { .. }) =>
                 return Err(Diagnostic::new(class.span, "[E5004] Set<T> key classification is missing")),
             Some(a::NativeClass::Comparator(_)) => None,
+            Some(a::NativeClass::Path) => Some(t::NativeClass::Path),
+            Some(a::NativeClass::File) => Some(t::NativeClass::File),
+            Some(a::NativeClass::Directory) => Some(t::NativeClass::Directory),
+            Some(a::NativeClass::FileInfo) => Some(t::NativeClass::FileInfo),
             Some(a::NativeClass::Console) => Some(t::NativeClass::Console),
             Some(a::NativeClass::Files) => Some(t::NativeClass::Files),
             Some(a::NativeClass::Args) => Some(t::NativeClass::Args),
@@ -612,9 +616,10 @@ impl Checker<'_> {
                 (t::Stmt::Assign { target, value }, false)
             }
             S::Expr(expr) => {
+                let is_try = matches!(&expr.kind, a::ExprKind::Try(_));
                 if !matches!(&expr.kind, a::ExprKind::Call { .. } | a::ExprKind::MethodCall { .. }
-                    | a::ExprKind::New { .. } | a::ExprKind::Variant { .. }) {
-                    return Err(Diagnostic::new(expr.span, "only a call or construction can be used as an expression statement"));
+                    | a::ExprKind::New { .. } | a::ExprKind::Variant { .. }) && !is_try {
+                    return Err(Diagnostic::new(expr.span, "only a call, construction, or result propagation can be used as an expression statement"));
                 }
                 let value = self.expression(expr)?;
                 if value.ty.is_object() && self.tables.is_view(value.ty) {

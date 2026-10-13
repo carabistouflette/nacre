@@ -84,12 +84,12 @@ def exercise_native(nacre, source, name, expected, cc, directory, env, sanitizer
     c_file = directory / f'{name}.c'
     exe = directory / name
     command([str(nacre), 'emit-c', str(source), '-o', str(c_file)], capture_output=True)
-    flags = ['-std=c11', '-O1', '-g', '-DNACRE_MEMORY_STATS']
+    flags = ['-std=c11', '-O1', '-g', '-pthread', '-DNACRE_MEMORY_STATS']
     if sanitizers:
         flags += ['-fsanitize=address,undefined', '-fno-sanitize-recover=all', '-fno-omit-frame-pointer']
         if sys.platform.startswith('linux'):
             flags += ['-fno-pie', '-no-pie']
-    command([cc, *flags, str(c_file), '-o', str(exe)], capture_output=True)
+    command([cc, *flags, str(c_file), '-lm', '-o', str(exe)], capture_output=True)
     run_env = dict(env, ASAN_OPTIONS='detect_leaks=1:halt_on_error=1')
     result = command([str(exe)], capture_output=True, env=run_env, timeout=20)
     assert result.stdout == expected.encode('utf-8'), (name, result.stdout)
@@ -169,7 +169,7 @@ def main():
                         c_file = directory / (name + '.c')
                         exe = directory / name
                         command([str(nacre), 'emit-c', str(source), '-o', str(c_file)], capture_output=True)
-                        command([cc, '-std=c11', '-O2', str(c_file), '-o', str(exe)], capture_output=True)
+                        command([cc, '-std=c11', '-O2', '-pthread', str(c_file), '-lm', '-o', str(exe)], capture_output=True)
                         result = subprocess.run([str(exe)], capture_output=True, timeout=20)
                         assert result.returncode == 70, (name, result.returncode, result.stderr)
                         assert b'[1:' in result.stderr, (name, result.stderr)

@@ -1,58 +1,51 @@
-/* rename is the atomic visibility commit; no fsync/power-loss durability promise. */
-static ncr_obj_@RESULT_BOOL_ATOMIC@ @FILES_WRITE_TEXT_ATOMIC@(ncr_obj_@TEXT_ID@ *path, ncr_obj_@TEXT_ID@ *content, size_t line, size_t column) {
-    if (!ncr_io_path_valid_@TEXT_ID@(path) || path->length == 0) {
-        return @ERROR_BOOL_ATOMIC@("Files.writeTextAtomic: invalid path", sizeof("Files.writeTextAtomic: invalid path") - 1, line, column);
-    }
+/* Rename is the atomic visibility commit; no fsync or power-loss promise is made. */
+static ncr_obj_@RESULT_UNIT_ATOMIC@ @FILES_WRITE_TEXT_ATOMIC@(ncr_obj_@TEXT_ID@ *path, ncr_obj_@TEXT_ID@ *content, size_t line, size_t column) {
     if (content->length < 0 || (content->length > 0 && content->bytes == NULL)) {
-        return @ERROR_BOOL_ATOMIC@("Files.writeTextAtomic: invalid content", sizeof("Files.writeTextAtomic: invalid content") - 1, line, column);
+        return @ERROR_UNIT_ATOMIC@("Files.writeTextAtomic: invalid content", sizeof("Files.writeTextAtomic: invalid content") - 1, line, column);
     }
 
     static const char suffix[] = ".ncr-atomic-XXXXXX";
+    char *target = ncr_fs_path_cstring_@TEXT_ID@(path, line, column);
+    if (target == NULL) {
+        return @ERROR_UNIT_ATOMIC@("Files.writeTextAtomic: invalid path", sizeof("Files.writeTextAtomic: invalid path") - 1, line, column);
+    }
     size_t path_length = (size_t)path->length;
-    if (path_length > (SIZE_MAX - 1 - sizeof(suffix)) / 2) {
-        return @ERROR_BOOL_ATOMIC@("Files.writeTextAtomic: path too long", sizeof("Files.writeTextAtomic: path too long") - 1, line, column);
+    if (path_length > SIZE_MAX - sizeof(suffix)) {
+        ncr_deallocate(target);
+        NCR_FS_RETURN_ERROR(@RESULT_UNIT_ATOMIC@, "Files.writeTextAtomic path", EOVERFLOW, line, column);
     }
-    char *paths = ncr_allocate(path_length * 2 + 1 + sizeof(suffix), line, column);
-    char *target = paths;
-    char *temporary = paths + path_length + 1;
-    if (path_length > 0) {
-        memcpy(target, path->bytes, path_length);
-        memcpy(temporary, path->bytes, path_length);
-    }
-    target[path_length] = '\0';
+    char *temporary = ncr_allocate(path_length + sizeof(suffix), line, column);
+    memcpy(temporary, target, path_length);
     memcpy(temporary + path_length, suffix, sizeof(suffix));
 
-    int descriptor = mkstemp(temporary);
-    if (descriptor == -1) {
-        ncr_deallocate(paths);
-        return @ERROR_BOOL_ATOMIC@("Files.writeTextAtomic: cannot create temporary file", sizeof("Files.writeTextAtomic: cannot create temporary file") - 1, line, column);
+    int descriptor = mkostemp(temporary, O_CLOEXEC);
+    if (descriptor < 0) {
+        int error = errno;
+        ncr_deallocate(target);
+        ncr_deallocate(temporary);
+        NCR_FS_RETURN_ERROR(@RESULT_UNIT_ATOMIC@, "Files.writeTextAtomic create", error, line, column);
     }
-    FILE *file = fdopen(descriptor, "wb");
-    if (file == NULL) {
-        (void)close(descriptor);
-        (void)unlink(temporary);
-        ncr_deallocate(paths);
-        return @ERROR_BOOL_ATOMIC@("Files.writeTextAtomic: cannot open temporary file", sizeof("Files.writeTextAtomic: cannot open temporary file") - 1, line, column);
-    }
-
-    size_t content_length = (size_t)content->length;
-    bool success = content_length == 0
-        || fwrite(content->bytes, 1, content_length, file) == content_length;
-    if (fflush(file) != 0) { success = false; }
-    if (fclose(file) != 0) { success = false; }
+    int failure = 0;
+    bool success = ncr_fs_write_all(descriptor, content->bytes, (size_t)content->length, &failure);
+    if (close(descriptor) != 0 && failure == 0) { failure = errno; success = false; }
     if (!success) {
+        int error = failure == 0 ? EIO : failure;
         (void)unlink(temporary);
-        ncr_deallocate(paths);
-        return @ERROR_BOOL_ATOMIC@("Files.writeTextAtomic: write failed", sizeof("Files.writeTextAtomic: write failed") - 1, line, column);
+        ncr_deallocate(target);
+        ncr_deallocate(temporary);
+        NCR_FS_RETURN_ERROR(@RESULT_UNIT_ATOMIC@, "Files.writeTextAtomic write", error, line, column);
     }
     if (rename(temporary, target) != 0) {
+        int error = errno;
         (void)unlink(temporary);
-        ncr_deallocate(paths);
-        return @ERROR_BOOL_ATOMIC@("Files.writeTextAtomic: rename failed", sizeof("Files.writeTextAtomic: rename failed") - 1, line, column);
+        ncr_deallocate(target);
+        ncr_deallocate(temporary);
+        NCR_FS_RETURN_ERROR(@RESULT_UNIT_ATOMIC@, "Files.writeTextAtomic rename", error, line, column);
     }
-    ncr_deallocate(paths);
-    return (ncr_obj_@RESULT_BOOL_ATOMIC@){
-        .tag = @BOOL_ATOMIC_OK_TAG@,
-        .data.v@BOOL_ATOMIC_OK_TAG@.f0 = true
+    ncr_deallocate(target);
+    ncr_deallocate(temporary);
+    return (ncr_obj_@RESULT_UNIT_ATOMIC@){
+        .tag = @UNIT_ATOMIC_OK_TAG@,
+        .data.v@UNIT_ATOMIC_OK_TAG@.f0 = UINT8_C(0)
     };
 }

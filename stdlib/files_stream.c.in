@@ -1,0 +1,90 @@
+static ssize_t ncr_fs_read_buffer_@BUFFER_ID@(int descriptor, ncr_obj_@BUFFER_ID@ *buffer,
+    int64_t maximum, size_t line, size_t column) {
+    if (maximum == 0) { return 0; }
+    uint64_t capacity_limit = (uint64_t)SIZE_MAX;
+    if (capacity_limit > (uint64_t)INT64_MAX) { capacity_limit = (uint64_t)INT64_MAX; }
+    if ((uint64_t)buffer->length >= capacity_limit) { errno = EOVERFLOW; return -1; }
+    uint64_t amount = (uint64_t)maximum;
+    if (amount > UINT64_C(65536)) { amount = UINT64_C(65536); }
+    if (amount > (uint64_t)SSIZE_MAX) { amount = (uint64_t)SSIZE_MAX; }
+    uint64_t remaining = capacity_limit - (uint64_t)buffer->length;
+    if (amount > remaining) { amount = remaining; }
+    if (amount == 0) { errno = EOVERFLOW; return -1; }
+    size_t requested = (size_t)amount;
+    size_t available = buffer->capacity - buffer->length;
+    if (available < requested) {
+        @BUFFER_RESERVE@(buffer, buffer->length + requested, line, column);
+        available = buffer->capacity - buffer->length;
+    }
+    size_t count = available < requested ? available : requested;
+    ssize_t bytes_read;
+    do { bytes_read = read(descriptor, buffer->bytes + buffer->length, count); }
+    while (bytes_read < 0 && errno == EINTR);
+    if (bytes_read > 0) { buffer->length += (size_t)bytes_read; }
+    return bytes_read;
+}
+
+static bool ncr_fs_read_all_text_@BUFFER_ID@(int descriptor, ncr_obj_@BUFFER_ID@ *buffer,
+    size_t line, size_t column, int *failure) {
+    while (buffer->length < (size_t)INT32_MAX) {
+        size_t remaining = (size_t)INT32_MAX - buffer->length;
+        ssize_t count = ncr_fs_read_buffer_@BUFFER_ID@(descriptor, buffer, (int64_t)remaining, line, column);
+        if (count < 0) { *failure = errno; return false; }
+        if (count == 0) { return true; }
+    }
+    unsigned char extra;
+    ssize_t count;
+    do { count = read(descriptor, &extra, 1); } while (count < 0 && errno == EINTR);
+    if (count < 0) { *failure = errno; return false; }
+    if (count > 0) { *failure = EFBIG; return false; }
+    return true;
+}
+
+static ssize_t ncr_fs_write_once(int descriptor, const unsigned char *bytes, size_t length) {
+    if (length == 0) { return 0; }
+    if (length > (size_t)SSIZE_MAX) { length = (size_t)SSIZE_MAX; }
+    sigset_t pipe_set;
+    sigset_t old_mask;
+    sigset_t pending;
+    if (sigemptyset(&pipe_set) != 0 || sigaddset(&pipe_set, SIGPIPE) != 0) { return -1; }
+    int mask_error = pthread_sigmask(SIG_BLOCK, &pipe_set, &old_mask);
+    if (mask_error != 0) { errno = mask_error; return -1; }
+    if (sigpending(&pending) != 0) {
+        int error = errno;
+        (void)pthread_sigmask(SIG_SETMASK, &old_mask, NULL);
+        errno = error;
+        return -1;
+    }
+    int was_pending = sigismember(&pending, SIGPIPE);
+    if (was_pending < 0) {
+        int error = errno;
+        (void)pthread_sigmask(SIG_SETMASK, &old_mask, NULL);
+        errno = error;
+        return -1;
+    }
+    ssize_t result = write(descriptor, bytes, length);
+    int write_error = errno;
+    if (result < 0 && write_error == EPIPE && was_pending == 0) {
+        const struct timespec immediate = { .tv_sec = 0, .tv_nsec = 0 };
+        while (sigtimedwait(&pipe_set, NULL, &immediate) < 0 && errno == EINTR) { }
+    }
+    int restore_error = pthread_sigmask(SIG_SETMASK, &old_mask, NULL);
+    if (restore_error != 0 && result >= 0) { errno = restore_error; return -1; }
+    if (result < 0) { errno = write_error; }
+    return result;
+}
+
+static bool ncr_fs_write_all(int descriptor, const unsigned char *bytes, size_t length, int *failure) {
+    size_t offset = 0;
+    while (offset < length) {
+        ssize_t count = ncr_fs_write_once(descriptor, bytes + offset, length - offset);
+        if (count < 0) {
+            if (errno == EINTR) { continue; }
+            *failure = errno;
+            return false;
+        }
+        if (count == 0) { *failure = EIO; return false; }
+        offset += (size_t)count;
+    }
+    return true;
+}

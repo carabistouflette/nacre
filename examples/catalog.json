@@ -33,6 +33,14 @@
       "meaningful_outputs": ["UDP bytes: 4", "TCP listener:", "TCP accept deadline expired", "TCP listener closed"]
     },
     {
+      "category": "io",
+      "source": "examples/io/filesystem.ncr",
+      "stdin": "",
+      "args": ["/tmp"],
+      "expected_status": 0,
+      "meaningful_outputs": ["4", "true", "note-é.txt", "payload.bin", "cleaned", "filesystem complete"]
+    },
+    {
       "category": "text",
       "source": "examples/text/utf8_regex.ncr",
       "stdin": "",

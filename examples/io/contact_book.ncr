@@ -531,15 +531,9 @@ class ContactBook {
 
     private void saveFile(borrow Text path) {
         Text content = this.encode();
-        Result<boolean,Text> writeResult = Files.writeTextAtomic(path, content);
+        Result<Unit,Text> writeResult = Files.writeTextAtomic(path, content);
         match (writeResult) {
-            Ok(success) {
-                if (success) {
-                    println("Contact book saved.");
-                } else {
-                    println("The contact book was not saved.");
-                }
-            }
+            Ok(unit) { println("Contact book saved."); }
             Err(error) { this.reportError(error); }
         }
     }
