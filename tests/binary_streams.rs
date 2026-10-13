@@ -366,13 +366,21 @@ Result<Unit, Text> exercise() {
 
     File input = File.openRead(sourcePath)?;
     File output = File.create(copyPath, 384)?;
-    long copied = Streams.copy(input, output, 100L, 7L)?;
+    long copied = 0L;
+    match (Streams.copy(input, output, 100L, 7L)) {
+        Err(error) { return new Result<Unit, Text>.Err(error.message().clone()); }
+        Ok(value) { copied = value; }
+    }
     input.close()?;
     output.close()?;
     println(copied == 100L);
 
     File copiedFile = File.openRead(copyPath)?;
-    ByteBuffer copiedBytes = Streams.readAll(copiedFile, 100L, 9L)?;
+    ByteBuffer copiedBytes;
+    match (Streams.readAll(copiedFile, 100L, 9L)) {
+        Err(error) { return new Result<Unit, Text>.Err(error.message().clone()); }
+        Ok(value) { copiedBytes = value; }
+    }
     copiedFile.close()?;
     boolean contentsMatch = copiedBytes.length() == 100L;
     index = 0;
@@ -384,28 +392,47 @@ Result<Unit, Text> exercise() {
 
     File boundedInput = File.openRead(sourcePath)?;
     File boundedOutput = File.create(shortPath, 384)?;
-    long boundedCount = Streams.copy(boundedInput, boundedOutput, 13L, 5L)?;
+    long boundedCount = 0L;
+    match (Streams.copy(boundedInput, boundedOutput, 13L, 5L)) {
+        Err(error) { return new Result<Unit, Text>.Err(error.message().clone()); }
+        Ok(value) { boundedCount = value; }
+    }
     boundedInput.close()?;
     boundedOutput.close()?;
     println(boundedCount == 13L);
     File boundedFile = File.openRead(shortPath)?;
-    ByteBuffer boundedBytes = Streams.readAll(boundedFile, 100L, 4L)?;
+    ByteBuffer boundedBytes;
+    match (Streams.readAll(boundedFile, 100L, 4L)) {
+        Err(error) { return new Result<Unit, Text>.Err(error.message().clone()); }
+        Ok(value) { boundedBytes = value; }
+    }
     boundedFile.close()?;
     println(boundedBytes.length() == 13L && boundedBytes.get(0L) == (byte)0
         && boundedBytes.get(12L) == (byte)12);
 
     File exactBoundFile = File.openRead(shortPath)?;
-    ByteBuffer exactBoundBytes = Streams.readAll(exactBoundFile, 13L, 4L)?;
+    ByteBuffer exactBoundBytes;
+    match (Streams.readAll(exactBoundFile, 13L, 4L)) {
+        Err(error) { return new Result<Unit, Text>.Err(error.message().clone()); }
+        Ok(value) { exactBoundBytes = value; }
+    }
     exactBoundFile.close()?;
     println(exactBoundBytes.length() == 13L && exactBoundBytes.get(0L) == (byte)0
         && exactBoundBytes.get(12L) == (byte)12);
 
     File shortOutput = File.create(writeAllPath, 384)?;
     ThreeByteFileSink shortSink = new ThreeByteFileSink(shortOutput);
-    Streams.writeAll(shortSink, payload)?;
+    match (Streams.writeAll(shortSink, payload)) {
+        Err(error) { return new Result<Unit, Text>.Err(error.message().clone()); }
+        Ok(unit) {}
+    }
     shortSink.close()?;
     File allFile = File.openRead(writeAllPath)?;
-    ByteBuffer allBytes = Streams.readAll(allFile, 100L, 8L)?;
+    ByteBuffer allBytes;
+    match (Streams.readAll(allFile, 100L, 8L)) {
+        Err(error) { return new Result<Unit, Text>.Err(error.message().clone()); }
+        Ok(value) { allBytes = value; }
+    }
     allFile.close()?;
     boolean allMatch = allBytes.length() == 100L;
     index = 0;
@@ -416,46 +443,86 @@ Result<Unit, Text> exercise() {
     println(allMatch);
 
     File prefixInput = File.openRead(sourcePath)?;
-    ByteBuffer prefix = Streams.readUpTo(prefixInput, 13L, 4L)?;
+    ByteBuffer prefix;
+    match (Streams.readUpTo(prefixInput, 13L, 4L)) {
+        Err(error) { return new Result<Unit, Text>.Err(error.message().clone()); }
+        Ok(value) { prefix = value; }
+    }
     ByteBuffer afterPrefix = ByteBuffer.withCapacity(0L)?;
     long prefixCursorCount = prefixInput.read(afterPrefix, 1L)?;
     prefixInput.close()?;
     println(prefix.length() == 13L && prefix.get(0L) == (byte)0 && prefix.get(12L) == (byte)12
         && prefixCursorCount == 1L && afterPrefix.get(0L) == (byte)13);
     File emptyInput = File.openRead(emptyPath)?;
-    ByteBuffer emptyRead = Streams.readAll(emptyInput, 0L, 4L)?;
+    ByteBuffer emptyRead;
+    match (Streams.readAll(emptyInput, 0L, 4L)) {
+        Err(error) { return new Result<Unit, Text>.Err(error.message().clone()); }
+        Ok(value) { emptyRead = value; }
+    }
     emptyInput.close()?;
     println(emptyRead.length() == 0L);
 
     File zeroLimitInput = File.openRead(sourcePath)?;
+    boolean zeroLimitErrorRetained = false;
     match (Streams.readAll(zeroLimitInput, 0L, 4L)) {
-        Err(error) { println("readAll max-zero rejected"); drop(error); }
-        Ok(value) { println("readAll max-zero accepted"); }
+        Err(error) {
+            long sourceBytesRead = error.sourceBytesRead();
+            Option<ByteBuffer> retained = StreamError.takeRetainedBytes(move error);
+            match (retained) {
+                None {}
+                Some(bytes) {
+                    zeroLimitErrorRetained = sourceBytesRead == 1L && bytes.length() == 1L
+                        && bytes.get(0L) == (byte)0;
+                    drop(bytes);
+                }
+            }
+        }
+        Ok(value) { drop(value); }
     }
     ByteBuffer afterZeroProbe = ByteBuffer.withCapacity(0L)?;
     long zeroProbeCount = zeroLimitInput.read(afterZeroProbe, 1L)?;
     zeroLimitInput.close()?;
-    println(zeroProbeCount == 1L && afterZeroProbe.get(0L) == (byte)1);
+    println(zeroLimitErrorRetained && zeroProbeCount == 1L && afterZeroProbe.get(0L) == (byte)1);
 
     File excessInput = File.openRead(sourcePath)?;
+    boolean excessErrorRetainedProbe = false;
     match (Streams.readAll(excessInput, 13L, 4L)) {
-        Err(error) { println("readAll bound rejected"); drop(error); }
-        Ok(value) { println("readAll bound accepted"); }
+        Err(error) {
+            long sourceBytesRead = error.sourceBytesRead();
+            Option<ByteBuffer> retained = StreamError.takeRetainedBytes(move error);
+            match (retained) {
+                None {}
+                Some(bytes) {
+                    excessErrorRetainedProbe = sourceBytesRead == 14L && bytes.length() == 14L
+                        && bytes.get(12L) == (byte)12 && bytes.get(13L) == (byte)13;
+                    drop(bytes);
+                }
+            }
+        }
+        Ok(value) { drop(value); }
     }
     ByteBuffer afterLimitProbe = ByteBuffer.withCapacity(0L)?;
     long limitProbeCount = excessInput.read(afterLimitProbe, 1L)?;
     excessInput.close()?;
-    println(limitProbeCount == 1L && afterLimitProbe.get(0L) == (byte)14);
+    println(excessErrorRetainedProbe && limitProbeCount == 1L && afterLimitProbe.get(0L) == (byte)14);
 
     File shortCopyInput = File.openRead(sourcePath)?;
     File shortCopyFile = File.create(copyPath, 384)?;
     ThreeByteFileSink shortCopySink = new ThreeByteFileSink(shortCopyFile);
-    long shortCopied = Streams.copy(shortCopyInput, shortCopySink, 100L, 11L)?;
+    long shortCopied = 0L;
+    match (Streams.copy(shortCopyInput, shortCopySink, 100L, 11L)) {
+        Err(error) { return new Result<Unit, Text>.Err(error.message().clone()); }
+        Ok(value) { shortCopied = value; }
+    }
     shortCopyInput.close()?;
     shortCopySink.close()?;
     println(shortCopied == 100L);
     File shortCopiedFile = File.openRead(copyPath)?;
-    ByteBuffer shortCopiedBytes = Streams.readAll(shortCopiedFile, 100L, 6L)?;
+    ByteBuffer shortCopiedBytes;
+    match (Streams.readAll(shortCopiedFile, 100L, 6L)) {
+        Err(error) { return new Result<Unit, Text>.Err(error.message().clone()); }
+        Ok(value) { shortCopiedBytes = value; }
+    }
     shortCopiedFile.close()?;
     boolean shortCopyMatches = shortCopiedBytes.length() == 100L;
     index = 0;
@@ -466,6 +533,7 @@ Result<Unit, Text> exercise() {
     println(shortCopyMatches);
     return new Result<Unit, Text>.Ok(());
 }
+
 
 void main() {
     match (exercise()) {
@@ -496,7 +564,7 @@ fn streams_copy_file_interfaces_bounds_and_short_write_recovery() {
     );
     assert_eq!(
         output.stdout,
-        b"true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\nreadAll max-zero rejected\ntrue\nreadAll bound rejected\ntrue\ntrue\ntrue\n"
+        b"true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n"
     );
 
     let bytes = fs::read(copied).unwrap();
@@ -504,6 +572,299 @@ fn streams_copy_file_interfaces_bounds_and_short_write_recovery() {
     assert_eq!(bytes, (0_u8..100).collect::<Vec<_>>());
     assert_eq!(fs::read(short).unwrap(), (0_u8..13).collect::<Vec<_>>());
     assert_eq!(fs::read(write_all).unwrap(), (0_u8..100).collect::<Vec<_>>());
+}
+
+const STREAM_PROGRESS_SOURCE: &str = r#"
+class PlannedSource implements ByteSource {
+    private int mode;
+    private long next;
+    private int calls;
+    public PlannedSource(int mode) {
+        this.mode = mode;
+        this.next = 0L;
+        this.calls = 0;
+    }
+    public Result<long, Text> read(borrow mut ByteBuffer destination, long maxBytes) {
+        if (maxBytes == 0L) { return new Result<long, Text>.Ok(0L); }
+        if (this.mode == 1) {
+            if (this.calls == 0) {
+                destination.append((byte)50);
+                destination.append((byte)51);
+                this.calls = this.calls + 1;
+                return new Result<long, Text>.Ok(2L);
+            }
+            if (this.calls == 1) {
+                destination.append((byte)52);
+                this.calls = this.calls + 1;
+                return new Result<long, Text>.Err(new Text("source failure"));
+            }
+            return new Result<long, Text>.Ok(0L);
+        }
+        if (this.mode == 3) {
+            destination.append((byte)70);
+            return new Result<long, Text>.Err(new Text("source failure"));
+        }
+        if (this.mode == 4) {
+            destination.append((byte)80);
+            return new Result<long, Text>.Ok(2L);
+        }
+
+        long limit = 4L;
+        long base = 10L;
+        if (this.mode == 5) { limit = 3L; base = 60L; }
+        long amount = maxBytes;
+        long remaining = limit - this.next;
+        if (amount > remaining) { amount = remaining; }
+        long index = 0L;
+        while (index < amount) {
+            destination.append((byte)(base + this.next));
+            this.next = this.next + 1L;
+            index = index + 1L;
+        }
+        return new Result<long, Text>.Ok(amount);
+    }
+}
+
+class PlannedSink implements ByteSink {
+    private int mode;
+    private int calls;
+    public PlannedSink(int mode) {
+        this.mode = mode;
+        this.calls = 0;
+    }
+    public Result<long, Text> write(borrow ByteBuffer source, long offset, long maxBytes) {
+        if (maxBytes == 0L) { return new Result<long, Text>.Ok(0L); }
+        if (this.mode == 0) {
+            if (this.calls == 0) {
+                this.calls = this.calls + 1;
+                if (maxBytes > 2L) { return new Result<long, Text>.Ok(2L); }
+                return new Result<long, Text>.Ok(maxBytes);
+            }
+            return new Result<long, Text>.Err(new Text("sink failure"));
+        }
+        if (this.mode == 1) { return new Result<long, Text>.Ok(maxBytes); }
+        if (this.mode == 2) { return new Result<long, Text>.Ok(0L); }
+        return new Result<long, Text>.Ok(maxBytes + 1L);
+    }
+    public Result<Unit, Text> flush() {
+        if (this.mode == 1) { return new Result<Unit, Text>.Err(new Text("flush failure")); }
+        return new Result<Unit, Text>.Ok(());
+    }
+}
+
+boolean copySinkFailureRetainsPendingPacket() {
+    PlannedSource source = new PlannedSource(0);
+    PlannedSink sink = new PlannedSink(0);
+    match (Streams.copy(source, sink, 4L, 4L)) {
+        Ok(count) { return false; }
+        Err(error) {
+            boolean progress = error.sourceBytesRead() == 4L
+                && error.sinkBytesWritten() == 2L && error.confirmedOffset() == 2L;
+            Option<ByteBuffer> retained = StreamError.takeRetainedBytes(move error);
+            boolean packetMatches = false;
+            match (retained) {
+                None {}
+                Some(packet) {
+                    packetMatches = packet.length() == 4L && packet.get(0L) == (byte)10
+                        && packet.get(1L) == (byte)11 && packet.get(2L) == (byte)12
+                        && packet.get(3L) == (byte)13;
+                    drop(packet);
+                }
+            }
+            return progress && packetMatches;
+        }
+    }
+}
+
+boolean copySourceFailureRetainsStagedBytes() {
+    PlannedSource source = new PlannedSource(3);
+    PlannedSink sink = new PlannedSink(1);
+    match (Streams.copy(source, sink, 4L, 4L)) {
+        Ok(count) { return false; }
+        Err(error) {
+            boolean progress = error.sourceBytesRead() == 1L
+                && error.sinkBytesWritten() == 0L && error.confirmedOffset() == 0L;
+            Option<ByteBuffer> retained = StreamError.takeRetainedBytes(move error);
+            boolean staged = false;
+            match (retained) {
+                None {}
+                Some(bytes) {
+                    staged = bytes.length() == 1L && bytes.get(0L) == (byte)70;
+                    drop(bytes);
+                }
+            }
+            return progress && staged;
+        }
+    }
+}
+
+boolean readUpToFailureRetainsAppendedPrefix() {
+    PlannedSource source = new PlannedSource(1);
+    match (Streams.readUpTo(source, 4L, 2L)) {
+        Ok(bytes) { drop(bytes); return false; }
+        Err(error) {
+            boolean progress = error.sourceBytesRead() == 3L;
+            Option<ByteBuffer> retained = StreamError.takeRetainedBytes(move error);
+            boolean prefixMatches = false;
+            match (retained) {
+                None {}
+                Some(bytes) {
+                    prefixMatches = bytes.length() == 3L && bytes.get(0L) == (byte)50
+                        && bytes.get(1L) == (byte)51 && bytes.get(2L) == (byte)52;
+                    drop(bytes);
+                }
+            }
+            return progress && prefixMatches;
+        }
+    }
+}
+
+boolean readAllFailureRetainsLimitProbe() {
+    PlannedSource source = new PlannedSource(5);
+    match (Streams.readAll(source, 2L, 2L)) {
+        Ok(bytes) { drop(bytes); return false; }
+        Err(error) {
+            boolean progress = error.sourceBytesRead() == 3L;
+            Option<ByteBuffer> retained = StreamError.takeRetainedBytes(move error);
+            boolean prefixMatches = false;
+            match (retained) {
+                None {}
+                Some(bytes) {
+                    prefixMatches = bytes.length() == 3L && bytes.get(0L) == (byte)60
+                        && bytes.get(1L) == (byte)61 && bytes.get(2L) == (byte)62;
+                    drop(bytes);
+                }
+            }
+            return progress && prefixMatches;
+        }
+    }
+}
+
+boolean writeAllFailureLeavesSourceUsable() {
+    ByteBuffer source;
+    match (ByteBuffer.withCapacity(0L)) {
+        Err(error) { return false; }
+        Ok(value) { source = value; }
+    }
+    source.append((byte)10);
+    source.append((byte)11);
+    source.append((byte)12);
+    source.append((byte)13);
+    PlannedSink sink = new PlannedSink(0);
+    match (Streams.writeAll(sink, source)) {
+        Ok(unit) { return false; }
+        Err(error) {
+            boolean progress = error.sinkBytesWritten() == 2L
+                && error.confirmedOffset() == 2L;
+            Option<ByteBuffer> retained = StreamError.takeRetainedBytes(move error);
+            boolean noCopy = false;
+            match (retained) {
+                None { noCopy = true; }
+                Some(bytes) { drop(bytes); }
+            }
+            return progress && noCopy && source.length() == 4L
+                && source.get(0L) == (byte)10 && source.get(3L) == (byte)13;
+        }
+    }
+}
+
+boolean copyFlushFailureRetainsConfirmedCounts() {
+    PlannedSource source = new PlannedSource(0);
+    PlannedSink sink = new PlannedSink(1);
+    match (Streams.copy(source, sink, 10L, 4L)) {
+        Ok(count) { return false; }
+        Err(error) {
+            boolean progress = error.sourceBytesRead() == 4L
+                && error.sinkBytesWritten() == 4L && error.confirmedOffset() == 0L;
+            Option<ByteBuffer> retained = StreamError.takeRetainedBytes(move error);
+            boolean noPendingPacket = false;
+            match (retained) {
+                None { noPendingPacket = true; }
+                Some(bytes) { drop(bytes); }
+            }
+            return progress && noPendingPacket;
+        }
+    }
+}
+
+boolean malformedReadCountRetainsObservableBytes() {
+    PlannedSource source = new PlannedSource(4);
+    PlannedSink sink = new PlannedSink(1);
+    match (Streams.copy(source, sink, 1L, 1L)) {
+        Ok(count) { return false; }
+        Err(error) {
+            boolean noFalseCount = error.sourceBytesRead() == 0L
+                && error.sinkBytesWritten() == 0L;
+            Option<ByteBuffer> retained = StreamError.takeRetainedBytes(move error);
+            boolean staged = false;
+            match (retained) {
+                None {}
+                Some(bytes) { staged = bytes.length() == 1L && bytes.get(0L) == (byte)80; drop(bytes); }
+            }
+            return noFalseCount && staged;
+        }
+    }
+}
+
+boolean noProgressWriteRetainsPacket() {
+    PlannedSource source = new PlannedSource(0);
+    PlannedSink sink = new PlannedSink(2);
+    match (Streams.copy(source, sink, 4L, 4L)) {
+        Ok(count) { return false; }
+        Err(error) {
+            boolean progress = error.sourceBytesRead() == 4L
+                && error.sinkBytesWritten() == 0L && error.confirmedOffset() == 0L;
+            Option<ByteBuffer> retained = StreamError.takeRetainedBytes(move error);
+            boolean packetMatches = false;
+            match (retained) {
+                None {}
+                Some(bytes) { packetMatches = bytes.length() == 4L; drop(bytes); }
+            }
+            return progress && packetMatches;
+        }
+    }
+}
+
+boolean malformedWriteCountRetainsPacket() {
+    PlannedSource source = new PlannedSource(0);
+    PlannedSink sink = new PlannedSink(3);
+    match (Streams.copy(source, sink, 4L, 4L)) {
+        Ok(count) { return false; }
+        Err(error) {
+            boolean progress = error.sourceBytesRead() == 4L
+                && error.sinkBytesWritten() == 0L && error.confirmedOffset() == 0L;
+            Option<ByteBuffer> retained = StreamError.takeRetainedBytes(move error);
+            boolean packetMatches = false;
+            match (retained) {
+                None {}
+                Some(bytes) { packetMatches = bytes.length() == 4L; drop(bytes); }
+            }
+            return progress && packetMatches;
+        }
+    }
+}
+
+void main() {
+    println(copySinkFailureRetainsPendingPacket());
+    println(copySourceFailureRetainsStagedBytes());
+    println(readUpToFailureRetainsAppendedPrefix());
+    println(readAllFailureRetainsLimitProbe());
+    println(writeAllFailureLeavesSourceUsable());
+    println(copyFlushFailureRetainsConfirmedCounts());
+    println(malformedReadCountRetainsObservableBytes());
+    println(noProgressWriteRetainsPacket());
+    println(malformedWriteCountRetainsPacket());
+}
+"#;
+
+#[test]
+fn stream_errors_preserve_recoverable_progress_and_owned_data() {
+    let program = compile(STREAM_PROGRESS_SOURCE);
+    let output = run(&program, &[]);
+    assert_eq!(
+        output.stdout,
+        b"true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n"
+    );
 }
 
 const SERIALIZATION_SOURCE: &str = r#"

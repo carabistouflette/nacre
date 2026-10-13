@@ -1,12 +1,246 @@
 // ByteSource and ByteSink are allocation-free interfaces; native implementations
 // use their concrete object directly in the generated vtable.
 interface ByteSource {
+    // maxBytes == 0 returns zero without touching destination. For a positive
+    // request, read blocks until bytes or EOF; zero means EOF. On Ok, exactly
+    // the returned count is appended. An Err may follow physical source progress;
+    // any bytes it already appended remain observable.
     Result<long, Text> read(borrow mut ByteBuffer destination, long maxBytes);
 }
 
 interface ByteSink {
+    // A zero request returns zero. For a positive request, Ok returns a positive
+    // count no larger than maxBytes. An Err may follow physical writes.
     Result<long, Text> write(borrow ByteBuffer source, long offset, long maxBytes);
+    // Flush errors do not undo earlier writes or imply that they were not delivered.
     Result<Unit, Text> flush();
+}
+
+class StreamError {
+    private Text message;
+    private long sourceBytesRead;
+    private long sinkBytesWritten;
+    private Option<ByteBuffer> retainedBytes;
+    private long confirmedOffset;
+
+    public StreamError(Text message, long sourceBytesRead, long sinkBytesWritten,
+        Option<ByteBuffer> retainedBytes, long confirmedOffset) {
+        this.message = message;
+        this.sourceBytesRead = sourceBytesRead;
+        this.sinkBytesWritten = sinkBytesWritten;
+        this.retainedBytes = retainedBytes;
+        this.confirmedOffset = confirmedOffset;
+    }
+    public readonly borrow Text message() { return this.message; }
+    public readonly long sourceBytesRead() { return this.sourceBytesRead; }
+    public readonly long sinkBytesWritten() { return this.sinkBytesWritten; }
+    public readonly long confirmedOffset() { return this.confirmedOffset; }
+    public readonly borrow Option<ByteBuffer> retainedBytes() { return this.retainedBytes; }
+    public static Option<ByteBuffer> takeRetainedBytes(StreamError error) {
+        return move error.retainedBytes;
+    }
+}
+
+class Streams {
+    // Counts are confirmed logical progress; a failed transport call may have
+    // advanced physically beyond them. Pending bytes are retained, not a retry
+    // or rollback promise. Flush follows the sink contract, not peer delivery.
+    public static Result<long, StreamError> copy(borrow mut ByteSource source, borrow mut ByteSink sink, long maxBytes, long bufferSize) {
+        if (maxBytes < 0L || bufferSize <= 0L) {
+            return new Result<long, StreamError>.Err(new StreamError(
+                new Text("Streams.copy requires maxBytes >= 0 and bufferSize > 0"),
+                0L, 0L, new Option<ByteBuffer>.None(), 0L));
+        }
+        if (maxBytes == 0L) {
+            match (sink.flush()) {
+                Err(error) {
+                    return new Result<long, StreamError>.Err(new StreamError(
+                        error, 0L, 0L, new Option<ByteBuffer>.None(), 0L));
+                }
+                Ok(unit) { return new Result<long, StreamError>.Ok(0L); }
+            }
+        }
+
+        long chunkCapacity = bufferSize;
+        if (chunkCapacity > maxBytes) { chunkCapacity = maxBytes; }
+        ByteBuffer buffer;
+        match (ByteBuffer.withCapacity(chunkCapacity)) {
+            Err(error) {
+                return new Result<long, StreamError>.Err(new StreamError(
+                    error, 0L, 0L, new Option<ByteBuffer>.None(), 0L));
+            }
+            Ok(value) { buffer = value; }
+        }
+
+        long sourceBytesRead = 0L;
+        long sinkBytesWritten = 0L;
+        while (sourceBytesRead < maxBytes) {
+            buffer.clear();
+            long requested = maxBytes - sourceBytesRead;
+            if (requested > chunkCapacity) { requested = chunkCapacity; }
+            match (source.read(buffer, requested)) {
+                Err(error) {
+                    long appended = buffer.length();
+                    if (appended <= requested) { sourceBytesRead = sourceBytesRead + appended; }
+                    return new Result<long, StreamError>.Err(new StreamError(
+                        error, sourceBytesRead, sinkBytesWritten,
+                        new Option<ByteBuffer>.Some(move buffer), 0L));
+                }
+                Ok(count) {
+                    if (count < 0L || count > requested || buffer.length() != count) {
+                        return new Result<long, StreamError>.Err(new StreamError(
+                            new Text("ByteSource.read returned an invalid byte count"),
+                            sourceBytesRead, sinkBytesWritten,
+                            new Option<ByteBuffer>.Some(move buffer), 0L));
+                    }
+                    if (count == 0L) { break; }
+                    sourceBytesRead = sourceBytesRead + count;
+
+                    long offset = 0L;
+                    while (offset < count) {
+                        match (sink.write(buffer, offset, count - offset)) {
+                            Err(error) {
+                                return new Result<long, StreamError>.Err(new StreamError(
+                                    error, sourceBytesRead, sinkBytesWritten + offset,
+                                    new Option<ByteBuffer>.Some(move buffer), offset));
+                            }
+                            Ok(written) {
+                                if (written <= 0L || written > count - offset) {
+                                    return new Result<long, StreamError>.Err(new StreamError(
+                                        new Text("ByteSink.write made no progress or returned an invalid byte count"),
+                                        sourceBytesRead, sinkBytesWritten + offset,
+                                        new Option<ByteBuffer>.Some(move buffer), offset));
+                                }
+                                offset = offset + written;
+                            }
+                        }
+                    }
+                    sinkBytesWritten = sinkBytesWritten + offset;
+                }
+            }
+        }
+        match (sink.flush()) {
+            Err(error) {
+                return new Result<long, StreamError>.Err(new StreamError(
+                    error, sourceBytesRead, sinkBytesWritten,
+                    new Option<ByteBuffer>.None(), 0L));
+            }
+            Ok(unit) { return new Result<long, StreamError>.Ok(sinkBytesWritten); }
+        }
+    }
+
+    // Returns the owned prefix at maxBytes without probing. Errors retain it.
+    public static Result<ByteBuffer, StreamError> readUpTo(borrow mut ByteSource source, long maxBytes, long bufferSize) {
+        if (maxBytes < 0L || bufferSize <= 0L) {
+            return new Result<ByteBuffer, StreamError>.Err(new StreamError(
+                new Text("Streams.readUpTo requires maxBytes >= 0 and bufferSize > 0"),
+                0L, 0L, new Option<ByteBuffer>.None(), 0L));
+        }
+        long chunkCapacity = bufferSize;
+        if (chunkCapacity > maxBytes) { chunkCapacity = maxBytes; }
+        ByteBuffer output;
+        match (ByteBuffer.withCapacity(chunkCapacity)) {
+            Err(error) {
+                return new Result<ByteBuffer, StreamError>.Err(new StreamError(
+                    error, 0L, 0L, new Option<ByteBuffer>.None(), 0L));
+            }
+            Ok(value) { output = value; }
+        }
+
+        long sourceBytesRead = 0L;
+        while (output.length() < maxBytes) {
+            long before = output.length();
+            long requested = maxBytes - before;
+            if (requested > chunkCapacity) { requested = chunkCapacity; }
+            match (source.read(output, requested)) {
+                Err(error) {
+                    long appended = output.length() - before;
+                    if (appended >= 0L && appended <= requested) {
+                        sourceBytesRead = sourceBytesRead + appended;
+                    }
+                    return new Result<ByteBuffer, StreamError>.Err(new StreamError(
+                        error, sourceBytesRead, 0L,
+                        new Option<ByteBuffer>.Some(move output), 0L));
+                }
+                Ok(count) {
+                    long appended = output.length() - before;
+                    if (count < 0L || count > requested || appended != count) {
+                        return new Result<ByteBuffer, StreamError>.Err(new StreamError(
+                            new Text("ByteSource.read returned an invalid byte count"),
+                            sourceBytesRead, 0L,
+                            new Option<ByteBuffer>.Some(move output), 0L));
+                    }
+                    if (count == 0L) { break; }
+                    sourceBytesRead = sourceBytesRead + count;
+                }
+            }
+        }
+        return new Result<ByteBuffer, StreamError>.Ok(output);
+    }
+
+    // Succeeds only at EOF. At the limit it consumes at most one probe byte;
+    // the over-limit error retains that byte after the accumulated prefix.
+    public static Result<ByteBuffer, StreamError> readAll(borrow mut ByteSource source, long maxBytes, long bufferSize) {
+        ByteBuffer output = Streams.readUpTo(source, maxBytes, bufferSize)?;
+        if (output.length() < maxBytes) { return new Result<ByteBuffer, StreamError>.Ok(output); }
+        long sourceBytesRead = output.length();
+        long before = output.length();
+        match (source.read(output, 1L)) {
+            Err(error) {
+                long appended = output.length() - before;
+                if (appended >= 0L && appended <= 1L) {
+                    sourceBytesRead = sourceBytesRead + appended;
+                }
+                return new Result<ByteBuffer, StreamError>.Err(new StreamError(
+                    error, sourceBytesRead, 0L,
+                    new Option<ByteBuffer>.Some(move output), 0L));
+            }
+            Ok(count) {
+                long appended = output.length() - before;
+                if (count < 0L || count > 1L || appended != count) {
+                    return new Result<ByteBuffer, StreamError>.Err(new StreamError(
+                        new Text("ByteSource.read returned an invalid byte count"),
+                        sourceBytesRead, 0L,
+                        new Option<ByteBuffer>.Some(move output), 0L));
+                }
+                if (count == 0L) { return new Result<ByteBuffer, StreamError>.Ok(output); }
+                return new Result<ByteBuffer, StreamError>.Err(new StreamError(
+                    new Text("Streams.readAll: input exceeds maxBytes"),
+                    sourceBytesRead + count, 0L,
+                    new Option<ByteBuffer>.Some(move output), 0L));
+            }
+        }
+    }
+
+    // source stays borrowed and owned by the caller; confirmedOffset is the
+    // successful prefix, not a claim about physical progress during an Err.
+    public static Result<Unit, StreamError> writeAll(borrow mut ByteSink sink, borrow ByteBuffer source) {
+        long offset = 0L;
+        long length = source.length();
+        while (offset < length) {
+            match (sink.write(source, offset, length - offset)) {
+                Err(error) {
+                    return new Result<Unit, StreamError>.Err(new StreamError(
+                        error, 0L, offset, new Option<ByteBuffer>.None(), offset));
+                }
+                Ok(written) {
+                    if (written <= 0L || written > length - offset) {
+                        return new Result<Unit, StreamError>.Err(new StreamError(
+                            new Text("ByteSink.write made no progress or returned an invalid byte count"),
+                            0L, offset, new Option<ByteBuffer>.None(), offset));
+                    }
+                    offset = offset + written;
+                }
+            }
+        }
+        match (sink.flush()) {
+            Err(error) {
+                return new Result<Unit, StreamError>.Err(new StreamError(
+                    error, 0L, offset, new Option<ByteBuffer>.None(), offset));
+            }
+            Ok(unit) { return new Result<Unit, StreamError>.Ok(()); }
+        }
+    }
 }
 
 class BinaryReader {
@@ -39,95 +273,3 @@ class BinaryWriter {
     public static ByteBuffer finish(BinaryWriter writer) {}
 }
 
-class Streams {
-    // maxBytes bounds bytes consumed; copy returns the number transferred and
-    // flushes the sink, without implying that a network peer has received them.
-    public static Result<long, Text> copy(borrow mut ByteSource source, borrow mut ByteSink sink, long maxBytes, long bufferSize) {
-        if (maxBytes < 0L || bufferSize <= 0L) {
-            return new Result<long, Text>.Err(new Text("Streams.copy requires maxBytes >= 0 and bufferSize > 0"));
-        }
-        if (maxBytes == 0L) {
-            sink.flush()?;
-            return new Result<long, Text>.Ok(0L);
-        }
-
-        long chunkCapacity = bufferSize;
-        if (chunkCapacity > maxBytes) { chunkCapacity = maxBytes; }
-        ByteBuffer buffer = ByteBuffer.withCapacity(chunkCapacity)?;
-        long copied = 0L;
-        while (copied < maxBytes) {
-            buffer.clear();
-            long requested = maxBytes - copied;
-            if (requested > chunkCapacity) { requested = chunkCapacity; }
-            long count = source.read(buffer, requested)?;
-            if (count < 0L || count > requested || buffer.length() != count) {
-                return new Result<long, Text>.Err(new Text("ByteSource.read returned an invalid byte count"));
-            }
-            if (count == 0L) { break; }
-
-            long offset = 0L;
-            while (offset < count) {
-                long written = sink.write(buffer, offset, count - offset)?;
-                if (written <= 0L || written > count - offset) {
-                    return new Result<long, Text>.Err(new Text("ByteSink.write made no progress or returned an invalid byte count"));
-                }
-                offset = offset + written;
-            }
-            copied = copied + count;
-        }
-        sink.flush()?;
-        return new Result<long, Text>.Ok(copied);
-    }
-
-    // Returns the prefix read so far when maxBytes is reached without probing.
-    public static Result<ByteBuffer, Text> readUpTo(borrow mut ByteSource source, long maxBytes, long bufferSize) {
-        if (maxBytes < 0L || bufferSize <= 0L) {
-            return new Result<ByteBuffer, Text>.Err(new Text("Streams.readUpTo requires maxBytes >= 0 and bufferSize > 0"));
-        }
-        long chunkCapacity = bufferSize;
-        if (chunkCapacity > maxBytes) { chunkCapacity = maxBytes; }
-        ByteBuffer output = ByteBuffer.withCapacity(chunkCapacity)?;
-        if (maxBytes == 0L) { return new Result<ByteBuffer, Text>.Ok(output); }
-        ByteBuffer chunk = ByteBuffer.withCapacity(chunkCapacity)?;
-        while (output.length() < maxBytes) {
-            chunk.clear();
-            long requested = maxBytes - output.length();
-            if (requested > chunkCapacity) { requested = chunkCapacity; }
-            long count = source.read(chunk, requested)?;
-            if (count < 0L || count > requested || chunk.length() != count) {
-                return new Result<ByteBuffer, Text>.Err(new Text("ByteSource.read returned an invalid byte count"));
-            }
-            if (count == 0L) { break; }
-            output.appendBytes(chunk)?;
-        }
-        return new Result<ByteBuffer, Text>.Ok(output);
-    }
-
-    // Succeeds only on EOF. If maxBytes are read, a one-byte probe detects
-    // excess input; that byte is consumed before Err is returned.
-    public static Result<ByteBuffer, Text> readAll(borrow mut ByteSource source, long maxBytes, long bufferSize) {
-        ByteBuffer output = Streams.readUpTo(source, maxBytes, bufferSize)?;
-        if (output.length() < maxBytes) { return new Result<ByteBuffer, Text>.Ok(output); }
-        ByteBuffer probe = ByteBuffer.withCapacity(1L)?;
-        long count = source.read(probe, 1L)?;
-        if (count < 0L || count > 1L || probe.length() != count) {
-            return new Result<ByteBuffer, Text>.Err(new Text("ByteSource.read returned an invalid byte count"));
-        }
-        if (count == 0L) { return new Result<ByteBuffer, Text>.Ok(output); }
-        return new Result<ByteBuffer, Text>.Err(new Text("Streams.readAll: input exceeds maxBytes"));
-    }
-
-    public static Result<Unit, Text> writeAll(borrow mut ByteSink sink, borrow ByteBuffer source) {
-        long offset = 0L;
-        long length = source.length();
-        while (offset < length) {
-            long written = sink.write(source, offset, length - offset)?;
-            if (written <= 0L || written > length - offset) {
-                return new Result<Unit, Text>.Err(new Text("ByteSink.write made no progress or returned an invalid byte count"));
-            }
-            offset = offset + written;
-        }
-        sink.flush()?;
-        return new Result<Unit, Text>.Ok(());
-    }
-}

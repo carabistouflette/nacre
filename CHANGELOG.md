@@ -253,10 +253,10 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 - BinaryReader and BinaryWriter are unique-owned, choose byte order explicitly,
   preserve reader cursors on incomplete/invalid UTF-8 input, encode binary32 and
   binary64 values, and transfer the writer's exact buffer on finish. ByteSource/
-  ByteSink are allocation-free interfaces implemented by File and TcpStream.
-  Streams distinguishes prefix-returning `readUpTo` from EOF-enforcing `readAll`,
-  which probes and consumes one excess byte before returning `Err`; bounded loops
-  handle partial transfers, reject zero progress, and flush according to the sink.
+  ByteSink are allocation-free interfaces implemented by File, TcpStream, and
+  TlsStream. Streams preserves partial progress in owned StreamError values,
+  including pending copy packets, read prefixes and exact-limit probe bytes;
+  writeAll retains the caller's source and reports only confirmed offsets.
 
 - Linux networking adds immutable IPv4/IPv6 `SocketAddress`, owned TCP listeners/streams,
   UDP sockets and datagrams with poll-based deadlines and direct ByteBuffer appends.

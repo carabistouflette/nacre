@@ -1404,23 +1404,52 @@ class BinaryWriter {
     readonly borrow ByteBuffer bytes()
     static ByteBuffer finish(BinaryWriter writer)
 }
-static Result<long, Text> Streams.copy(borrow mut ByteSource source, borrow mut ByteSink sink, long maxBytes, long bufferSize)
-static Result<ByteBuffer, Text> Streams.readUpTo(borrow mut ByteSource source, long maxBytes, long bufferSize)
-static Result<ByteBuffer, Text> Streams.readAll(borrow mut ByteSource source, long maxBytes, long bufferSize)
-static Result<Unit, Text> Streams.writeAll(borrow mut ByteSink sink, borrow ByteBuffer source)
+class StreamError {
+    readonly borrow Text message()
+    readonly long sourceBytesRead()
+    readonly long sinkBytesWritten()
+    readonly long confirmedOffset()
+    readonly borrow Option<ByteBuffer> retainedBytes()
+    static Option<ByteBuffer> takeRetainedBytes(StreamError error)
+}
+static Result<long, StreamError> Streams.copy(borrow mut ByteSource source, borrow mut ByteSink sink, long maxBytes, long bufferSize)
+static Result<ByteBuffer, StreamError> Streams.readUpTo(borrow mut ByteSource source, long maxBytes, long bufferSize)
+static Result<ByteBuffer, StreamError> Streams.readAll(borrow mut ByteSource source, long maxBytes, long bufferSize)
+static Result<Unit, StreamError> Streams.writeAll(borrow mut ByteSink sink, borrow ByteBuffer source)
 ```
 
 `ByteSource` and `ByteSink` are allocation-free interfaces implemented by
-`File` and `TcpStream`; each operation may transfer a partial count. `Streams`
-loops over partial writes, rejects invalid counts and zero-progress writes, and
-uses positive `bufferSize` to bound each transfer chunk. `copy` consumes at most
-`maxBytes`, stops at EOF, and flushes the sink (including when the bound is zero).
-`readUpTo` consumes at most `maxBytes` and returns the prefix at the limit
-without probing for another byte. `readAll` succeeds only when it reaches EOF.
-After reading `maxBytes` bytes it probes one extra byte; if present, that byte is
-consumed and `Err` is returned. This also applies when `maxBytes` is zero.
-`writeAll` loops until the complete buffer is sent, then flushes. Errors do not
-roll back source consumption or already-written output.
+`File`, `TcpStream`, and `TlsStream`. A zero-byte read request returns zero
+without changing the destination. A positive read request blocks until data or
+EOF; `Ok(0)` means EOF, and `Ok(n)` appends exactly `n` bytes. A positive write
+request must return a positive count no larger than the request; zero is valid
+only for a zero-byte request. A failed source or sink operation can follow
+physical transport progress, which the primitive result does not report.
+
+`StreamError` owns the original `Text` message and exposes confirmed logical
+`sourceBytesRead` and `sinkBytesWritten` counts. Its optional `retainedBytes`
+is owned by the error; inspect the counts and `confirmedOffset()` first, then
+`takeRetainedBytes(move error)` consumes the error and transfers the optional
+buffer. For `copy`, that buffer is the current pending source packet and the
+offset is its prefix accepted by successful sink calls. For `readUpTo` and
+`readAll`, it is the accumulated output. For `writeAll`, no source copy is
+retained: the caller keeps its borrowed source and the offset is the confirmed
+written prefix. Other operations use offset zero. Counts include only logically
+confirmed bytes, not unreported physical progress from a failed transport call;
+retained pending bytes do not promise rollback or make retry automatically safe.
+An allocation failure before stream effects reports zero progress.
+
+`copy` consumes at most `maxBytes`, stops at EOF, and flushes the sink even when
+the bound is zero. It retains staged source bytes if reading fails, and retains
+the current packet plus confirmed write offset if a write fails. A flush error
+reports all successful writes but does not undo them. `readUpTo` consumes at
+most `maxBytes`, never probes past the limit, and returns the prefix at the
+limit. Errors retain the accumulated prefix, including bounded valid bytes a
+failing read already appended. `readAll` succeeds only at EOF. Once it reaches
+`maxBytes`, it consumes at most one probe byte; an over-limit error retains the
+output and that byte, including when `maxBytes` is zero. `writeAll` loops over
+partial writes and flushes on completion; errors preserve the confirmed offset
+while leaving the original source usable.
 
 `BinaryReader` uniquely owns its input buffer; `BinaryWriter` uniquely owns the
 buffer it builds. Both constructors require an explicit byte order. Reads of
@@ -1435,11 +1464,15 @@ largest finite binary32 value without advancing the writer.
 when out of range. `bytes()` is a borrow tied to the writer; `finish` consumes the
 writer and transfers its exact buffer without copying.
 
-The `File` stream adapters use the descriptor cursor and may return partial
-counts. `File.flush` calls `fsync`. `TcpStream.read` and `write` use timeout `0`
-(unbounded wait); its `flush` is a no-op and gives no guarantee of network
-delivery. `Streams.copy` and `writeAll` flush their sink according to that sink's
-contract, not a peer-acknowledgement guarantee.
+The `File` adapters use the descriptor cursor and may return partial counts;
+reads are blocking and return zero at EOF. `File.flush` calls `fsync`.
+`TcpStream` interface reads and writes use timeout `0` (unbounded wait); its
+flush is a no-op and makes no network-delivery promise. TLS interface reads and
+writes also use timeout `0` (unbounded wait). A `TlsStream.write` error closes
+the TLS connection because physical bytes may already have been sent. Its
+`flush` only checks that the stream is open; it does not flush a TLS record or
+acknowledge network delivery. `Streams.copy` and `writeAll` account only for
+successful logical sink counts, not peer acknowledgement.
 
 ### Domain serialization
 
