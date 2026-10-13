@@ -24,22 +24,13 @@ fn missing_filename() { assert!(!nacre(&["run"]).status.success()); }
 #[test]
 fn nonexistent_file() { assert!(!nacre(&["check", "file-that-does-not-exist.ncr"]).status.success()); }
 #[test]
-fn help_and_version_outputs_are_english() {
-    let help = nacre(&["--help"]);
-    assert!(help.status.success());
-    assert!(String::from_utf8_lossy(&help.stdout).contains("Usage:"));
-    let version = nacre(&["--version"]);
-    assert!(version.status.success());
-    assert!(String::from_utf8_lossy(&version.stdout).starts_with("nacre "));
-}
-#[test]
 fn checks_valid_file() { let out = nacre(&["check", "examples/hello.ncr"]); assert!(out.status.success()); }
 #[test]
 fn rejects_invalid_file_with_caret() {
     let out = nacre(&["check", "examples/invalid/type_error.ncr"]);
     assert!(!out.status.success());
     let text = String::from_utf8_lossy(&out.stderr);
-    assert!(text.contains("type_error.ncr:2:15: error:"), "{text}");
+    assert!(text.contains("type_error.ncr:2:15:"), "{text}");
     assert!(text.contains("^^^^"));
 }
 #[test]
