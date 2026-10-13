@@ -351,6 +351,9 @@ pub(super) fn implementation(program: &t::Program) -> String {
         add_param(&mut substitutions, "@DECODE_CHARSET@", function, 1);
     }
 
+    if uses(&usage, M::LocaleAvailable) {
+        append_section(&mut body, locale_source, "/* NACRE_LOCALE_BEGIN AVAILABLE */", "/* NACRE_LOCALE_END AVAILABLE */");
+    }
     if uses(&usage, M::CharsetAvailable) || uses(&usage, M::LocaleAvailable) {
         let function = native_function(program, |method|
             method == M::LocaleAvailable || method == M::CharsetAvailable);
