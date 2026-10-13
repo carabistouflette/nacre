@@ -1,31 +1,32 @@
 # Nacre architecture
 
-Cette note décrit l'implémentation source livrée. Le périmètre de validation
-du compilateur Rust et de ses programmes générés est documenté dans
-[VALIDATION.md](VALIDATION.md).
+This note summarizes the compiler and runtime structure. Validation evidence is
+recorded separately in [VALIDATION.md](VALIDATION.md).
 
 ## Pipeline
 
 ```text
-fichier(s) .ncr ou dossier
-  → project.rs      collecte, limites et unités source distinctes
-  → lexer.rs        tokens et positions source de chaque fichier
-  → parser.rs       AST puis fusion des déclarations
-  → stdlib.rs       injection des contrats natifs réservés
-  → generics.rs     instanciations nominales et substitution des paramètres
-  → checker.rs      noms, types, visibilité, contrats d'interfaces, IR typée
-  → ownership.rs    CFG : initialisation et déplacements, point fixe
-  → borrowing.rs    prêts lexicaux, origines et incompatibilités d'accès
-  → codegen.rs      C11, tables de méthodes et nettoyages déterministes
-  → stdlib_codegen.rs / stdlib/*.c.in : corps C des méthodes natives
-  → native.rs       GCC/Clang → exécutable ; ou Clang → IR LLVM textuelle
+one or more .ncr files or directories
+  → project.rs       source collection, limits, source-unit boundaries
+  → lexer.rs         tokens and file-local source positions
+  → parser.rs        one AST unit per source file
+  → resolver.rs      modules, imports, and qualified names
+  → stdlib.rs        injection of reserved native declarations
+  → generics.rs      nominal instantiation and type substitution
+  → checker.rs       names, types, visibility, interfaces, and typed IR
+  → ownership.rs     definite initialization and move-flow analysis
+  → borrowing.rs     lexical loans, origins, and access conflicts
+  → codegen.rs       C11, interface tables, and deterministic cleanup
+  → stdlib_codegen.rs / stdlib/*.c.in   native C method bodies
+  → native.rs        GCC/Clang to executable, or Clang to textual LLVM IR
 ```
 
-Le frontend utilise la bibliothèque standard Rust ; `serde_json` encode et décode
-les messages du LSP. `#![forbid(unsafe_code)]` interdit Rust `unsafe` dans
-ses sources ; cela ne prouve ni la correction du compilateur ni la sûreté du C
-qu'il est censé produire. Le programme cible utilise le runtime C fourni et la
-bibliothèque C du système, sans JVM ni collecteur de déchets prévu.
+The Rust frontend uses the standard library; `serde_json` encodes and decodes LSP
+messages. `#![forbid(unsafe_code)]` forbids Rust `unsafe` in the compiler, but
+does not prove compiler correctness or generated-C safety. The native target
+uses the supplied C runtime and system C library. It has no garbage collector or
+implicit reference counting for ordinary language values; sharing synchronization
+controls requires explicit mutex/channel handles.
 
 ## AST et spécialisation générique
 
@@ -53,14 +54,15 @@ Des bornes sur la profondeur, le nombre et la longueur des instances limitent
 les expansions récursives. Ce n'est pas une inférence de paramètres, ni un
 système de contraintes génériques avec bornes de type.
 
-`ForEach` AST nodes preserve both typed map bindings (or one list binding),
-collection, body and source spans. The checker shares binding/receiver contracts,
-evaluates the collection once, and lowers to existing typed block/while IR.
-Lists use indexed accessors; maps use compiler-only capacity/occupied/key/value
-expressions, with C layout knowledge confined to `stdlib_codegen`.
+`ForEach` AST nodes preserve typed bindings, the collection, body, and source
+spans: maps have two bindings; lists and sets have one. The checker evaluates a
+collection expression once and lowers traversal to typed block/while IR. Lists
+use indexed accessors; maps and sets use compiler-only capacity, occupancy, key,
+and value expressions. Knowledge of their C layout stays in `stdlib_codegen`.
 The cursor advances before the original body is checked by reference, not cloned.
-Existing flow, borrowing and C cleanup passes govern joins/exits. No iterator
-object, affine-owner copy or per-entry key rehashing is introduced.
+Existing flow, borrowing, and cleanup passes govern joins and exits. Traversal
+does not allocate iterator objects, copy affine owners, or rehash keys to read
+stored values.
 
 Recoverable list intrinsics return inline `Option<T>` layouts obtained from
 ordinary specialization. Native enum IDs/tags are looked up, not fixed in the
@@ -192,78 +194,88 @@ ne sont pas un substitut à cette validation.
 
 ## Classes natives et mémoire des collections
 
-`ast::Class.native` is never produced by source parsing. Trusted prelude injection
-marks List<T>, Map<K,V>, Text and the static runtime APIs. Specialization resolves
-collection parameters; Map keys must be int before ordinary checking.
-The checker resolves native classes and typed methods without granting native
-privileges to a user-defined spelling.
-Unused native classes are not materialized. Copied `get` is removed for affine
-elements; `getRef`/`getMut` are removed for primitive elements before typing.
-Borrowed accessors derive their checked object/enum/interface ABI from typed IR.
+`ast::Class.native` is never produced by source parsing. Trusted prelude
+injection marks built-in collection templates, scalar/text types, and system
+APIs for I/O, filesystem, regex, math/random/time, processes, synchronization, and
+networking. Generic specialization classifies `Map<K,V>` and `Set<K>` keys as
+`int` or owned `Text` before ordinary type checking. The checker resolves native
+declarations and typed methods without granting native privileges to a
+user-defined spelling.
 
-Les fonctions natives reçoivent des signatures typées normales, mais leurs corps
-IR vides sont explicitement exemptés d'analyse. `ownership.rs` et `borrowing.rs`
-ne leur attribuent pas une preuve de sûreté. Les appels utilisateur sont vérifiés
-selon les mêmes contrats que les fonctions ordinaires.
+Unused native classes are not materialized. Copying accessors are pruned for
+affine elements; borrowed accessors are pruned for copyable elements. Their ABI
+is derived from typed IR.
+Native functions have ordinary typed signatures, but their empty IR bodies are
+exempt from analysis. `ownership.rs` and `borrowing.rs` do not prove native
+method safety; user calls are checked against the same contracts as ordinary
+functions.
 
-Le stockage d'une liste comporte un pointeur de buffer, une taille et une
-capacité. Seule la plage initialisée possède des valeurs. Le type concret de
-l'élément détermine son destructeur, y compris un destructeur dynamique pour les
-interfaces. Les opérations `pop`/`remove` retirent l'élément avant de transférer sa
-représentation à l'appelant. Le texte contient un buffer d'octets possédé ; aucune
-vue de ce buffer n'est retournée comme `String` statique.
+List storage contains a buffer pointer, size, and capacity. Only initialized
+slots own values. The concrete element type selects the destructor, including
+dynamic destruction for interface values. `pop` and `remove` clear the stored
+slot before transferring its value to the caller. `Text` owns a byte buffer;
+that buffer is not returned as a static `String` view.
 
-Map storage is a single buffer of entries containing int keys, a stored value,
-and occupancy. Entry struct definitions follow complete ordinary/interface/enum
-layouts and precede drop bodies, so inline values have their real C size.
-Unsigned hashing/open addressing supports every signed key. Checked growth
+Map storage is a single buffer of entries containing an `int` or owned `Text`
+key, a value, occupancy, and (for Text keys) a cached hash. Entry structure
+definitions follow complete ordinary/interface/enum layouts and precede drop
+bodies, so inline values have their real C size. Unsigned hashing and
+open-addressing support every signed integer key and Text keys. Checked growth
 raw-relocates owners; backward-shift deletion repairs probe chains without
-tombstones or allocations. Replacement returns the previous owner rather than
-dropping it. Borrowed lookup returns object pointers, enum slot addresses, or
-interface fat pointers according to the concrete value layout.
+tombstones or allocation. Replacing an entry returns the previous value rather
+than dropping it. Text lookup borrows the query; borrowed value lookup returns
+an object pointer, enum slot address, or interface fat pointer according to the
+concrete value layout.
 
-The complete map is one alias domain. Native argument sequencing and existing
-projected-receiver freezing remain in force; no per-key disjointness or iterator
-lifetime model is added. Native code remains part of the trusted base.
+Each map remains one alias domain. Native argument sequencing and projected
+receiver freezing remain in force; separate keys do not provide disjoint
+borrowing. Map and Set traversal does not add a first-class iterator or a
+per-entry lifetime model. Native collection code remains part of the trusted
+base.
 
-Le backend injecte aux appels natifs deux arguments cachés ligne/colonne et
-substitue leurs identifiants numériques dans les templates C. Les buffers
-passent par les mêmes compteurs que les allocations d'objets. Ils n'utilisent ni
-GC ni comptage de références dans ce modèle. Voir [STDLIB.md](STDLIB.md).
+The backend injects source line/column arguments into native calls and substitutes
+numeric identifiers into C templates. Buffers use the same accounting as object
+allocations. Ordinary values do not use garbage collection or implicit reference
+counts; mutexes and channels explicitly share their synchronization control
+blocks. See [STDLIB.md](STDLIB.md).
 
-La vérification historique des cycles de champs reste appliquée aux champs
-obligatoires. Une liste native ne comporte pas de champ obligatoire de son type
-élément : sa valeur vide fournit un cas de base. Un `Node` qui possède une
-`List<Node>` est donc représentable ; un graphe avec plusieurs propriétaires
-pour le même objet ne l'est pas.
+The existing check for cycles of required fields still applies. A native list
+does not require an element field, so its empty state supplies a base case. A
+`Node` that owns a `List<Node>` is representable; multiple owners for the same
+object are not.
 
-## Unités source et outils de projet
+## Source units and project tools
 
-`project::SourceBundle` conserve les noms, le texte et les offsets de chaque
-unité. Les fichiers sont lexés et parsés séparément pour qu'un commentaire ou une
-déclaration ne puisse franchir une frontière de fichier. Les positions sont
-ensuite exprimées dans un texte cumulé, et les AST sont fusionnés avant les
-passes communes. Il n'y a pas de compilation séparée, de packages ou d'import.
+`project::SourceBundle` retains each source name, its text, and source offsets.
+Files are lexed and parsed independently so a comment or declaration cannot
+cross a file boundary. Their AST units are then resolved together: each
+`module` header supplies a namespace, and each file's imports bind declarations
+from the selected source bundle. This is whole-program compilation, not
+separate compilation, package linking, or external dependency resolution.
 
-Les diagnostics primaires et leurs notes sont remappés sur le fichier d'origine.
-Pour les erreurs runtime multifichiers, le C contient une table compacte des
-lignes de début de fichier. Les commandes d'export `emit-flow`/`emit-borrows`
-conservent les lignes cumulées pour l'instant.
+Primary diagnostics and their notes map back to the original file. Multi-file C
+output includes a compact table of file starting lines for runtime errors.
+`emit-flow` and `emit-borrows` currently retain lines from the combined text.
 
-`doctor` utilise le véritable pipeline, pas une fixture prédéfinie. `init` crée
-seulement un squelette local neuf. `--sanitize` transmet les options de détection
-mémoire au compilateur C. Le pipeline natif et `doctor` ont été exécutés sous
-Linux avec GCC et Clang ; voir le rapport de validation.
+`doctor` exercises the real compiler pipeline rather than a fixed fixture.
+`init` creates a new local project skeleton. `--sanitize` passes memory-safety
+instrumentation options to the C compiler; `doctor` is a smoke check, not an
+exhaustive proof. See [VALIDATION.md](VALIDATION.md) for the recorded evidence.
 
 ## LSP and recoverable I/O
 
-`nacre lsp` échange des messages JSON-RPC avec framing `Content-Length`.
-Il réutilise `SourceBundle::validate` et `SourceBundle::locate`, sans compilateur C,
-sur des snapshots bornés de sources disque et de buffers non sauvegardés.
-Les positions en octets du frontend sont converties en lignes/colonnes UTF-16
-pour le protocole ; les notes deviennent des informations liées.
-`nacre.json` déclare les chemins source d’un projet ; sans marqueur, un document
-est compilé seul. Les clients VS Code et Zed lancent ce même serveur.
+`nacre lsp` exchanges JSON-RPC messages with `Content-Length` framing. It reuses
+`SourceBundle::validate` and `SourceBundle::locate`, without invoking the C
+compiler, on bounded snapshots of disk sources and open buffers. Frontend byte
+positions are converted to LSP UTF-16 positions; notes become related
+information.
+
+The nearest ancestor `nacre.json` declares project source roots. Within a project
+scope, open buffers override disk files, including unsaved new source files under
+the configured roots. Stale document versions do not replace newer snapshots.
+Without a marker, each document is validated alone; nearby files are not merged.
+VS Code and Zed launch the same server. See [PROJECTS.md](PROJECTS.md) for the
+configuration and overlay contract.
 
 Les corps C d’E/S produisent les véritables spécialisations IR de `Option`/`Result`.
 Ils valident UTF-8, ranges et conversions int32, avec erreurs textuelles possédées.

@@ -1,227 +1,741 @@
 # Nacre standard library
 
-`List`, `Map`, `Text`, `Option`, `Result`, `Console`, `Files`, and `Args` are reserved
-and pre-injected without imports. The two sum types use the ordinary enum
-representation; native methods belong to the trusted base. Specializations are
-emitted on demand with all their signatures. The scope of real validation is
-described in [VALIDATION.md](VALIDATION.md).
+This is the source-level API reference for the experimental Linux native alpha.
+The compiler injects the built-in declarations before checking user source. Built-in
+names are reserved and available unqualified; no standard-library import is needed.
+There is no Java runtime, GUI, reflection, JVM, dynamic loading, or general-purpose
+FFI layer. Native methods are part of the trusted compiler/runtime base.
 
-## List<T>
+## Values, errors, and ownership
 
-`new List<T>()` creates an empty list. `T` may be `int`, `boolean`, a static
-`String`, an owned class or interface, an enum, `Text`, or another list.
-Borrow-containing views and borrows are not valid list elements, including when
-nested. Lists are invariant: `List<Dog>` is not a `List<Animal>`. However,
-`List<Animal>.add(new Dog())` accepts an upcast to an interface explicitly
-implemented by `Dog`.
+The language's scalar types are `byte`, `char`, `int`, `long`, `double`, `boolean`,
+`String`, and `Unit`. Scalars and static `String` values copy. `String` is an
+immutable view of a source literal; `Text` is a separately owned, mutable object.
+Ordinary object and handle values are affine: a by-value argument transfers its
+owner, and scope cleanup destroys any owner that was not transferred. There is no
+implicit clone or general reference counting. `clone()` and the named shared-handle
+operations below are explicit exceptions.
 
-| Method | Contract |
+Fallible library operations use `Result<T, Text>`. A successful command returns
+`Ok(())`, where `()` is the value of the inhabited `Unit` type; an error returns an
+owned diagnostic `Text`. `Option<T>` represents absence, not an error. A nonzero
+process exit is an `ExitStatus`, not a spawn/wait error. Reads and writes report
+counts or preserve partial effects where applicable; `Err` does not roll back OS
+writes already performed.
+
+Postfix `?` consumes an owned built-in `Result<T, E>` inside a function returning
+`Result<U, E>` with the same error type. It moves out `Ok(value)` or returns the
+owned `Err(error)` from the enclosing function after normal lexical cleanup. It
+cannot be applied to a borrowed result, another sum type, or a function that does
+not return a compatible built-in `Result`.
+
+Ordinary allocation failure follows the runtime's fatal-allocation policy. A
+`Result` reports the recoverable OS, range, conversion, and synchronization errors
+specified below; it does not make allocation generally fallible. Fatal runtime
+failures do not unwind scopes. No throughput or latency guarantees are made.
+
+## Numeric and scalar types
+
+| Type | Meaning |
 |---|---|
-| `void add(T value)` | Copies a primitive or consumes an owned object; grows the buffer as needed. |
-| `readonly int size()` | Number of initialized elements. |
-| `readonly int capacity()` | Current buffer capacity. |
-| `readonly boolean isEmpty()` | Whether `size() == 0`. |
-| `readonly T get(int index)` | Copies an element of `int`, `boolean`, or `String`; checks bounds. |
-| `readonly Option<T> tryGet(int index)` | Copies an `int`, `boolean`, or `String` into `Some`; invalid indices return `None` without mutation. |
-| `readonly borrow T getRef(int index)` | Returns a shared borrow of an affine nominal element; checks bounds and does not allocate or transfer ownership. |
-| `borrow mut T getMut(int index)` | Returns an exclusive borrow of an affine nominal element; checks bounds and does not allocate or transfer ownership. |
-| `void set(int index, T value)` | Replaces an element and destroys the old owned value; checks bounds. |
-| `T pop()` | Removes and transfers ownership of the last element; fatal if the list is empty. |
-| `T remove(int index)` | Removes an element, preserves order, and transfers ownership; checks bounds. |
-| `Option<T> tryPop()` | Transfers the last element into `Some`; an empty list returns `None`. |
-| `Option<T> tryRemove(int index)` | Transfers the indexed element into `Some`, preserving survivor order; invalid indices return `None`. |
-| `void clear()` | Destroys remaining elements and retains the buffer. |
-| `void reserve(int capacity)` | Ensures at least this capacity without changing the size; a negative value is fatal. |
+| `byte` | Unsigned 8-bit integer, range 0 through 255. |
+| `char` | One Unicode scalar value (not a UTF-8 byte, UTF-16 code unit, or grapheme). |
+| `int` | Signed 32-bit integer. Addition, subtraction, multiplication, and negation wrap modulo 2^32; division or remainder by zero is fatal. |
+| `long` | Signed 64-bit integer. Integer literals use an `L` suffix, such as `42L`. Arithmetic wraps modulo 2^64; division or remainder by zero is fatal. |
+| `double` | C `double` / IEEE-754 binary floating-point value. Decimal and exponent literals include examples such as `1.25` and `2e3`. |
+| `Unit` | An inhabited, trivially droppable value written `()`, used for successful commands and generic payloads. |
+| `boolean` | `true` or `false`. |
+| `String` | Immutable, statically stored UTF-8 literal view; it is not an owned dynamic string. |
 
-The buffer grows geometrically, with overflow checks before size multiplication.
-Reallocation relocates stored representations without destroying them; only
-`[0, size())` owns elements. `remove` shifts subsequent elements and clears the
-old final slot to prevent a second destruction. List destruction releases its
-elements in reverse order, then its buffer and the list object. Extracted
-elements are no longer released by the list.
+A character literal contains exactly one Unicode scalar, for example `'λ'` or
+`'\u{1f9ed}'`. Character literals support `\n`, `\r`, `\t`, `\0`, `\"`, `\'`,
+`\\`, and `\u{...}` escapes. String literals support `\n`, `\r`, `\t`, `\0`,
+`\"`, `\'`, and `\\`, but not Unicode escapes. Numeric expressions are promoted
+to a common numeric type; a wider numeric value can be used where a narrower type
+is not required. Explicit numeric casts use `(type)value`. A checked cast that is
+out of range, non-finite where disallowed, or not a Unicode scalar terminates
+with a runtime diagnostic rather than returning `Result`.
 
-`getRef` and `getMut` borrow from the entire list, not just the selected index.
-Their returned reference is scoped lexically. While either borrow is active,
-`add`, `set`, `pop`, `remove`, `clear`, `reserve`, moving the list, or destroying
-it is forbidden; these operations could replace an element or relocate storage.
-A mutable element borrow also prevents independent reads of the list. The
-borrowed element itself may be read through `getRef` or mutated through
-`getMut`. Ordinary objects return their stored object pointer, inline enums
-return the address of their inline slot, and interfaces use their existing
-allocation-free borrowed fat-pointer representation.
+`Text.appendByte` formats the unsigned byte as decimal text; it does not append a raw byte. Use `ByteBuffer` for binary bytes.
 
-Call arguments retain the language's receiver reservations: `xs.add(xs.get(0))`
-for `List<int>` evaluates the copied argument before mutation. A named shared
-borrow prevents mutation of the same owner until the end of its lexical scope;
-the same rule prevents moving it during that scope.
+## `Text` and UTF-8
 
-Recoverable methods return inline options without allocating. Failed extraction
-does not change contents, size, or capacity. Successful extraction clears the
-vacated slot and transfers exactly one cleanup obligation. Existing strict
-methods still fail fatally at invalid boundaries. Allocation failure remains
-fatal; no `Option<borrow T>` method is exposed.
+`Text` owns validated, length-delimited UTF-8. Embedded NUL is valid content. Text methods treat data as UTF-8 text; this is distinct from the arbitrary binary data held by `ByteBuffer`.
 
-`for (int item : numbers)` copies primitive elements; nominal elements use
-`for (borrow T item : list)` or `for (borrow mut T item : list)`. The collection
-is evaluated once and borrowed for the whole loop. Element bindings end each
-iteration, while structural mutation through another alias stays forbidden.
-See [V8.md](V8.md) for traversal and recoverable-operation contracts.
+```java
+Text(String initial)
+void append(String value)
+void appendInt(int value)
+void appendByte(byte value)
+void appendChar(char value)
+void appendLong(long value)
+void appendDouble(double value)
+void appendBoolean(boolean value)
+void appendText(borrow Text other)
+readonly int byteLength()
+readonly int byteAt(int byteIndex)
+readonly boolean isEmpty()
+void clear()
+readonly void print()
+readonly Text clone()
+readonly boolean equals(borrow Text other)
+readonly boolean equalsString(String other)
+readonly Result<int, Text> parseInt()
+readonly Result<long, Text> parseLong()
+readonly Result<double, Text> parseDouble()
+readonly Result<Text, Text> sliceBytes(int start, int end)
+readonly int charCount()
+readonly char charAt(int scalarIndex)
+readonly int compareTo(borrow Text other)
+readonly int indexOf(borrow Text needle)
+readonly boolean startsWith(borrow Text prefix)
+readonly boolean endsWith(borrow Text suffix)
+readonly Result<Text, Text> slice(int startScalar, int endScalar)
+readonly Text trim()
+readonly Text replace(borrow Text needle, borrow Text replacement)
+readonly List<Text> split(borrow Text delimiter)
+```
 
-## Map<int,V>
+`byteLength`, `byteAt`, and `indexOf` use UTF-8 byte offsets. `charCount`, `charAt`,
+and `slice` use Unicode scalar positions; neither unit counts grapheme clusters.
+`sliceBytes` copies a half-open byte range and returns `Err` unless its bounds are
+valid UTF-8 boundaries. `slice` copies a half-open scalar range and returns `Err`
+for an invalid range. `indexOf` searches exact UTF-8 bytes and returns `-1` when
+absent (an empty needle matches at offset zero). `compareTo`, equality, prefixes,
+and suffixes compare exact bytes; there is no normalization or case folding.
 
-`new Map<int,V>()` creates an empty dictionary. Maps accept only signed `int`
-keys, including zero, negative values, INT32_MIN and INT32_MAX. Value types follow
-List ownership rules; borrows and local views cannot be stored. Generic types
-remain invariant. There is no custom hashing or text-key API.
+`trim` removes Unicode White_Space scalars at both ends. `replace` uses exact byte
+matches; an empty needle inserts the replacement at each scalar boundary,
+including both ends. A nonempty `split` delimiter preserves empty fields; an empty
+delimiter splits into one-scalar `Text` values, and empty text split by an empty
+delimiter produces an empty list. Returned slices, replacements, and split fields
+are owned values, not borrowed views.
 
-| Method | Contract |
-|---|---|
-| `readonly int size()` | Live key/value pairs. |
-| `readonly boolean isEmpty()` | Whether the live count is zero. |
-| `readonly boolean containsKey(int key)` | Presence query with no retained reference. |
-| `Option<V> put(int key, V value)` | Copies a primitive or consumes an owner; returns None for a new key or Some of the previous value for replacement. |
-| `Option<V> tryRemove(int key)` | Removes/transfers the value in Some, or returns None without mutation. |
-| `readonly Option<V> tryGet(int key)` | Copies int/boolean/String into Some; absent key returns None. Only copied value specializations expose it. |
-| `readonly borrow V getRef(int key)` | Shared affine-value reference; absent key is fatal. |
-| `borrow mut V getMut(int key)` | Exclusive affine-value reference; absent key is fatal. |
-| `void clear()` | Destroys remaining values once and retains reusable entry storage. |
+`parseInt` and `parseLong` accept an optional ASCII sign followed by ASCII decimal
+digits only, with no whitespace or suffix, and return `Err` on malformed or
+out-of-range values. `parseDouble` accepts a full decimal significand with an
+optional exponent, or a signed `NaN`/`Inf` spelling, and returns `Err` on invalid
+syntax or range errors. `print()` writes the text followed by a newline. Static
+`String` and owned `Text` are not implicitly convertible.
 
-Options are inline wrappers. Replacement transfers the previous cleanup
-obligation rather than destroying that value. Existing-key replacement never
-grows the buffer; unsuccessful removal/lookup preserves contents and size.
-Insertion alone may allocate for growth; allocation/size failure remains fatal.
+## `ByteBuffer`
 
-Storage is one entry buffer with open addressing and backward-shift deletion.
-Growth relocates representations without destroying owners; deleted slots no
-longer own a value. Expected lookup/update is constant time, with linear
-worst-case collision chains. No hash-flooding resistance is promised.
+`ByteBuffer` is an affine binary byte owner with a private resizable allocation. It
+does not validate UTF-8 and exposes no pointer, slice, or implicit clone.
 
-References borrow the entire map root, not an independent key. A conflicting
-put, removal, clear, movement, replacement or destruction is forbidden while
-either reference is active, even if the call would be a no-op. Exclusive value
-access blocks independent map reads. Objects return stored pointers, inline
-enums return slot addresses, and interfaces retain their borrowed fat-pointer
-ABI. Bounds/presence observations do not grant a reference or lifetime refinement.
-Built-in traversal uses `for (int key, int value : map)` for copied values and
-`for (int key, borrow V value : map)` / `borrow mut V` for affine values.
-It visits occupied slots directly, without iterator allocation or key rehashing.
-Cost is linear in capacity, not just live count; order is unspecified. The whole
-map root stays loaned for the loop, so structural mutation is forbidden.
-See [MAP_TRAVERSAL.md](MAP_TRAVERSAL.md) for the exact traversal contract.
+```java
+static Result<ByteBuffer, Text> withCapacity(long initialCapacity)
+readonly long length()
+readonly long capacity()
+readonly byte get(long index)
+void set(long index, byte value)
+void append(byte value)
+Result<Unit, Text> appendBytes(borrow ByteBuffer source)
+void clear()
+Result<Unit, Text> truncate(long newLength)
+```
 
-## Text
+Capacity and indices are byte counts. Negative capacity and an invalid truncate
+range return `Err`; `get`/`set` out of bounds are fatal runtime diagnostics.
+`appendBytes` copies the source's current contents and retains no reference to it.
+`clear` sets length to zero but retains capacity. Growth checks size overflow and is
+not specified as a latency or allocation-count guarantee; out-of-memory remains
+fatal. Stream and file reads append to existing contents rather than clearing them.
 
-`new Text(String initial)` copie les octets de la chaîne statique dans un buffer
-possédé. Une chaîne initiale vide n’alloue pas de buffer avant le premier ajout.
-`Text` n’est pas convertible en `String`. Ses déplacements, paramètres propriétaires
-et retours propriétaires utilisent les règles ordinaires du langage.
-
-| Méthode | Contrat |
-|---|---|
-| `void append(String value)` | Ajoute les octets statiques, sans conserver de référence à un objet. |
-| `void appendInt(int value)` | Ajoute la représentation décimale signée, y compris INT32_MIN. |
-| `void appendBoolean(boolean value)` | Ajoute `true` ou `false`. |
-| `void appendText(borrow Text other)` | Copie le contenu d’un autre texte. L’auto-aliasing est refusé par l’analyse. |
-| `readonly int byteLength()` | Taille en octets UTF-8, pas en caractères. |
-| `readonly int byteAt(int index)` | Octet entre 0 et 255 ; vérifie les limites. |
-| `readonly boolean isEmpty()` | Teste si le contenu est vide. |
-| `void clear()` | Vide le contenu sans réduire la capacité. |
-| `readonly void print()` | Affiche le contenu suivi d’un saut de ligne. |
-| `readonly Text clone()` | Nouvelle allocation et copie indépendante explicite. |
-| `readonly boolean equals(borrow Text other)` | Comparaison des octets ; deux lectures du même texte sont autorisées. |
-| `readonly boolean equalsString(String other)` | Comparaison avec une chaîne statique. |
-| `readonly Result<int,Text> parseInt()` | Signe `+`/`-` facultatif puis chiffres ASCII ; analyse tous les octets, vérifie `[-2147483648,2147483647]`. Vide, espaces, suffixes et overflow donnent `Err` sans consommer le propriétaire. |
-| `readonly Result<Text,Text> sliceBytes(int start, int end)` | Copie indépendante de `[start,end)` ; plage valide et frontières de points de code UTF-8 obligatoires, sinon `Err`. |
-
-Aucun `toString`, emprunt de slice ou pointeur n’est exposé. `sliceBytes` retourne
-un nouveau propriétaire, pas une vue qui pourrait survivre au buffer dynamique.
-Les NUL sont conservés. Les indices restent des **octets**, pas des caractères ou
-graphèmes ; la vérification de frontières UTF-8 ne les transforme pas en indices Unicode.
-
-## Option<T> et Result<T,E>
+## `Option<T>` and `Result<T, E>`
 
 ```java
 enum Option<T> { None; Some(T); }
-enum Result<T,E> { Ok(T); Err(E); }
+enum Result<T, E> { Ok(T); Err(E); }
 ```
 
-Ces déclarations sont des contrats préinjectés réservés. Construction explicite :
-`new Option<int>.Some(42)`, `new Option<int>.None()`,
-`new Result<int,Text>.Err(new Text("échec"))`.
-Une somme n’alloue pas d’enveloppe ; seuls ses payloads peuvent allouer.
-Toutes les sommes sont affines, même `Option<int>`. `match` les consomme et exige
-toutes les variantes, avec les variables de payload correspondantes.
-Les payloads possédés sont détruits sur les sorties normales, y compris les
-retours précoces et sorties de boucle. Les emprunts et vues locaux sont interdits
-dans les payloads ; il n’y a pas de déballage implicite ni d’exceptions.
+These are ordinary pre-injected affine enum values, stored inline without an
+allocated wrapper. Construct variants explicitly, for example
+`new Result<Unit, Text>.Ok(())`; `match` is exhaustive and consuming unless the
+enum is explicitly borrowed. Payload ownership moves with its variant. There is no
+implicit unwrapping or exception mechanism.
 
-## Console
+## Collections
 
-| Méthode statique | Contrat |
-|---|---|
-| `Result<Option<Text>,Text> readLine()` | `Ok(Some(line))` pour une ligne, `Ok(None)` pour EOF sans octets restants, `Err(error)` pour erreur de lecture, taille excessive ou UTF-8 invalide. |
-| `void print(String value)` | Affiche les octets sans saut de ligne et flush stdout. |
-| `void printText(borrow Text value)` | Même affichage pour un texte possédé, sans le consommer. |
+Collections own their contents and are affine. `T` must be a copied scalar/static
+`String` or an owned object, interface, or enum; borrows and local views cannot be
+stored. A collection's element references loan the complete collection root, not
+just one index or key. Structural mutation, movement, replacement, and destruction
+that conflict with a live loan are rejected until its lexical scope ends.
 
-`readLine` enlève LF et le CR qui le précède ; une dernière ligne sans LF est
-retournée avant EOF. Une ligne vide est `Some(Text vide)`, pas EOF.
-Une ligne UTF-8 invalide est consommée avant `Err`. En revanche, un flux C ayant
-une erreur persistante n’est pas réinitialisé : l’appelant ne doit pas le réessayer
-indéfiniment. Le Sudoku termine proprement sur une erreur du flux console.
-Le buffer lu est transféré au `Text` retourné, sans recopie intégrale.
+### `List<T>`
 
-## Files
+```java
+List<T>()
+void add(T value)
+readonly int size()
+readonly int capacity()
+readonly boolean isEmpty()
+readonly T get(int index)                         // copied specializations only
+readonly Option<T> tryGet(int index)              // copied specializations only
+Option<T> tryPop()
+Option<T> tryRemove(int index)
+readonly borrow T getRef(int index)                // affine specializations only
+borrow mut T getMut(int index)                     // affine specializations only
+void set(int index, T value)
+T pop()
+T remove(int index)
+void clear()
+void reserve(int capacity)
+void sort()                                        // supported default-order specializations only
+void sortBy(Comparator<T> comparator)
+readonly Option<int> binarySearch(T value)         // supported default-order specializations only
+readonly Option<int> binarySearchBy(Comparator<T> comparator, borrow T value)
+```
 
-| Méthode statique | Contrat |
-|---|---|
-| `Result<Text,Text> readText(borrow Text path)` | Lecture complète UTF-8, NUL de contenu conservés ; échec d’ouverture/lecture/fermeture, UTF-8 invalide ou taille excessive → `Err`. |
-| `Result<boolean,Text> writeText(borrow Text path, borrow Text content)` | Écrit les octets exacts et remplace le fichier existant ; `Ok(true)` après écriture, flush et fermeture réussis, sinon `Err`. |
-| `Result<boolean,Text> writeTextAtomic(borrow Text path, borrow Text content)` | Writes exact bytes to a sibling temporary file, flushes and closes it, then atomically replaces the destination using `rename`; returns `Ok(true)` only after commit. |
+Copied access (`get`, `tryGet`) is specialized for `byte`, `char`, `int`, `long`,
+`double`, `boolean`, `Unit`, and static `String`; affine nominal elements instead
+expose `getRef`/`getMut`. `tryGet`, `tryPop`, and `tryRemove` return inline options;
+invalid indices and empty extraction return `None` without mutation. Strict `get`,
+`set`, `pop`, `remove`, and reference access diagnose invalid indices (or an empty
+`pop`) fatally. `set` replaces and destroys the old owned value. `reserve` with a
+negative capacity is fatal.
 
-Un NUL dans un chemin est refusé. Les chemins sont UTF-8 ; les espaces sont
-acceptés. Les buffers lus sont transférés au texte retourné sans copie finale.
-`writeText` n’est pas atomique : un échec peut laisser un fichier partiel ou
-tronqué. Aucun `Err` ne prétend annuler les écritures déjà effectuées.
+Default `sort`/`binarySearch` ordering is provided for `byte`, `char`, `int`,
+`long`, `double`, `boolean`, and static `String`. Default string ordering is
+lexicographic by UTF-8 bytes. `binarySearch` expects the list to be sorted using the
+same ordering. `sortBy` and `binarySearchBy` use a user-supplied
+`Comparator<T>`; the binary search also expects a matching pre-sorted list. A
+comparator returns a negative, zero, or positive `int` for its pair of values.
 
-`writeTextAtomic` guarantees atomic visibility, not power-loss durability: it
-does not call `fsync`. Before a successful commit, a failure preserves the
-destination and attempts to remove the temporary file. A replacement uses
-`mkstemp` permissions (0600 subject to umask), not the old file's permissions.
-Renaming over a symlink replaces the symlink entry rather than its referent.
-There is no fallible operation after the successful rename that can produce
-an `Err` claiming the old destination was preserved.
+List traversal uses `for (int value : values)` for copied values and
+`for (borrow T value : values)` / `for (borrow mut T value : values)` for affine
+values. The list is evaluated once and stays loaned for the full loop; each
+binding ends at the iteration boundary. This is built-in traversal, not a
+first-class iterator or an early-release/NLL feature.
 
-## Args
+### `Deque<T>`
 
-| Méthode statique | Contrat |
-|---|---|
-| `int count()` | Nombre d’arguments utilisateur, sans le nom de l’exécutable. |
-| `Result<Text,Text> get(int index)` | Copie possédée de l’argument UTF-8 ; indice invalide ou octets non UTF-8 → `Err`. |
+```java
+Deque<T>()
+void pushFront(T value)
+void pushBack(T value)
+T popFront()
+T popBack()
+Option<T> tryPopFront()
+Option<T> tryPopBack()
+readonly int size()
+readonly int capacity()
+readonly boolean isEmpty()
+readonly T get(int index)                         // copied specializations only
+readonly Option<T> tryGet(int index)              // copied specializations only
+readonly borrow T getRef(int index)                // affine specializations only
+borrow mut T getMut(int index)                     // affine specializations only
+void set(int index, T value)
+void clear()
+void reserve(int capacity)
+```
 
-L’entrée reste `void main()`. Les arguments sont ceux de l’exécutable construit,
-ou ceux transmis par `nacre run sources -- arguments...`.
-`Console`, `Files` et `Args` ne sont pas constructibles et ne sont pas des types
-de variables ou de payloads.
+The deque is an owning double-ended collection. Pushes transfer affine elements;
+strict pops from an empty deque and invalid indexed operations are fatal. Recoverable
+pops return `None` when empty. Copied versus borrowed indexed access follows the
+same specialization rules as `List<T>`. Negative reserve is fatal.
 
+### `Array<T>` and `Arrays`
 
-## Frontière de confiance
+```java
+Array<T>(List<T> values)                           // consumes the list
+readonly int size()
+readonly T get(int index)                         // copied specializations only
+readonly Option<T> tryGet(int index)              // copied specializations only
+readonly borrow T getRef(int index)                // affine specializations only
+borrow mut T getMut(int index)                     // affine specializations only
+void set(int index, T value)
 
-Les corps vides de `stdlib/prelude.ncr` sont des contrats internes, pas du code
-utilisateur valable pour les méthodes non-void. `src/stdlib.rs` est le seul
-injecteur du marqueur natif. Le parseur ne peut pas produire ce marqueur à partir
-du source. Après spécialisation, le checker résout les signatures, puis les appels
-utilisateur sont analysés normalement. Les corps natifs ne sont pas présentés
-comme ayant été prouvés par les analyses d’ownership et d’emprunts.
+static Array<byte> zeroedBytes(int length)
+static Array<char> zeroedChars(int length)
+static Array<int> zeroedInts(int length)
+static Array<long> zeroedLongs(int length)
+static Array<double> zeroedDoubles(int length)
+static Array<boolean> zeroedBooleans(int length)
+static Array<Unit> zeroedUnits(int length)
+```
 
-Le backend ajoute aux appels natifs une ligne et une colonne cachées pour les
-contrôles de limites. Les primitives mémoire C et les templates natifs font
-partie de la base de confiance ; ils doivent être audités indépendamment.
-Les scripts C testent les templates réels, mais pas leur intégration Rust.
+`Array<T>` is a fixed-length affine owner, not `T[]` syntax. Constructing it from a
+`List<T>` consumes the list and transfers its initialized elements; `set` replaces
+one element but cannot resize the array. The `Arrays` factories initialize every
+slot to the corresponding zero value. A negative factory length is fatal. Strict
+indexed operations diagnose out-of-range indices; `tryGet` is available for copied
+specializations and returns `None` when out of range. Affine arrays expose only
+borrowed indexed access, not `Option<borrow T>`.
 
-## Erreurs fatales
+### `Set<T>` and `Map<K, V>`
 
-Les opérations historiques de listes/texte hors limites, `pop` vide, capacité
-négative, taille impossible dans les opérations fatales ou échec d’allocation
-arrêtent toujours le processus. Pas de déroulement normal des destructeurs sur
-ce chemin. Les nouvelles E/S, conversions et copies de plages renvoient des
-erreurs récupérables via `Result` ; l’échec d’allocation reste fatal.
+The only supported set keys and map keys are `int` and owned `Text`. No static
+`String`, `Path`, or user-defined hash/equality type is supported. `Text` key
+comparison is exact UTF-8 byte equality, including embedded NUL; there is no
+normalization or case folding.
+
+```java
+Set<T>()
+void add(T key)
+readonly boolean contains(T key)
+boolean remove(T key)
+readonly int size()
+readonly boolean isEmpty()
+void clear()
+
+Map<K, V>()
+readonly boolean containsKey(K key)
+readonly int size()
+readonly boolean isEmpty()
+Option<V> put(K key, V value)
+Option<V> tryRemove(K key)
+readonly Option<V> tryGet(K key)                   // copied value specializations only
+readonly borrow V getRef(K key)                    // affine value specializations only
+borrow mut V getMut(K key)                          // affine value specializations only
+void clear()
+```
+
+For `Map<int, V>`/`Set<int>`, integer queries copy. For `Map<Text, V>`/`Set<Text>`,
+`put`/`add` take an owned `Text` key, while lookups and removals take a shared
+`borrow Text` query; the query is not consumed or stored. Equal-key replacement
+retains the existing map key and returns the replaced value in `Some`. `put`
+returns `None` for a new key; `tryRemove` transfers a removed value in `Some`, or
+returns `None` when absent. Insertion or growth can allocate; allocation failure
+is fatal. Map and set iteration order is unspecified.
+
+`tryGet` copies only copied value types; affine values require `getRef`/`getMut`.
+Absent borrowed lookup is a fatal boundary error. `Map` traversal uses two bindings,
+for example `for (int key, borrow Value value : map)` or
+`for (borrow Text key, int value : map)`. Text map keys are readonly borrowed
+bindings. Set traversal accepts one readonly key binding. All these loops hold a
+whole-root loan for their complete lexical extent; different entries do not grant
+disjoint mutable access. See [MAP_TRAVERSAL.md](MAP_TRAVERSAL.md) for the base
+map traversal contract.
+
+## Console and command-line arguments
+
+```java
+static Result<Option<Text>, Text> Console.readLine()
+static void Console.print(String value)
+static void Console.printText(borrow Text value)
+static int Args.count()
+static Result<Text, Text> Args.get(int index)
+```
+
+`readLine` returns `Ok(Some(line))`, strips LF and a preceding CR, and returns a
+final unterminated line before EOF. An empty line is `Some(empty Text)`; EOF with no
+remaining bytes is `None`. Input errors, excessive line length, and invalid UTF-8
+are `Err`. `Console.print`/`printText` write without a newline; `Text.print` does
+append one. `Args.count` excludes `argv[0]`; `Args.get` returns an owned UTF-8
+copy and reports an invalid index or non-UTF-8 argument as `Err`.
+
+## Paths and filesystem
+
+`Path`, `File`, `Directory`, `FileInfo`, and `ByteBuffer` are opaque native owners;
+resource handles have no public constructors. Factories return fully initialized
+owners or a `Result` error. Explicit `close()` reports errors and invalidates the
+handle; ordinary scope cleanup best-effort closes an open descriptor. Calls on a
+closed resource return `Err`.
+
+### `Path`, `File`, and `Directory`
+
+```java
+static Result<Path, Text> Path.fromText(Text path)
+readonly Path Path.clone()
+static Result<Path, Text> Path.join(borrow Path base, borrow Path child)
+readonly boolean Path.isAbsolute()
+readonly borrow Text Path.asText()
+
+static Result<File, Text> File.openRead(borrow Path path)
+static Result<File, Text> File.create(borrow Path path, int mode)
+static Result<File, Text> File.openAppend(borrow Path path, int mode)
+Result<long, Text> File.readSome(borrow mut ByteBuffer destination, long maxBytes)
+Result<long, Text> File.writeSome(borrow ByteBuffer source, long offset, long maxBytes)
+Result<Unit, Text> File.writeAll(borrow ByteBuffer source)
+Result<Unit, Text> File.flush()
+Result<Unit, Text> File.close()
+
+static Result<Directory, Text> Directory.open(borrow Path path)
+Result<Option<Text>, Text> Directory.nextName()
+Result<Unit, Text> Directory.close()
+```
+
+`Path.fromText` consumes `Text`, rejects an empty path or embedded NUL, and takes
+its storage. `Path.clone` is an explicit independent copy. `join` rejects an
+absolute child and joins components without resolving symlinks, canonicalizing,
+or normalizing `.`/`..`. `asText` is a shared borrow. Paths are UTF-8 boundary
+strings; embedded NUL is rejected.
+
+`File.create` and `openAppend` use POSIX permission modes subject to the process
+umask. `readSome` appends at most `maxBytes`, returns the count, `0` at EOF, or
+`Err`; a zero maximum performs no read. `writeSome` writes at most the selected
+`[offset, offset + maxBytes)` source range and returns one partial count. Invalid
+ranges and negative limits are `Err`; zero maximum returns zero. `writeAll` retries
+partial writes until complete or `Err`; an error can follow a written prefix and
+does not undo it. `flush` uses `fsync`; it does not promise hardware durability
+beyond the OS contract. File I/O is synchronous and blocking. Drop closes but does
+not implicitly flush.
+
+`Directory.nextName` skips `.` and `..`, returns one owned UTF-8 entry component
+per `Some`, `None` at end, and `Err` for I/O or invalid UTF-8. It does not return a
+full path, sort entries, or recurse. Join the name to the original path when needed.
+
+### `FileInfo` and `Files`
+
+```java
+readonly long FileInfo.size()
+readonly boolean FileInfo.isFile()
+readonly boolean FileInfo.isDirectory()
+readonly boolean FileInfo.isSymlink()
+
+static Result<Text, Text> Files.readText(borrow Text path)
+static Result<Unit, Text> Files.writeText(borrow Text path, borrow Text content)
+static Result<Unit, Text> Files.writeTextAtomic(borrow Text path, borrow Text content)
+static Result<FileInfo, Text> Files.metadata(borrow Path path)
+static Result<Unit, Text> Files.createDirectory(borrow Path path, int mode)
+static Result<Unit, Text> Files.removeFile(borrow Path path)
+static Result<Unit, Text> Files.removeDirectory(borrow Path path)
+static Result<Unit, Text> Files.rename(borrow Path from, borrow Path to)
+```
+
+`readText` reads the complete file, preserves embedded NUL, and rejects invalid
+UTF-8 or open/read/close/size errors. `writeText` writes exact UTF-8 bytes and
+returns `Err` on failure; a failed write may leave a truncated or partial file.
+Neither `Err` nor another operation rolls back an already written prefix.
+`writeTextAtomic` writes a sibling temporary file and commits with `rename`;
+success gives atomic visibility, not power-loss durability (`fsync` is not
+promised). Before commit, failure preserves the destination and attempts to remove
+the temporary file. The replacement uses temporary-file permissions, subject to
+the umask, and replacing a symlink replaces its directory entry.
+
+`metadata` returns a `FileInfo` snapshot; `size()` is in bytes. Filesystem paths
+are passed through the operating-system boundary and reject embedded NUL. `mode`
+arguments are POSIX permission bits, subject to umask. Filesystem commands report
+success as `Result<Unit, Text>`, not a boolean.
+
+## POSIX regular expressions
+
+```java
+static Result<Regex, Text> Regex.compile(borrow Text pattern)
+readonly Result<boolean, Text> Regex.matches(borrow Text subject)
+readonly Result<Option<RegexMatch>, Text> Regex.search(borrow Text subject)
+readonly int RegexMatch.groupCount()
+readonly boolean RegexMatch.hasGroup(int index)
+readonly borrow Text RegexMatch.group(int index)
+readonly int RegexMatch.start(int index)
+readonly int RegexMatch.end(int index)
+```
+
+`Regex` uses Linux POSIX extended regular expressions (`REG_EXTENDED`), not Java
+regex syntax. Compilation and matching use the `C.UTF-8` locale; compilation returns
+`Err` if it is unavailable, with no fallback. `matches` requires a full-subject
+match. `search` returns the first POSIX leftmost-longest match or `Ok(None)`;
+`RegexMatch` owns copies of its captures, so they do not borrow the input subject.
+Group 0 is the complete match, and `groupCount` includes it. `start` and `end` are
+half-open UTF-8 byte offsets. `hasGroup` is false when a capture did not
+participate; `group`, `start`, and `end` on an absent or out-of-range group are
+fatal runtime boundary errors.
+
+POSIX regex APIs consume NUL-terminated C strings. `Regex.compile`, `matches`, and
+`search` reject a pattern or subject containing embedded NUL with `Err` rather
+than truncating it. Regex is for text, not arbitrary binary `ByteBuffer` contents.
+
+## Math, random numbers, and time
+
+### `Math`
+
+```java
+static Result<int, Text> absInt(int value)
+static Result<long, Text> absLong(long value)
+static double absDouble(double value)
+static int minInt(int left, int right)
+static long minLong(long left, long right)
+static double minDouble(double left, double right)
+static int maxInt(int left, int right)
+static long maxLong(long left, long right)
+static double maxDouble(double left, double right)
+static double sqrt(double value)
+static double pow(double base, double exponent)
+static double log(double value)
+static double exp(double value)
+static double sin(double value)
+static double cos(double value)
+static double tan(double value)
+static double floor(double value)
+static double ceil(double value)
+static double round(double value)
+static double hypot(double x, double y)
+static boolean isNaN(double value)
+static boolean isFinite(double value)
+```
+
+`absInt` and `absLong` return `Err` for the respective signed minimum, whose
+positive absolute value is not representable. Floating-point methods follow the
+host C math library and IEEE values: domain/range cases may produce NaN or
+infinity; these methods do not turn every floating-point domain case into `Err`.
+`round` uses ties away from zero. `minDouble`/`maxDouble` use the C `fmin`/`fmax`
+NaN and signed-zero behavior.
+
+### `Random`
+
+```java
+Random(long seed)
+static Result<Random, Text> fromSystem()
+void reseed(long seed)
+long nextLong()
+Result<int, Text> nextInt(int bound)
+double nextDouble()
+```
+
+A seeded generator is deterministic (SplitMix64): the same seed and call
+sequence reproduce the same outputs. `nextInt` requires a positive exclusive
+bound and returns `Err` otherwise. `nextDouble` is in `[0.0, 1.0)`. `fromSystem`
+obtains an initial seed from `/dev/urandom`; failure is `Err`. The generator is
+non-cryptographic, including when initialized from system entropy; do not use it
+for keys, tokens, nonces, or other security-sensitive randomness.
+
+### `Time`
+
+```java
+static Result<long, Text> monotonicNanos()
+static Result<long, Text> unixMillis()
+static Result<Unit, Text> sleepMillis(long milliseconds)
+static Result<long, Text> deadlineAfterMillis(long timeoutMillis)
+```
+
+`monotonicNanos` returns nanoseconds from the monotonic clock's unspecified
+origin; compare values from that same clock domain, not with wall time.
+`unixMillis` returns milliseconds since the Unix epoch from the realtime clock and
+can move when wall time is adjusted. `sleepMillis` blocks for a nonnegative
+interval and resumes after interruption where possible; a negative duration is
+`Err`. `deadlineAfterMillis` returns an absolute deadline in the monotonic
+nanosecond domain and returns `Err` for a negative timeout, clock failure, or
+unrepresentable deadline. The API does not promise exact scheduling precision.
+
+## Threads, mutexes, guards, and channels
+
+Native concurrency is synchronous POSIX threading and blocking synchronization,
+not an executor, detached-thread API, or callback framework. `Thread<T>.spawn`
+transfers a user-implemented `Task<T>` and its owned data to one worker thread.
+The concrete task object and its result must be sendable: the recursive checker
+rejects borrowed/view-bearing state and `Guard<T>`. Scalars, immutable static
+`String`, and owned values whose fields/payloads recursively meet the rule can
+cross threads; `Mutex<T>` and channel endpoints are the explicitly shareable
+control handles when their payload type is sendable.
+
+```java
+interface Task<T> { T run(); }
+static Result<Thread<T>, Text> Thread.spawn(Task<T> task)
+Result<T, Text> Thread.join()
+
+static Result<Mutex<T>, Text> Mutex.create(T initial)
+Result<Mutex<T>, Text> Mutex.cloneHandle()
+Result<Guard<T>, Text> Mutex.lock()
+Result<Option<Guard<T>>, Text> Mutex.tryLock()
+
+readonly borrow T Guard.getRef()                  // affine object specializations
+borrow mut T Guard.getMut()                       // affine object specializations
+readonly T Guard.read()                           // copied-value specializations
+Result<Unit, Text> Guard.write(T value)            // copied-value specializations
+
+static Result<Channel<T>, Text> Channel.bounded(long capacity)
+Result<Sender<T>, Text> Channel.takeSender()
+Result<Receiver<T>, Text> Channel.takeReceiver()
+Result<Unit, SendError<T>> Sender.send(T value)
+Result<Sender<T>, Text> Sender.cloneSender()
+Result<Unit, Text> Sender.close()
+Result<Option<T>, Text> Receiver.receive()
+Result<Unit, Text> Receiver.close()
+
+enum SendError<T> { Closed(T); System(Text, T); }
+```
+
+`join` waits for the worker and moves its single result back; a second join is an
+error. Dropping an unjoined `Thread` synchronously joins it and drops its result;
+that drop can block forever if the task does. Threads are never detached.
+
+`Mutex<T>` owns one protected value. `cloneHandle()` explicitly shares only its
+control block; it does not clone `T`. `lock` blocks until available; `tryLock`
+returns `Ok(None)` only when currently busy. A `Guard<T>` owns the active lock and
+unlocks on drop. For affine object values, `getRef`/`getMut` are the only ways to
+access the protected object; their receiver-rooted borrows prevent moving or
+dropping the guard while a borrow is live. For copied scalar values and immutable
+`String`, the specialization exposes value `read`/`write` instead. `Guard` has no
+public constructor or clone and cannot cross threads. Recursive same-thread
+locking is reported as an error; `lock` can otherwise block indefinitely.
+
+`Channel.bounded` requires capacity at least one; zero-capacity rendezvous is not
+supported. It creates one sender and one receiver, each taken at most once. A
+sender blocks while a full queue has no space. A closed receiver makes `send`
+return the original value inside `SendError.Closed`; a synchronization failure
+returns it inside `SendError.System`. `receive` blocks until an item arrives or
+all senders close; it drains queued values and then returns `Ok(None)`. Closing a
+receiver aborts the queue and drops queued values. More producers require an
+explicit `cloneSender`; receivers cannot be cloned.
+
+Only the named synchronization controls use explicit shared lifetime counts.
+`cloneHandle` and `cloneSender` keep their control blocks alive; they do not clone
+ordinary objects or channel payloads. Cycles made by storing cloned mutex handles
+or channel sender handles inside shared payloads can retain those control blocks
+indefinitely because Nacre has no cycle collector. `lock`, full-channel `send`,
+empty-channel `receive`, thread `join`, and implicit drop of an unjoined thread can
+block. Locking multiple mutexes in inconsistent orders can deadlock. Avoid cycles
+and establish a consistent lock/wait order; drop guards before blocking on work
+that may need the same mutex.
+
+## Environment and child processes
+
+### `Env`, `Command`, and `Process`
+
+```java
+static Result<Option<Text>, Text> Env.get(borrow Text name)
+static Result<Unit, Text> Env.set(borrow Text name, borrow Text value)
+static Result<Unit, Text> Env.unset(borrow Text name)
+
+static Command Command.create(Path executable)
+Result<Unit, Text> Command.addArg(Text argument)
+Result<Unit, Text> Command.setEnv(Text name, Text value)
+Result<Unit, Text> Command.redirectStdin(File file)
+Result<Unit, Text> Command.redirectStdout(File file)
+Result<Unit, Text> Command.redirectStderr(File file)
+Result<Unit, Text> Command.clearEnv()
+readonly Result<Process, Text> Command.spawn()
+readonly Result<ProcessOutput, Text> Command.output(long maxBytesPerStream, long timeoutMs)
+
+Result<ExitStatus, Text> Process.wait()
+Result<Option<ExitStatus>, Text> Process.waitFor(long timeoutMs)
+Result<Unit, Text> Process.terminate()
+Result<Unit, Text> Process.kill()
+
+enum ExitStatus { Exited(long code); Signaled(int signal); }
+readonly borrow ByteBuffer ProcessOutput.stdout()
+readonly borrow ByteBuffer ProcessOutput.stderr()
+readonly borrow ExitStatus ProcessOutput.status()
+readonly boolean ProcessOutput.stdoutTruncated()
+readonly boolean ProcessOutput.stderrTruncated()
+readonly boolean ProcessOutput.timedOut()
+```
+
+`Env` operates on the process environment. Names must be nonempty and contain
+neither NUL nor `=`; values cannot contain NUL. `get` returns an owned UTF-8 value,
+`None` only when absent, and `Err` for invalid UTF-8. Environment operations are
+synchronized. `set`/`unset` affect later global reads and process snapshots; a
+`Command` environment override is local to its child.
+
+`Command.create` consumes its executable `Path`. Each `addArg` adds exactly one
+literal argument; Nacre does not tokenize, concatenate, interpolate, or run a
+shell command. Added arguments follow the executable path in `argv`. Before each
+spawn, inherited environment and command overrides are snapshotted consistently.
+`clearEnv` starts the child with an empty environment before explicit overrides.
+An executable containing `/` is used as given; otherwise executable lookup uses
+`PATH` from that child environment snapshot (the POSIX default search path is used
+when `PATH` is absent, and empty components mean the current directory). No shell
+fallback is used for an unrecognized executable format. Embedded NUL in
+executable, arguments, environment names, or values is rejected.
+
+Without redirects, `spawn` inherits the corresponding standard descriptors. A
+redirect consumes an open `File`; replacing a redirect closes the previous owner,
+and the `Command` retains its configured file for repeated spawns. Using a closed
+redirect is `Err`. `output` rejects a command with configured redirects rather
+than silently overriding them.
+
+`wait` blocks and reaps once; `waitFor` with a negative timeout is `Err`, zero
+waits without a deadline, and a positive timeout is one monotonic millisecond
+deadline. `Ok(None)` means timed out without reaping; it leaves the process
+available for another wait. `terminate` sends SIGTERM and `kill` sends SIGKILL to
+the child only; call `wait`/`waitFor` to reap explicitly. A nonzero exit is
+`Ok(ExitStatus.Exited(code))`; signal termination is
+`Ok(ExitStatus.Signaled(signal))`. Dropping an unreaped `Process` sends SIGKILL
+and synchronously reaps it. Drop can block. It does not kill a process tree and
+there is no process-tree guarantee for descendants.
+
+`Command.output(maxBytesPerStream, timeoutMs)` redirects child stdin from
+`/dev/null`, captures stdout and stderr independently, and drains both concurrently
+so one full pipe does not block the other. It stores at most the specified
+nonnegative byte limit **per stream**, continues draining excess bytes, and marks
+truncation. Capture is binary and preserves NUL bytes. A zero timeout is unbounded;
+a positive timeout is one monotonic end-to-end deadline, and a negative timeout or
+negative capture limit is `Err`. On timeout, it kills and reaps the child and
+returns `Ok(ProcessOutput)` with `timedOut() == true`, the status, and any captured
+prefix. The capture path closes its pipe readers after collecting any immediately
+available prefix rather than waiting forever for descendant-held writers. A
+capture timeout affects the direct child only; descendants are not guaranteed to
+stop. Spawn/poll/read failures return `Err` after cleanup of a started child and
+its pipes. A child that exits nonzero still produces a successful capture result.
+
+## TCP and UDP
+
+All socket operations are synchronous and blocking at the API level, with
+nonblocking readiness handling underneath where needed. Socket handles are unique
+affine owners; there is no descriptor clone, background I/O thread, TLS, or
+cross-platform networking promise.
+
+```java
+static Result<List<SocketAddress>, Text> SocketAddress.resolve(
+    borrow Text host, int port, boolean passive)
+readonly Text SocketAddress.toText()
+
+static Result<TcpListener, Text> TcpListener.bind(borrow SocketAddress address, int backlog)
+Result<TcpStream, Text> TcpListener.accept(long timeoutMs)
+Result<SocketAddress, Text> TcpListener.localAddress()
+Result<Unit, Text> TcpListener.close()
+
+static Result<TcpStream, Text> TcpStream.connect(borrow SocketAddress address, long timeoutMs)
+Result<long, Text> TcpStream.readSome(borrow mut ByteBuffer destination, long maxBytes, long timeoutMs)
+Result<long, Text> TcpStream.writeSome(borrow ByteBuffer source, long offset, long maxBytes, long timeoutMs)
+Result<Unit, Text> TcpStream.writeAll(borrow ByteBuffer source, long timeoutMs)
+Result<SocketAddress, Text> TcpStream.peerAddress()
+Result<SocketAddress, Text> TcpStream.localAddress()
+Result<Unit, Text> TcpStream.close()
+
+readonly borrow SocketAddress Datagram.source()
+readonly long Datagram.bytesRead()
+readonly boolean Datagram.truncated()
+
+static Result<UdpSocket, Text> UdpSocket.bind(borrow SocketAddress address)
+Result<long, Text> UdpSocket.sendTo(borrow ByteBuffer source, long offset, long length,
+    borrow SocketAddress destination, long timeoutMs)
+Result<Datagram, Text> UdpSocket.receiveFrom(borrow mut ByteBuffer destination,
+    long maxBytes, long timeoutMs)
+Result<SocketAddress, Text> UdpSocket.localAddress()
+Result<Unit, Text> UdpSocket.close()
+```
+
+`resolve` handles IPv4/IPv6 addresses and copies results into owned
+`SocketAddress` values. The port must be in `[0, 65535]`; an empty host is valid
+only for `passive == true` and denotes a wildcard address. `toText` returns a
+numeric address without another DNS lookup. Name resolution is synchronous and
+has no timeout; socket timeouts begin only after resolution completes.
+
+Listener `bind` requires a positive backlog. `localAddress` reports an ephemeral
+port selected by the OS. TCP `connect` and listener `accept` accept zero for an
+unbounded wait, a positive monotonic millisecond timeout, and return `Err` for a
+negative timeout. A timeout closes an in-progress connect descriptor. TCP reads
+append to the existing destination and return a positive count, `0` for orderly
+EOF, or `Err` (including timeout); a zero maximum returns zero immediately.
+`writeSome` returns one partial count. `writeAll` retries partial progress against
+one end-to-end deadline; `Err` can follow bytes already sent. A peer close reports
+an error rather than raising process-wide SIGPIPE.
+
+`UdpSocket.sendTo` sends one datagram; it does not retry or split a message and a
+short send is an error. `receiveFrom` consumes one datagram, appends at most
+`maxBytes`, and reports the number of bytes copied, its owned source address, and
+whether it was truncated. A zero-length datagram is a successful `Datagram` with
+`bytesRead() == 0`, not stream EOF. Oversized datagrams are consumed once and
+reported as truncated. Both UDP methods use the same timeout convention as TCP;
+timeout is `Err`. No TLS, automatic datagram retry, or network service discovery
+is provided.
+
+## Platform, allocation, and timing limits
+
+This native systems surface targets Linux and POSIX facilities. It is not a
+Windows or macOS support claim. OS-facing paths, environment, argv, host, and
+other C boundary strings reject embedded NUL; `Text` itself can contain NUL.
+File and socket I/O, process waits, mutex locks, channel send/receive, thread joins,
+and sleeps are synchronous. A documented zero timeout means unbounded waiting;
+positive relative timeouts use monotonic deadlines. DNS resolution has no timeout.
+No API promises that a deadline interrupts arbitrary work outside the timed OS
+operation, and no general latency, throughput, or allocation-count claim is made.
+
+Native templates and runtime primitives are trusted code: source-level ownership
+checking does not prove their C implementation. The compiler has no exception
+unwinding or general sandbox. See [ARCHITECTURE.md](ARCHITECTURE.md) for the
+compiler/native boundary and [VALIDATION.md](VALIDATION.md) for recorded
+validation evidence.

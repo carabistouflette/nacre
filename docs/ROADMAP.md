@@ -1,92 +1,83 @@
 # Nacre development roadmap
 
-Nacre develops continuously as an experimental pre-1.0 language. Work is organized
-by concrete language/tooling problems, not numbered language milestones. Ordinary
-`0.x.y` releases identify shipped compiler versions; compatibility is not promised
-before 1.0. Language/backend/ownership changes require explicit contracts and
-behavioral evidence, not a schedule-driven collection of features.
+Nacre is an experimental pre-1.0 native language. Development is organized
+around concrete language, runtime, and tooling problems, not numbered language
+milestones. Ordinary `0.x.y` versions identify compiler releases; language and
+standard-library compatibility are not promised before 1.0. No feature schedule
+or release commitment is implied by this document.
 
-Implementation and review must respect the
-[Rust Design Patterns design principles](https://rust-unofficial.github.io/patterns/additional_resources/design-principles.html):
+Implementation and review should follow the
+[Rust Design Patterns principles](https://rust-unofficial.github.io/patterns/additional_resources/design-principles.html):
 composition, focused responsibilities, encapsulation, explicit contracts,
-side-effect-free queries, DRY/KISS and predictable behavior. Prefer existing
+side-effect-free queries, DRY/KISS, and predictable behavior. Prefer existing
 representations and shared cleanup paths over speculative abstractions.
-When implementation or review encounters a violation, record concrete evidence
-and a bounded remediation. Fix relevant issues with the current change; plan
-unrelated debt separately. Resolve conflicting contracts explicitly rather than
-merely label avoidable violations as tradeoffs.
 
-## Encountered design remediation
+## Current capabilities
 
-- Map-key support was independently restricted in generic specialization,
-  native type checking and C generation. Centralize key classification and pass
-  checked metadata downstream; do not add another repeated int-or-Text whitelist.
-- Existing probing/insertion recomputed a key hash, and growth/deletion derived
-  bucket homes by rehashing stored keys. Hash each operation's query once; cache
-  stored Text hashes so string bytes are not repeatedly scanned. Keep one map
-  algorithm with narrow key operations rather than duplicate storage code.
-- Stale rejection-fixture comments described all non-int keys as unsupported.
-  Update the contract comments and reject genuinely unsupported keys while adding
-  positive Text coverage; do not preserve obsolete restrictions through tests.
-- Typed map-header grammar already supported borrowed nominal key syntax, but
-  editor checks only exercised integer keys. Extend corpus/query/tokenizer and
-  compiler contract checks for Text keys and mutable values; reuse the existing
-  grammar production rather than introduce a parallel syntax.
+- Affine ownership and definite initialization for classes, interfaces, and
+  inline enums; lexical shared/exclusive borrowing, receiver-derived borrowed
+  returns, owned-field replacement, borrowed enum matching, and list/map
+  traversal.
+- Generic nominal classes, interfaces, and enums, specialized before checking.
+- Source-unit modules and named or wildcard imports resolved across the complete
+  explicitly selected source bundle. This does not add separate compilation,
+  external dependencies, or a package manager.
+- Built-in affine collections, including lists, deques, arrays, sets, and maps
+  with signed integer or owned UTF-8 text keys. Generic specialization and
+  ownership rules still apply to their values.
+- UTF-8 `Text`, binary buffers, console and file APIs, paths and metadata,
+  POSIX regular expressions, math/random/time utilities, processes, threads,
+  mutexes, channels, and blocking TCP/UDP APIs.
+- A native C11 backend, command-line project support, and an LSP server with
+  project source roots and open-buffer overlays.
 
-## Recently shipped: built-in map traversal
+The supported native target is Linux. Nacre has no JVM, garbage collector, GUI,
+reflection, dynamic loading, or general-purpose FFI layer. Ordinary owners are
+affine; shared control is explicit through the standard mutex/channel handles.
+The native library and generated C runtime are part of the trusted base.
 
-[MAP_TRAVERSAL.md](MAP_TRAVERSAL.md) defines copied/shared/exclusive two-binding
-loops over integer maps. Keep whole-root lexical loans, direct storage scanning,
-unspecified order and existing cleanup. This does not introduce first-class
-iterators or weaken invalidation rules.
+## Engineering priorities
 
-## Existing capabilities
+- Keep ownership, borrowing, cleanup, and interface-dispatch contracts consistent
+  across generic specialization and every concrete representation.
+- Exercise generated programs with real values, early exits, nested ownership,
+  collisions and growth, replacement, error paths, and exactly-once cleanup.
+- Preserve lexical root-wide collection loans. Different map keys or list
+  positions do not create independent alias domains.
+- Design process, filesystem, network, and synchronization APIs around explicit
+  ownership, partial effects, blocking, deadline, and failure semantics.
+- Review compiler/runtime input boundaries independently; finite input limits and
+  passing validation campaigns are not a security certification.
+- Keep command-line, LSP, grammar, snippets, queries, and editor diagnostics
+  aligned whenever syntax or project behavior changes.
+- Validate persisted relationships before replacing live state. Atomic rename
+  visibility is not a promise of power-loss durability.
+- Publish curated source, changelog, and evidence only; do not include workstation
+  configuration, credentials, caches, or private proof locations.
 
-Affine ownership/definite initialization, generic nominal classes, interfaces and
-inline enums, receiver-derived borrowed returns, owned-field replacement,
-borrowed matching, lexical list traversal, recoverable extraction, UTF-8
-console/files, native arguments, source bundles, LSP and editor support.
+## Exploratory directions
 
-Integer maps transfer previous/removed owners and expose shared/exclusive value
-references. The multi-file lending desk exercises polymorphic resources, generic
-catalogs, availability states, member relationships, local parsing views,
-recoverable commands and validated atomic persistence. Historical contracts and
-verification reports remain labeled as originally captured.
+Possible future work includes better diagnostics, profile-guided compiler/native
+performance work, more complete project tooling, and additional standard-library
+operations. Any addition must first have an explicit language and ownership
+contract and an end-to-end implementation; these are areas of exploration, not
+promised deliverables.
 
-## Candidates, not release commitments
+First-class borrowed iterators, non-lexical lifetimes, lifetime parameters,
+disjoint-entry borrowing, FFI, class inheritance, external package resolution,
+and a direct LLVM backend remain outside the current language contract. Adding
+one would require a separate design and compatibility decision; it must not be
+inferred from built-in traversal or whole-program module imports.
 
-- Text/string map keys after specifying owned-key replacement, equality, hashing
-  and allocation-free borrowed lookup contracts.
-- Profile-driven compiler/native performance, not speculative backend rewrites.
-- Independent compiler/runtime input and trust-boundary review.
-- Fallible allocation only after a separate recovery/cleanup design.
-- First-class borrowed iterators only after explicit lifetime and movement/export
-  contracts; built-in traversal does not imply them.
+## Safety boundaries
 
-NLL, lifetime parameters, disjoint-entry borrowing, modules, threads, FFI,
-inheritance and a direct LLVM backend require separate language contracts.
+Loans end at lexical scope boundaries, not at last use. Owners and transitively
+owned fields share a conservative root; local views remain non-movable and
+non-exportable. Partial moves are unsupported. Map traversal order is unspecified,
+and maps do not promise hash-flooding resistance. Very deep owned trees can
+exhaust the C stack during recursive destruction. Programs are not sandboxed;
+limits on compiler and LSP input do not make untrusted programs safe.
 
-## Development and release gates
-
-- Preserve receiver-origin contracts across generic/interface dispatch.
-- Keep root-wide collection loans until lexical scope ends. Different keys do not
-  imply independent alias domains; absent removal remains a modifying call.
-- Verify object, inline-enum, interface and nested-collection representations,
-  collision shifting, growth, extraction and exactly-once cleanup.
-- Exercise actual generated programs under GCC/Clang sanitizers, meaningful
-  consumer-visible regressions, minimum supported Rust and bounded fuzzing.
-- Check grammar/snippets/queries and actual desktop syntax, diagnostics, unsaved
-  overlays, recovery and reopening when the editing surface changes.
-- Validate all persistence relationships before replacing live state; preserve
-  order explicitly when it matters. Atomic visibility is not crash durability.
-- Publish curated portable sources, changelog and evidence only; no workstation
-  configuration, credentials, caches or private UI proof locations.
-- Record the exact green source CI commit and run. Evidence-only follow-ups must
-  distinguish their commit from the executable source that was tested.
-
-## Unchanged safety boundaries
-
-Loans end lexically, not at last use. Owners and transitively owned fields share a
-root; local views remain non-movable/non-exportable. Partial moves are unsupported.
-Maps promise neither traversal order nor hash-flooding resistance. Untrusted
-programs are not sandboxed; finite passing campaigns are not a general proof.
+Validation reports retain the versions, environments, and scope in which their
+evidence was collected. Historical labels and results are not statements of
+current compatibility or a release promise.

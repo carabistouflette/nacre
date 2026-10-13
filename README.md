@@ -1,32 +1,32 @@
 # Nacre
 
-Nacre is an experimental Rust compiler with a Java-like syntax and the pipeline
-**Nacre → C11 → GCC/Clang → native executable**. No JVM, garbage collector, or
-reference counting is used. Cargo package/CLI: `nacre` **0.12.0**; source files:
-`.ncr`; project marker: `nacre.json`. Rust **1.74** is the declared minimum.
+Nacre is an experimental Linux-only native-language alpha compiler implemented
+in Rust, with Java-like source syntax and the pipeline **Nacre → C11 →
+GCC/Clang → native executable**. It has no JVM, garbage collector, or implicit
+reference counting/cloning. Ordinary owners are affine; only named mutex and
+channel handles are shared explicitly. Cargo package/CLI: `nacre` **0.12.0**;
+source files: `.ncr`; project marker: `nacre.json`. Rust **1.74** is the
+declared minimum.
 
-Nacre provides `Map<int,V>` with recoverable ownership transfer and receiver-bound
-references, plus a multi-file lending desk demonstrating interfaces, generic
-catalogs, enums, local parsing views, lexical traversal, validated loading, and
-atomic saving. Built-in map traversal copies keys and primitive values or borrows
-affine values. Borrow lifetimes stay lexical and alias domains conservative.
-
-Nacre is pre-1.0: language and standard-library compatibility are not guaranteed.
-Development is feature-driven; releases use ordinary `0.x.y` package versions,
-not numbered language milestones. Historical evidence retains its original labels.
-See the [development roadmap](docs/ROADMAP.md) and
-[map traversal contract](docs/MAP_TRAVERSAL.md).
+Nacre includes module/import name resolution within a whole source bundle,
+generic classes/interfaces/enums, built-in collections, receiver-bound borrowing,
+UTF-8 `Text`, binary buffers, and Linux filesystem, process, thread,
+synchronization, regular-expression, time, and TCP/UDP APIs. It is pre-1.0:
+language and standard-library compatibility are not guaranteed. Releases use
+ordinary `0.x.y` package versions, not numbered language milestones. Historical
+evidence retains its original labels. See the [development roadmap](docs/ROADMAP.md)
+and [standard-library reference](docs/STDLIB.md).
 
 ## Start
 
-Linux/WSL is the initial target. Install Rust/Cargo and GCC or Clang with C11
-headers and a linker. Native Windows/macOS behavior is not certified.
+Linux is the supported native target. Install Rust/Cargo and GCC or Clang with
+C11 headers and a linker; Windows and macOS are not supported targets.
 
 ```sh
 cargo fetch --locked
 cargo test --offline --locked --features fuzzing
 cargo run --offline --locked -- doctor
-cargo run --offline --locked -- run examples/contact_book.ncr --memory-stats
+cargo run --offline --locked -- run examples/io/contact_book.ncr --memory-stats
 ```
 
 `doctor` executes a real generated native program using List/Text and checks its
@@ -43,13 +43,13 @@ output and allocation balance. It is a smoke check, not a general safety proof.
   phone filtering, confirmed batch removal, validated load, atomic save, help,
   and quit. Traversal borrows contacts; edits replace their owned fields. Phone
   display borrows an `Option<Text>` payload. Unicode and paths with spaces work.
-- [Sudoku](examples/sudoku.ncr): immutable clues, validated moves, solving,
+- [Sudoku](examples/apps/sudoku.ncr): immutable clues, validated moves, solving,
   validated load, and atomic saves that preserve clues separately from moves.
 
 ```sh
-nacre run examples/lending_desk --memory-stats
-nacre run examples/contact_book.ncr --memory-stats
-nacre run examples/sudoku.ncr --memory-stats
+nacre run examples/apps/lending_desk --memory-stats
+nacre run examples/io/contact_book.ncr --memory-stats
+nacre run examples/apps/sudoku.ncr --memory-stats
 ```
 
 Memory statistics appear on stderr as
@@ -77,36 +77,42 @@ each element binding ends at its iteration boundary. Structural mutation through
 another alias is rejected, even for copied primitive traversal. This is not a
 first-class iterator or an NLL feature.
 
-`tryGet` exists for copied primitives only. `tryPop` and `tryRemove` transfer
-any supported element into an inline `Option<T>` without a wrapper allocation;
+`tryGet` is available for copyable scalar types only. `tryPop` and `tryRemove`
+transfer any supported element into an inline `Option<T>` without a wrapper
+allocation;
 invalid boundaries return `None` without mutation. Existing strict operations
-retain their fatal-boundary behavior. Run the complete
-[collection example](examples/collections_v8.ncr) with:
+recover their fatal-boundary behavior. See the
+[collection recovery example](examples/collections/list_recovery.ncr):
 
 ```sh
-nacre run examples/collections_v8.ncr --memory-stats
+nacre run examples/collections/list_recovery.ncr --memory-stats
 ```
 
 ## Map traversal
 
 ```java
 for (int key, int count : counts) { println(count); }
-for (int key, borrow Contact contact : entries) {
+for (borrow Text key, int count : textCounts) {
+    key.print();
+    println(count);
+}
+for (int key, borrow Contact contact : contacts) {
     borrow Text name = contact.getName();
     name.print();
 }
-for (int key, borrow mut Contact contact : entries) {
+for (int key, borrow mut Contact contact : contacts) {
     contact.setName(new Text("Updated"));
 }
 ```
 
-Keys copy; affine values borrow. The collection is evaluated once and loaned
-for the whole loop. Structural mutation is rejected, including absent removal.
-Order is unspecified; retain explicit ordered IDs when order matters.
-See [the contract](docs/MAP_TRAVERSAL.md) and run the complete example:
+Integer keys copy; Text keys are readonly borrowed views of stored keys. Affine
+values are borrowed for the whole loop. The collection is evaluated once and
+structural mutation is rejected, including absent removal. Order is unspecified;
+retain explicit ordered IDs when order matters. See [the contract](docs/MAP_TRAVERSAL.md)
+and run the example:
 
 ```sh
-cargo run --offline --locked -- run examples/map_traversal.ncr --memory-stats
+cargo run --offline --locked -- run examples/collections/map_traversal.ncr --memory-stats
 ```
 
 ## Ownership and borrowed access
@@ -193,18 +199,23 @@ nominal classes/interfaces/enums before typing and remain invariant.
 
 ## Standard library
 
-`List`, `Map`, `Text`, `Option`, `Result`, `Console`, `Files`, and `Args` are reserved and
-preinjected without imports. [STDLIB.md](docs/STDLIB.md) is the API reference.
+The standard library is injected into every program; built-in names are reserved
+and available without user-authored imports. [STDLIB.md](docs/STDLIB.md) is the
+complete API reference.
 
 | API | Contract |
 |---|---|
-| `List<T>` | Copied/shared/exclusive traversal, copied get/tryGet, borrowed getRef/getMut, recoverable tryPop/tryRemove, and strict mutation/extraction. |
-| `Map<int,V>` | Stable signed integer keys; put returns a previous owner or None, tryRemove transfers a value, copied tryGet and affine getRef/getMut, whole-map loans, size/presence queries and clear. |
-| `Text` | Owned UTF-8 bytes, including NUL; append operations, byte access, clone, comparison, print, strict int32 parseInt, and boundary-checked owned sliceBytes. Distinct from static String. |
-| `Console` | UTF-8 line input with explicit EOF; String/Text output. Errors are owned Result values. |
-| `Files` | UTF-8 readText, non-atomic writeText, and writeTextAtomic. |
-| `Args` | Native arguments excluding argv[0], with owned UTF-8 copies from get. |
+| `List<T>`, `Deque<T>`, `Array<T>`, `Set<T>` | Affine collections with specialized traversal, ownership, and borrowing operations. |
+| `Map<int,V>`, `Map<Text,V>` | Signed integer or owned UTF-8 text keys; value access specializes for copyable scalars or affine nominal types. |
+| `Text`, `ByteBuffer` | Owned UTF-8 text and binary bytes; `Text` is distinct from static `String`. |
 | `Option<T>`, `Result<T,E>` | Inline affine enum values; exhaustive owning or borrowed matching. |
+| Console, arguments, files | UTF-8 console input/output, arguments, text and byte files, directories, paths, and metadata. |
+| Processes, threads, synchronization | Literal-argv processes, owned threads, and explicit shared mutex/channel handles. |
+| Regex, Math, Random, Time, sockets | POSIX regular expressions, scalar utilities, monotonic/wall-clock time, TCP, and UDP. |
+
+See the API reference for exact signatures, ownership, error, blocking, and
+platform contracts. Fallible operations do not roll back side effects on `Err`;
+ordinary allocation failure remains fatal.
 
 `writeTextAtomic` writes a sibling temporary file, flushes/closes it, and commits
 with `rename`. Atomic visibility is not power-loss durability: no `fsync` promise.
@@ -231,10 +242,11 @@ nacre doctor
 nacre lsp
 ```
 
-Commands accept multiple sources or recursively collected directories, sharing
-one nominal namespace. `init` refuses an existing path. Existing outputs are
-replaced except the input source. Native optimization defaults to `-O2`; default
-build output is `out/<source-name>`. `--sanitize` enables ASan/UBSan.
+Commands accept multiple sources or recursively collected directories, resolving
+their module namespaces together as one whole-program compilation. `init` refuses
+an existing path. Existing outputs are replaced except the input source. Native
+optimization defaults to `-O2`; default build output is `out/<source-name>`.
+`--sanitize` enables ASan/UBSan.
 
 `NACRE_CC` or `CC` selects one C compiler executable, without embedded flags.
 `NACRE_CLANG` selects Clang for textual LLVM emission; this is the C frontend's
@@ -289,20 +301,21 @@ framing targets with bounded time/input/memory and isolated copies of intentiona
 seed corpora. Preserve crash artifacts for reproduction. Finite successful runs
 are evidence, not a general fuzz-safety proof.
 
-[VALIDATION.md](docs/VALIDATION.md) records observed compiler/native/editor/CI
-evidence and unverified platform boundaries. Release 0.11.0 includes 998 passed
-tests and 16 dedicated sanitized traversal/lending generated-program runs.
-[Actual desktop acceptance](docs/editors-0.11.0.json) passes in VS Code and Zed,
-including traversal completion, unsaved overlays, loan diagnostics and recovery.
+See [VALIDATION.md](docs/VALIDATION.md) for the compiler, native backend, and
+editor-facing evidence and its unverified platform boundaries. This README makes
+no desktop-acceptance or remote-CI claim.
 
 ## Boundaries and design notes
 
-No modules/packages/imports or separate compilation, arrays `T[]`, non-int map
-keys, first-class borrowed iterators, NLL/lifetime parameters,
-network API, threads, FFI, inheritance,
-overloading, or direct LLVM backend. Very deep owned trees may exhaust the C
-stack during recursive destruction. Untrusted programs are not sandboxed.
-Resource limits on compiler/LSP input are not a security certification.
+Modules and `import` resolve names only inside the source files selected for one
+whole-program compilation; there is no separate compilation, package manager, or
+external dependency resolver. There is no `T[]` syntax or bracket indexing; use
+`Array<T>` or another collection. First-class borrowed iterators, NLL/lifetime
+parameters, disjoint-entry borrowing, FFI, class inheritance, overloading, and a
+direct LLVM backend are not provided. GUI, reflection, JVM execution, and dynamic
+loading are outside the project scope. Very deep owned trees may exhaust the C
+stack during recursive destruction. Programs are not sandboxed; compiler/LSP
+input limits are not a security certification.
 
 Additional references: [architecture](docs/ARCHITECTURE.md),
 [grammar](docs/GRAMMAR.md), [generics](docs/GENERICS.md),

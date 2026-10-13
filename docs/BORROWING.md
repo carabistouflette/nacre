@@ -20,8 +20,9 @@ lifetime analysis: using a reference for the last time does not end its loan.
 A named owner, parameter, `this`, or owned-field projection can supply a borrow.
 Explicit expressions use `borrow place` or `borrow mut place`. A temporary owner
 must first be assigned to a local; it cannot supply an escaping reference.
-Primitives (`int`, `boolean`, `String`) copy and cannot be borrowed. Nominal
-objects, interfaces, and enums can be borrowed; local view objects cannot.
+Copyable scalar values (`byte`, `char`, `int`, `long`, `double`, `Unit`,
+`boolean`, and `String`) cannot be borrowed. Nominal objects, interfaces, and
+enums can be borrowed; local view objects cannot.
 
 ## Alias domains and reborrows
 
@@ -129,33 +130,41 @@ alias domain.
 
 `tryPop` and `tryRemove` are modifying methods even on an empty list or invalid
 index, so active loans still reject them. Recoverable runtime failure does not
-relax static ownership requirements. `tryGet` copies primitives only.
+relax static ownership requirements. `tryGet` copies copyable scalar values only.
 
 ## Map value references
 
-`Map<int,V>` affine values expose shared `getRef(key)` and exclusive `getMut(key)`.
-The result derives from the complete map root, with the same object/inline-enum/
-interface representation rules as List access. Missing keys remain fatal;
-`containsKey` is a copied presence observation, not a retained loan.
+`Map<int,V>` and `Map<Text,V>` provide shared `getRef(key)` and exclusive
+`getMut(key)` access for affine values. The result derives from the complete map
+root, with the same object/inline-enum/interface representation rules as List
+access. Missing borrowed lookup is fatal; `containsKey` is a copied presence
+observation, not a retained loan.
+
+For `Map<Text,V>`, the map owns each stored key. `put` consumes a `Text` key;
+`containsKey`, `tryRemove`, and value lookups take `borrow Text`, which remains
+borrowed only for the call. Replacing an equal key retains the stored key and
+returns the replaced value.
 
 References block conflicting put, tryRemove, clear, movement, destruction, and
 ancestor-field replacement. Different keys do not grant independent alias
 domains. Even an absent removal or existing-key replacement is a modifying
-method. Primitive values use copied `tryGet` instead of references.
+method. Copyable scalar values use copied `tryGet` instead of references.
 
 Maps stored beside another field share their containing owner's root. Shared
 traversal of an ID list may coexist with shared map lookup, but not mutation of
 that sibling map. End those scopes before mutation; there is no NLL or early
 release operation. A Catalog in the lending example follows this rule explicitly.
 
-Two-binding map traversal holds the same root loan across the whole loop:
-`for (int key, borrow V value : map)` is shared; `borrow mut V` is exclusive.
-Keys and primitive values copy, while affine bindings reborrow occupied slots.
-Exclusive traversal permits mutation through the current value binding, not
-independent map access. Bindings end per iteration; existing loop cleanup handles
-all exits. Receiver-derived borrowed returns retain the caller's root loan;
-local-owned values cannot escape. [MAP_TRAVERSAL.md](MAP_TRAVERSAL.md) defines
-header, stability and ordering requirements.
+Two-binding map traversal holds the same root loan across the whole loop. Integer
+keys are copied; Text keys are exposed as readonly `borrow Text`. Copyable scalar
+values copy, while affine value bindings borrow occupied slots:
+`for (int key, borrow V value : intMap)` and
+`for (borrow Text key, borrow V value : textMap)`. `borrow mut V` permits mutation
+through the current value binding, not independent map access. Bindings end per
+iteration; existing loop cleanup handles all exits. Receiver-derived borrowed
+returns retain the caller's root loan; local-owned values cannot escape.
+[STDLIB.md](STDLIB.md) documents Text-key maps; [MAP_TRAVERSAL.md](MAP_TRAVERSAL.md)
+defines the base traversal stability and ordering contract.
 
 ## Replacing owned fields
 
