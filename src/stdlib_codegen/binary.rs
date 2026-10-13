@@ -39,7 +39,7 @@ fn add_result(
     error_key: &'static str,
 ) {
     let id = result_id(function);
-    let (_, ok_variant) = variant(program, id, "Ok");
+    let (ok, ok_variant) = variant(program, id, "Ok");
     let (_, error_variant) = variant(program, id, "Err");
     assert_eq!(ok_variant.fields.len(), 1, "binary Result Ok has one payload");
     assert!(matches!(error_variant.fields.as_slice(), [Type::Object(text)] if *text == text_class_id(program)),
