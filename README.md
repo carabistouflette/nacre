@@ -24,7 +24,7 @@ C11 headers and a linker; Windows and macOS are not supported targets.
 
 Optional native library APIs require their development headers and libraries:
 OpenSSL 3 for `Crypto`, zlib for `Compression`/`Checksums`, GMP for arbitrary
-precision, ICU for Unicode/calendar APIs, PCRE2-8 (`libpcre2-dev`) for Regex,
+precision, ICU for Unicode/calendar APIs, PCRE2 10.30+ 8-bit for Regex,
 libcurl for HTTP, libarchive for ZIP, libxml2 for XML, SQLite for SQL, and
 uriparser for URI operations. Generated programs link only the libraries
 requested by their emitted native templates; ordinary programs retain their

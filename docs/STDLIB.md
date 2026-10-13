@@ -1325,8 +1325,8 @@ Each PCRE2 execution is limited to 1,000,000 match-loop iterations per candidate
 start position, depth 1,000, and 16 MiB of backtracking heap. Exceeding a limit
 returns `Err`, never `false` or `Ok(None)`; PCRE2 allocation and execution errors
 also return `Err`. Matching state is per call; compiled patterns are shared
-read-only. Programs using `Regex` require PCRE2's 8-bit development headers when
-building and the `libpcre2-8` runtime library.
+read-only. Programs using `Regex` require PCRE2 10.30+ 8-bit development headers
+when building and the `libpcre2-8` runtime library.
 
 ## Math, random numbers, and time
 

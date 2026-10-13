@@ -435,6 +435,34 @@ void main() {
         }
     }
 
+    Text resetPattern = new Text("a\\Kb");
+    match (Regex.compile(resetPattern)) {
+        Err(error) { println("reset-start pattern rejected"); drop(error); }
+        Ok(regex) {
+            Text subject = new Text("ab");
+            match (regex.matches(subject)) {
+                Err(error) { println("reset-start full match errored"); drop(error); }
+                Ok(value) { println(value); }
+            }
+            match (regex.search(subject)) {
+                Err(error) { println("reset-start search errored"); drop(error); }
+                Ok(found) {
+                    match (found) {
+                        None { println("reset-start match missing"); }
+                        Some(capture) {
+                            println(capture.start(0));
+                            println(capture.end(0));
+                            borrow Text group = capture.group(0);
+                            group.print();
+                            println();
+                        }
+                    }
+                }
+            }
+            drop(regex);
+        }
+    }
+
     Text nulPattern = new Text("a\0b");
     match (Regex.compile(nulPattern)) {
         Err(error) { println("embedded NUL pattern rejected"); drop(error); }
@@ -473,7 +501,7 @@ void main() {
 "#);
     assert_eq!(
         output.stdout,
-        "true\nfalse\n2\n1\n10\nÄbc-äBC\n1\n5\nÄbc\ntrue\na\n0\n1\ntrue\n2\n5\na\0b\ninvalid pattern rejected\n"
+        "true\nfalse\n2\n1\n10\nÄbc-äBC\n1\n5\nÄbc\ntrue\na\n0\n1\ntrue\n1\n2\nb\ntrue\n2\n5\na\0b\ninvalid pattern rejected\n"
             .as_bytes()
     );
 }

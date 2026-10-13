@@ -19,7 +19,7 @@ static bool ncr_regex_text_bytes(
 }
 
 static int ncr_regex_execute(
-    pcre2_code *compiled, PCRE2_SPTR subject, PCRE2_SIZE subject_length,
+    const pcre2_code *compiled, PCRE2_SPTR subject, PCRE2_SIZE subject_length,
     uint32_t options, pcre2_match_data *match_data
 ) {
     pcre2_match_context *context = pcre2_match_context_create(NULL);
@@ -168,7 +168,7 @@ static ncr_obj_@MATCHES_RESULT@ @REGEX_MATCHES@(
     size_t line, size_t column
 ) {
     static const char invalid_subject[] = "Regex.matches: invalid Text subject state";
-    static const char inconsistent_match[] = "Regex.matches: PCRE2 full-match offsets are invalid";
+    static const char inconsistent_match[] = "Regex.matches: PCRE2 full-match end offset is invalid";
     PCRE2_SPTR subject_bytes;
     PCRE2_SIZE subject_length;
     if (!ncr_regex_text_bytes(subject, &subject_bytes, &subject_length)) {
@@ -198,7 +198,8 @@ static ncr_obj_@MATCHES_RESULT@ @REGEX_MATCHES@(
         return @MATCHES_ERR@(error, message_length, line, column);
     }
     PCRE2_SIZE *offsets = pcre2_get_ovector_pointer(match_data);
-    if (offsets == NULL || offsets[0] != 0 || offsets[1] != subject_length) {
+    /* PCRE2 \K may reset offset 0; the match options enforce subject boundaries. */
+    if (offsets == NULL || offsets[1] != subject_length) {
         pcre2_match_data_free(match_data);
         return @MATCHES_ERR@(
             inconsistent_match, sizeof(inconsistent_match) - 1, line, column);
