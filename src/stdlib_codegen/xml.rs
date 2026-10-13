@@ -1,54 +1,13 @@
-use crate::ir::{self as t, CallTarget, NativeClass as C, NativeMethod as M, Type};
+use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
 use super::support::{native_function, replace_method_ids, replace_placeholders, result_id, variant_id};
 
-fn expression_uses_xml(program: &t::Program, expression: &t::Expr) -> bool {
-    match &expression.kind {
-        t::ExprKind::Call { target, args, .. } => {
-            let is_xml_call = match target {
-                CallTarget::Function(id) => matches!(program.functions[*id].native,
-                    Some(M::XmlDocumentParse | M::XmlDocumentSerialize | M::XmlDocumentRootName |
-                        M::XmlDocumentQueryText | M::XmlDocumentQueryXml | M::XmlDocumentSetText |
-                        M::XmlDocumentSetAttribute | M::XmlDocumentRemove | M::XmlDocumentAppendXml |
-                        M::XmlDocumentValidate | M::XmlDocumentRegisterNamespace | M::XmlDocumentEscape)),
-                CallTarget::Println => false,
-            };
-            is_xml_call || args.iter().any(|arg| expression_uses_xml(program, arg))
-        }
-        t::ExprKind::Unary { expr, .. } | t::ExprKind::Drop(expr) | t::ExprKind::Cast { value: expr } |
-        t::ExprKind::Try { value: expr, .. } | t::ExprKind::Upcast { value: expr, .. } =>
-            expression_uses_xml(program, expr),
-        t::ExprKind::MapSlot { index, .. } => expression_uses_xml(program, index),
-        t::ExprKind::Binary { left, right, .. } =>
-            expression_uses_xml(program, left) || expression_uses_xml(program, right),
-        t::ExprKind::New { args, .. } | t::ExprKind::Variant { args, .. } =>
-            args.iter().any(|arg| expression_uses_xml(program, arg)),
-        t::ExprKind::Read(_) | t::ExprKind::Move(_) | t::ExprKind::Borrow { .. } |
-        t::ExprKind::MapCapacity(_) |
-        t::ExprKind::Char(_) | t::ExprKind::Int(_) | t::ExprKind::Long(_) |
-        t::ExprKind::Double(_) | t::ExprKind::Unit | t::ExprKind::Boolean(_) |
-        t::ExprKind::String(_) => false,
-    }
-}
-
-fn block_uses_xml(program: &t::Program, block: &[t::Stmt]) -> bool {
-    block.iter().any(|statement| match statement {
-        t::Stmt::Let { value, .. } => value.as_ref().is_some_and(|value| expression_uses_xml(program, value)),
-        t::Stmt::Assign { value, .. } | t::Stmt::Expr(value) => expression_uses_xml(program, value),
-        t::Stmt::If { condition, then_block, else_block } =>
-            expression_uses_xml(program, condition) || block_uses_xml(program, then_block) ||
-                else_block.as_ref().is_some_and(|block| block_uses_xml(program, block)),
-        t::Stmt::While { condition, body } =>
-            expression_uses_xml(program, condition) || block_uses_xml(program, body),
-        t::Stmt::Match { value, arms } => expression_uses_xml(program, value) ||
-            arms.iter().any(|arm| block_uses_xml(program, &arm.body)),
-        t::Stmt::Return(value) => value.as_ref().is_some_and(|value| expression_uses_xml(program, value)),
-        t::Stmt::Block(block) => block_uses_xml(program, block),
-        t::Stmt::Break | t::Stmt::Continue => false,
-    })
+fn xml_class(program: &t::Program) -> Option<usize> {
+    program.classes.iter().find_map(|class|
+        matches!(class.native, Some(C::XmlDocument)).then_some(class.id))
 }
 
 fn used(program: &t::Program) -> bool {
-    program.functions.iter().any(|function| block_uses_xml(program, &function.body))
+    xml_class(program).is_some()
 }
 
 pub(super) fn fields() -> String {
@@ -64,9 +23,7 @@ pub(super) fn drop_fields(program: &t::Program, class_id: usize) -> String {
 }
 
 pub(super) fn drop_helper_prototypes(program: &t::Program) -> String {
-    if used(program) {
-        let class_id = program.classes.iter().find(|class|
-            matches!(class.native, Some(C::XmlDocument))).expect("XmlDocument native class").id;
+    if let Some(class_id) = xml_class(program) {
         format!("static void ncr_xml_document_drop_{class_id}(void *document, void *xpath_context);\n")
     } else {
         String::new()
@@ -84,8 +41,7 @@ fn parameter(function: &t::Function, index: usize) -> String {
 
 pub(super) fn implementation(program: &t::Program) -> Option<String> {
     if !used(program) { return None; }
-    let xml = program.classes.iter().find(|class| matches!(class.native, Some(C::XmlDocument)))
-        .expect("XmlDocument native class").id;
+    let xml = xml_class(program).expect("XmlDocument native class");
     let text = program.classes.iter().find(|class| matches!(class.native, Some(C::Text)))
         .expect("Text native class").id;
     let parse = method(program, M::XmlDocumentParse);
@@ -100,9 +56,10 @@ pub(super) fn implementation(program: &t::Program) -> Option<String> {
     let register_namespace = method(program, M::XmlDocumentRegisterNamespace);
     let escape = method(program, M::XmlDocumentEscape);
 
-    let list = match query_text.return_type {
-        Type::Object(result) => result,
-        _ => unreachable!("XmlDocument.queryText returns a List<Text> result"),
+    let query_text_result = result_id(query_text);
+    let Type::Object(list) = program.classes[query_text_result].result
+        .expect("XmlDocument.queryText returns Result").ok_type else {
+        unreachable!("XmlDocument.queryText Result payload is List<Text>");
     };
     assert_eq!(query_xml.return_type, query_text.return_type,
         "XmlDocument query methods share Result<List<Text>, Text>");
@@ -117,7 +74,7 @@ pub(super) fn implementation(program: &t::Program) -> Option<String> {
 
     let parse_result = result_id(parse);
     let serialize_result = result_id(serialize);
-    let query_result = result_id(query_text);
+    let query_result = query_text_result;
     let long_result = result_id(set_text);
     assert_eq!(result_id(set_attribute), long_result);
     assert_eq!(result_id(remove), long_result);
@@ -125,13 +82,15 @@ pub(super) fn implementation(program: &t::Program) -> Option<String> {
     let unit_result = result_id(validate);
     assert_eq!(result_id(register_namespace), unit_result);
 
-    let template = replace_method_ids(include_str!("../../stdlib/xml.c.in").to_owned(), program, None);
+    let template = replace_placeholders(include_str!("../../stdlib/xml.c.in").to_owned(), &[
+        ("@LIST_NEW@", format!("ncr_fn_{}", list_new.id)),
+        ("@LIST_ADD@", format!("ncr_fn_{}", list_add.id)),
+    ]);
+    let template = replace_method_ids(template, program, None);
     let body = replace_placeholders(template, &[
         ("@XML_DOCUMENT_ID@", xml.to_string()),
         ("@TEXT_ID@", text.to_string()),
         ("@LIST_ID@", list.to_string()),
-        ("@LIST_NEW@", format!("ncr_fn_{}", list_new.id)),
-        ("@LIST_ADD@", format!("ncr_fn_{}", list_add.id)),
         ("@PARSE_INPUT@", parameter(parse, 0)),
         ("@PARSE_RESULT@", parse_result.to_string()),
         ("@PARSE_OK_TAG@", variant_id(program, parse_result, "Ok").to_string()),

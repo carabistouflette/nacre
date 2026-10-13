@@ -174,3 +174,95 @@ void main() {
         b"malformed-rejected\nxxe-rejected\nnul-source-rejected\nxpath-rejected\nnul-xpath-rejected\ninvalid-character-rejected\nnul-prefix-rejected\nnul-uri-rejected\nreserved-prefix-rejected\nreserved-uri-rejected\nxmlns-uri-rejected\nexternal-xsd-rejected\n0\n");
     assert_memory_balanced(&output);
 }
+
+#[test]
+fn escape_only_and_text_query_after_integer_list_specialization() {
+    let escape_only = execute(r#"
+void main() {
+    XmlDocument.escape(new Text("&literal; <café>")).print();
+}
+"#);
+    assert!(escape_only.status.success(), "{}", String::from_utf8_lossy(&escape_only.stderr));
+    assert_eq!(escape_only.stdout, b"&amp;literal; &lt;caf\xc3\xa9&gt;\n");
+    assert_memory_balanced(&escape_only);
+
+    let query_after_integer_list = execute(r#"
+Result<Unit, Text> exercise() {
+    List<int> numbers = new List<int>();
+    numbers.add(7);
+    XmlDocument document = XmlDocument.parse(new Text("<root><item>value</item></root>"))?;
+    List<Text> values = document.queryText(new Text("/root/item/text()"))?;
+    List<Text> markup = document.queryXml(new Text("/root/item"))?;
+    println(numbers.get(0));
+    borrow Text value = values.getRef(0);
+    borrow Text xml = markup.getRef(0);
+    value.print();
+    xml.print();
+    return new Result<Unit, Text>.Ok(());
+}
+void main() {
+    match (exercise()) {
+        Ok(_) { }
+        Err(error) { error.print(); }
+    }
+}
+"#);
+    assert!(query_after_integer_list.status.success(),
+        "{}", String::from_utf8_lossy(&query_after_integer_list.stderr));
+    assert_eq!(query_after_integer_list.stdout, b"7\nvalue\n<item>value</item>\n");
+    assert_memory_balanced(&query_after_integer_list);
+}
+
+#[test]
+fn literal_set_text_namespace_atomicity_and_utf8_fragments() {
+    let output = execute(r#"
+Result<Unit, Text> exercise() {
+    XmlDocument values = XmlDocument.parse(new Text("<root label='old'><item>old</item></root>"))?;
+    Text literal = new Text("&#65; &custom; &amp;");
+    println(values.setText(new Text("/root/item | /root/item/text()"), literal)?);
+    println(values.setText(new Text("/root/@label"), literal)?);
+    List<Text> content = values.queryText(new Text("/root/item/text()"))?;
+    List<Text> label = values.queryText(new Text("/root/@label"))?;
+    borrow Text contentValue = content.getRef(0);
+    borrow Text labelValue = label.getRef(0);
+    contentValue.print();
+    labelValue.print();
+    println(values.remove(new Text("/root/item | /root/item/text()"))?);
+
+    match (XmlDocument.parse(new Text("<p:root/>"))) {
+        Ok(document) { drop(document); println("unbound-root-accepted"); }
+        Err(_) { println("unbound-root-rejected"); }
+    }
+    match (XmlDocument.parse(new Text("<root><p:item/></root>"))) {
+        Ok(document) { drop(document); println("unbound-child-accepted"); }
+        Err(_) { println("unbound-child-rejected"); }
+    }
+
+    XmlDocument encoded = XmlDocument.parse(new Text("<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?><root><a xmlns:p=\"urn:p\"/><b/></root>"))?;
+    match (encoded.appendXml(new Text("/root/a | /root/b"), new Text("<p:item/>"))) {
+        Ok(_) { println("namespace-fragment-accepted"); }
+        Err(_) { println("namespace-fragment-rejected"); }
+    }
+    List<Text> unchanged = encoded.queryXml(new Text("/root/a/* | /root/b/*"))?;
+    println(unchanged.size());
+    match (encoded.appendXml(new Text("/root/b"), new Text("<item>café</item>"))) {
+        Ok(_) { println("utf8-fragment-appended"); }
+        Err(_) { println("utf8-fragment-rejected"); }
+    }
+    List<Text> appended = encoded.queryText(new Text("/root/b/item/text()"))?;
+    borrow Text appendedValue = appended.getRef(0);
+    appendedValue.print();
+    return new Result<Unit, Text>.Ok(());
+}
+void main() {
+    match (exercise()) {
+        Ok(_) { }
+        Err(error) { error.print(); }
+    }
+}
+"#);
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert_eq!(output.stdout,
+        b"1\n1\n&#65; &custom; &amp;\n&#65; &custom; &amp;\n1\nunbound-root-rejected\nunbound-child-rejected\nnamespace-fragment-rejected\n0\nutf8-fragment-appended\ncaf\xc3\xa9\n");
+    assert_memory_balanced(&output);
+}

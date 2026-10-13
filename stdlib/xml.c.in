@@ -3,9 +3,14 @@
 #include <libxml/tree.h>
 #include <libxml/valid.h>
 #include <libxml/xpath.h>
+#include <libxml/xpathInternals.h>
 #include <libxml/xmlschemas.h>
 
+#if LIBXML_VERSION >= 21200
+static void ncr_xml_silent_error(void *user_data, const xmlError *error) {
+#else
 static void ncr_xml_silent_error(void *user_data, xmlErrorPtr error) {
+#endif
     (void)user_data;
     (void)error;
 }
@@ -17,6 +22,21 @@ static xmlParserInputPtr ncr_xml_deny_external(void *context, const xmlChar *pub
     return NULL;
 }
 
+static bool ncr_xml_parser_well_formed(xmlParserCtxtPtr parser) {
+#if LIBXML_VERSION >= 21400
+    return (xmlCtxtGetStatus(parser) & XML_STATUS_NOT_WELL_FORMED) == 0;
+#else
+    return parser->wellFormed != 0;
+#endif
+}
+
+static bool ncr_xml_parser_namespaces_well_formed(xmlParserCtxtPtr parser) {
+#if LIBXML_VERSION >= 21400
+    return (xmlCtxtGetStatus(parser) & XML_STATUS_NOT_NS_WELL_FORMED) == 0;
+#else
+    return parser->nsWellFormed != 0;
+#endif
+}
 static uint32_t ncr_xml_decode_scalar(const unsigned char *bytes, size_t index, size_t *width) {
     unsigned char first = bytes[index];
     if (first < 0x80) {
@@ -100,8 +120,13 @@ static xmlDocPtr ncr_xml_parse_memory(const unsigned char *bytes, size_t length)
     parser->sax->resolveEntity = ncr_xml_deny_external;
     xmlDocPtr document = xmlCtxtReadMemory(parser, (const char *)bytes, (int)length,
         NULL, NULL, XML_PARSE_NONET | XML_PARSE_NOERROR | XML_PARSE_NOWARNING);
+    bool well_formed = ncr_xml_parser_well_formed(parser);
+    bool namespaces_well_formed = ncr_xml_parser_namespaces_well_formed(parser);
     xmlFreeParserCtxt(parser);
-    if (document == NULL) { return NULL; }
+    if (document == NULL || !well_formed || !namespaces_well_formed) {
+        if (document != NULL) { xmlFreeDoc(document); }
+        return NULL;
+    }
     if (document->intSubset != NULL || document->extSubset != NULL ||
         xmlDocGetRootElement(document) == NULL) {
         xmlFreeDoc(document);
@@ -423,12 +448,40 @@ static ncr_obj_@LONG_RESULT@ @XML_DOCUMENT_SET_TEXT@(ncr_obj_@XML_DOCUMENT_ID@ *
         xmlXPathFreeObject(selection);
         return @LONG_ERROR@(failure, strlen(failure), ncr_line, ncr_column);
     }
-    int value_length = ncr_v_@SET_TEXT_VALUE@->length;
-    for (size_t index = 0; index < count; ++index) {
-        xmlNodeSetContentLen(nodes[index], ncr_v_@SET_TEXT_VALUE@->bytes, value_length);
-    }
-    if (nodes != NULL) { ncr_deallocate(nodes); }
     xmlXPathFreeObject(selection);
+    int value_length = ncr_v_@SET_TEXT_VALUE@->length;
+    xmlNodePtr *replacement = count == 0 ? NULL :
+        ncr_allocate(count * sizeof(xmlNodePtr), ncr_line, ncr_column);
+    if (replacement != NULL) { memset(replacement, 0, count * sizeof(xmlNodePtr)); }
+    for (size_t index = 0; index < count; ++index) {
+        xmlNodePtr node = nodes[index];
+        if ((node->type == XML_ELEMENT_NODE || node->type == XML_ATTRIBUTE_NODE) &&
+            value_length > 0) {
+            replacement[index] = xmlNewDocTextLen(node->doc,
+                ncr_v_@SET_TEXT_VALUE@->bytes, value_length);
+            if (replacement[index] == NULL) {
+                for (size_t previous = 0; previous < index; ++previous) {
+                    if (replacement[previous] != NULL) { xmlFreeNode(replacement[previous]); }
+                }
+                if (replacement != NULL) { ncr_deallocate(replacement); }
+                if (nodes != NULL) { ncr_deallocate(nodes); }
+                return @LONG_ERROR@("XmlDocument.setText: failed to allocate literal text", sizeof("XmlDocument.setText: failed to allocate literal text") - 1, ncr_line, ncr_column);
+            }
+        }
+    }
+    for (size_t index = 0; index < count; ++index) {
+        xmlNodePtr node = nodes[index];
+        if (node->type == XML_ELEMENT_NODE || node->type == XML_ATTRIBUTE_NODE) {
+            if (node->children != NULL) { xmlFreeNodeList(node->children); }
+            node->children = replacement[index];
+            node->last = replacement[index];
+            if (replacement[index] != NULL) { replacement[index]->parent = node; }
+        } else {
+            xmlNodeSetContentLen(node, ncr_v_@SET_TEXT_VALUE@->bytes, value_length);
+        }
+    }
+    if (replacement != NULL) { ncr_deallocate(replacement); }
+    if (nodes != NULL) { ncr_deallocate(nodes); }
     return (ncr_obj_@LONG_RESULT@){ .tag = @LONG_OK_TAG@,
         .data.v@LONG_OK_TAG@.f0 = (int64_t)count };
 }
@@ -532,6 +585,7 @@ static ncr_obj_@LONG_RESULT@ @XML_DOCUMENT_REMOVE@(ncr_obj_@XML_DOCUMENT_ID@ *nc
         xmlXPathFreeObject(selection);
         return @LONG_ERROR@(failure, strlen(failure), ncr_line, ncr_column);
     }
+    xmlXPathFreeObject(selection);
     for (size_t index = 0; index < count; ++index) {
         xmlNodePtr node = nodes[index];
         if (node->type == XML_ATTRIBUTE_NODE) {
@@ -542,9 +596,122 @@ static ncr_obj_@LONG_RESULT@ @XML_DOCUMENT_REMOVE@(ncr_obj_@XML_DOCUMENT_ID@ *nc
         }
     }
     if (nodes != NULL) { ncr_deallocate(nodes); }
-    xmlXPathFreeObject(selection);
     return (ncr_obj_@LONG_RESULT@){ .tag = @LONG_OK_TAG@,
         .data.v@LONG_OK_TAG@.f0 = (int64_t)count };
+}
+
+static xmlDocPtr ncr_xml_fragment_document(xmlNodePtr parent, const char *fragment, int fragment_length) {
+    static const xmlChar wrapper_name[] = "ncr_fragment";
+    static const char close_tag[] = "</ncr_fragment>";
+    xmlDocPtr context = xmlNewDoc((const xmlChar *)"1.0");
+    if (context == NULL) { return NULL; }
+    xmlNodePtr wrapper = xmlNewDocNode(context, NULL, wrapper_name, NULL);
+    if (wrapper == NULL) {
+        xmlFreeDoc(context);
+        return NULL;
+    }
+    xmlDocSetRootElement(context, wrapper);
+    xmlNsPtr *namespaces = xmlGetNsList(parent->doc, parent);
+    if (namespaces != NULL) {
+        for (size_t index = 0; namespaces[index] != NULL; ++index) {
+            xmlNsPtr namespace_node = namespaces[index];
+            if (namespace_node->prefix != NULL &&
+                xmlStrEqual(namespace_node->prefix, (const xmlChar *)"xml")) {
+                continue;
+            }
+            if (namespace_node->href == NULL ||
+                xmlNewNs(wrapper, namespace_node->href, namespace_node->prefix) == NULL) {
+                xmlFree(namespaces);
+                xmlFreeDoc(context);
+                return NULL;
+            }
+        }
+        xmlFree(namespaces);
+    }
+    xmlBufferPtr start_tag = xmlBufferCreate();
+    if (start_tag == NULL || xmlNodeDump(start_tag, context, wrapper, 0, 0) < 0) {
+        if (start_tag != NULL) { xmlBufferFree(start_tag); }
+        xmlFreeDoc(context);
+        return NULL;
+    }
+    size_t markup_length = (size_t)xmlBufferLength(start_tag);
+    const xmlChar *markup = xmlBufferContent(start_tag);
+    if (markup == NULL || markup_length < 2 ||
+        markup[markup_length - 2] != '/' || markup[markup_length - 1] != '>') {
+        xmlBufferFree(start_tag);
+        xmlFreeDoc(context);
+        return NULL;
+    }
+    size_t opening_length = markup_length - 1;
+    size_t closing_length = sizeof(close_tag) - 1;
+    if (opening_length > (size_t)INT_MAX - closing_length ||
+        (size_t)fragment_length > (size_t)INT_MAX - opening_length - closing_length) {
+        xmlBufferFree(start_tag);
+        xmlFreeDoc(context);
+        return NULL;
+    }
+    size_t input_length = opening_length + (size_t)fragment_length + closing_length;
+    char *wrapped = xmlMalloc(input_length + 1);
+    if (wrapped == NULL) {
+        xmlBufferFree(start_tag);
+        xmlFreeDoc(context);
+        return NULL;
+    }
+    memcpy(wrapped, markup, markup_length - 2);
+    wrapped[markup_length - 2] = '>';
+    memcpy(wrapped + opening_length, fragment, (size_t)fragment_length);
+    memcpy(wrapped + opening_length + (size_t)fragment_length, close_tag, closing_length);
+    wrapped[input_length] = '\0';
+    xmlBufferFree(start_tag);
+    xmlFreeDoc(context);
+
+    xmlParserCtxtPtr parser = xmlNewParserCtxt();
+    if (parser == NULL || parser->sax == NULL) {
+        if (parser != NULL) { xmlFreeParserCtxt(parser); }
+        xmlFree(wrapped);
+        return NULL;
+    }
+    parser->sax->resolveEntity = ncr_xml_deny_external;
+    xmlDocPtr document = xmlCtxtReadMemory(parser, wrapped, (int)input_length,
+        NULL, "UTF-8", XML_PARSE_NONET | XML_PARSE_NOERROR | XML_PARSE_NOWARNING);
+    bool well_formed = ncr_xml_parser_well_formed(parser);
+    bool namespaces_well_formed = ncr_xml_parser_namespaces_well_formed(parser);
+    xmlFreeParserCtxt(parser);
+    xmlFree(wrapped);
+    xmlNodePtr parsed_wrapper = document == NULL ? NULL : xmlDocGetRootElement(document);
+    if (document == NULL || !well_formed || !namespaces_well_formed ||
+        document->intSubset != NULL || document->extSubset != NULL ||
+        parsed_wrapper == NULL || parsed_wrapper->prev != NULL || parsed_wrapper->next != NULL ||
+        !xmlStrEqual(parsed_wrapper->name, wrapper_name)) {
+        if (document != NULL) { xmlFreeDoc(document); }
+        return NULL;
+    }
+    return document;
+}
+
+static bool ncr_xml_parse_fragment(xmlNodePtr parent, const unsigned char *bytes,
+        size_t length, xmlNodePtr *fragments) {
+    *fragments = NULL;
+    if (length > (size_t)INT_MAX) { return false; }
+    xmlDocPtr document = ncr_xml_fragment_document(parent, (const char *)bytes, (int)length);
+    if (document == NULL) { return false; }
+    xmlNodePtr wrapper = xmlDocGetRootElement(document);
+    xmlNodePtr source = wrapper->children;
+    xmlNodePtr copied = source == NULL ? NULL : xmlDocCopyNodeList(parent->doc, source);
+    if (source != NULL && copied == NULL) {
+        xmlFreeDoc(document);
+        return false;
+    }
+    for (xmlNodePtr node = copied; node != NULL; node = node->next) {
+        if (node->type == XML_ELEMENT_NODE && xmlReconciliateNs(parent->doc, node) < 0) {
+            xmlFreeNodeList(copied);
+            xmlFreeDoc(document);
+            return false;
+        }
+    }
+    xmlFreeDoc(document);
+    *fragments = copied;
+    return true;
 }
 
 static void ncr_xml_free_fragments(xmlNodePtr *fragments, size_t count) {
@@ -554,7 +721,6 @@ static void ncr_xml_free_fragments(xmlNodePtr *fragments, size_t count) {
     }
     ncr_deallocate(fragments);
 }
-
 static ncr_obj_@LONG_RESULT@ @XML_DOCUMENT_APPEND_XML@(ncr_obj_@XML_DOCUMENT_ID@ *ncr_self,
         ncr_obj_@TEXT_ID@ *ncr_v_@APPEND_XPATH@, ncr_obj_@TEXT_ID@ *ncr_v_@APPEND_FRAGMENT@,
         size_t ncr_line, size_t ncr_column) {
@@ -590,9 +756,8 @@ static ncr_obj_@LONG_RESULT@ @XML_DOCUMENT_APPEND_XML@(ncr_obj_@XML_DOCUMENT_ID@
     if (fragments != NULL) { memset(fragments, 0, parent_count * sizeof(xmlNodePtr)); }
     int fragment_length = ncr_v_@APPEND_FRAGMENT@->length;
     for (size_t index = 0; index < parent_count; ++index) {
-        int status = xmlParseInNodeContext(parents[index], (const char *)ncr_v_@APPEND_FRAGMENT@->bytes,
-            fragment_length, XML_PARSE_NONET | XML_PARSE_NOERROR | XML_PARSE_NOWARNING, &fragments[index]);
-        if (status != XML_ERR_OK) {
+        if (!ncr_xml_parse_fragment(parents[index], ncr_v_@APPEND_FRAGMENT@->bytes,
+                (size_t)fragment_length, &fragments[index])) {
             ncr_xml_free_fragments(fragments, parent_count);
             if (parents != NULL) { ncr_deallocate(parents); }
             xmlXPathFreeObject(selection);

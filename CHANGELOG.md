@@ -93,6 +93,8 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   validation. DTDs, external entities, XInclude processing, and external XSD
   composition are denied; streaming XML and XSLT remain unsupported, so this is
   not complete XML parity.
+  Namespace-invalid documents and fragments are rejected before mutation; setText
+  preserves literal character data, and appended fragments are parsed as UTF-8.
 - Floating min/max normalize signed-zero ties explicitly rather than relying on
   host libm's unspecified tie sign; both operand orders and same-sign zeros are
   covered by generated-program sanitizer regressions.
