@@ -3,10 +3,6 @@ on: [push, pull_request, workflow_dispatch]
 jobs:
   test:
     runs-on: ubuntu-latest
-    env:
-      CPATH: ${{ runner.temp }}/nacre-native-deps/include
-      LIBRARY_PATH: ${{ runner.temp }}/nacre-native-deps/lib
-      LD_LIBRARY_PATH: ${{ runner.temp }}/nacre-native-deps/lib
     strategy:
       matrix:
         rust: ["1.74.0", stable]
@@ -18,7 +14,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y cmake patch libssl-dev zlib1g-dev libgmp-dev libcurl4-openssl-dev libicu-dev libarchive-dev libxml2-dev libxslt1-dev libsqlite3-dev liburiparser-dev libpcre2-dev
       - name: Build corrected seekable ZIP dependency
-        run: python3 scripts/build_libarchive.py --prefix "$RUNNER_TEMP/nacre-native-deps"
+        run: |
+          prefix="$RUNNER_TEMP/nacre-native-deps"
+          python3 scripts/build_libarchive.py --prefix "$prefix"
+          printf '%s\n' "CPATH=$prefix/include" "LIBRARY_PATH=$prefix/lib" "LD_LIBRARY_PATH=$prefix/lib" >> "$GITHUB_ENV"
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust }}

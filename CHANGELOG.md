@@ -3,6 +3,9 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- CI exports isolated native dependency paths through the runner environment file
+  after building the corrected ZIP library; workflow admission no longer uses the
+  unavailable `runner` context in a job-level environment.
 - Filesystem permission modes reject negative values and bits outside `07777`
   before opening, truncating, creating directories, or changing permissions.
   Zero and POSIX special permission bits remain valid.

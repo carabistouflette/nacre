@@ -38,6 +38,8 @@ Native integration uses the corrected libarchive build from
 `scripts/build_libarchive.py`; `CPATH`, `LIBRARY_PATH`, and `LD_LIBRARY_PATH` select
 its isolated prefix. These are local execution results, not a remote-CI or
 whole-Java API-parity claim.
+CI exports those paths through `GITHUB_ENV` after the dependency build, rather
+than referencing the unavailable `runner` context in a job-level environment.
 
 ## Historical 0.12.0 baseline
 
