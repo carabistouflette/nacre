@@ -1,0 +1,11 @@
+// Compiler-owned contracts. These empty bodies are not Nacre implementations.
+// Only the trusted injector can mark declarations as native intrinsics.
+enum Option<T> {
+    None;
+    Some(T);
+}
+
+enum Result<T, E> {
+    Ok(T);
+    Err(E);
+}

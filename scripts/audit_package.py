@@ -19,7 +19,9 @@ def main():
     for path in (ROOT/'docs').glob('*.json'):
         json.loads(path.read_text())
     include_paths = 0
-    for path in list((ROOT/'src').glob('*.rs')) + list((ROOT/'tests').glob('*.rs')):
+    rust_source_files = sorted((ROOT/'src').rglob('*.rs'))
+    rust_test_files = sorted((ROOT/'tests').rglob('*.rs'))
+    for path in rust_source_files + rust_test_files:
         text = path.read_text()
         for value in re.findall(r'include_str!\(\s*"([^"\n]+)"\s*\)', text):
             included = (path.parent/value).resolve()
@@ -27,7 +29,7 @@ def main():
             included.read_text()
             include_paths += 1
     counts = {}
-    files = list((ROOT/'tests').glob('*.rs')) + list((ROOT/'src').glob('*.rs'))
+    files = rust_test_files + rust_source_files
     for path in files:
         text = path.read_text()
         # Checked-in test macros close at column zero. Count their invocations,

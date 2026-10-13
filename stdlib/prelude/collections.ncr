@@ -1,0 +1,31 @@
+class List<T> {
+    public List() {}
+    public void add(T value) {}
+    public readonly int size() {}
+    public readonly int capacity() {}
+    public readonly boolean isEmpty() {}
+    public readonly T get(int index) {}
+    public readonly Option<T> tryGet(int index) {}
+    public Option<T> tryPop() {}
+    public Option<T> tryRemove(int index) {}
+    public readonly borrow T getRef(int index) {}
+    public borrow mut T getMut(int index) {}
+    public void set(int index, T value) {}
+    public T pop() {}
+    public T remove(int index) {}
+    public void clear() {}
+    public void reserve(int capacity) {}
+}
+
+class Map<K, V> {
+    public Map() {}
+    public readonly boolean containsKey(K key) {}
+    public readonly int size() {}
+    public readonly boolean isEmpty() {}
+    public Option<V> put(K key, V value) {}
+    public Option<V> tryRemove(K key) {}
+    public readonly Option<V> tryGet(K key) {}
+    public readonly borrow V getRef(K key) {}
+    public borrow mut V getMut(K key) {}
+    public void clear() {}
+}

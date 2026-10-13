@@ -1,36 +1,35 @@
 //! Trusted prelude injection. User programs cannot declare native functions.
-use crate::ast::{self as a, NativeClass, Type};
+mod catalog;
+
+use self::catalog::{builtin, PRELUDE_UNITS};
+use crate::ast as a;
 use crate::diagnostic::{Diagnostic, Span};
 use crate::ir::{NativeClass as C, NativeMethod as M};
 
 pub fn inject(program: &mut a::Program) -> Result<(), Diagnostic> {
     for class in &program.classes {
-        if matches!(class.name.as_str(), "List" | "Map" | "Text" | "Option" | "Result" | "Console" | "Files" | "Args") {
-            return Err(Diagnostic::new(class.span,
-                format!("[E5001] `{}` est un type reserve de la bibliotheque standard", class.name)));
+        if builtin(&class.name).is_some() {
+            return Err(Diagnostic::new(
+                class.span,
+                format!("[E5001] `{}` is reserved by the standard library", class.name),
+            ));
         }
     }
-    let mut tokens = crate::lexer::lex(include_str!("../stdlib/prelude.ncr"))?;
-    // Prelude locations must not index into unrelated user text.
-    for token in &mut tokens { token.span = Span::default(); }
-    let mut prelude = crate::parser::parse(tokens)?;
-    for class in &mut prelude.classes {
-        class.is_builtin = true;
-        class.native = Some(match class.name.as_str() {
-            "List" => NativeClass::List(Type::Named("T".to_owned())),
-            "Map" => NativeClass::Map {
-                key: Type::Named("K".to_owned()),
-                value: Type::Named("V".to_owned()),
-                key_kind: None,
-            },
-            "Text" => NativeClass::Text,
-            "Console" => NativeClass::Console,
-            "Files" => NativeClass::Files,
-            "Args" => NativeClass::Args,
-            _ => continue,
-        });
+    for unit in PRELUDE_UNITS {
+        let mut tokens = crate::lexer::lex(unit.source)?;
+        // Prelude locations must not index into unrelated user text.
+        for token in &mut tokens {
+            token.span = Span::default();
+        }
+        let mut prelude = crate::parser::parse(tokens)?;
+        for class in &mut prelude.classes {
+            let builtin = unit.builtins.iter().find(|builtin| builtin.name == class.name)
+                .expect("prelude declaration is missing its builtin catalog entry");
+            class.is_builtin = true;
+            class.native = builtin.native_class();
+        }
+        program.classes.extend(prelude.classes);
     }
-    program.classes.extend(prelude.classes);
     Ok(())
 }
 
