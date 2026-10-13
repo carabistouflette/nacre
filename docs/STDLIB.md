@@ -571,10 +571,13 @@ Result<Unit, Text> close()
 `open` accepts nonempty strict UTF-8 paths without embedded NUL; `:memory:` opens
 an in-memory database. Connections use SQLite `SQLITE_OPEN_FULLMUTEX` and enable
 foreign-key enforcement. SQL text is also strict UTF-8 and NUL-free. `prepare`
-accepts exactly one statement (with optional trailing whitespace/comments). A
-bounded lexical preflight rejects multi-statement SQL before preparing any
-command on the live connection, while respecting quoted semicolons and trigger
-bodies. It replaces the previous prepared statement only after the new SQL parses.
+accepts exactly one executable statement, allowing leading empty commands and
+SQLite's token-leading UTF-8 BOM whitespace. Only whitespace/comments may follow
+the statement. A bounded linear lexical preflight rejects multi-statement SQL
+before preparing any command on the live connection, while respecting quoted
+semicolons and trigger bodies. It replaces the previous prepared statement only
+after the new SQL parses. Some SQLite PRAGMAs take effect during preparation;
+`prepare` is a command, not a side-effect-free query.
 Failed SQL/tail validation keeps the previous statement; a failure while
 finalizing that previous statement is reported after SQLite has finalized it, so
 no statement remains installed. SQLite failures use generic Text diagnostics and

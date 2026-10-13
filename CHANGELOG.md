@@ -60,8 +60,9 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   statement, copied length-delimited bindings/rows, strict type accessors,
   transactions, foreign-key enforcement, and bounded busy timeouts. `prepare`
   and `execute` reject multi-statement SQL before preparing any part, while
-  preserving trigger bodies and quoted semicolons. `step` completion is terminal
-  until reset/replacement, and failed steps require reset before retry. Empty
+  preserving trigger bodies, quoted semicolons, token-leading UTF-8 BOMs, and
+  leading empty commands. `step` completion is terminal until reset/replacement,
+  and failed steps require reset before retry. Empty
   blobs remain distinct from allocation failures. This native SQL API documents
   its single-cursor limit and does not claim JDBC parity.
 - Floating min/max normalize signed-zero ties explicitly rather than relying on

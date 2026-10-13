@@ -16,7 +16,7 @@ static bool ncr_database_text_valid_@DATABASE_CLASS_ID@(const ncr_obj_@TEXT_CLAS
     return !reject_nul || length == 0 || memchr(text->bytes, 0, length) == NULL;
 }
 
-/* Skip only SQLite's lexical whitespace and comments, bounded by length. */
+/* Skip SQLite's lexical whitespace, token-leading UTF-8 BOMs, and comments. */
 static size_t ncr_database_sql_skip_trivia_@DATABASE_CLASS_ID@(
     const char *sql, size_t length, size_t offset
 ) {
@@ -24,6 +24,10 @@ static size_t ncr_database_sql_skip_trivia_@DATABASE_CLASS_ID@(
         unsigned char byte = (unsigned char)sql[offset];
         if (byte == ' ' || byte == '\t' || byte == '\n' || byte == '\f' || byte == '\r') {
             offset++;
+        } else if (length - offset >= 3 && byte == 0xef &&
+                (unsigned char)sql[offset + 1] == 0xbb &&
+                (unsigned char)sql[offset + 2] == 0xbf) {
+            offset += 3;
         } else if (byte == '-' && offset + 1 < length && sql[offset + 1] == '-') {
             offset += 2;
             while (offset < length && sql[offset] != '\n') { offset++; }
@@ -95,7 +99,7 @@ static bool ncr_database_sql_is_single_statement_@DATABASE_CLASS_ID@(
         unsigned char token = SQL_OTHER;
         if (byte == ';') {
             token = SQL_SEMICOLON;
-            if (state == SQL_NOTHING || state == SQL_START) { return false; }
+            if (state == SQL_NOTHING || state == SQL_START) { offset++; continue; }
             if (state != SQL_TRIGGER && state != SQL_TRIGGER_SEMI) { complete = true; }
             offset++;
         } else if (byte == '\'' || byte == '"' || byte == '`') {

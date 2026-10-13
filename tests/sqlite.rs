@@ -382,3 +382,55 @@ fn sqlite_busy_timeout_is_bounded_between_two_connections() {
     assert_eq!(output.stdout, b"true\ntrue\ntrue\ntrue\ntrue\n");
     assert_memory_balanced(&output);
 }
+
+#[test]
+fn sqlite_bom_triggers_and_leading_empty_commands_preserve_sqlite_grammar() {
+    let source = r#"
+Result<Unit, Text> exercise() {
+    Text memory = new Text(":memory:");
+    Database database = Database.open(memory)?;
+    Text table = new Text("CREATE TABLE t(x INTEGER)");
+    Text audit = new Text("CREATE TABLE audit(payload TEXT)");
+    database.execute(table)?;
+    database.execute(audit)?;
+    Text leadingQuery = new Text("; /* empty commands */ ; SELECT 73");
+    database.prepare(leadingQuery)?;
+    println(database.step()?);
+    Option<long> result = database.columnLong(0)?;
+    match (result) { None { println(false); } Some(value) { println(value == 73L); } }
+    Text leadingInsert = new Text("; ; INSERT INTO t VALUES(11)");
+    database.execute(leadingInsert)?;
+    // Both SQL inputs below begin with a literal UTF-8 BOM.
+    Text executedTrigger = new Text("﻿CREATE TRIGGER executed AFTER INSERT ON t BEGIN INSERT INTO audit VALUES('exec;value'); END;");
+    database.execute(executedTrigger)?;
+    Text preparedTrigger = new Text("﻿CREATE TEMP TRIGGER prepared AFTER INSERT ON t BEGIN INSERT INTO audit VALUES(CASE WHEN NEW.x = 22 THEN 'prepare;value' ELSE 'wrong' END); END;");
+    database.prepare(preparedTrigger)?;
+    database.step()?;
+    Text insert = new Text("INSERT INTO t VALUES(22)");
+    database.execute(insert)?;
+    Text query = new Text("SELECT payload FROM audit ORDER BY payload");
+    database.prepare(query)?;
+    println(database.step()?);
+    Option<Text> first = database.columnText(0)?;
+    match (first) { None { println(false); } Some(value) { println(value.equalsString("exec;value")); } }
+    println(database.step()?);
+    Option<Text> second = database.columnText(0)?;
+    match (second) { None { println(false); } Some(value) { println(value.equalsString("prepare;value")); } }
+    println(!database.step()?);
+    Text values = new Text("SELECT SUM(x) FROM t");
+    database.prepare(values)?;
+    println(database.step()?);
+    Option<long> total = database.columnLong(0)?;
+    match (total) { None { println(false); } Some(value) { println(value == 33L); } }
+    return new Result<Unit, Text>.Ok(());
+}
+void main() {
+    match (exercise()) {
+        Ok(value) {}
+        Err(error) { error.print(); }
+    }
+}
+"#;
+    let output = run_memory(source);
+    assert_eq!(output.stdout, "true\n".repeat(9).as_bytes());
+}
