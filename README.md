@@ -30,6 +30,22 @@ link only the libraries requested by their emitted native templates; ordinary
 programs retain their existing C11/POSIX dependencies. The compiler accepts only
 a fixed dependency allowlist, never linker flags supplied by Nacre source.
 
+ZIP's strict seekable reader needs the upstream correction for zero-entry archives
+that is not in released libarchive 3.8.9. The pinned dependency build verifies the
+release SHA-256 and applies that one-line correction; it does not install globally.
+With Python 3.12+, CMake, `patch`, and the native development packages installed:
+
+```sh
+python3 scripts/build_libarchive.py --prefix "$PWD/target/native-deps"
+export CPATH="$PWD/target/native-deps/include${CPATH:+:$CPATH}"
+export LIBRARY_PATH="$PWD/target/native-deps/lib${LIBRARY_PATH:+:$LIBRARY_PATH}"
+export LD_LIBRARY_PATH="$PWD/target/native-deps/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+```
+
+Keep these variables set for native compilation and execution. CI builds and uses
+the same corrected dependency. ZIP does not fall back to lax streaming-directory
+validation when a seekable archive is malformed.
+
 ```sh
 cargo fetch --locked
 cargo test --offline --locked --features fuzzing

@@ -75,6 +75,10 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   decompressed output, CRC and truncation. Entries own their UTF-8 metadata, regular
   file additions reject trailing slashes, and writers require explicit close to
   report final directory errors without extracting or normalizing entry names.
+  Header rejection leaves no readable current entry while allowing subsequent
+  advancement. The native dependency build pins and verifies libarchive 3.8.9
+  with its upstream zero-entry bidder correction; strict central-directory
+  validation is preserved rather than falling back to streaming format detection.
 
 - Floating min/max normalize signed-zero ties explicitly rather than relying on
   host libm's unspecified tie sign; both operand orders and same-sign zeros are

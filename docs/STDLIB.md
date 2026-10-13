@@ -1233,6 +1233,11 @@ contract, not a peer-acknowledgement guarantee.
 
 ## ZIP archives
 
+The pinned private dependency build in `scripts/build_libarchive.py` applies the
+upstream seekable-reader correction for a zero-entry archive whose end record is
+at offset zero. See README for compile/runtime library paths. Both file and memory
+readers use the same strict seekable format configuration.
+
 `ZipReader` and `ZipWriter` use libarchive's ZIP support, including Zip64. They
 operate on archive entries only: no method extracts to the filesystem. Entry names
 are preserved as UTF-8, including absolute names and `.`/`..` components, so callers
@@ -1271,6 +1276,9 @@ uncompressed size, or -1 when the header omits it. A negative limit, a second re
 unsupported entry types, encrypted entries, invalid UTF-8 names, truncated data,
 and decompression or CRC failures return `Err`. Use `skipEntry` to discard the
 current entry explicitly. Directories have no file data.
+A header rejected by `next` does not become a readable current entry.
+`readEntry` and `skipEntry` then return `Err`; a subsequent `next` can advance
+past that header when the archive backend can continue.
 
 `ZipWriter.create` accepts levels 0 through 9: level 0 stores entries, while levels
 1 through 9 use DEFLATE. Entry names must be nonempty UTF-8 without NUL. `add`

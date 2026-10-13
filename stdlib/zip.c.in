@@ -49,6 +49,12 @@ static void ncr_zip_reader_release(void *handle, void *locale_handle) {
     if (locale != (locale_t)0) { freelocale(locale); }
 }
 
+static int ncr_zip_reader_configure(struct archive *archive) {
+    int status = archive_read_support_filter_all(archive);
+    if (status == ARCHIVE_OK) { status = archive_read_support_format_zip_seekable(archive); }
+    return status;
+}
+
 
 static bool ncr_zip_buffer_append_@BUFFER_ID@(ncr_obj_@BUFFER_ID@ *buffer, const unsigned char *bytes,
     size_t amount, size_t maximum, size_t line, size_t column) {
@@ -100,8 +106,7 @@ static ncr_obj_@OPEN_RESULT_ID@ @ZIP_READER_OPEN@(ncr_obj_@PATH_ID@ *ncr_v_@OPEN
         (void)archive_read_free(archive);
         return ncr_result_error_@OPEN_RESULT_ID@("ZipReader.open: C.UTF-8 locale is unavailable", sizeof("ZipReader.open: C.UTF-8 locale is unavailable") - 1, ncr_line, ncr_column);
     }
-    int status = archive_read_support_filter_all(archive);
-    if (status == ARCHIVE_OK) { status = archive_read_support_format_zip_seekable(archive); }
+    int status = ncr_zip_reader_configure(archive);
     if (status == ARCHIVE_OK) {
         locale_t previous = uselocale(locale);
         if (previous == (locale_t)0) {
@@ -150,8 +155,7 @@ static ncr_obj_@FROM_BYTES_RESULT_ID@ @ZIP_READER_FROM_BYTES@(ncr_obj_@BUFFER_ID
         free(copy);
         return ncr_result_error_@FROM_BYTES_RESULT_ID@("ZipReader.fromBytes: C.UTF-8 locale is unavailable", sizeof("ZipReader.fromBytes: C.UTF-8 locale is unavailable") - 1, ncr_line, ncr_column);
     }
-    int status = archive_read_support_filter_all(archive);
-    if (status == ARCHIVE_OK) { status = archive_read_support_format_zip_seekable(archive); }
+    int status = ncr_zip_reader_configure(archive);
     static const unsigned char empty_archive_bytes[1] = { 0 };
     const void *archive_bytes = copy == NULL ? (const void *)empty_archive_bytes : (const void *)copy;
     if (status == ARCHIVE_OK) {
@@ -219,8 +223,6 @@ static ncr_obj_@NEXT_RESULT_ID@ @ZIP_READER_NEXT@(ncr_obj_@ZIP_READER_ID@ *ncr_s
         return (ncr_obj_@NEXT_RESULT_ID@){ .tag = @NEXT_OK_TAG@, .data.v@NEXT_OK_TAG@.f0 = option };
     }
     if (status != ARCHIVE_OK) { NCR_ZIP_RETURN_ERROR(@NEXT_RESULT_ID@, "ZipReader.next", archive, ncr_line, ncr_column); }
-    ncr_self->entry_active = true;
-    ncr_self->entry_read = false;
     if (!valid_pathname) {
         return ncr_result_error_@NEXT_RESULT_ID@("ZipReader.next: entry name is not UTF-8", sizeof("ZipReader.next: entry name is not UTF-8") - 1, ncr_line, ncr_column);
     }
@@ -242,6 +244,8 @@ static ncr_obj_@NEXT_RESULT_ID@ @ZIP_READER_NEXT@(ncr_obj_@ZIP_READER_ID@ *ncr_s
     } else if (is_directory) {
         size = 0;
     }
+    ncr_self->entry_active = true;
+    ncr_self->entry_read = false;
     ncr_obj_@TEXT_ID@ *name = @TEXT_FROM_BYTES@((const unsigned char *)pathname, name_length, ncr_line, ncr_column);
     ncr_obj_@ZIP_ENTRY_ID@ *entry = ncr_allocate(sizeof(*entry), ncr_line, ncr_column);
     entry->name = name;

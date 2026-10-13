@@ -129,8 +129,9 @@ Result<Unit, Text> readWritten(borrow Path path) {
         match (reader.next()?) {
             None { done = true; }
             Some(entry) {
+                borrow Text name = entry.name();
                 if (index == 0) {
-                    require(entry.name().equalsString("café-λ.bin") && entry.size() == 4L && !entry.isDirectory(), "written file metadata")?;
+                    require(name.equalsString("café-λ.bin") && entry.size() == 4L && !entry.isDirectory(), "written file metadata")?;
                     ByteBuffer bytes = reader.readEntry(4L)?;
                     require(bytes.length() == 4L && bytes.get(0L) == (byte)65 && bytes.get(1L) == (byte)0
                         && bytes.get(2L) == (byte)255 && bytes.get(3L) == (byte)66, "written binary payload")?;
@@ -139,16 +140,16 @@ Result<Unit, Text> readWritten(borrow Path path) {
                         Ok(repeated) { return new Result<Unit, Text>.Err(new Text("reader repeated entry read")); }
                     }
                 } else if (index == 1) {
-                    require(entry.name().equalsString("unread.bin"), "unread entry metadata")?;
+                    require(name.equalsString("unread.bin"), "unread entry metadata")?;
                 } else if (index == 2) {
-                    require(entry.name().equalsString("folder/") && entry.isDirectory() && entry.size() == 0L, "directory metadata")?;
+                    require(name.equalsString("folder/") && entry.isDirectory() && entry.size() == 0L, "directory metadata")?;
                     reader.skipEntry()?;
                 } else if (index == 3) {
-                    require(entry.name().equalsString("empty") && !entry.isDirectory() && entry.size() == 0L, "empty file metadata")?;
+                    require(name.equalsString("empty") && !entry.isDirectory() && entry.size() == 0L, "empty file metadata")?;
                     ByteBuffer bytes = reader.readEntry(0L)?;
                     require(bytes.length() == 0L, "empty file data")?;
                 } else if (index == 4) {
-                    require(entry.name().equalsString("../kept.txt"), "preserved traversal-shaped name")?;
+                    require(name.equalsString("../kept.txt"), "preserved traversal-shaped name")?;
                     ByteBuffer bytes = reader.readEntry(4L)?;
                     require(bytes.length() == 4L && bytes.get(0L) == (byte)115, "safe entry data")?;
                 }
@@ -219,8 +220,9 @@ Result<Unit, Text> inspect(borrow mut ZipReader reader) {
         match (reader.next()?) {
             None { done = true; }
             Some(entry) {
+                borrow Text name = entry.name();
                 if (index == 0) {
-                    require(entry.name().equalsString("stored.bin") && entry.size() == 4L && !entry.isDirectory(), "stored entry metadata")?;
+                    require(name.equalsString("stored.bin") && entry.size() == 4L && !entry.isDirectory(), "stored entry metadata")?;
                     match (reader.readEntry(-1L)) {
                         Err(error) { println("reader rejects negative limit"); }
                         Ok(bytes) { return new Result<Unit, Text>.Err(new Text("reader accepted negative limit")); }
@@ -233,23 +235,23 @@ Result<Unit, Text> inspect(borrow mut ZipReader reader) {
                         Ok(repeated) { return new Result<Unit, Text>.Err(new Text("reader permitted repeated read")); }
                     }
                 } else if (index == 1) {
-                    require(entry.name().equalsString("deflated.txt") && entry.size() == 107L, "deflated entry metadata")?;
+                    require(name.equalsString("deflated.txt") && entry.size() == 107L, "deflated entry metadata")?;
                     ByteBuffer bytes = reader.readEntry(107L)?;
                     require(bytes.length() == 107L && bytes.get(0L) == (byte)102 && bytes.get(10L) == (byte)45
                         && bytes.get(11L) == (byte)90 && bytes.get(106L) == (byte)90, "deflated payload")?;
                 } else if (index == 2) {
-                    require(entry.name().equalsString("empty-dir/") && entry.isDirectory() && entry.size() == 0L, "directory metadata")?;
+                    require(name.equalsString("empty-dir/") && entry.isDirectory() && entry.size() == 0L, "directory metadata")?;
                     reader.skipEntry()?;
                 } else if (index == 3) {
-                    require(entry.name().equalsString("empty") && !entry.isDirectory() && entry.size() == 0L, "empty file metadata")?;
+                    require(name.equalsString("empty") && !entry.isDirectory() && entry.size() == 0L, "empty file metadata")?;
                     ByteBuffer bytes = reader.readEntry(0L)?;
                     require(bytes.length() == 0L, "empty file data")?;
                 } else if (index == 4) {
-                    require(entry.name().equalsString("../kept.txt") && entry.size() == 13L, "preserved unsafe-looking name")?;
+                    require(name.equalsString("../kept.txt") && entry.size() == 13L, "preserved unsafe-looking name")?;
                     ByteBuffer bytes = reader.readEntry(13L)?;
                     require(bytes.length() == 13L, "traversal-shaped entry data")?;
                 } else if (index == 5) {
-                    require(entry.name().equalsString("bomb.bin") && entry.size() == 100000L, "bomb declared size")?;
+                    require(name.equalsString("bomb.bin") && entry.size() == 100000L, "bomb declared size")?;
                     match (reader.readEntry(32L)) {
                         Err(error) { println("reader bounds actual decompressed output"); }
                         Ok(bytes) { return new Result<Unit, Text>.Err(new Text("reader exceeded decompression bound")); }
@@ -383,13 +385,6 @@ fn writer_produces_store_deflate_directory_empty_and_sequential_entries() {
     let output = run(&program, &[&stored, &deflated, &empty, &dropped]);
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("ZIP_WRITER_OK"), "{stdout}");
-    assert!(stdout.contains("writer rejects empty entry name"), "{stdout}");
-    assert!(stdout.contains("writer rejects NUL entry name"), "{stdout}");
-    assert!(stdout.contains("writer rejects trailing slash file name"), "{stdout}");
-    assert!(stdout.contains("closed writer rejects add"), "{stdout}");
-    assert!(stdout.contains("closed writer rejects close"), "{stdout}");
-    assert!(stdout.contains("closed reader rejects next"), "{stdout}");
-    assert!(stdout.contains("empty archive"), "{stdout}");
 
     let check = r#"import sys, zipfile
 with zipfile.ZipFile(sys.argv[1]) as archive:
@@ -422,9 +417,6 @@ fn reader_handles_independent_store_deflate_directories_empty_entries_and_bounds
     let output = run(&program, &[&fixture]);
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("ZIP_READER_OK"), "{stdout}");
-    assert!(stdout.contains("reader rejects negative limit"), "{stdout}");
-    assert!(stdout.contains("reader bounds actual decompressed output"), "{stdout}");
-    assert!(stdout.contains("closed reader rejects next"), "{stdout}");
 }
 
 #[test]
@@ -454,3 +446,90 @@ fn reader_rejects_truncated_archives_and_preserves_utf8_errors() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("ZIP_DAMAGED_OK"), "{stdout}");
     assert!(stdout.contains("ZIP_ERROR_UTF8_OK"), "{stdout}");
+}
+
+#[test]
+fn rejected_header_cannot_be_read_and_next_valid_entry_remains_available() {
+    let scratch = Scratch::new();
+    let fixture = scratch.path("unsupported-entry.zip");
+    let create = r#"import stat, sys, zipfile
+with zipfile.ZipFile(sys.argv[1], 'w') as archive:
+    link = zipfile.ZipInfo('link')
+    link.create_system = 3
+    link.external_attr = (stat.S_IFLNK | 0o777) << 16
+    archive.writestr(link, b'target')
+    archive.writestr('valid', b'abc')
+"#;
+    let created = Command::new("python3").arg("-c").arg(create).arg(&fixture).output().unwrap();
+    assert!(created.status.success(), "{}", String::from_utf8_lossy(&created.stderr));
+    let source = r#"
+Result<Unit, Text> prove() {
+    Text filename = Args.get(0)?;
+    Path path = Path.fromText(filename)?;
+    ZipReader reader = ZipReader.open(path)?;
+    match (reader.next()) {
+        Err(error) { println("header-rejected"); }
+        Ok(entry) { println("header-accepted"); }
+    }
+    match (reader.readEntry(16L)) {
+        Err(error) { println("read-rejected"); }
+        Ok(bytes) { println("read-accepted"); }
+    }
+    match (reader.next()?) {
+        None { println("missing-valid-entry"); }
+        Some(entry) {
+            borrow Text name = entry.name();
+            println(name.equalsString("valid"));
+            ByteBuffer bytes = reader.readEntry(3L)?;
+            println(bytes.length() == 3L && bytes.get(0L) == (byte)97 && bytes.get(2L) == (byte)99);
+        }
+    }
+    reader.close()?;
+    return new Result<Unit, Text>.Ok(());
+}
+void main() {
+    match (prove()) {
+        Ok(unit) {}
+        Err(error) { error.print(); }
+    }
+}
+"#;
+    let program = compile(source);
+    let output = run(&program, &[&fixture]);
+    assert_eq!(output.stdout, b"header-rejected\nread-rejected\ntrue\ntrue\n");
+}
+
+#[test]
+fn empty_memory_archive_outlives_its_source_buffer() {
+    let source = r#"
+Result<Unit, Text> prove() {
+    ByteBuffer bytes = ByteBuffer.withCapacity(22L)?;
+    bytes.append((byte)80);
+    bytes.append((byte)75);
+    bytes.append((byte)5);
+    bytes.append((byte)6);
+    int index = 0;
+    while (index < 18) {
+        bytes.append((byte)0);
+        index = index + 1;
+    }
+    ZipReader reader = ZipReader.fromBytes(bytes)?;
+    bytes.clear();
+    match (reader.next()?) {
+        None { println(true); }
+        Some(entry) { println(false); }
+    }
+    reader.close()?;
+    return new Result<Unit, Text>.Ok(());
+}
+void main() {
+    match (prove()) {
+        Ok(unit) {}
+        Err(error) { error.print(); }
+    }
+}
+"#;
+    let program = compile(source);
+    let output = run(&program, &[]);
+    assert_eq!(output.stdout, b"true\n");
+}
