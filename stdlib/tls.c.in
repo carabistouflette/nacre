@@ -770,11 +770,35 @@ static ncr_obj_@PEER_RESULT_TYPE@ @TLS_STREAM_PEER_CERTIFICATE_FN@(
         return (ncr_obj_@PEER_RESULT_ID@){ .tag = @PEER_OK_TAG@, .data.v@PEER_OK_TAG@.f0 = none };
     }
     X509 *copy = X509_dup(peer);
+    if (copy == NULL) {
+        X509_free(peer);
+        NCR_TLS_RETURN_ERROR(@PEER_RESULT_ID@, "TlsStream.peerCertificate copy", EPROTO, ncr_line, ncr_column);
+    }
+    STACK_OF(X509) *peer_chain = SSL_get_peer_cert_chain((SSL *)stream->ssl);
+    STACK_OF(X509) *chain = NULL;
+    int chain_count = peer_chain == NULL ? 0 : sk_X509_num(peer_chain);
+    if (chain_count < 0) {
+        X509_free(peer);
+        X509_free(copy);
+        NCR_TLS_RETURN_ERROR(@PEER_RESULT_ID@, "TlsStream.peerCertificate chain", EPROTO, ncr_line, ncr_column);
+    }
+    for (int index = 0; index < chain_count; ++index) {
+        X509 *item = sk_X509_value(peer_chain, index);
+        if (item != NULL && X509_cmp(item, peer) == 0) { continue; }
+        if (chain == NULL) { chain = sk_X509_new_null(); }
+        X509 *item_copy = item == NULL || chain == NULL ? NULL : X509_dup(item);
+        if (item_copy == NULL || sk_X509_push(chain, item_copy) == 0) {
+            X509_free(item_copy);
+            X509_free(peer);
+            X509_free(copy);
+            if (chain != NULL) { sk_X509_pop_free(chain, X509_free); }
+            NCR_TLS_RETURN_ERROR(@PEER_RESULT_ID@, "TlsStream.peerCertificate chain copy", EPROTO, ncr_line, ncr_column);
+        }
+    }
     X509_free(peer);
-    if (copy == NULL) { NCR_TLS_RETURN_ERROR(@PEER_RESULT_ID@, "TlsStream.peerCertificate copy", EPROTO, ncr_line, ncr_column); }
     ncr_obj_@CERTIFICATE_ID@ *certificate = ncr_allocate(sizeof(*certificate), ncr_line, ncr_column);
     certificate->certificate = copy;
-    certificate->chain = NULL;
+    certificate->chain = chain;
     ncr_obj_@PEER_OPTION_ID@ some = { .tag = @PEER_OPTION_SOME_TAG@, .data.v@PEER_OPTION_SOME_TAG@.f0 = certificate };
     return (ncr_obj_@PEER_RESULT_ID@){ .tag = @PEER_OK_TAG@, .data.v@PEER_OK_TAG@.f0 = some };
 }

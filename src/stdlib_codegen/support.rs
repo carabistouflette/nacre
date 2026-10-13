@@ -401,6 +401,8 @@ pub(super) fn marker(method: M) -> &'static str {
         M::CryptoMacFinish => "@CRYPTO_MAC_FINISH@",
         M::CertificateParsePem => "@CERTIFICATE_PARSE_PEM@",
         M::CertificateParsePemChain => "@CERTIFICATE_PARSE_PEM_CHAIN@",
+        M::CertificateToPem => "@CERTIFICATE_TO_PEM@",
+        M::CertificateToPemChain => "@CERTIFICATE_TO_PEM_CHAIN@",
         M::CertificateSubject => "@CERTIFICATE_SUBJECT@",
         M::CertificateIssuer => "@CERTIFICATE_ISSUER@",
         M::CertificateSerialText => "@CERTIFICATE_SERIAL_TEXT@",

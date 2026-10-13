@@ -24,6 +24,8 @@ class CryptoMac {
 class Certificate {
     public static Result<Certificate, Text> parsePem(borrow Text pem) {}
     public static Result<Certificate, Text> parsePemChain(borrow Text pem) {}
+    public readonly Result<Text, Text> toPem() {}
+    public readonly Result<Text, Text> toPemChain() {}
     public readonly Result<Text, Text> subject() {}
     public readonly Result<Text, Text> issuer() {}
     public readonly Result<Text, Text> serialText() {}

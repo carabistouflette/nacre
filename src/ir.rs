@@ -254,6 +254,7 @@ pub enum NativeMethod {
     CryptoDigestCreate, CryptoDigestUpdate, CryptoDigestFinish,
     CryptoMacCreate, CryptoMacUpdate, CryptoMacFinish,
     CertificateParsePem, CertificateParsePemChain, CertificateSubject, CertificateIssuer,
+    CertificateToPem, CertificateToPemChain,
     CertificateSerialText, CertificateNotBeforeUnixSeconds, CertificateNotAfterUnixSeconds,
     CertificateMatchesHost, CertificateVerify,
     UriParse, UriFromIri, UriClone, UriToText, UriScheme, UriUserInfo, UriHost, UriPath,

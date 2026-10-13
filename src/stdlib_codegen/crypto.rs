@@ -1,5 +1,8 @@
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
-use super::support::{native_function, replace_method_ids, replace_placeholders, result_id, text_class, variant_id};
+use super::support::{
+    native_function, replace_method_ids, replace_placeholders, result_id, template_section,
+    text_class, variant_id,
+};
 
 fn method(program: &t::Program, native: M) -> &t::Function {
     let function = native_function(program, |candidate| candidate == native);
@@ -26,49 +29,57 @@ fn is_crypto_method(method: M) -> bool {
         M::CryptoConstantTimeEquals)
 }
 
-fn expression_uses_crypto(program: &t::Program, expression: &t::Expr) -> bool {
+
+fn expression_uses_method(
+    program: &t::Program,
+    expression: &t::Expr,
+    matches_method: fn(M) -> bool,
+) -> bool {
     use t::ExprKind as E;
     match &expression.kind {
         E::New { args, .. } | E::Variant { args, .. } =>
-            args.iter().any(|argument| expression_uses_crypto(program, argument)),
+            args.iter().any(|argument| expression_uses_method(program, argument, matches_method)),
         E::Call { target, args, .. } => {
             if let t::CallTarget::Function(id) = target {
                 if program.functions.get(*id).and_then(|function| function.native)
-                    .is_some_and(is_crypto_method) {
+                    .is_some_and(matches_method) {
                     return true;
                 }
             }
-            args.iter().any(|argument| expression_uses_crypto(program, argument))
+            args.iter().any(|argument| expression_uses_method(program, argument, matches_method))
         }
-        E::MapSlot { index, .. } => expression_uses_crypto(program, index),
+        E::MapSlot { index, .. } => expression_uses_method(program, index, matches_method),
         E::Drop(value) | E::Upcast { value, .. } | E::Unary { expr: value, .. }
         | E::Try { value, .. } | E::Cast { value } =>
-            expression_uses_crypto(program, value),
+            expression_uses_method(program, value, matches_method),
         E::Binary { left, right, .. } =>
-            expression_uses_crypto(program, left) || expression_uses_crypto(program, right),
+            expression_uses_method(program, left, matches_method) ||
+                expression_uses_method(program, right, matches_method),
         E::Char(_) | E::Int(_) | E::Long(_) | E::Double(_) | E::Unit | E::Boolean(_)
         | E::String(_) | E::Read(_) | E::Move(_) | E::Borrow { .. } | E::MapCapacity(_) => false,
     }
 }
 
-fn block_uses_crypto(program: &t::Program, block: &t::Block) -> bool {
+fn block_uses_method(program: &t::Program, block: &t::Block, matches_method: fn(M) -> bool) -> bool {
     block.iter().any(|statement| {
         use t::Stmt as S;
         match statement {
             S::Let { value, .. } => value.as_ref()
-                .is_some_and(|value| expression_uses_crypto(program, value)),
-            S::Assign { value, .. } | S::Expr(value) => expression_uses_crypto(program, value),
+                .is_some_and(|value| expression_uses_method(program, value, matches_method)),
+            S::Assign { value, .. } | S::Expr(value) =>
+                expression_uses_method(program, value, matches_method),
             S::If { condition, then_block, else_block } =>
-                expression_uses_crypto(program, condition)
-                    || block_uses_crypto(program, then_block)
-                    || else_block.as_ref().is_some_and(|block| block_uses_crypto(program, block)),
+                expression_uses_method(program, condition, matches_method)
+                    || block_uses_method(program, then_block, matches_method)
+                    || else_block.as_ref().is_some_and(|block| block_uses_method(program, block, matches_method)),
             S::While { condition, body } =>
-                expression_uses_crypto(program, condition) || block_uses_crypto(program, body),
-            S::Match { value, arms } => expression_uses_crypto(program, value)
-                || arms.iter().any(|arm| block_uses_crypto(program, &arm.body)),
+                expression_uses_method(program, condition, matches_method)
+                    || block_uses_method(program, body, matches_method),
+            S::Match { value, arms } => expression_uses_method(program, value, matches_method)
+                || arms.iter().any(|arm| block_uses_method(program, &arm.body, matches_method)),
             S::Return(value) => value.as_ref()
-                .is_some_and(|value| expression_uses_crypto(program, value)),
-            S::Block(block) => block_uses_crypto(program, block),
+                .is_some_and(|value| expression_uses_method(program, value, matches_method)),
+            S::Block(block) => block_uses_method(program, block, matches_method),
             S::Break | S::Continue => false,
         }
     })
@@ -76,8 +87,35 @@ fn block_uses_crypto(program: &t::Program, block: &t::Block) -> bool {
 
 fn is_used(program: &t::Program) -> bool {
     program.functions.iter().any(|function| {
-        function.native.is_none() && block_uses_crypto(program, &function.body)
+        function.native.is_none() && block_uses_method(program, &function.body, is_crypto_method)
     })
+}
+
+
+pub(crate) fn digest_selection_helper(program: &t::Program) -> String {
+    let has_key_digest_user = program.classes.iter().any(|class| matches!(
+        class.native, Some(C::CryptoKey | C::CryptoDigest | C::CryptoMac)
+    ));
+    if !is_used(program) && !has_key_digest_user { return String::new(); }
+    const START: &str = "/* CRYPTO_GROUP DIGEST_SELECTION */";
+    const END: &str = "/* CRYPTO_GROUP_END DIGEST_SELECTION */";
+    let template = include_str!("../../stdlib/crypto.c.in");
+    let selection = template_section(template, START, END).to_owned();
+    replace_placeholders(selection, &[(
+        "@TEXT_CLASS@",
+        text_class(program).expect("digest selection requires Text").to_string(),
+    )])
+}
+
+fn without_digest_selection(source: &str) -> String {
+    let (before, remaining) = source.split_once("/* CRYPTO_GROUP DIGEST_SELECTION */")
+        .expect("Crypto template digest selection group");
+    let (_, after) = remaining.split_once("/* CRYPTO_GROUP_END DIGEST_SELECTION */")
+        .expect("Crypto template digest selection end");
+    let mut body = String::with_capacity(source.len());
+    body.push_str(before);
+    body.push_str(after);
+    body
 }
 
 pub(super) fn implementation(program: &t::Program) -> String {
@@ -119,7 +157,8 @@ pub(super) fn implementation(program: &t::Program) -> String {
     assert!(matches!(ok.fields.as_slice(), [Type::Object(class)] if *class == byte_buffer));
     assert!(matches!(err.fields.as_slice(), [Type::Object(class)] if *class == text));
 
-    let body = replace_placeholders(include_str!("../../stdlib/crypto.c.in").to_owned(), &[
+    let template = include_str!("../../stdlib/crypto.c.in");
+    let body = replace_placeholders(without_digest_selection(template), &[
         ("@RESULT@", result.to_string()),
         ("@RESULT_OK_TAG@", variant_id(program, result, "Ok").to_string()),
         ("@ERROR_RESULT_FN@", format!("ncr_result_error_{result}")),

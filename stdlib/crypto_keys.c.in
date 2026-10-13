@@ -30,15 +30,6 @@ static bool ncr_cryptokeys_text_is(@TEXT_TYPE@ value, const char *expected) {
     return (size_t)value->length == expected_length && memcmp(value->bytes, expected, expected_length) == 0;
 }
 
-static const char *ncr_cryptokeys_digest_name(@TEXT_TYPE@ value) {
-    if (ncr_cryptokeys_text_is(value, "SHA256")) { return "SHA256"; }
-    if (ncr_cryptokeys_text_is(value, "SHA384")) { return "SHA384"; }
-    if (ncr_cryptokeys_text_is(value, "SHA512")) { return "SHA512"; }
-    if (ncr_cryptokeys_text_is(value, "SHA3-256")) { return "SHA3-256"; }
-    if (ncr_cryptokeys_text_is(value, "SHA3-384")) { return "SHA3-384"; }
-    if (ncr_cryptokeys_text_is(value, "SHA3-512")) { return "SHA3-512"; }
-    return NULL;
-}
 /* CRYPTOKEYS_GROUP_END ALGORITHM */
 
 /* CRYPTOKEYS_GROUP PEM */
@@ -188,13 +179,12 @@ static bool ncr_cryptokeys_signature_context(EVP_PKEY *key, @TEXT_TYPE@ digest,
     *key_context = NULL;
     int kind = ncr_cryptokeys_key_kind(key);
     if (kind != 1 && kind != 2 && kind != 4) { return false; }
-    const EVP_MD *md = NULL;
+    const struct ncr_crypto_digest_spec *spec = NULL;
     if (kind == 2) {
         if (digest == NULL || digest->length != 0 || ncr_cryptokeys_text_has_nul(digest)) { return false; }
     } else {
-        const char *name = ncr_cryptokeys_digest_name(digest);
-        if (name == NULL) { return false; }
-        md = EVP_get_digestbyname(name);
+        if (ncr_crypto_digest_spec_for(digest, &spec) != 1) { return false; }
+        md = EVP_get_digestbyname(spec->name);
         if (md == NULL) { return false; }
     }
     EVP_MD_CTX *md_context = EVP_MD_CTX_new();
@@ -461,8 +451,9 @@ static void ncr_cryptokeys_digest_destroy(void *value) {
 }
 
 static @DIGEST_CREATE_RESULT@ @CRYPTO_DIGEST_CREATE@(@TEXT_TYPE@ ncr_v_@DIGEST_CREATE_ALGORITHM_ID@, size_t line, size_t column) {
-    const char *name = ncr_cryptokeys_digest_name(ncr_v_@DIGEST_CREATE_ALGORITHM_ID@);
-    const EVP_MD *algorithm = name == NULL ? NULL : EVP_get_digestbyname(name);
+    const struct ncr_crypto_digest_spec *spec = NULL;
+    const EVP_MD *algorithm = ncr_crypto_digest_spec_for(ncr_v_@DIGEST_CREATE_ALGORITHM_ID@, &spec) == 1
+        ? EVP_get_digestbyname(spec->name) : NULL;
     if (algorithm == NULL) {
         return ncr_result_error_@DIGEST_CREATE_ERROR_RESULT@("unsupported digest algorithm", sizeof("unsupported digest algorithm") - 1, line, column);
     }
@@ -518,14 +509,16 @@ static void ncr_cryptokeys_mac_destroy(void *algorithm, void *context) {
 
 static @MAC_CREATE_RESULT@ @CRYPTO_MAC_CREATE@(@TEXT_TYPE@ ncr_v_@MAC_CREATE_ALGORITHM_ID@,
     @BUFFER_TYPE@ ncr_v_@MAC_CREATE_KEY_ID@, size_t line, size_t column) {
-    const char *name = ncr_cryptokeys_digest_name(ncr_v_@MAC_CREATE_ALGORITHM_ID@);
-    if (name == NULL) { return ncr_result_error_@MAC_CREATE_ERROR_RESULT@("unsupported MAC digest algorithm", sizeof("unsupported MAC digest algorithm") - 1, line, column); }
+    const struct ncr_crypto_digest_spec *spec = NULL;
+    if (ncr_crypto_digest_spec_for(ncr_v_@MAC_CREATE_ALGORITHM_ID@, &spec) != 1) {
+        return ncr_result_error_@MAC_CREATE_ERROR_RESULT@("unsupported MAC digest algorithm", sizeof("unsupported MAC digest algorithm") - 1, line, column);
+    }
     EVP_MAC *algorithm = EVP_MAC_fetch(NULL, "HMAC", NULL);
     EVP_MAC_CTX *context = algorithm == NULL ? NULL : EVP_MAC_CTX_new(algorithm);
-    char *parameter_digest = (char *)name;
     OSSL_PARAM parameters[2];
-    parameters[0] = OSSL_PARAM_construct_utf8_string(OSSL_MAC_PARAM_DIGEST, parameter_digest, 0);
+    parameters[0] = OSSL_PARAM_construct_utf8_string(OSSL_MAC_PARAM_DIGEST, (char *)spec->name, 0);
     parameters[1] = OSSL_PARAM_construct_end();
+
     const unsigned char *key = ncr_v_@MAC_CREATE_KEY_ID@->length == 0 ? (const unsigned char *)"" : ncr_v_@MAC_CREATE_KEY_ID@->bytes;
     if (context == NULL || EVP_MAC_init(context, key, ncr_v_@MAC_CREATE_KEY_ID@->length, parameters) != 1) {
         ncr_cryptokeys_mac_destroy(algorithm, context);
@@ -669,6 +662,45 @@ static @CERTIFICATE_PARSE_RESULT@ @CERTIFICATE_PARSE_PEM@(@TEXT_TYPE@ ncr_v_@CER
 static @CERTIFICATE_PARSE_CHAIN_RESULT@ @CERTIFICATE_PARSE_PEM_CHAIN@(@TEXT_TYPE@ ncr_v_@CERTIFICATE_PARSE_PEM_CHAIN_ID@, size_t line, size_t column) {
     return ncr_cryptokeys_certificate_parse(ncr_v_@CERTIFICATE_PARSE_PEM_CHAIN_ID@, true, line, column);
 }
+static @TEXT_TYPE@ ncr_cryptokeys_certificate_pem(@CERTIFICATE_TYPE@ ncr_self,
+    bool include_chain, size_t line, size_t column) {
+    if (ncr_self == NULL || ncr_self->certificate == NULL) { return NULL; }
+    BIO *bio = BIO_new(BIO_s_mem());
+    if (bio == NULL) { return NULL; }
+    bool succeeded = PEM_write_bio_X509(bio, (X509 *)ncr_self->certificate) == 1;
+    STACK_OF(X509) *chain = include_chain ? (STACK_OF(X509) *)ncr_self->chain : NULL;
+    int chain_count = chain == NULL ? 0 : sk_X509_num(chain);
+    if (chain_count < 0) { succeeded = false; }
+    for (int index = 0; succeeded && index < chain_count; ++index) {
+        X509 *certificate = sk_X509_value(chain, index);
+        succeeded = certificate != NULL && PEM_write_bio_X509(bio, certificate) == 1;
+    }
+    BUF_MEM *memory = NULL;
+    if (succeeded) { BIO_get_mem_ptr(bio, &memory); }
+    @TEXT_TYPE@ text = memory == NULL || memory->data == NULL || memory->length > INT32_MAX
+        ? NULL : @TEXT_FROM_BYTES@((const unsigned char *)memory->data, memory->length, line, column);
+    BIO_free(bio);
+    return text;
+}
+
+static @CERTIFICATE_PEM_RESULT@ @CERTIFICATE_TO_PEM@(@CERTIFICATE_TYPE@ ncr_self,
+    size_t line, size_t column) {
+    @TEXT_TYPE@ text = ncr_cryptokeys_certificate_pem(ncr_self, false, line, column);
+    if (text == NULL) {
+        return ncr_result_error_@CERTIFICATE_PEM_ERROR_RESULT@("certificate PEM encoding failed", sizeof("certificate PEM encoding failed") - 1, line, column);
+    }
+    return (@CERTIFICATE_PEM_RESULT@){ .tag = @CERTIFICATE_PEM_OK_TAG@, .data.v@CERTIFICATE_PEM_OK_TAG@.f0 = text };
+}
+
+static @CERTIFICATE_PEM_CHAIN_RESULT@ @CERTIFICATE_TO_PEM_CHAIN@(@CERTIFICATE_TYPE@ ncr_self,
+    size_t line, size_t column) {
+    @TEXT_TYPE@ text = ncr_cryptokeys_certificate_pem(ncr_self, true, line, column);
+    if (text == NULL) {
+        return ncr_result_error_@CERTIFICATE_PEM_CHAIN_ERROR_RESULT@("certificate chain PEM encoding failed", sizeof("certificate chain PEM encoding failed") - 1, line, column);
+    }
+    return (@CERTIFICATE_PEM_CHAIN_RESULT@){ .tag = @CERTIFICATE_PEM_CHAIN_OK_TAG@, .data.v@CERTIFICATE_PEM_CHAIN_OK_TAG@.f0 = text };
+}
+
 
 static @TEXT_TYPE@ ncr_cryptokeys_certificate_name(X509 *certificate, bool issuer, size_t line, size_t column) {
     X509_NAME *name = issuer ? X509_get_issuer_name(certificate) : X509_get_subject_name(certificate);

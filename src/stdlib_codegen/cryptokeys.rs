@@ -131,6 +131,8 @@ fn add_method_placeholders(
         add_result(program, replacements, M::CertificateParsePem, "@CERTIFICATE_PARSE_RESULT@", "@CERTIFICATE_PARSE_OK_TAG@", "@CERTIFICATE_PARSE_ERROR_RESULT@");
         add_method_parameter(program, replacements, "@CERTIFICATE_PARSE_PEM_CHAIN_ID@", M::CertificateParsePemChain, 0);
         add_result(program, replacements, M::CertificateParsePemChain, "@CERTIFICATE_PARSE_CHAIN_RESULT@", "@CERTIFICATE_PARSE_CHAIN_OK_TAG@", "@CERTIFICATE_PARSE_CHAIN_ERROR_RESULT@");
+        add_result(program, replacements, M::CertificateToPem, "@CERTIFICATE_PEM_RESULT@", "@CERTIFICATE_PEM_OK_TAG@", "@CERTIFICATE_PEM_ERROR_RESULT@");
+        add_result(program, replacements, M::CertificateToPemChain, "@CERTIFICATE_PEM_CHAIN_RESULT@", "@CERTIFICATE_PEM_CHAIN_OK_TAG@", "@CERTIFICATE_PEM_CHAIN_ERROR_RESULT@");
         add_result(program, replacements, M::CertificateSubject, "@CERTIFICATE_SUBJECT_RESULT@", "@CERTIFICATE_SUBJECT_OK_TAG@", "@CERTIFICATE_SUBJECT_ERROR_RESULT@");
         add_result(program, replacements, M::CertificateIssuer, "@CERTIFICATE_ISSUER_RESULT@", "@CERTIFICATE_ISSUER_OK_TAG@", "@CERTIFICATE_ISSUER_ERROR_RESULT@");
         add_result(program, replacements, M::CertificateSerialText, "@CERTIFICATE_SERIAL_RESULT@", "@CERTIFICATE_SERIAL_OK_TAG@", "@CERTIFICATE_SERIAL_ERROR_RESULT@");

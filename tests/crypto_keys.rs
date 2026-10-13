@@ -109,6 +109,41 @@ boolean certificateTimesMatch(borrow Certificate certificate, long expectedBefor
 boolean certificateError(Result<Certificate, Text> result) {
     match (result) { Err(error) { return true; } Ok(value) { return false; } }
 }
+boolean certificatePemLeafMatches(borrow Certificate certificate, String expected, borrow Path caFile) {
+    match (certificate.toPem()) {
+        Err(error) { return false; }
+        Ok(pem) {
+            if (!pem.equalsString(expected)) { return false; }
+            match (Certificate.parsePem(pem)) {
+                Err(error) { return false; }
+                Ok(leaf) {
+                    return textResultEquals(leaf.subject(), "CN=wrong.example")
+                        && textResultEquals(leaf.serialText(), "399359574543232366588319981121540190122060777063")
+                        && certificateTimesMatch(leaf, 1791881336L, 2107241336L)
+                        && unitError(verifyCertificate(leaf, "good.example", caFile, 1791881337L));
+                }
+            }
+        }
+    }
+}
+boolean certificatePemChainMatches(borrow Certificate certificate, String expected, borrow Path caFile) {
+    match (certificate.toPemChain()) {
+        Err(error) { return false; }
+        Ok(pem) {
+            if (!pem.equalsString(expected)) { return false; }
+            match (Certificate.parsePemChain(pem)) {
+                Err(error) { return false; }
+                Ok(chain) {
+                    return textResultEquals(chain.subject(), "CN=wrong.example")
+                        && textResultEquals(chain.issuer(), "CN=Nacre Test Intermediate")
+                        && textResultEquals(chain.serialText(), "399359574543232366588319981121540190122060777063")
+                        && certificateTimesMatch(chain, 1791881336L, 2107241336L)
+                        && unitOk(verifyCertificate(chain, "good.example", caFile, 1791881337L));
+                }
+            }
+        }
+    }
+}
 boolean byteBufferResultsEqual(Result<ByteBuffer, Text> first, Result<ByteBuffer, Text> second) {
     match (first) {
         Err(error) { return false; }
@@ -263,6 +298,65 @@ void main() {{
     );
     assert_native(&source, b"true\ntrue\ntrue\ntrue\ntrue\n");
 }
+#[test]
+fn digest_only_program_uses_the_shared_exact_allowlist() {
+    let source = r#"
+boolean digestError(Result<CryptoDigest, Text> result) {
+    match (result) { Err(error) { return true; } Ok(value) { return false; } }
+}
+boolean digestLength(Result<ByteBuffer, Text> result, long expected) {
+    match (result) {
+        Err(error) { return false; }
+        Ok(bytes) { return bytes.length() == expected; }
+    }
+}
+void main() {
+    Text supported = new Text("SHA3-512");
+    match (CryptoDigest.create(supported)) {
+        Err(error) { println(false); }
+        Ok(digest) { println(digestLength(digest.finish(), 64L)); }
+    }
+    Text unsupported = new Text("SHA-1");
+    Text nulName = new Text("SHA256\0");
+    println(digestError(CryptoDigest.create(unsupported)));
+    println(digestError(CryptoDigest.create(nulName)));
+}
+"#;
+    assert_native(source, b"true\ntrue\ntrue\n");
+}
+
+#[test]
+fn key_only_program_uses_the_shared_exact_allowlist() {
+    const PUBLIC: &str = include_str!("fixtures/crypto_rsapss_nist.pub.pem");
+    let source = format!(
+        r#"
+boolean verificationIsFalse(Result<boolean, Text> result) {{
+    match (result) {{ Err(error) {{ return false; }} Ok(valid) {{ return !valid; }} }}
+}}
+boolean verificationError(Result<boolean, Text> result) {{
+    match (result) {{ Err(error) {{ return true; }} Ok(valid) {{ return false; }} }}
+}}
+void main() {{
+    Text pem = new Text({});
+    match (CryptoKey.parsePublicPem(pem)) {{
+        Err(error) {{ println(false); println(false); println(false); }}
+        Ok(key) {{
+            ByteBuffer empty = Encoding.utf8Encode(new Text(""));
+            Text supported = new Text("SHA256");
+            Text unsupported = new Text("SHA-1");
+            Text nulName = new Text("SHA256\0");
+            println(verificationIsFalse(key.verify(supported, empty, empty)));
+            println(verificationError(key.verify(unsupported, empty, empty)));
+            println(verificationError(key.verify(nulName, empty, empty)));
+        }}
+    }}
+}}
+"#,
+        nacre_literal(PUBLIC),
+    );
+    assert_native(&source, b"true\ntrue\ntrue\n");
+}
+
 
 #[test]
 fn rfc8032_ed25519_key_pem_signing_and_role_checks() {
@@ -631,4 +725,37 @@ void main() {{
         nacre_literal(REVERSED),
     );
     assert_native(&source, b"true\ntrue\ntrue\n");
+}
+#[test]
+fn certificate_pem_export_roundtrips_leaf_and_ordered_chain() {
+    const LEAF: &str = include_str!("fixtures/crypto_leaf.pem");
+    const INTERMEDIATE: &str = include_str!("fixtures/crypto_intermediate.pem");
+    const ROOT: &str = include_str!("fixtures/crypto_root.pem");
+    let input_chain = format!("{LEAF}\n \t{INTERMEDIATE}\n\n{ROOT}");
+    let normalized_chain = format!("{LEAF}{INTERMEDIATE}{ROOT}");
+    let ca_path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/crypto_root.pem");
+    let source = format!(
+        r#"{HELPERS}
+void main() {{
+    Text caText = new Text({});
+    match (Path.fromText(caText)) {{
+        Err(error) {{ println(false); println(false); }}
+        Ok(caFile) {{
+            match (parseCertificateChain({})) {{
+                Err(error) {{ println(false); println(false); }}
+                Ok(certificate) {{
+                    println(certificatePemLeafMatches(certificate, {}, caFile));
+                    println(certificatePemChainMatches(certificate, {}, caFile));
+                }}
+            }}
+        }}
+    }}
+}}
+"#,
+        nacre_literal(ca_path),
+        nacre_literal(&input_chain),
+        nacre_literal(LEAF),
+        nacre_literal(&normalized_chain),
+    );
+    assert_native(&source, b"true\ntrue\n");
 }

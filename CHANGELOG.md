@@ -128,6 +128,14 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   CSPRNG bytes, and constant-time equality with borrowed inputs and affine outputs.
   Authentication failures wipe unexposed plaintext; unsupported digests and invalid
   lengths return generic `Err` diagnostics.
+- Certificates export canonical leaf-only or complete ordered-chain PEM, and
+  round-trip regressions verify the preserved intermediate chain. TLS peer
+  certificates own independent copies of the available leaf and peer chain, so
+  their PEM remains exportable after the stream closes. Crypto, key signatures,
+  streaming digest, and MAC share the same exact six-name digest allowlist.
+- Secret-returning PEM, agreement, KDF, and decryption values remain ordinary
+  caller-owned objects without a clear/drop wiping guarantee; documentation
+  distinguishes those results from explicitly cleansed internal scratch.
 - Adds native zlib-wrapped DEFLATE, RFC 1952 gzip, bounded strict decompression,
   concatenated gzip-member handling, and unsigned CRC-32/Adler-32 checksums over
   borrowed binary ByteBuffers. ZIP archive and entry operations remain a gap;

@@ -697,6 +697,8 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
         (C::CryptoMac, "finish") => M::CryptoMacFinish,
         (C::Certificate, "parsePem") => M::CertificateParsePem,
         (C::Certificate, "parsePemChain") => M::CertificateParsePemChain,
+        (C::Certificate, "toPem") => M::CertificateToPem,
+        (C::Certificate, "toPemChain") => M::CertificateToPemChain,
         (C::Certificate, "subject") => M::CertificateSubject,
         (C::Certificate, "issuer") => M::CertificateIssuer,
         (C::Certificate, "serialText") => M::CertificateSerialText,

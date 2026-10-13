@@ -432,15 +432,23 @@ Digest, HMAC, PBKDF2, and HKDF use the selected supported digest exactly.
 AES-GCM accepts 16-, 24-, or 32-byte keys and a 12-byte nonce. Callers must never
 reuse a nonce with the same key. Encryption returns ciphertext followed by the
 16-byte authentication tag. Decryption returns `Err` for malformed keys/nonces,
-truncated tags, or authentication failure; unauthenticated plaintext is wiped and
-freed before returning, and no plaintext owner is exposed. Inputs that would
-narrow beyond OpenSSL's `int` lengths are rejected.
+truncated tags, or authentication failure; unexposed unauthenticated plaintext is
+wiped before it is freed. Successful plaintext is an ordinary caller-owned
+`ByteBuffer`, not a secure-erasure container. Inputs that would narrow beyond
+OpenSSL's `int` lengths are rejected.
 
 Equal-length `constantTimeEquals` comparisons use OpenSSL's constant-time
 comparison primitive. Different lengths return `false` immediately, so lengths
 are not hidden. `Crypto` supplies cryptographic primitives; `CryptoKey`,
 `CryptoDigest`, `CryptoMac`, and `Certificate` supply key and certificate operations.
 Native programs require the OpenSSL 3 development and runtime libraries.
+
+`privatePem`, `agree`, PBKDF2/HKDF, and successful AES-GCM decryption return
+ordinary caller-owned `Text` or `ByteBuffer` values. Clearing or dropping these
+owners has no secure-wiping guarantee. The implementation still cleanses
+internal temporary material where its native paths explicitly require it, such
+as the private-PEM BIO copy and unauthenticated plaintext that is not returned;
+that cleanup does not wipe a successful returned value.
 
 ## Compression and checksums
 
@@ -564,6 +572,8 @@ Result<ByteBuffer, Text> finish()
 ```java
 static Result<Certificate, Text> parsePem(borrow Text pem)
 static Result<Certificate, Text> parsePemChain(borrow Text pem)
+readonly Result<Text, Text> toPem()
+readonly Result<Text, Text> toPemChain()
 readonly Result<Text, Text> subject()
 readonly Result<Text, Text> issuer()
 readonly Result<Text, Text> serialText()
@@ -590,15 +600,19 @@ terminal after `finish`; later updates and finishes return `Err`. No secret is
 included in backend error text.
 
 Certificates reject malformed PEM and trailing non-whitespace. `parsePem` accepts
-one certificate; `parsePemChain` owns the first certificate and its PEM
-intermediates. Subject and issuer use RFC 2253 text, and the serial is decimal.
-Validity accessors convert ASN.1 times to checked signed Unix seconds, including
-dates before the epoch; malformed dates or intervals with `notBefore` after
-`notAfter` are rejected during parsing.
-Hostname checks use subject alternative names without falling back to the common
-name. `verify` checks the supplied CA file trust store, chain, server purpose,
-explicit Unix time, and SAN hostname; it does not fetch certificates or use the
-network.
+one certificate; `parsePemChain` owns the first certificate and every subsequent
+certificate in input order. Subject and issuer use RFC 2253 text, and the serial
+is decimal. Validity accessors convert ASN.1 times to checked signed Unix seconds,
+including dates before the epoch; malformed dates or intervals with `notBefore`
+after `notAfter` are rejected during parsing.
+`toPem` exports only the leaf; `toPemChain` exports the leaf followed by every
+stored chain member in preserved order. Both serialize the owned X.509 certificates
+as canonical PEM rather than retaining input whitespace, preserving the certificate
+content, public keys, signatures, subjects, serials, and validity values for
+round-trip parsing and verification. Hostname checks use subject alternative names
+without falling back to the common name. `verify` checks the supplied CA file trust
+store, stored chain, server purpose, explicit Unix time, and SAN hostname; it does
+not fetch certificates or use the network.
 
 ## `Database`
 
@@ -2442,7 +2456,11 @@ the destination. `writeSome` can report partial progress; `writeAll` uses one
 end-to-end deadline, and an error may follow bytes already sent. `TlsStream.close`
 uses a separate 250 ms deadline for TLS shutdown before releasing the transport.
 `cipher`, `protocol`, and `peerCertificate` return owned results; the peer certificate
-is `None` when the remote side supplied no certificate.
+is `None` when the remote side supplied no certificate. A returned `Certificate`
+owns independent copies of the leaf and every available peer-chain certificate in
+their supplied order, omitting a duplicate leaf if OpenSSL includes it in that
+chain. It retains no borrowed SSL pointers and its `toPemChain()` output remains
+available after the originating stream and configuration are closed or dropped.
 
 TLS operations clear their thread-local OpenSSL error queue before each SSL
 attempt, so a failed unrelated configuration operation cannot poison a later

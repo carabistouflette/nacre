@@ -50,6 +50,8 @@ static ncr_obj_@RESULT@ ncr_crypto_success(ncr_obj_@BYTE_BUFFER_CLASS@ *buffer) 
     };
 }
 
+
+/* CRYPTO_GROUP DIGEST_SELECTION */
 struct ncr_crypto_digest_spec {
     const char *name;
     size_t name_length;
@@ -83,6 +85,7 @@ static int ncr_crypto_digest_spec_for(
     }
     return 0;
 }
+/* CRYPTO_GROUP_END DIGEST_SELECTION */
 
 static bool ncr_crypto_output_length(int64_t requested, size_t *length) {
     if (requested < 0 || (uint64_t)requested > (uint64_t)NCR_CRYPTO_MAX_OUTPUT

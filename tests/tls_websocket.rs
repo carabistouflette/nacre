@@ -8,6 +8,7 @@ use std::time::{Duration, Instant};
 
 const CERT: &str = include_str!("fixtures/tls_loopback_cert.pem");
 const KEY: &str = include_str!("fixtures/tls_loopback_key.pem");
+const INTERMEDIATE: &str = include_str!("fixtures/crypto_intermediate.pem");
 
 fn compile(source: &str) -> native::NativeProgram {
     let c = compile_to_c(source)
@@ -128,7 +129,7 @@ fn tls_loopback_verifies_identity_and_transfers_bytes_with_owned_config() {
     let server_source = format!(r#"
 void main() {{
     Text certificate_text = new Text({});
-    match (Certificate.parsePem(certificate_text)) {{
+    match (Certificate.parsePemChain(certificate_text)) {{
         Err(error) {{ println("certificate-error"); }}
         Ok(certificate) {{
             Text key_text = new Text({});
@@ -205,10 +206,39 @@ void main() {{
         }}
     }}
 }}
-"#, nacre_literal(CERT), nacre_literal(KEY));
+    "#, nacre_literal(&format!("{CERT}{INTERMEDIATE}")), nacre_literal(KEY));
 
     let ca_path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/tls_loopback_cert.pem");
     let client_source = format!(r#"
+boolean tlsTextEquals(Result<Text, Text> result, String expected) {{
+    match (result) {{ Err(error) {{ return false; }} Ok(value) {{ return value.equalsString(expected); }} }}
+}}
+boolean tlsUnitOk(Result<Unit, Text> result) {{
+    match (result) {{ Err(error) {{ return false; }} Ok(value) {{ return true; }} }}
+}}
+boolean peerChainSurvivesStreamClose(borrow Certificate certificate, String expected, borrow Path caFile) {{
+    match (certificate.toPemChain()) {{
+        Err(error) {{ return false; }}
+        Ok(pem) {{
+            if (!pem.equalsString(expected)) {{ return false; }}
+            match (Certificate.parsePemChain(pem)) {{
+                Err(error) {{ return false; }}
+                Ok(restored) {{
+                    Text host = new Text("localhost");
+                    match (Time.unixMillis()) {{
+                        Err(error) {{ return false; }}
+                        Ok(nowMillis) {{
+                            return tlsTextEquals(certificate.serialText(), "471755676793627701306629492919834469958365017893")
+                                && tlsTextEquals(restored.subject(), "CN=localhost")
+                                && tlsTextEquals(restored.serialText(), "471755676793627701306629492919834469958365017893")
+                                && tlsUnitOk(restored.verify(host, caFile, nowMillis / 1000L));
+                        }}
+                    }}
+                }}
+            }}
+        }}
+    }}
+}}
 void main() {{
     match (Args.get(0)) {{
         Err(error) {{ println("argument-error"); }}
@@ -234,20 +264,7 @@ void main() {{
                                             match (TlsStream.connect(addresses.getRef(0), config_handle, host, 5000L)) {{
                                                 Err(error) {{ println("connect-error"); }}
                                                 Ok(stream) {{
-                                                    match (stream.peerCertificate()) {{
-                                                        Err(error) {{ println(false); }}
-                                                        Ok(peer) {{
-                                                            match (peer) {{
-                                                                None {{ println(false); }}
-                                                                Some(certificate) {{
-                                                                    match (certificate.serialText()) {{
-                                                                        Err(error) {{ println(false); }}
-                                                                        Ok(serial) {{ println(serial.equalsString("471755676793627701306629492919834469958365017893")); }}
-                                                                    }}
-                                                                }}
-                                                            }}
-                                                        }}
-                                                    }}
+                                                    Result<Option<Certificate>, Text> peerCertificate = stream.peerCertificate();
                                                     Text request_text = new Text("hello");
                                                     ByteBuffer request = Encoding.utf8Encode(request_text);
                                                     match (stream.writeAll(request, 5000L)) {{
@@ -284,6 +301,17 @@ void main() {{
                                                         Err(error) {{ println("client-close-error"); }}
                                                         Ok(unit) {{ println("client-close-ok"); }}
                                                     }}
+                                                    match (peerCertificate) {{
+                                                        Err(error) {{ println(false); }}
+                                                        Ok(peer) {{
+                                                            match (peer) {{
+                                                                None {{ println(false); }}
+                                                                Some(certificate) {{
+                                                                    println(peerChainSurvivesStreamClose(certificate, {}, ca_file));
+                                                                }}
+                                                            }}
+                                                        }}
+                                                    }}
                                                 }}
                                             }}
                                         }}
@@ -299,7 +327,7 @@ void main() {{
         }}
     }}
 }}
-"#, nacre_literal(ca_path));
+    "#, nacre_literal(ca_path), nacre_literal(&format!("{CERT}{INTERMEDIATE}")));
 
     let server = compile(&server_source);
     let client = compile(&client_source);
@@ -308,7 +336,7 @@ void main() {{
     assert!(endpoint.starts_with("127.0.0.1:"), "{endpoint}");
     let port = endpoint.rsplit(':').next().unwrap();
     let client_output = run(&client, &[port]);
-    assert!(client_output.contains("true\nclient-write-ok\ntrue\ntrue\nclient-close-ok\n"), "{client_output}");
+    assert!(client_output.contains("client-write-ok\ntrue\ntrue\nclient-close-ok\ntrue\n"), "{client_output}");
     let (status, stdout, stderr) = server_process.finish_for(Duration::from_secs(15));
     assert!(status.success(), "TLS server failed:\n{stderr}");
     assert_live_zero(&stderr);

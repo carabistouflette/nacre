@@ -275,6 +275,7 @@ pub fn implementations(program: &t::Program) -> String {
         out.push_str(&date_time::common_helpers(program));
         out.push('\n');
     }
+    out.push_str(&crypto::digest_selection_helper(program));
     // Native consumers use ByteBuffer's authoritative reserve helpers.
     // Emit that storage core before wrappers, independently of class numbering.
     for class in &program.classes {
