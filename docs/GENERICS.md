@@ -159,10 +159,13 @@ C symbols use numeric identifiers rather than source names containing `<` or
 `>`.
 
 Expansions such as `Chain<T>` containing `Chain<Chain<T>>` can produce an
-unbounded sequence of specializations. Limits are 64 specializations, 128
-concrete types, syntactic type depth 32, and specialized-name length 4096.
-Reaching a limit produces `E4199`. These limits are not a general security
-guarantee.
+unbounded sequence of specializations. Limits are 64 user-template specializations,
+128 concrete user types, syntactic type depth 32, and specialized-name length 4096.
+Trusted built-in types and their compiler-owned prerequisites do not consume the
+user specialization/type budgets; adding standard-library helpers cannot reduce
+an application's available generic budget. Depth and name-length checks still apply
+to all type requests. Reaching a limit produces `E4199`. These limits are not a
+general security guarantee.
 
 ## Diagnostics
 

@@ -8,7 +8,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use crate::ast::{self as a, Type};
 use crate::diagnostic::{Diagnostic, Span};
 
-const MAX_SPECIALIZATIONS: usize = 64;
+const MAX_USER_SPECIALIZATIONS: usize = 64;
 const MAX_TYPE_NAME: usize = 4096;
 type Environment = HashMap<String, Type>;
 fn supports_default_ordering(ty: &Type) -> bool {
@@ -78,6 +78,7 @@ struct Request { template: String, name: String, args: Vec<Type>, span: Span }
 struct Expander {
     definitions: HashMap<String, a::Class>,
     requested: HashSet<String>,
+    user_specializations: usize,
     pending: VecDeque<Request>,
     names: Vec<String>,
 }
@@ -88,7 +89,7 @@ pub fn expand(mut program: a::Program) -> Result<(a::Program, Vec<String>), Diag
         return Err(Diagnostic::new(Span::default(), "limit: 128 user classes or interfaces per program, including templates"));
     }
     let mut expander = Expander { definitions: HashMap::new(), requested: HashSet::new(),
-        pending: VecDeque::new(), names: Vec::new() };
+        user_specializations: 0, pending: VecDeque::new(), names: Vec::new() };
     for class in &program.classes {
         if matches!(class.name.as_str(), "System" | "println") {
             return Err(Diagnostic::new(class.span, "class name reserved for output support"));
@@ -174,9 +175,6 @@ impl Expander {
                 if let Some(replacement) = env.get(name) { return Ok(replacement.clone()); }
                 if self.definitions.get(name).is_some_and(|c|
                     c.native.is_some() && c.type_params.is_empty()) && !self.requested.contains(name) {
-                    if self.requested.len() >= MAX_SPECIALIZATIONS {
-                        return Err(Diagnostic::new(span, "[E4199] limit of 64 requested specializations and native types"));
-                    }
                     self.requested.insert(name.clone());
                     self.names.push(name.clone());
                     self.pending.push_back(Request { template: name.clone(), name: name.clone(), args: Vec::new(), span });
@@ -211,8 +209,11 @@ impl Expander {
                     return Err(Diagnostic::new(span, "[E4199] specialization name is too long; recursive expansion is likely"));
                 }
                 if !self.requested.contains(&key) {
-                    if self.requested.len() >= MAX_SPECIALIZATIONS {
-                        return Err(Diagnostic::new(span, "[E4199] limit of 64 specializations; recursive generic expansion is possible"));
+                    if !self.definitions[name].is_builtin {
+                        if self.user_specializations >= MAX_USER_SPECIALIZATIONS {
+                            return Err(Diagnostic::new(span, "[E4199] limit of 64 user-template specializations; recursive generic expansion is possible"));
+                        }
+                        self.user_specializations += 1;
                     }
                     self.requested.insert(key.clone());
                     self.names.push(key.clone());

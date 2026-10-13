@@ -22,6 +22,10 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   Sendable iterators cannot retain discarded thread-affine guards. Direct ordered
   traversal preserves readonly keys and mutable value loans; iterator break
   releases the loop loan without consuming the remaining input.
+- Generic expansion counts user-template specializations separately from trusted
+  built-in dependencies, matching the existing concrete-user-type budget. Native
+  drain and iterator prerequisites no longer exhaust the budget in ordinary array
+  programs; the 64 user-specialization, depth and name-length guards remain.
 
 - Adds reusable affine `Codec<T>` and `Serialization<T>` APIs with a canonical
   big-endian `NCRS`/version-1 frame, primitive, length-prefixed UTF-8 and byte
