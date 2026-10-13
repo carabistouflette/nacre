@@ -1008,9 +1008,11 @@ returns the current cursor. `seek` uses origin `0` for start, `1` for current
 position, and `2` for end; invalid origins, negative resulting positions, and
 offset overflow are errors. `truncate` changes file length but does not move the
 cursor. `readAt` appends bytes to the destination buffer; `writeAt` uses the
-specified source-buffer range. Both return one partial count and leave the cursor unchanged.
-Offset or buffer-range overflow is an error. `writeAt` is rejected for append-mode
-files because Linux may force `pwrite` to append on those descriptors.
+specified source-buffer range. Both return one partial count and leave the cursor
+unchanged; `readAt` is bounded by the platform's representable ByteBuffer length
+and the remaining long offset range. Offset or buffer-range overflow is an error.
+`writeAt` is rejected for append-mode files because Linux may force `pwrite` to
+append on those descriptors.
 
 `Directory.nextName` skips `.` and `..`, returns one owned UTF-8 entry component
 per `Some`, `None` at end, and `Err` for I/O or invalid UTF-8. It does not return a
@@ -1066,7 +1068,8 @@ error. `readLink` returns the symlink target as a UTF-8
 `Path`; `symlink` stores the target path as supplied, while `chmod` changes mode
 bits. `list` returns unsorted, nonrecursive UTF-8 entry names (excluding `.` and
 `..`), with limits of 65,536 names and 16 MiB total name bytes. `canonical`
-resolves an existing path to its canonical absolute path.
+resolves an existing path to its canonical absolute path and returns `Err` with
+`EILSEQ` if the resolved path bytes are not valid UTF-8.
 
 Filesystem paths are passed through the operating-system boundary and reject
 embedded NUL. Creation `mode` arguments are POSIX permission bits, subject to
@@ -1095,10 +1098,11 @@ waits against a monotonic deadline, returns `Ok(None)` on timeout, and treats
 `timeoutMillis == 0` as one nonblocking poll. Negative timeouts are errors.
 Events are separate records and need not represent one high-level filesystem
 operation. Move-from/move-to events can be correlated by their nonzero cookie.
-`name()` is the UTF-8 entry name and is empty for self, ignored, and overflow
-events. Queue overflow is returned as `WatchKind.Overflow` with `overflow() ==
-true`, not silently discarded. A `DeletedSelf` or `Ignored` event invalidates the
-watch; queued events remain readable, then later `next` calls return `Err`.
+`name()` is the UTF-8 entry name. It is empty for attribute changes to the
+watched directory itself and for other self, ignored, and overflow events. Queue
+overflow is returned as `WatchKind.Overflow` with `overflow() == true`, not
+silently discarded. A `DeletedSelf` or `Ignored` event invalidates the watch;
+queued events remain readable, then later `next` calls return `Err`.
 `close()` is idempotent, including after invalidation.
 
 ## Byte streams and binary encoding

@@ -92,13 +92,17 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   Directory, `lstat` metadata, and nonrecursive Files operations. File supports
   cursor positioning, truncation, and cursor-preserving `pread`/`pwrite`; append
   descriptors reject positioned writes. FileInfo reports POSIX mode and Unix-
-  millisecond timestamps. Files copy streams regular files with bounded memory,
-  create directories, manage links and modes, list names, and resolve canonical
-  paths. Linux inotify Watcher emits stable event kinds and explicit queue
-  overflow, uses monotonic deadlines, invalidates on self-deletion, and closes
-  idempotently. Files writes return `Result<Unit,Text>`; standalone postfix `?`
-  preserves ordinary call-statement success cleanup and propagates owned errors.
-  FIFO write failures preserve the caller's signal mask and pending SIGPIPE state.
+  millisecond timestamps. Files copy regular files with bounded memory, create
+  directories, manage links and modes, list names, and resolve canonical paths;
+  invalid UTF-8 canonical results return recoverable `EILSEQ`. Positioned reads
+  respect the platform's `min(SIZE_MAX, INT64_MAX)` ByteBuffer bound. Linux inotify
+  Watcher emits stable event kinds and explicit queue overflow, accepts nameless
+  watched-directory attribute events without invalidating the watch, uses
+  monotonic deadlines, invalidates on self-deletion, and closes idempotently.
+  WatchEvent accessors are emitted independently of Watcher. Files writes return
+  `Result<Unit,Text>`; standalone postfix `?` preserves ordinary call-statement
+  success cleanup and propagates owned errors. FIFO write failures preserve the
+  caller's signal mask and pending SIGPIPE state.
 - BinaryReader and BinaryWriter are unique-owned, choose byte order explicitly,
   preserve reader cursors on incomplete/invalid UTF-8 input, encode binary32 and
   binary64 values, and transfer the writer's exact buffer on finish. ByteSource/

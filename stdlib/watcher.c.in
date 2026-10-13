@@ -135,8 +135,10 @@ static ncr_obj_@WATCHER_NEXT_RESULT@ @WATCHER_NEXT@(ncr_obj_@WATCHER_ID@ *@WATCH
     else if (actions == IN_DELETE_SELF) { kind_tag = @WATCH_KIND_DELETED_SELF_TAG@; }
     else if (actions == IN_IGNORED) { kind_tag = @WATCH_KIND_IGNORED_TAG@; }
     else { kind_tag = @WATCH_KIND_OVERFLOW_TAG@; }
-    bool name_expected = actions != IN_Q_OVERFLOW && actions != IN_MOVE_SELF && actions != IN_DELETE_SELF && actions != IN_IGNORED;
-    if ((name_expected && name_length == 0) || (!name_expected && name_length != 0)) {
+    bool name_may_be_empty = actions == IN_ATTRIB || actions == IN_Q_OVERFLOW || actions == IN_MOVE_SELF
+        || actions == IN_DELETE_SELF || actions == IN_IGNORED;
+    bool name_must_be_empty = name_may_be_empty && actions != IN_ATTRIB;
+    if ((!name_may_be_empty && name_length == 0) || (name_must_be_empty && name_length != 0)) {
         @WATCHER_NEXT_SELF@->invalidated = true;
         NCR_FS_RETURN_ERROR(@WATCHER_NEXT_RESULT@, "Watcher.next malformed event name", EPROTO, ncr_line, ncr_column);
     }
@@ -167,23 +169,3 @@ static ncr_obj_@WATCHER_CLOSE_RESULT@ @WATCHER_CLOSE@(ncr_obj_@WATCHER_ID@ *@WAT
     return (ncr_obj_@WATCHER_CLOSE_RESULT@){ .tag = @WATCHER_CLOSE_OK_TAG@, .data.v@WATCHER_CLOSE_OK_TAG@.f0 = UINT8_C(0) };
 }
 
-static ncr_obj_@TEXT_ID@ *@WATCH_EVENT_NAME@(ncr_obj_@WATCH_EVENT_ID@ *ncr_self, size_t ncr_line, size_t ncr_column) {
-    (void)ncr_line; (void)ncr_column;
-    return ncr_self->name;
-}
-static ncr_obj_@WATCH_KIND_ID@ @WATCH_EVENT_KIND@(ncr_obj_@WATCH_EVENT_ID@ *ncr_self, size_t ncr_line, size_t ncr_column) {
-    (void)ncr_line; (void)ncr_column;
-    return ncr_self->kind;
-}
-static int64_t @WATCH_EVENT_COOKIE@(ncr_obj_@WATCH_EVENT_ID@ *ncr_self, size_t ncr_line, size_t ncr_column) {
-    (void)ncr_line; (void)ncr_column;
-    return (int64_t)ncr_self->cookie;
-}
-static bool @WATCH_EVENT_IS_DIRECTORY@(ncr_obj_@WATCH_EVENT_ID@ *ncr_self, size_t ncr_line, size_t ncr_column) {
-    (void)ncr_line; (void)ncr_column;
-    return ncr_self->is_directory;
-}
-static bool @WATCH_EVENT_OVERFLOW@(ncr_obj_@WATCH_EVENT_ID@ *ncr_self, size_t ncr_line, size_t ncr_column) {
-    (void)ncr_line; (void)ncr_column;
-    return ncr_self->overflow;
-}

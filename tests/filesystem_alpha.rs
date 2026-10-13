@@ -1111,6 +1111,42 @@ void main() {
     );
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn canonical_rejects_invalid_utf8_in_resolved_paths() {
+    use std::os::unix::ffi::OsStringExt;
+    use std::os::unix::fs::symlink;
+
+    let scratch = Scratch::new();
+    let invalid_target = scratch.0.join(OsString::from_vec(vec![b't', 0xff]));
+    let link = scratch.0.join("valid-link");
+    fs::write(&invalid_target, b"payload").unwrap();
+    symlink(&invalid_target, &link).unwrap();
+    let source = r#"
+void main() {
+    match (Args.get(0)) {
+        Err(error) { println("ARG_ERROR"); }
+        Ok(pathText) {
+            match (Path.fromText(pathText)) {
+                Err(error) { println("PATH_ERROR"); }
+                Ok(path) {
+                    match (Files.canonical(path)) {
+                        Err(error) { Console.printText(error); println(""); }
+                        Ok(canonical) { println("CANONICAL_INVALID_UTF8_ACCEPTED"); }
+                    }
+                }
+            }
+        }
+    }
+}
+"#;
+    let output = run_source(source, &[link.as_path()]);
+    assert_eq!(
+        output.stdout,
+        b"Files.canonical target is not valid UTF-8 failed (errno=84)\n"
+    );
+}
+
 fn spawn_watcher(
     program: &native::NativeProgram,
     path: &Path,
@@ -1425,3 +1461,82 @@ void main() {
     assert!(stdout.contains("CLOSED_NEXT_REJECTED\n"));
     assert!(stdout.contains("WATCH_DONE\n"));
 }
+#[cfg(target_os = "linux")]
+#[test]
+fn watcher_accepts_nameless_attribute_event_for_watched_directory() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let scratch = Scratch::new();
+    let watched_directory = scratch.0.join("watched");
+    fs::create_dir(&watched_directory).unwrap();
+    let source = r#"
+Result<Unit,Text> watch(borrow Path path) {
+    Watcher watcher = Watcher.open(path)?;
+    Console.print("WATCH_READY\n");
+    match (Console.readLine()) {
+        Err(error) { return new Result<Unit,Text>.Err(error); }
+        Ok(option) { drop(option); }
+    }
+    match (watcher.next(2000L)?) {
+        None { println("ATTRIBUTE_EVENT_MISSING"); }
+        Some(event) {
+            borrow Text eventName = event.name();
+            if (eventName.byteLength() == 0) {
+                match (event.kind()) {
+                    Created { println("UNEXPECTED_KIND"); }
+                    Modified { println("UNEXPECTED_KIND"); }
+                    AttributesChanged { println("SELF_ATTRIBUTES_CHANGED"); }
+                    ClosedForWrite { println("UNEXPECTED_KIND"); }
+                    Deleted { println("UNEXPECTED_KIND"); }
+                    MovedFrom { println("UNEXPECTED_KIND"); }
+                    MovedTo { println("UNEXPECTED_KIND"); }
+                    MovedSelf { println("UNEXPECTED_KIND"); }
+                    DeletedSelf { println("UNEXPECTED_KIND"); }
+                    Ignored { println("UNEXPECTED_KIND"); }
+                    Overflow { println("UNEXPECTED_KIND"); }
+                }
+            } else { println("ATTRIBUTE_EVENT_HAD_NAME"); }
+        }
+    }
+    match (watcher.next(0L)?) {
+        None { println("WATCH_REMAINS_VALID"); }
+        Some(event) { println("UNEXPECTED_SECOND_EVENT"); }
+    }
+    watcher.close()?;
+    return new Result<Unit,Text>.Ok(());
+}
+void main() {
+    match (Args.get(0)) {
+        Err(error) { println("ARG_ERROR"); }
+        Ok(pathText) {
+            match (Path.fromText(pathText)) {
+                Err(error) { println("PATH_ERROR"); }
+                Ok(path) {
+                    match (watch(path)) {
+                        Err(error) { Console.printText(error); println(""); }
+                        Ok(unit) { println("WATCH_DONE"); }
+                    }
+                }
+            }
+        }
+    }
+}
+"#;
+    let program = compile(source);
+    let (mut child, output) = spawn_watcher(&program, &watched_directory);
+    let current_mode = fs::metadata(&watched_directory).unwrap().permissions().mode() & 0o777;
+    fs::set_permissions(
+        &watched_directory,
+        fs::Permissions::from_mode(current_mode ^ 0o001),
+    )
+    .unwrap();
+    send_line(&mut child);
+    let result = finish_child(child, output);
+    assert!(result.status.success(), "{}", String::from_utf8_lossy(&result.stderr));
+    assert_live_zero(&result);
+    let stdout = String::from_utf8(result.stdout).unwrap();
+    assert!(stdout.contains("SELF_ATTRIBUTES_CHANGED\n"), "{stdout}");
+    assert!(stdout.contains("WATCH_REMAINS_VALID\n"), "{stdout}");
+    assert!(stdout.contains("WATCH_DONE\n"), "{stdout}");
+}
+

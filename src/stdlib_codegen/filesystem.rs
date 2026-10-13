@@ -40,6 +40,11 @@ fn class_id(program: &t::Program, is: impl Fn(C) -> bool) -> Option<usize> {
 fn native_method(program: &t::Program, method: M) -> &t::Function {
     native_function(program, |candidate| candidate == method)
 }
+fn watch_kind_id(program: &t::Program) -> usize {
+    program.classes.iter().find(|class| class.name == "WatchKind")
+        .expect("Watcher and WatchEvent require WatchKind").id
+}
+
 
 fn parameter(function: &t::Function, index: usize) -> String {
     format!("ncr_v_{}", function.params[index].0)
@@ -241,8 +246,7 @@ fn watcher_implementation(
         unreachable!("Watcher.next Some variant contains WatchEvent");
     };
     assert_eq!(*event, watch_event, "Watcher.next returns WatchEvent");
-    let kind = program.classes.iter().find(|class| class.name == "WatchKind")
-        .expect("Watcher requires WatchKind").id;
+    let kind = watch_kind_id(program);
     replacements.extend([
         ("@WATCHER_OPTION_ID@", option.to_string()),
         ("@WATCHER_OPTION_NONE_TAG@", variant_id(program, option, "None").to_string()),
@@ -262,6 +266,16 @@ fn watcher_implementation(
     ]);
     expand_template(program, include_str!("../../stdlib/watcher.c.in"), &replacements)
 }
+fn watch_event_implementation(program: &t::Program, text: usize, watch_event: usize) -> String {
+    let kind = watch_kind_id(program);
+    let replacements = [
+        ("@TEXT_ID@", text.to_string()),
+        ("@WATCH_EVENT_ID@", watch_event.to_string()),
+        ("@WATCH_KIND_ID@", kind.to_string()),
+    ];
+    expand_template(program, include_str!("../../stdlib/watch_event.c.in"), &replacements)
+}
+
 
 
 fn files_implementation(
@@ -437,6 +451,13 @@ pub(super) fn implementations(program: &t::Program) -> Option<String> {
             path.expect("Watcher requires Path"),
             watcher,
             watch_event.expect("Watcher requires WatchEvent"),
+        ));
+    }
+    if let Some(watch_event) = watch_event {
+        output.push_str(&watch_event_implementation(
+            program,
+            text_class(program).expect("WatchEvent requires Text"),
+            watch_event,
         ));
     }
     Some(output)

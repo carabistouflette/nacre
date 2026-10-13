@@ -201,6 +201,10 @@ static ncr_obj_@FILES_CANONICAL_RESULT@ @FILES_CANONICAL@(ncr_obj_@PATH_ID@ *@FI
     ncr_deallocate(path);
     if (resolved == NULL) { NCR_FS_RETURN_ERROR(@FILES_CANONICAL_RESULT@, "Files.canonical", error, ncr_line, ncr_column); }
     size_t length = strlen(resolved);
+    if (!ncr_utf8_valid((const unsigned char *)resolved, length)) {
+        free(resolved);
+        NCR_FS_RETURN_ERROR(@FILES_CANONICAL_RESULT@, "Files.canonical target is not valid UTF-8", EILSEQ, ncr_line, ncr_column);
+    }
     ncr_obj_@TEXT_ID@ *text = ncr_text_from_bytes_@TEXT_ID@((const unsigned char *)resolved, length, ncr_line, ncr_column);
     free(resolved);
     return @PATH_FROM_TEXT@(text, ncr_line, ncr_column);

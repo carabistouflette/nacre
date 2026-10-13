@@ -1,0 +1,20 @@
+static ncr_obj_@TEXT_ID@ *@WATCH_EVENT_NAME@(ncr_obj_@WATCH_EVENT_ID@ *ncr_self, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column;
+    return ncr_self->name;
+}
+static ncr_obj_@WATCH_KIND_ID@ @WATCH_EVENT_KIND@(ncr_obj_@WATCH_EVENT_ID@ *ncr_self, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column;
+    return ncr_self->kind;
+}
+static int64_t @WATCH_EVENT_COOKIE@(ncr_obj_@WATCH_EVENT_ID@ *ncr_self, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column;
+    return (int64_t)ncr_self->cookie;
+}
+static bool @WATCH_EVENT_IS_DIRECTORY@(ncr_obj_@WATCH_EVENT_ID@ *ncr_self, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column;
+    return ncr_self->is_directory;
+}
+static bool @WATCH_EVENT_OVERFLOW@(ncr_obj_@WATCH_EVENT_ID@ *ncr_self, size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column;
+    return ncr_self->overflow;
+}
