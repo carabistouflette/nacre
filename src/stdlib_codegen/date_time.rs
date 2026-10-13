@@ -1,97 +1,11 @@
-use crate::ir::{self as t, CallTarget, Expr, ExprKind, NativeClass as C, NativeMethod as M, Stmt, Type};
+use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
 use super::support::{
     native_function, replace_method_ids, replace_placeholders, result_id, text_class, variant_id,
 };
 
-fn is_date_time_method(method: M) -> bool {
-    matches!(
-        method,
-        M::DateTimeFromParts
-            | M::DateTimeParts
-            | M::DateTimeFormat
-            | M::DateTimeParse
-            | M::DateTimeIsLeapYear
-            | M::DateTimeDaysInMonth
-            | M::DateTimeAddCalendar
-            | M::DateTimeDurationMillis
-            | M::DateTimeAvailableZones
-    )
-}
-
-fn expression_uses_date_time(program: &t::Program, expression: &Expr) -> bool {
-    let nested = match &expression.kind {
-        ExprKind::Drop(value)
-        | ExprKind::Unary { expr: value, .. }
-        | ExprKind::Try { value, .. }
-        | ExprKind::Cast { value } => expression_uses_date_time(program, value),
-        ExprKind::Upcast { value, .. } => expression_uses_date_time(program, value),
-        ExprKind::MapSlot { index, .. } => expression_uses_date_time(program, index),
-        ExprKind::New { args, .. } | ExprKind::Variant { args, .. } => {
-            args.iter().any(|argument| expression_uses_date_time(program, argument))
-        }
-        ExprKind::Call { target, args, .. } => {
-            let is_date_time_call = match target {
-                CallTarget::Function(id) => program.functions[*id]
-                    .native
-                    .is_some_and(is_date_time_method),
-                CallTarget::Println => false,
-            };
-            is_date_time_call
-                || args.iter().any(|argument| expression_uses_date_time(program, argument))
-        }
-        ExprKind::Binary { left, right, .. } => {
-            expression_uses_date_time(program, left)
-                || expression_uses_date_time(program, right)
-        }
-        ExprKind::Char(_)
-        | ExprKind::Int(_)
-        | ExprKind::Long(_)
-        | ExprKind::Double(_)
-        | ExprKind::Unit
-        | ExprKind::Boolean(_)
-        | ExprKind::String(_)
-        | ExprKind::Read(_)
-        | ExprKind::Move(_)
-        | ExprKind::Borrow { .. } => false,
-    };
-    nested
-}
-
-fn block_uses_date_time(program: &t::Program, block: &[Stmt]) -> bool {
-    block.iter().any(|statement| match statement {
-        Stmt::Let { value, .. } => value
-            .as_ref()
-            .is_some_and(|value| expression_uses_date_time(program, value)),
-        Stmt::Assign { value, .. } | Stmt::Expr(value) => {
-            expression_uses_date_time(program, value)
-        }
-        Stmt::If { condition, then_block, else_block } => {
-            expression_uses_date_time(program, condition)
-                || block_uses_date_time(program, then_block)
-                || else_block
-                    .as_ref()
-                    .is_some_and(|block| block_uses_date_time(program, block))
-        }
-        Stmt::While { condition, body } => {
-            expression_uses_date_time(program, condition)
-                || block_uses_date_time(program, body)
-        }
-        Stmt::Match { value, arms } => {
-            expression_uses_date_time(program, value)
-                || arms.iter().any(|arm| block_uses_date_time(program, &arm.body))
-        }
-        Stmt::Return(value) => value
-            .as_ref()
-            .is_some_and(|value| expression_uses_date_time(program, value)),
-        Stmt::Block(block) => block_uses_date_time(program, block),
-        Stmt::Break | Stmt::Continue => false,
-    })
-}
 
 pub(super) fn is_used(program: &t::Program) -> bool {
-    program.functions.iter().any(|function| {
-        function.native.is_none() && block_uses_date_time(program, &function.body)
-    })
+    program.classes.iter().any(|class| matches!(class.native, Some(C::DateTime)))
 }
 
 pub(super) fn implementation(program: &t::Program) -> String {

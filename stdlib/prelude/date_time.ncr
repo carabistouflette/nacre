@@ -8,7 +8,18 @@ class DateFields {
     private int millisecondValue;
     private int offsetSecondsValue;
     private boolean isDstValue;
-    private DateFields() {}
+    private DateFields(int year, int month, int day, int hour, int minute,
+                       int second, int millisecond, int offsetSeconds, boolean isDst) {
+        this.yearValue = year;
+        this.monthValue = month;
+        this.dayValue = day;
+        this.hourValue = hour;
+        this.minuteValue = minute;
+        this.secondValue = second;
+        this.millisecondValue = millisecond;
+        this.offsetSecondsValue = offsetSeconds;
+        this.isDstValue = isDst;
+    }
 
     public readonly int year() { return this.yearValue; }
     public readonly int month() { return this.monthValue; }

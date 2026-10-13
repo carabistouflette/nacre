@@ -699,14 +699,16 @@ millisecond remains exactly representable. `durationMillis` is instead a fixed
 signed `end - start` calculation, independent of calendar days, and returns
 `Err` on signed overflow. `DateFields.offsetSeconds` is the total zone offset
 from UTC; `isDst` reports ICU's daylight-time status. `DateFields` is an owned
-affine result with primitive fields.
+affine result with primitive fields and readonly accessors; only the native
+temporal factories construct it.
 
 `zone` must be a known ICU system time-zone ID (for example `UTC` or
 `America/New_York`); custom offsets, unknown IDs, and embedded NUL are rejected.
 No host default time zone or locale is consulted. `locale` is a BCP 47 tag
 identifying an installed ICU locale; the empty string explicitly selects ICU's
 root locale. Invalid or unavailable locales return `Err` rather than silently
-falling back. `availableZones` lists the ICU time-zone IDs.
+falling back. `availableZones` lists system time-zone IDs accepted by `parts`,
+not the unrelated ICU locale inventory.
 
 `format` and `parse` use ICU date-pattern syntax, not a Java-compatibility
 contract. Embedded NUL and invalid patterns return `Err`. Parsing is strict and

@@ -266,10 +266,17 @@ void main() {
     }
     List<Text> zones = DateTime.availableZones();
     boolean hasUtc = false;
+    boolean hasNewYork = false;
+    boolean allZonesUsable = true;
     for (borrow Text zone : zones) {
         if (zone.equalsString("UTC")) { hasUtc = true; }
+        if (zone.equalsString("America/New_York")) { hasNewYork = true; }
+        match (DateTime.parts(0L, zone)) {
+            Ok(fields) {}
+            Err(error) { allZonesUsable = false; }
+        }
     }
-    println(hasUtc);
+    println(hasUtc && hasNewYork && allZonesUsable);
 }
 "#,
     );

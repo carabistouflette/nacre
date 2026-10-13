@@ -14,6 +14,10 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   independent, so either API works without constructing the other class.
 - Native placeholder checks share the actual `@NAME@` grammar rather than
   rejecting every literal `@` byte, preserving HTTP user-information validation.
+- DateTime respects ICU timezone-buffer preconditions and enumerates actual system
+  zone IDs. DateFields' private constructor now initializes every field.
+  Class-presence emission replaces a duplicate expression traversal; advertised
+  zone IDs are checked through actual temporal conversion.
 - Native `Encoding` converts affine byte buffers to lowercase hex, canonical
   padded RFC 4648 Base64, canonical unpadded Base64URL, and strict UTF-8 `Text`.
   Decoders reject malformed alphabets, padding, discarded bits, and invalid
