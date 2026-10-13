@@ -166,6 +166,7 @@ pub(super) const PRELUDE_UNITS: &[PreludeUnit] = &[
         builtins: &[
             Builtin { name: "ByteSource", native: None },
             Builtin { name: "ByteSink", native: None },
+            Builtin { name: "StreamError", native: None },
             Builtin { name: "Streams", native: None },
             Builtin { name: "BinaryReader", native: Some(|| NativeClass::BinaryReader) },
             Builtin { name: "BinaryWriter", native: Some(|| NativeClass::BinaryWriter) },

@@ -36,9 +36,6 @@ class StreamError {
     public readonly long sinkBytesWritten() { return this.sinkBytesWritten; }
     public readonly long confirmedOffset() { return this.confirmedOffset; }
     public readonly borrow Option<ByteBuffer> retainedBytes() { return this.retainedBytes; }
-    public static Option<ByteBuffer> takeRetainedBytes(StreamError error) {
-        return move error.retainedBytes;
-    }
 }
 
 class Streams {
@@ -84,14 +81,14 @@ class Streams {
                     if (appended <= requested) { sourceBytesRead = sourceBytesRead + appended; }
                     return new Result<long, StreamError>.Err(new StreamError(
                         error, sourceBytesRead, sinkBytesWritten,
-                        new Option<ByteBuffer>.Some(move buffer), 0L));
+                        new Option<ByteBuffer>.Some(buffer), 0L));
                 }
                 Ok(count) {
                     if (count < 0L || count > requested || buffer.length() != count) {
                         return new Result<long, StreamError>.Err(new StreamError(
                             new Text("ByteSource.read returned an invalid byte count"),
                             sourceBytesRead, sinkBytesWritten,
-                            new Option<ByteBuffer>.Some(move buffer), 0L));
+                            new Option<ByteBuffer>.Some(buffer), 0L));
                     }
                     if (count == 0L) { break; }
                     sourceBytesRead = sourceBytesRead + count;
@@ -102,14 +99,14 @@ class Streams {
                             Err(error) {
                                 return new Result<long, StreamError>.Err(new StreamError(
                                     error, sourceBytesRead, sinkBytesWritten + offset,
-                                    new Option<ByteBuffer>.Some(move buffer), offset));
+                                    new Option<ByteBuffer>.Some(buffer), offset));
                             }
                             Ok(written) {
                                 if (written <= 0L || written > count - offset) {
                                     return new Result<long, StreamError>.Err(new StreamError(
                                         new Text("ByteSink.write made no progress or returned an invalid byte count"),
                                         sourceBytesRead, sinkBytesWritten + offset,
-                                        new Option<ByteBuffer>.Some(move buffer), offset));
+                                        new Option<ByteBuffer>.Some(buffer), offset));
                                 }
                                 offset = offset + written;
                             }
@@ -160,7 +157,7 @@ class Streams {
                     }
                     return new Result<ByteBuffer, StreamError>.Err(new StreamError(
                         error, sourceBytesRead, 0L,
-                        new Option<ByteBuffer>.Some(move output), 0L));
+                        new Option<ByteBuffer>.Some(output), 0L));
                 }
                 Ok(count) {
                     long appended = output.length() - before;
@@ -168,7 +165,7 @@ class Streams {
                         return new Result<ByteBuffer, StreamError>.Err(new StreamError(
                             new Text("ByteSource.read returned an invalid byte count"),
                             sourceBytesRead, 0L,
-                            new Option<ByteBuffer>.Some(move output), 0L));
+                            new Option<ByteBuffer>.Some(output), 0L));
                     }
                     if (count == 0L) { break; }
                     sourceBytesRead = sourceBytesRead + count;
@@ -193,7 +190,7 @@ class Streams {
                 }
                 return new Result<ByteBuffer, StreamError>.Err(new StreamError(
                     error, sourceBytesRead, 0L,
-                    new Option<ByteBuffer>.Some(move output), 0L));
+                    new Option<ByteBuffer>.Some(output), 0L));
             }
             Ok(count) {
                 long appended = output.length() - before;
@@ -201,13 +198,13 @@ class Streams {
                     return new Result<ByteBuffer, StreamError>.Err(new StreamError(
                         new Text("ByteSource.read returned an invalid byte count"),
                         sourceBytesRead, 0L,
-                        new Option<ByteBuffer>.Some(move output), 0L));
+                        new Option<ByteBuffer>.Some(output), 0L));
                 }
                 if (count == 0L) { return new Result<ByteBuffer, StreamError>.Ok(output); }
                 return new Result<ByteBuffer, StreamError>.Err(new StreamError(
                     new Text("Streams.readAll: input exceeds maxBytes"),
                     sourceBytesRead + count, 0L,
-                    new Option<ByteBuffer>.Some(move output), 0L));
+                    new Option<ByteBuffer>.Some(output), 0L));
             }
         }
     }

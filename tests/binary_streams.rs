@@ -368,7 +368,7 @@ Result<Unit, Text> exercise() {
     File output = File.create(copyPath, 384)?;
     long copied = 0L;
     match (Streams.copy(input, output, 100L, 7L)) {
-        Err(error) { return new Result<Unit, Text>.Err(error.message().clone()); }
+        Err(error) { borrow Text message = error.message(); return new Result<Unit, Text>.Err(message.clone()); }
         Ok(value) { copied = value; }
     }
     input.close()?;
@@ -378,7 +378,7 @@ Result<Unit, Text> exercise() {
     File copiedFile = File.openRead(copyPath)?;
     ByteBuffer copiedBytes;
     match (Streams.readAll(copiedFile, 100L, 9L)) {
-        Err(error) { return new Result<Unit, Text>.Err(error.message().clone()); }
+        Err(error) { borrow Text message = error.message(); return new Result<Unit, Text>.Err(message.clone()); }
         Ok(value) { copiedBytes = value; }
     }
     copiedFile.close()?;
@@ -394,7 +394,7 @@ Result<Unit, Text> exercise() {
     File boundedOutput = File.create(shortPath, 384)?;
     long boundedCount = 0L;
     match (Streams.copy(boundedInput, boundedOutput, 13L, 5L)) {
-        Err(error) { return new Result<Unit, Text>.Err(error.message().clone()); }
+        Err(error) { borrow Text message = error.message(); return new Result<Unit, Text>.Err(message.clone()); }
         Ok(value) { boundedCount = value; }
     }
     boundedInput.close()?;
@@ -403,7 +403,7 @@ Result<Unit, Text> exercise() {
     File boundedFile = File.openRead(shortPath)?;
     ByteBuffer boundedBytes;
     match (Streams.readAll(boundedFile, 100L, 4L)) {
-        Err(error) { return new Result<Unit, Text>.Err(error.message().clone()); }
+        Err(error) { borrow Text message = error.message(); return new Result<Unit, Text>.Err(message.clone()); }
         Ok(value) { boundedBytes = value; }
     }
     boundedFile.close()?;
@@ -413,7 +413,7 @@ Result<Unit, Text> exercise() {
     File exactBoundFile = File.openRead(shortPath)?;
     ByteBuffer exactBoundBytes;
     match (Streams.readAll(exactBoundFile, 13L, 4L)) {
-        Err(error) { return new Result<Unit, Text>.Err(error.message().clone()); }
+        Err(error) { borrow Text message = error.message(); return new Result<Unit, Text>.Err(message.clone()); }
         Ok(value) { exactBoundBytes = value; }
     }
     exactBoundFile.close()?;
@@ -423,14 +423,14 @@ Result<Unit, Text> exercise() {
     File shortOutput = File.create(writeAllPath, 384)?;
     ThreeByteFileSink shortSink = new ThreeByteFileSink(shortOutput);
     match (Streams.writeAll(shortSink, payload)) {
-        Err(error) { return new Result<Unit, Text>.Err(error.message().clone()); }
+        Err(error) { borrow Text message = error.message(); return new Result<Unit, Text>.Err(message.clone()); }
         Ok(unit) {}
     }
     shortSink.close()?;
     File allFile = File.openRead(writeAllPath)?;
     ByteBuffer allBytes;
     match (Streams.readAll(allFile, 100L, 8L)) {
-        Err(error) { return new Result<Unit, Text>.Err(error.message().clone()); }
+        Err(error) { borrow Text message = error.message(); return new Result<Unit, Text>.Err(message.clone()); }
         Ok(value) { allBytes = value; }
     }
     allFile.close()?;
@@ -445,7 +445,7 @@ Result<Unit, Text> exercise() {
     File prefixInput = File.openRead(sourcePath)?;
     ByteBuffer prefix;
     match (Streams.readUpTo(prefixInput, 13L, 4L)) {
-        Err(error) { return new Result<Unit, Text>.Err(error.message().clone()); }
+        Err(error) { borrow Text message = error.message(); return new Result<Unit, Text>.Err(message.clone()); }
         Ok(value) { prefix = value; }
     }
     ByteBuffer afterPrefix = ByteBuffer.withCapacity(0L)?;
@@ -456,7 +456,7 @@ Result<Unit, Text> exercise() {
     File emptyInput = File.openRead(emptyPath)?;
     ByteBuffer emptyRead;
     match (Streams.readAll(emptyInput, 0L, 4L)) {
-        Err(error) { return new Result<Unit, Text>.Err(error.message().clone()); }
+        Err(error) { borrow Text message = error.message(); return new Result<Unit, Text>.Err(message.clone()); }
         Ok(value) { emptyRead = value; }
     }
     emptyInput.close()?;
@@ -467,13 +467,12 @@ Result<Unit, Text> exercise() {
     match (Streams.readAll(zeroLimitInput, 0L, 4L)) {
         Err(error) {
             long sourceBytesRead = error.sourceBytesRead();
-            Option<ByteBuffer> retained = StreamError.takeRetainedBytes(move error);
+            borrow Option<ByteBuffer> retained = error.retainedBytes();
             match (retained) {
                 None {}
                 Some(bytes) {
                     zeroLimitErrorRetained = sourceBytesRead == 1L && bytes.length() == 1L
                         && bytes.get(0L) == (byte)0;
-                    drop(bytes);
                 }
             }
         }
@@ -489,13 +488,12 @@ Result<Unit, Text> exercise() {
     match (Streams.readAll(excessInput, 13L, 4L)) {
         Err(error) {
             long sourceBytesRead = error.sourceBytesRead();
-            Option<ByteBuffer> retained = StreamError.takeRetainedBytes(move error);
+            borrow Option<ByteBuffer> retained = error.retainedBytes();
             match (retained) {
                 None {}
                 Some(bytes) {
                     excessErrorRetainedProbe = sourceBytesRead == 14L && bytes.length() == 14L
                         && bytes.get(12L) == (byte)12 && bytes.get(13L) == (byte)13;
-                    drop(bytes);
                 }
             }
         }
@@ -511,7 +509,7 @@ Result<Unit, Text> exercise() {
     ThreeByteFileSink shortCopySink = new ThreeByteFileSink(shortCopyFile);
     long shortCopied = 0L;
     match (Streams.copy(shortCopyInput, shortCopySink, 100L, 11L)) {
-        Err(error) { return new Result<Unit, Text>.Err(error.message().clone()); }
+        Err(error) { borrow Text message = error.message(); return new Result<Unit, Text>.Err(message.clone()); }
         Ok(value) { shortCopied = value; }
     }
     shortCopyInput.close()?;
@@ -520,7 +518,7 @@ Result<Unit, Text> exercise() {
     File shortCopiedFile = File.openRead(copyPath)?;
     ByteBuffer shortCopiedBytes;
     match (Streams.readAll(shortCopiedFile, 100L, 6L)) {
-        Err(error) { return new Result<Unit, Text>.Err(error.message().clone()); }
+        Err(error) { borrow Text message = error.message(); return new Result<Unit, Text>.Err(message.clone()); }
         Ok(value) { shortCopiedBytes = value; }
     }
     shortCopiedFile.close()?;
@@ -660,7 +658,7 @@ boolean copySinkFailureRetainsPendingPacket() {
         Err(error) {
             boolean progress = error.sourceBytesRead() == 4L
                 && error.sinkBytesWritten() == 2L && error.confirmedOffset() == 2L;
-            Option<ByteBuffer> retained = StreamError.takeRetainedBytes(move error);
+            borrow Option<ByteBuffer> retained = error.retainedBytes();
             boolean packetMatches = false;
             match (retained) {
                 None {}
@@ -668,7 +666,6 @@ boolean copySinkFailureRetainsPendingPacket() {
                     packetMatches = packet.length() == 4L && packet.get(0L) == (byte)10
                         && packet.get(1L) == (byte)11 && packet.get(2L) == (byte)12
                         && packet.get(3L) == (byte)13;
-                    drop(packet);
                 }
             }
             return progress && packetMatches;
@@ -684,13 +681,12 @@ boolean copySourceFailureRetainsStagedBytes() {
         Err(error) {
             boolean progress = error.sourceBytesRead() == 1L
                 && error.sinkBytesWritten() == 0L && error.confirmedOffset() == 0L;
-            Option<ByteBuffer> retained = StreamError.takeRetainedBytes(move error);
+            borrow Option<ByteBuffer> retained = error.retainedBytes();
             boolean staged = false;
             match (retained) {
                 None {}
                 Some(bytes) {
                     staged = bytes.length() == 1L && bytes.get(0L) == (byte)70;
-                    drop(bytes);
                 }
             }
             return progress && staged;
@@ -704,14 +700,13 @@ boolean readUpToFailureRetainsAppendedPrefix() {
         Ok(bytes) { drop(bytes); return false; }
         Err(error) {
             boolean progress = error.sourceBytesRead() == 3L;
-            Option<ByteBuffer> retained = StreamError.takeRetainedBytes(move error);
+            borrow Option<ByteBuffer> retained = error.retainedBytes();
             boolean prefixMatches = false;
             match (retained) {
                 None {}
                 Some(bytes) {
                     prefixMatches = bytes.length() == 3L && bytes.get(0L) == (byte)50
                         && bytes.get(1L) == (byte)51 && bytes.get(2L) == (byte)52;
-                    drop(bytes);
                 }
             }
             return progress && prefixMatches;
@@ -725,14 +720,13 @@ boolean readAllFailureRetainsLimitProbe() {
         Ok(bytes) { drop(bytes); return false; }
         Err(error) {
             boolean progress = error.sourceBytesRead() == 3L;
-            Option<ByteBuffer> retained = StreamError.takeRetainedBytes(move error);
+            borrow Option<ByteBuffer> retained = error.retainedBytes();
             boolean prefixMatches = false;
             match (retained) {
                 None {}
                 Some(bytes) {
                     prefixMatches = bytes.length() == 3L && bytes.get(0L) == (byte)60
                         && bytes.get(1L) == (byte)61 && bytes.get(2L) == (byte)62;
-                    drop(bytes);
                 }
             }
             return progress && prefixMatches;
@@ -756,11 +750,11 @@ boolean writeAllFailureLeavesSourceUsable() {
         Err(error) {
             boolean progress = error.sinkBytesWritten() == 2L
                 && error.confirmedOffset() == 2L;
-            Option<ByteBuffer> retained = StreamError.takeRetainedBytes(move error);
+            borrow Option<ByteBuffer> retained = error.retainedBytes();
             boolean noCopy = false;
             match (retained) {
                 None { noCopy = true; }
-                Some(bytes) { drop(bytes); }
+                Some(bytes) {}
             }
             return progress && noCopy && source.length() == 4L
                 && source.get(0L) == (byte)10 && source.get(3L) == (byte)13;
@@ -776,11 +770,11 @@ boolean copyFlushFailureRetainsConfirmedCounts() {
         Err(error) {
             boolean progress = error.sourceBytesRead() == 4L
                 && error.sinkBytesWritten() == 4L && error.confirmedOffset() == 0L;
-            Option<ByteBuffer> retained = StreamError.takeRetainedBytes(move error);
+            borrow Option<ByteBuffer> retained = error.retainedBytes();
             boolean noPendingPacket = false;
             match (retained) {
                 None { noPendingPacket = true; }
-                Some(bytes) { drop(bytes); }
+                Some(bytes) {}
             }
             return progress && noPendingPacket;
         }
@@ -795,11 +789,11 @@ boolean malformedReadCountRetainsObservableBytes() {
         Err(error) {
             boolean noFalseCount = error.sourceBytesRead() == 0L
                 && error.sinkBytesWritten() == 0L;
-            Option<ByteBuffer> retained = StreamError.takeRetainedBytes(move error);
+            borrow Option<ByteBuffer> retained = error.retainedBytes();
             boolean staged = false;
             match (retained) {
                 None {}
-                Some(bytes) { staged = bytes.length() == 1L && bytes.get(0L) == (byte)80; drop(bytes); }
+                Some(bytes) { staged = bytes.length() == 1L && bytes.get(0L) == (byte)80; }
             }
             return noFalseCount && staged;
         }
@@ -814,11 +808,11 @@ boolean noProgressWriteRetainsPacket() {
         Err(error) {
             boolean progress = error.sourceBytesRead() == 4L
                 && error.sinkBytesWritten() == 0L && error.confirmedOffset() == 0L;
-            Option<ByteBuffer> retained = StreamError.takeRetainedBytes(move error);
+            borrow Option<ByteBuffer> retained = error.retainedBytes();
             boolean packetMatches = false;
             match (retained) {
                 None {}
-                Some(bytes) { packetMatches = bytes.length() == 4L; drop(bytes); }
+                Some(bytes) { packetMatches = bytes.length() == 4L; }
             }
             return progress && packetMatches;
         }
@@ -833,11 +827,11 @@ boolean malformedWriteCountRetainsPacket() {
         Err(error) {
             boolean progress = error.sourceBytesRead() == 4L
                 && error.sinkBytesWritten() == 0L && error.confirmedOffset() == 0L;
-            Option<ByteBuffer> retained = StreamError.takeRetainedBytes(move error);
+            borrow Option<ByteBuffer> retained = error.retainedBytes();
             boolean packetMatches = false;
             match (retained) {
                 None {}
-                Some(bytes) { packetMatches = bytes.length() == 4L; drop(bytes); }
+                Some(bytes) { packetMatches = bytes.length() == 4L; }
             }
             return progress && packetMatches;
         }

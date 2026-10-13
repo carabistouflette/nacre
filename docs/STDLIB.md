@@ -1410,7 +1410,6 @@ class StreamError {
     readonly long sinkBytesWritten()
     readonly long confirmedOffset()
     readonly borrow Option<ByteBuffer> retainedBytes()
-    static Option<ByteBuffer> takeRetainedBytes(StreamError error)
 }
 static Result<long, StreamError> Streams.copy(borrow mut ByteSource source, borrow mut ByteSink sink, long maxBytes, long bufferSize)
 static Result<ByteBuffer, StreamError> Streams.readUpTo(borrow mut ByteSource source, long maxBytes, long bufferSize)
@@ -1428,9 +1427,9 @@ physical transport progress, which the primitive result does not report.
 
 `StreamError` owns the original `Text` message and exposes confirmed logical
 `sourceBytesRead` and `sinkBytesWritten` counts. Its optional `retainedBytes`
-is owned by the error; inspect the counts and `confirmedOffset()` first, then
-`takeRetainedBytes(move error)` consumes the error and transfers the optional
-buffer. For `copy`, that buffer is the current pending source packet and the
+is owned by the error and exposed through a shared borrow for inspection or
+explicit replay while the error remains alive. Inspect the counts and
+`confirmedOffset()` before replay. For `copy`, the buffer is the pending source packet and the
 offset is its prefix accepted by successful sink calls. For `readUpTo` and
 `readAll`, it is the accumulated output. For `writeAll`, no source copy is
 retained: the caller keeps its borrowed source and the offset is the confirmed
