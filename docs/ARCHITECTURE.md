@@ -28,31 +28,28 @@ uses the supplied C runtime and system C library. It has no garbage collector or
 implicit reference counting for ordinary language values; sharing synchronization
 controls requires explicit mutex/channel handles.
 
-## AST et spécialisation générique
+## AST and generic specialization
 
-L'AST distingue `Named`, `Applied { name, args }` et `Borrow { name, args, mutable }`.
-Les interfaces portent `is_interface = true` ; les enums portent une liste de
-variantes et de payloads. `is_builtin` distingue les déclarations du prelude des
-types utilisateur, sans accorder de privilèges à un nom de paramètre comme `T`.
-Une classe conserve ses paramètres et sa liste `implements` ; les constructions
-ordinaires et de variantes conservent leurs arguments de type explicites.
+The AST distinguishes `Named`, `Applied { name, args }`, and
+`Borrow { name, args, mutable }`. Interfaces carry `is_interface = true`;
+enums carry variants and payloads. `is_builtin` distinguishes trusted prelude
+declarations from user types without granting privileges to a parameter named `T`.
+Classes retain type parameters and `implements`; ordinary and variant
+constructions retain explicit type arguments.
 
-`generics.rs` indexe les déclarations puis réécrit les types utilisés. Chaque
-application de type demandée possède une clé canonique, par exemple `Box<int>`.
-Une file déterministe permet de découvrir les instances imbriquées ; un cache
-évite de produire plusieurs instances de la même application. La substitution
-traverse champs, signatures, variables, constructions et corps des méthodes.
-Elle ne remplace pas les identifiants de variables par des noms de types.
+`generics.rs` indexes declarations and rewrites requested types. Each application
+has a canonical key such as `Box<int>`. A deterministic queue discovers nested
+instances; a cache prevents duplicate specialization. Substitution traverses
+fields, signatures, locals, constructions, and method bodies. It does not rewrite
+variable identifiers as type names.
 
-Les instances deviennent des types nominaux concrets avant le typage.
-Les analyses suivantes n'ont donc pas de variable de type à résoudre. Les
-méthodes d'un template non instancié ne sont pas toutes vérifiées ; toutes celles
-d'une instance demandée le sont, même si elles ne sont jamais appelées. Cette
-sémantique est décrite dans [GENERICS.md](GENERICS.md).
+Instances become concrete nominal types before checking. Later analyses do not
+resolve type variables. An unused template is not fully checked, but every
+method of a requested instance is checked even when never called. See
+[GENERICS.md](GENERICS.md).
 
-Des bornes sur la profondeur, le nombre et la longueur des instances limitent
-les expansions récursives. Ce n'est pas une inférence de paramètres, ni un
-système de contraintes génériques avec bornes de type.
+Bounds on instance depth, count, and name length limit recursive expansion.
+This is neither type-argument inference nor a bounded generic constraint system.
 
 `ForEach` AST nodes preserve typed bindings, the collection, body, and source
 spans: maps have two bindings; lists and sets have one. The checker evaluates a
@@ -71,40 +68,37 @@ invalid boundaries return `None` before touching storage. List element validity
 is checked before compiler-generated Option payloads, preserving primary
 list-view diagnostics.
 
-## IR nominale et interfaces
+## Nominal IR and interfaces
 
-L’IR remplace les noms par des identifiants nominaux. `Object(id)` représente un
-propriétaire : pointeur de classe, interface par valeur ou somme affine par valeur.
-`Borrow { class: id, mutable }` représente un accès non possédé. Ainsi,
-`Type::is_object()` signifie **possédé**, et non « pointeur vers une classe ».
+The IR replaces names with nominal identifiers. `Object(id)` is an owner:
+a class pointer, interface value, or inline affine sum.
+`Borrow { class: id, mutable }` is non-owning access. Thus `Type::is_object()`
+means **owned**, not necessarily a heap pointer.
 
-Une classe IR conserve son nom, ses interfaces et, pour chacune, la liste des
-méthodes concrètes correspondant aux emplacements du contrat. Une interface
-conserve ses méthodes dans l'ordre de déclaration. Une signature virtuelle a
-un `virtual_slot` ; une expression `Upcast` enregistre la conversion possédée
-classe → interface. Pour une conversion empruntée, l'expression `Borrow` conserve
-la place concrète d'origine et porte le type d'interface attendu.
+An IR class retains its name, interfaces, and concrete methods for each contract
+slot. An interface retains declaration order. Virtual signatures have a
+`virtual_slot`; `Upcast` records an owning class-to-interface conversion.
+A borrowed conversion preserves its original concrete place and carries the
+expected interface type.
 
-Les contrats sont nominaux : une méthode de même nom ne suffit pas. Une clause
-`implements` doit exister. Le typage vérifie visibilité, mode de receveur
-`readonly`, paramètres, modes d'emprunt et retour. Les contrats sont actuellement
-exacts, sans covariance ni assouplissement implicite des effets. Une classe à
-champs empruntés, donc une vue locale, ne peut pas implémenter d'interface :
-l'effacement de son type ne doit pas contourner ses restrictions de durée de vie.
+Contracts are nominal: matching method names alone is insufficient; `implements`
+must be declared. Checking covers visibility, `readonly` receiver mode,
+parameters, borrowing modes, and return type. Signatures match exactly, without
+covariance or implicit effect relaxation. A class with borrowed fields is a
+local view and cannot implement an interface: type erasure must not hide its
+lifetime restrictions.
 
-## Ownership et emprunts
+## Ownership and borrowing
 
-`ownership.rs` suit les états possibles de chaque variable : non initialisée,
-disponible ou déplacée. Les jonctions sont des unions d'états ; une file de
-travail calcule un point fixe à travers les boucles. Une lecture exige un état
-disponible sur tous les chemins entrants. Une conversion possédée en interface
-traverse le déplacement de sa valeur source, sans créer un second propriétaire.
+`ownership.rs` tracks each variable's possible uninitialized, available, or moved
+states. Joins union states; a work queue computes a fixed point across loops.
+A read requires availability on every incoming path. Owning interface
+conversions transfer the source owner rather than creating another one.
 
-`borrowing.rs` travaille ensuite sur les blocs typés. Les emprunts locaux restent
-lexicaux, leurs cibles sont fixes, et les prêts d'argument durent le temps de
-l'appel, sauf capture par une vue. Les origines conservent racine et capacité
-parent pour les réemprunts. Le passage à une interface ne change pas cette origine :
-il ne permet pas d'obtenir un accès mutable concurrent à un emprunt partagé.
+`borrowing.rs` then checks typed blocks. Local loans remain lexical, their targets
+are fixed, and argument loans last through the call unless captured by a view.
+Origins preserve roots and parent capabilities for reborrows. Interface upcasts
+do not change those origins or permit exclusive access beside a shared loan.
 
 Virtual method signatures expose the same contracts as concrete methods; every
 implementation body is checked separately. Borrow analysis need not select a
@@ -112,10 +106,10 @@ dynamic implementation to determine whether an argument owns or borrows.
 The checker records borrowed returns in those signatures and proves their receiver origin;
 caller-side result loans survive call cleanup. Local views remain non-exportable.
 
-## Représentation C
+## C representation
 
-Une classe concrète reste un pointeur vers sa structure nominale. Une interface,
-possédée ou empruntée, est une structure de deux pointeurs passée par valeur :
+A concrete class is a pointer to its nominal structure. An owned or borrowed
+interface is a two-pointer structure passed by value:
 
 ```c
 struct interface_value {
@@ -124,72 +118,65 @@ struct interface_value {
 };
 ```
 
-La table contient une fonction de destruction et une fonction typée par méthode.
-Une table constante est émise par couple classe/interface. Les adaptateurs
-reçoivent `void *`, convertissent le pointeur de données en son type concret, puis
-appellent la bonne fonction. Ils évitent les conversions entre pointeurs de
-fonctions de signatures incompatibles.
+The table contains a destructor and a typed function for each method. One
+constant table is emitted per class/interface pair. Adapters receive `void *`,
+convert the data pointer to its concrete type, and call the matching function.
+They do not cast between incompatible function-pointer signatures.
 
-L'enveloppe d'interface ne nécessite pas d'allocation supplémentaire. Un transfert
-possédé met l'ancienne enveloppe à `{ NULL, NULL }`. Une interface propriétaire
-est nettoyée via la fonction de destruction de sa table, qui connaît le type
-concret et ses sous-objets possédés. Une interface empruntée n'est jamais détruite
-comme propriétaire. Une copie physique de ses deux pointeurs pour un emprunt
-n'est pas une copie de l'objet ni un comptage de références.
+An interface envelope adds no allocation. An owning transfer clears the source
+to `{ NULL, NULL }`. Cleanup uses the table's concrete destructor, including
+owned subobjects. A borrowed interface is never destroyed as an owner.
+Physically copying two pointers for a borrow does not clone the object or add
+a lifetime count.
 
-### Sommes par valeur
+### Inline sums
 
-Une enum C est une structure avec un tag `int32_t` et une union de payloads.
-Les sommes imbriquées sont définies dans un ordre topologique ; les cycles de
-représentation par valeur sont refusés avant émission. Les pointeurs de classes
-et interfaces permettent des structures récursives ayant un cas de base fini.
+A C enum is a structure with an `int32_t` tag and a payload union. Nested sums
+are defined in topological order; inline representation cycles are rejected
+before emission. Class/interface indirection permits recursive structures with
+a finite base case.
 
-Une construction ne crée pas d’allocation d’enveloppe. Un déplacement remplace
-le tag du propriétaire source par `-1`, état interne non constructible par le
-programme. Le destructeur consulte uniquement la variante active et détruit ses
-payloads possédés dans l’ordre inverse. Un `match` transfère ces payloads aux
-variables de branche et invalide son temporaire ; le CFG et les nettoyages
-lexicaux couvrent retours et sorties de boucle. Il est émis comme une chaîne
-`if`/`else if`, pour qu’un `break` continue de viser la boucle source.
+Construction adds no envelope allocation. A move sets the source tag to `-1`,
+an internal state unavailable to source programs. Destruction visits only the
+active variant and destroys owned payloads in reverse order. Consuming `match`
+transfers payloads to branch bindings and invalidates its temporary; the CFG
+and lexical cleanup cover returns and loop exits. It lowers to `if`/`else if`
+so `break` still targets the source loop.
 
 Enum references point to inline storage. Borrowed matching preserves the tag
 and binds primitive copies or receiver/scrutinee-derived nominal references;
 payloads containing borrowed fields/local views remain forbidden.
 
 
-Les fonctions de dispatch virtuel transmettent les paramètres à l'implémentation
-sans les nettoyer une seconde fois : les paramètres possédés sont consommés par
-la fonction concrète. Le nettoyage des retours, remplacements et sorties de
-boucle suit le modèle lexical des versions précédentes.
+Virtual dispatch transfers owned parameters to the concrete implementation,
+without a second cleanup in its adapter. Return, replacement, and loop-exit
+cleanup follow the same lexical ownership model.
 
-Le backend séquence les expressions pour préserver l'ordre gauche-droite. Les
-opérateurs `&&` et `||` restent des blocs conditionnels, pas des évaluations
-anticipées de leurs deux opérandes. Les sorties fatales du runtime ne déroulent
-pas les propriétaires ; les compteurs mémoire ne sont donc pas une garantie de
-nettoyage après une erreur fatale.
+The backend sequences expressions left to right. `&&` and `||` retain
+conditional short-circuit evaluation rather than evaluating both operands
+early. Fatal runtime exits do not unwind owners; memory counters therefore do
+not guarantee cleanup after a fatal failure.
 
-## Code natif et LLVM
+## Native code and LLVM
 
-`run` et `build` émettent du C puis appellent GCC ou Clang avec le niveau
-`-O0`, `-O1`, `-O2` (défaut), `-O3` ou `-Os`. Aucun gain de performance n'a été
-mesuré. Un niveau d'optimisation plus élevé n'est pas présenté comme une garantie
-de code plus rapide.
+`run` and `build` emit C and invoke GCC or Clang at `-O0`, `-O1`, `-O2`
+(the default), `-O3`, or `-Os`. Higher optimization is not a guarantee of faster
+code. Measured comparisons and their limits belong in [VALIDATION.md](VALIDATION.md).
 
 `emit-llvm` invokes Clang with `-S -emit-llvm` on the same generated C. Nacre has no
 direct LLVM backend written in Rust. `NACRE_CLANG` selects that Clang executable;
 `NACRE_CC`/`CC` separately select the compiler used by `run` and `build`.
 
-## Inspection et tests
+## Inspection and tests
 
-`emit-types` expose les types nominaux après spécialisation, `emit-flow` le CFG
-d'ownership, `emit-borrows` les événements vérifiés par l'analyse des prêts, et
-`emit-c` le code C. Ces commandes passent par les vérifications du frontend ;
-elles ne contournent pas un diagnostic de typage ou d'emprunt.
+`emit-types` exposes specialized nominal types, `emit-flow` the ownership CFG,
+`emit-borrows` checked loan events, and `emit-c` generated C. These commands run
+frontend checks and cannot bypass a type or borrowing diagnostic.
 
-Les manifestes JSON V2, V3, V4 et V5 servent à générer les suites Rust conservées
-dans le dépôt. Le script `validate.py` utilise le **vrai binaire Rust**, lorsqu'il
-peut être compilé, pour tester ses sorties C et LLVM. Les fixtures C indépendantes
-ne sont pas un substitut à cette validation.
+Checked-in JSON case manifests generate maintained Rust suites. `validate.py`
+uses the actual Rust compiler binary to exercise generated C and LLVM output.
+Independent handwritten/template C fixtures are supplementary, not substitutes
+for that proof.
 
 
 ## Classes natives et mémoire des collections
@@ -277,10 +264,11 @@ Without a marker, each document is validated alone; nearby files are not merged.
 VS Code and Zed launch the same server. See [PROJECTS.md](PROJECTS.md) for the
 configuration and overlay contract.
 
-Les corps C d’E/S produisent les véritables spécialisations IR de `Option`/`Result`.
-Ils valident UTF-8, ranges et conversions int32, avec erreurs textuelles possédées.
-Les buffers de console/fichier sont transférés au `Text` retourné sans recopie
-finale. L’entrée C reçoit `argc/argv` ; `Args` expose les arguments sans `argv[0]`.
-Les échecs d’allocation et les erreurs fatales historiques gardent leur arrêt sans
-déroulement de pile ; les retours `Err` suivent les nettoyages normaux.
+Native I/O bodies construct the actual IR specializations of `Option`/`Result`.
+They validate UTF-8, ranges, and conversions, returning owned error Text.
+Validated owned byte buffers transfer into returned Text: larger storage is
+adopted without a final byte copy; small content enters the header's 16-byte
+inline storage and releases its former allocation. C entry receives `argc/argv`;
+`Args` excludes `argv[0]`. Allocation failure and fatal boundaries terminate
+without unwinding; recoverable `Err` returns follow ordinary cleanup.
 

@@ -146,9 +146,9 @@ booleans; equality accepts numeric or boolean operands. Shift counts must be
 `byte`, `char`, or `int`. There is no text or object equality operator.
 
 `borrow place` and `borrow mut place` require a valid stable place after type
-checking. The postfix `?` consumes an owned built-in `Err` inside a function
-returning a compatible `Result`; it is not general exception syntax. Primitive
-casts use `(byte)`, `(char)`, `(int)`, `(long)`, or `(double)`. Class and
+checking. Postfix `?` consumes an owned built-in `Result`, yielding its `Ok`
+payload or propagating its `Err` from a compatible Result-returning function.
+Primitive casts use `(byte)`, `(char)`, `(int)`, `(long)`, or `(double)`. Class and
 interface casts are not available. The parser also recognizes
 `System.out.println(expression)`, `move(owner)`, and `drop(owner)` as built-ins.
 

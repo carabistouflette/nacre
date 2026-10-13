@@ -19,6 +19,7 @@ Historical reports retain their original release labels; they are not current-re
 | Blocked channel TSan | Real blocked-sender abort and last-sender-close receiver wakeup passed |
 | Editor source checks | Six grammar corpus cases, 34 compiler-checked snippets, 62 parsed examples and four Zed queries passed |
 | Zed extension build | Locked release `wasm32-wasip2` build passed |
+| Packaging audit | 147 included source paths; 1,113 declared tests counted, not executed by this audit |
 
 The native suites cover affine array storage transfer, wrapped Deque ownership,
 Map/Set collision and key behavior, borrowed enum comparators, UTF-8/NUL Text,
