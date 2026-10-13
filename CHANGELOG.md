@@ -36,6 +36,11 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   Source-text assertions about vtable layout and allocator call sites were removed;
   native interface CLI checks retain output and ownership-balance verification.
 
+- `BinaryReader` and `BinaryWriter` compose with owned `ByteSource`/`ByteSink`
+  values as well as `ByteBuffer`. Bounded source reads preserve the logical
+  cursor on failure; sink writers retain pending packets and resume from
+  confirmed offsets. Consuming `finish` returns any unwritten suffix without
+  implicit transport I/O or flush, and generic codecs work in either mode.
 - Adds reusable affine `Codec<T>` and `Serialization<T>` APIs with a canonical
   big-endian `NCRS`/version-1 frame, primitive and aggregate codecs, explicit
   list element limits, canonical Option/Result tags, UUID network-byte encoding,

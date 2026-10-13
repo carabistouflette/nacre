@@ -1378,6 +1378,7 @@ interface ByteSink {
 }
 class BinaryReader {
     BinaryReader(ByteBuffer bytes, boolean littleEndian)
+    static Result<BinaryReader, Text> fromSource(ByteSource source, boolean littleEndian, long maxBytes)
     readonly long position()
     readonly long remaining()
     Result<Unit, Text> seek(long position)
@@ -1392,7 +1393,9 @@ class BinaryReader {
 }
 class BinaryWriter {
     BinaryWriter(long capacity, boolean littleEndian)
+    static Result<BinaryWriter, Text> toSink(ByteSink sink, boolean littleEndian, long maxBytes)
     readonly long position()
+    readonly long pendingOffset()
     Result<Unit, Text> writeByte(byte value)
     Result<Unit, Text> writeInt16(int value)
     Result<Unit, Text> writeInt32(int value)
@@ -1402,6 +1405,7 @@ class BinaryWriter {
     Result<Unit, Text> writeBytes(borrow ByteBuffer source)
     Result<Unit, Text> writeUtf8(borrow Text value)
     readonly borrow ByteBuffer bytes()
+    Result<Unit, Text> flush()
     static ByteBuffer finish(BinaryWriter writer)
 }
 class StreamError {
@@ -1450,18 +1454,38 @@ output and that byte, including when `maxBytes` is zero. `writeAll` loops over
 partial writes and flushes on completion; errors preserve the confirmed offset
 while leaving the original source usable.
 
-`BinaryReader` uniquely owns its input buffer; `BinaryWriter` uniquely owns the
-buffer it builds. Both constructors require an explicit byte order. Reads of
-fixed-width values and `readBytes` leave the cursor unchanged if the requested
-data is insufficient; `readUtf8` is strict UTF-8 and likewise preserves the
-cursor on insufficient input or invalid encoding. `readInt16` returns a signed
-`int`. Binary doubles use IEEE-754 binary64 bits copied with `memcpy`.
-`readFloat32` widens an IEEE-754 binary32 value to `double`. `writeFloat32`
-encodes `double` values as binary32 and rejects finite magnitudes above the
-largest finite binary32 value without advancing the writer.
+`BinaryReader(ByteBuffer, ...)` uniquely owns its input; `fromSource` owns the
+`ByteSource` interface value and accepts a nonnegative `maxBytes` budget.
+`BinaryWriter(long, ...)` owns its output buffer; `toSink` owns the `ByteSink`
+interface value and likewise accepts a nonnegative budget. Both constructors
+require an explicit byte order. In source mode, `remaining()` reports budget,
+not known source availability; `seek` accepts only the current position.
+Reads enforce the budget before calling the source. Each operation leaves the
+logical cursor unchanged unless it succeeds. Bytes appended before a source
+error remain staged for later smaller reads, and the source error is returned.
+An append beyond the requested count is a contract violation; those bytes are
+preserved, not clamped or treated as confirmed progress. A zero-count read marks
+permanent EOF. Invalid UTF-8 leaves the cursor unchanged. A source error does
+not imply that the underlying transport rolled back; only staged bytes and
+successful results establish recoverable progress.
+
+`readInt16` returns a signed `int`. Binary doubles use IEEE-754 binary64 bits
+copied with `memcpy`. `readFloat32` widens an IEEE-754 binary32 value to
+`double`. `writeFloat32` encodes `double` values as binary32 and rejects finite
+magnitudes above the largest finite binary32 value without advancing the writer.
 `writeInt16` accepts only the signed 16-bit range and leaves the writer unchanged
-when out of range. `bytes()` is a borrow tied to the writer; `finish` consumes the
-writer and transfers its exact buffer without copying.
+when out of range.
+
+In sink mode, a write stages one complete encoded operation. `position()` counts
+only bytes confirmed by successful sink calls; `pendingOffset()` is the confirmed
+prefix of the packet borrowed by `bytes()`. If a sink call fails, the packet
+remains available and further writes are rejected until `flush()` resumes it.
+After sending the pending packet, `flush()` calls the sink's `flush`; it does not
+promise peer receipt. A failed transport call may have advanced the physical
+transport without confirming it, so retrying may duplicate bytes. `finish`
+consumes the writer without I/O or implicit flush and returns only the
+still-unwritten suffix of a pending packet. In buffer mode, `flush()` is a
+no-op and `finish` transfers the exact output buffer without copying.
 
 The `File` adapters use the descriptor cursor and may return partial counts;
 reads are blocking and return zero at EOF. `File.flush` calls `fsync`.

@@ -242,6 +242,7 @@ class Streams {
 
 class BinaryReader {
     public BinaryReader(ByteBuffer bytes, boolean littleEndian) {}
+    public static Result<BinaryReader, Text> fromSource(ByteSource source, boolean littleEndian, long maxBytes) {}
     public readonly long position() {}
     public readonly long remaining() {}
     public Result<Unit, Text> seek(long position) {}
@@ -257,7 +258,9 @@ class BinaryReader {
 
 class BinaryWriter {
     public BinaryWriter(long capacity, boolean littleEndian) {}
+    public static Result<BinaryWriter, Text> toSink(ByteSink sink, boolean littleEndian, long maxBytes) {}
     public readonly long position() {}
+    public readonly long pendingOffset() {}
     public Result<Unit, Text> writeByte(byte value) {}
     public Result<Unit, Text> writeInt16(int value) {}
     public Result<Unit, Text> writeInt32(int value) {}
@@ -267,6 +270,7 @@ class BinaryWriter {
     public Result<Unit, Text> writeBytes(borrow ByteBuffer source) {}
     public Result<Unit, Text> writeUtf8(borrow Text value) {}
     public readonly borrow ByteBuffer bytes() {}
+    public Result<Unit, Text> flush() {}
     public static ByteBuffer finish(BinaryWriter writer) {}
 }
 
