@@ -9,7 +9,7 @@ void main() {
         sum = sum + scores.get(i);
         i = i + 1;
     }
-    Text message = new Text("Somme = ");
+    Text message = new Text("Sum = ");
     message.appendInt(sum);
     message.print();
     println(scores.remove(1));

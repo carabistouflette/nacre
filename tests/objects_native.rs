@@ -16,12 +16,12 @@ macro_rules! case {
         #[test] fn $name() { run($source, $stdout, $allocations); }
     };
 }
-case!(counter, include_str!("../examples/counter.ncr"), "42\n", 1);
-case!(composition, include_str!("../examples/composition.ncr"), "Ma voiture\n150\n", 2);
-case!(ownership, include_str!("../examples/ownership.ncr"), "42\n42\n7\n", 2);
-case!(initializers, include_str!("../examples/field_initializers.ncr"), "Configuration\ntrue\n200\n", 1);
-case!(statics, include_str!("../examples/static_methods.ncr"), "36\n49\n", 0);
-case!(scopes, include_str!("../examples/object_scopes.ncr"), "0\n2\n100\n", 5);
+case!(counter, include_str!("../examples/language/counter.ncr"), "42\n", 1);
+case!(composition, include_str!("../examples/ownership/composition.ncr"), "My car\n150\n", 2);
+case!(ownership, include_str!("../examples/ownership/ownership.ncr"), "42\n42\n7\n", 2);
+case!(initializers, include_str!("../examples/language/field_initialization.ncr"), "Settings\ntrue\n200\n", 1);
+case!(statics, include_str!("../examples/language/static_methods.ncr"), "36\n49\n", 0);
+case!(scopes, include_str!("../examples/ownership/scope_cleanup.ncr"), "0\n2\n100\n", 5);
 case!(empty_class, "class Empty {} void main() { Empty e = new Empty(); }", "", 1);
 case!(move_local, "class C { int n = 1; } void main() { C a = new C(); C b = a; println(b.n); }", "1\n", 1);
 case!(self_assignment, "class C { int n = 1; } void main() { C a = new C(); a = a; println(a.n); }", "1\n", 1);

@@ -3,7 +3,7 @@ void main() {
     Desk desk = new Desk();
     int argumentCount = Args.count();
     if (argumentCount > 1) {
-        println("Usage: nacre run examples/lending_desk -- [initial-save-file]");
+        println("Usage: nacre run examples/apps/lending_desk -- [initial-save-file]");
         return;
     }
     if (argumentCount == 1) {

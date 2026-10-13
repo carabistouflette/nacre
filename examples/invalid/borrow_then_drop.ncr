@@ -2,5 +2,5 @@ class Counter { int value = 0; }
 void main() {
     Counter counter = new Counter();
     borrow Counter reader = counter;
-    drop(counter); // E3002 : reader emprunte encore counter.
+    drop(counter); // E3002: reader still borrows counter.
 }

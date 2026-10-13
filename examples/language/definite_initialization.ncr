@@ -4,12 +4,12 @@ class Message {
     void print() { println(text); }
 }
 
-void show(boolean french) {
+void show(boolean firstBranch) {
     Message message;
-    if (french) {
-        message = new Message("Bonjour !");
+    if (firstBranch) {
+        message = new Message("Initialized through the first branch.");
     } else {
-        message = new Message("Hello!");
+        message = new Message("Initialized through the second branch.");
     }
     message.print();
 }

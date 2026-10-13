@@ -2,5 +2,5 @@ class Counter { int value = 0; }
 void main() {
     Counter counter = new Counter();
     borrow Counter reader = counter;
-    borrow mut Counter editor = counter; // E3001 : partage et exclusivite incompatibles.
+    borrow mut Counter editor = counter; // E3001: shared and exclusive borrows conflict.
 }

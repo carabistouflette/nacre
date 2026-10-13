@@ -17,14 +17,14 @@ fn uninitialized_diagnostic_is_distinct_from_move() {
 }
 #[test]
 fn graph_contains_loop_moves_and_conditional_cleanup() {
-    let flow = emit_flow(include_str!("../examples/ownership_loop.ncr")).unwrap();
+    let flow = emit_flow(include_str!("../examples/ownership/loop_cleanup.ncr")).unwrap();
     for expected in ["loop-header", "loop-exit", "move %", "drop-if-present", "initialize/replace", "in=["] {
         assert!(flow.contains(expected), "missing {expected}:\n{flow}");
     }
 }
 #[test]
 fn graph_is_deterministic() {
-    let source = include_str!("../examples/ownership_continue.ncr");
+    let source = include_str!("../examples/ownership/continue_cleanup.ncr");
     assert_eq!(emit_flow(source).unwrap(), emit_flow(source).unwrap());
 }
 #[test]

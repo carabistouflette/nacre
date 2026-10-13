@@ -1,0 +1,364 @@
+{
+  "examples": [
+    {
+      "category": "language",
+      "source": "examples/language/modules",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["Sum = 42"]
+    },
+    {
+      "category": "language",
+      "source": "examples/language/numeric_types.ncr",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["255", "🧪", "-9223372036854775808", "312.5", "()"]
+    },
+    {
+      "category": "language",
+      "source": "examples/language/error_propagation.ncr",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["41", "43", "61", "71", "72", "inner failure", "condition failure"]
+    },
+    {
+      "category": "language",
+      "source": "examples/language/hello_world.ncr",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["Hello from Nacre!", "42", "true"]
+    },
+    {
+      "category": "language",
+      "source": "examples/language/counter.ncr",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["42"]
+    },
+    {
+      "category": "language",
+      "source": "examples/language/control_flow.ncr",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["25", "false"]
+    },
+    {
+      "category": "language",
+      "source": "examples/language/integer_overflow.ncr",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["-2147483648", "2147483647", "1"]
+    },
+    {
+      "category": "language",
+      "source": "examples/language/sum_types.ncr",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["42", "0"]
+    },
+    {
+      "category": "language",
+      "source": "examples/language/static_methods.ncr",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["36", "49"]
+    },
+    {
+      "category": "language",
+      "source": "examples/language/interfaces.ncr",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["Woof!", "Meow!"]
+    },
+    {
+      "category": "language",
+      "source": "examples/language/generic_box.ncr",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["42", "Hello, generics!", "true"]
+    },
+    {
+      "category": "language",
+      "source": "examples/language/generic_interfaces.ncr",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["42", "Generic polymorphism"]
+    },
+    {
+      "category": "language",
+      "source": "examples/language/interface_composition.ncr",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["42", "7"]
+    },
+    {
+      "category": "language",
+      "source": "examples/language/field_initialization.ncr",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["Settings", "true", "200"]
+    },
+    {
+      "category": "language",
+      "source": "examples/language/definite_initialization.ncr",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["Initialized through the first branch.", "Initialized through the second branch."]
+    },
+    {
+      "category": "language",
+      "source": "examples/language/multi_file_project",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["Sum = 42"]
+    },
+    {
+      "category": "ownership",
+      "source": "examples/ownership/borrowing.ncr",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["42", "84", "43"]
+    },
+    {
+      "category": "ownership",
+      "source": "examples/ownership/reborrowing.ncr",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["1", "2"]
+    },
+    {
+      "category": "ownership",
+      "source": "examples/ownership/borrowed_fields.ncr",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["Shared counter", "42", "43"]
+    },
+    {
+      "category": "ownership",
+      "source": "examples/ownership/borrowed_loop.ncr",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["8"]
+    },
+    {
+      "category": "ownership",
+      "source": "examples/ownership/loop_cleanup.ncr",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["13"]
+    },
+    {
+      "category": "ownership",
+      "source": "examples/ownership/continue_cleanup.ncr",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["40"]
+    },
+    {
+      "category": "ownership",
+      "source": "examples/ownership/break_cleanup.ncr",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["7"]
+    },
+    {
+      "category": "ownership",
+      "source": "examples/ownership/ownership.ncr",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["42", "7"]
+    },
+    {
+      "category": "ownership",
+      "source": "examples/ownership/composition.ncr",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["My car", "150"]
+    },
+    {
+      "category": "ownership",
+      "source": "examples/ownership/readonly_composition.ncr",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["120", "130"]
+    },
+    {
+      "category": "ownership",
+      "source": "examples/ownership/explicit_drop.ncr",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["150"]
+    },
+    {
+      "category": "ownership",
+      "source": "examples/ownership/generic_composition.ncr",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["42"]
+    },
+    {
+      "category": "ownership",
+      "source": "examples/ownership/generic_view.ncr",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["42", "43"]
+    },
+    {
+      "category": "ownership",
+      "source": "examples/ownership/interface_borrowing.ncr",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["41", "42"]
+    },
+    {
+      "category": "ownership",
+      "source": "examples/ownership/scope_cleanup.ncr",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["0", "100"]
+    },
+    {
+      "category": "ownership",
+      "source": "examples/ownership/owned_tree.ncr",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["3"]
+    },
+    {
+      "category": "collections",
+      "source": "examples/collections/list_operations.ncr",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["Sum = 42", "20", "12", "1"]
+    },
+    {
+      "category": "collections",
+      "source": "examples/collections/list_recovery.ncr",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["No negative index.", "2", "Alpha!", "Ωmega!", "Empty list preserved."]
+    },
+    {
+      "category": "collections",
+      "source": "examples/collections/map_traversal.ncr",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["Count entries:", "Total items:", "22", "Counter total before update:", "10", "Counter total after update:", "12"]
+    },
+    {
+      "category": "collections",
+      "source": "examples/collections/text_map_inventory.ncr",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["true", "12", "20", "2"]
+    },
+    {
+      "category": "collections",
+      "source": "examples/collections/map_updates.ncr",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["Absent key preserves the map.", "Replacement", "Already absent."]
+    },
+    {
+      "category": "collections",
+      "source": "examples/collections/owned_list.ncr",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["Alice", "true"]
+    },
+    {
+      "category": "text",
+      "source": "examples/text/text_basics.ncr",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["café", "Hi!", "One line", "and another."]
+    },
+    {
+      "category": "text",
+      "source": "examples/text/dynamic_text.ncr",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["Hello! Answer = 42", "true"]
+    },
+    {
+      "category": "io",
+      "source": "examples/io/contact_book.ncr",
+      "stdin": "add\nAda Ω\n\nlist\nquit\n",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["Nacre contact book.", "Contact added.", "1. Ada Ω | phone: (none)", "Goodbye."]
+    },
+    {
+      "category": "algorithms",
+      "source": "examples/algorithms/fibonacci.ncr",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["Fibonacci from 0 to 10:", "55"]
+    },
+    {
+      "category": "algorithms",
+      "source": "examples/algorithms/fizz_buzz.ncr",
+      "stdin": "",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["Fizz", "Buzz", "FizzBuzz"]
+    },
+    {
+      "category": "apps",
+      "source": "examples/apps/sudoku.ncr",
+      "stdin": "solve\nquit\n",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["Sudoku: rows and columns are numbered 1-9.", "Solved!"]
+    },
+    {
+      "category": "apps",
+      "source": "examples/apps/lending_desk",
+      "stdin": "add-book\nThe Left Hand of Darkness\nUrsula K. Le Guin\n14\nadd-member\nAda Ω\nReader\nlend\n1\n1\nlist\nquit\n",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["Book added as resource #1", "Member added as #1", "Lent to member #1", "Due on logical day 14", "Borrower: Ada Ω", "Goodbye."]
+    }
+  ]
+}

@@ -19,7 +19,7 @@ fn destruction_has_a_distinct_diagnostic() {
 }
 #[test]
 fn dump_is_deterministic_and_contains_real_loan_events() {
-    let source = include_str!("../examples/reborrowing.ncr");
+    let source = include_str!("../examples/ownership/reborrowing.ncr");
     let dump = emit_borrows(source).unwrap();
     assert_eq!(dump, emit_borrows(source).unwrap());
     for token in ["exclusive", "shared", "parent=Some", "end loan", "scope exit", "activate receiver"] {

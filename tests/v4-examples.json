@@ -1,6 +1,6 @@
 {
   "interfaces": {
-    "stdout": "Ouaf !\nOuaf !\nMiaou !\n",
+    "stdout": "Woof!\nWoof!\nMeow!\n",
     "allocations": 2
   },
   "interface_borrowing": {
@@ -8,7 +8,7 @@
     "allocations": 1
   },
   "generic_box": {
-    "stdout": "42\nBonjour les generiques !\ntrue\n",
+    "stdout": "42\nHello, generics!\ntrue\n",
     "allocations": 3
   },
   "generic_composition": {
@@ -16,7 +16,7 @@
     "allocations": 2
   },
   "generic_interfaces": {
-    "stdout": "42\nPolymorphisme generique\n",
+    "stdout": "42\nGeneric polymorphism\n",
     "allocations": 2
   },
   "interface_composition": {

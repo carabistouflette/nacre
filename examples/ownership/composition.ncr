@@ -21,7 +21,7 @@ class Car {
 
 void main() {
     Engine engine = new Engine(150);
-    Car car = new Car("Ma voiture", engine);
+    Car car = new Car("My car", engine);
     // engine.getPower(); would be rejected: engine was moved into car.
     car.describe();
 } // Car and its Engine are both freed, with no GC.

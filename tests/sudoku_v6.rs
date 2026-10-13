@@ -7,7 +7,7 @@ use std::process::{Command, Output, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const EXAMPLE: &str = include_str!("../examples/sudoku.ncr");
+const EXAMPLE: &str = include_str!("../examples/apps/sudoku.ncr");
 const PUZZLE: &str = "530070000600195000098000060800060003400803001700020006060000280000419005000080079";
 static NEXT_DIRECTORY: AtomicU64 = AtomicU64::new(0);
 
@@ -34,7 +34,7 @@ impl Drop for Scratch {
 }
 
 fn program() -> native::NativeProgram {
-    let c = compile_to_c(EXAMPLE).unwrap_or_else(|e| panic!("{}", e.render("sudoku.ncr", EXAMPLE)));
+    let c = compile_to_c(EXAMPLE).unwrap_or_else(|e| panic!("{}", e.render("apps/sudoku.ncr", EXAMPLE)));
     native::compile_c(&c).unwrap()
 }
 

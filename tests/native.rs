@@ -16,17 +16,17 @@ fn assert_stdout(source: &str, expected: &str) {
 }
 
 #[test]
-fn hello() { assert_stdout(include_str!("../examples/hello.ncr"), "Bonjour depuis Nacre !\n42\ntrue\n"); }
+fn hello() { assert_stdout(include_str!("../examples/language/hello_world.ncr"), "Hello from Nacre!\n42\ntrue\n"); }
 #[test]
-fn fibonacci() { assert_stdout(include_str!("../examples/fibonacci.ncr"), "Fibonacci de 0 a 10 :\n0\n1\n1\n2\n3\n5\n8\n13\n21\n34\n55\n"); }
+fn fibonacci() { assert_stdout(include_str!("../examples/algorithms/fibonacci.ncr"), "Fibonacci from 0 to 10:\n0\n1\n1\n2\n3\n5\n8\n13\n21\n34\n55\n"); }
 #[test]
-fn fizzbuzz() { assert_stdout(include_str!("../examples/fizzbuzz.ncr"), "1\n2\nFizz\n4\nBuzz\nFizz\n7\n8\nFizz\nBuzz\n11\nFizz\n13\n14\nFizzBuzz\n16\n17\nFizz\n19\nBuzz\n"); }
+fn fizzbuzz() { assert_stdout(include_str!("../examples/algorithms/fizz_buzz.ncr"), "1\n2\nFizz\n4\nBuzz\nFizz\n7\n8\nFizz\nBuzz\n11\nFizz\n13\n14\nFizzBuzz\n16\n17\nFizz\n19\nBuzz\n"); }
 #[test]
-fn break_continue_and_short_circuit() { assert_stdout(include_str!("../examples/control_flow.ncr"), "25\nfalse\n"); }
+fn break_continue_and_short_circuit() { assert_stdout(include_str!("../examples/language/control_flow.ncr"), "25\nfalse\n"); }
 #[test]
-fn overflow_boundaries() { assert_stdout(include_str!("../examples/overflow.ncr"), "-2147483648\n2147483647\n1\n-2147483648\n0\n"); }
+fn overflow_boundaries() { assert_stdout(include_str!("../examples/language/integer_overflow.ncr"), "-2147483648\n2147483647\n1\n-2147483648\n0\n"); }
 #[test]
-fn static_strings() { assert_stdout(include_str!("../examples/strings.ncr"), "Une chaîne UTF-8, sans objet alloué par le langage.\nSalut !\nUne ligne\net une autre.\n"); }
+fn static_strings() { assert_stdout(include_str!("../examples/text/text_basics.ncr"), "A UTF-8 string with a café character and no language-level allocation.\nHi!\nOne line\nand another.\n"); }
 
 #[test]
 fn empty_program() { assert_stdout("void main() {}", ""); }

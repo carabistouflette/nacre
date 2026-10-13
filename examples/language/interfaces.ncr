@@ -3,11 +3,11 @@ interface Animal {
 }
 
 class Dog implements Animal {
-    public readonly void speak() { println("Ouaf !"); }
+    public readonly void speak() { println("Woof!"); }
 }
 
 class Cat implements Animal {
-    public readonly void speak() { println("Miaou !"); }
+    public readonly void speak() { println("Meow!"); }
 }
 
 void speakTwice(borrow Animal animal) {
@@ -18,7 +18,7 @@ void speakTwice(borrow Animal animal) {
 void main() {
     Animal animal = new Dog();
     speakTwice(animal);
-    // Le remplacement detruit le Dog, puis conserve le Cat.
+    // Replacing the animal destroys the Dog and keeps the Cat.
     animal = new Cat();
     animal.speak();
 }

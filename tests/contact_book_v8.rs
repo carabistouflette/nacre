@@ -19,8 +19,8 @@ impl Drop for Workspace {
 }
 
 fn execute(input: &str) -> String {
-    let source = include_str!("../examples/contact_book.ncr");
-    let c = compile_to_c(source).unwrap_or_else(|error| panic!("{}", error.render("contact_book.ncr", source)));
+    let source = include_str!("../examples/io/contact_book.ncr");
+    let c = compile_to_c(source).unwrap_or_else(|error| panic!("{}", error.render("io/contact_book.ncr", source)));
     let program = native::compile_c_with_flags(&c, &["-DNACRE_MEMORY_STATS"]).unwrap();
     let mut child = Command::new(program.path())
         .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped())

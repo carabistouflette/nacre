@@ -5,5 +5,5 @@ void update(borrow mut Counter left, borrow mut Counter right) {
 }
 void main() {
     Counter counter = new Counter();
-    update(counter, counter); // E3001 : deux emprunts exclusifs du meme objet.
+    update(counter, counter); // E3001: two exclusive borrows of the same object.
 }

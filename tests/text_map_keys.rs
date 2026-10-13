@@ -481,7 +481,7 @@ void main() {
 #[test]
 fn named_inventory_example_uses_borrowed_queries_and_unordered_traversal() {
     assert_native(
-        include_str!("../examples/named_inventory.ncr"),
+        include_str!("../examples/collections/text_map_inventory.ncr"),
         b"true\ntrue\n12\n20\n2\n",
     );
 }

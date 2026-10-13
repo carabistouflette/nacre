@@ -18,19 +18,19 @@ int read(borrow Counter counter) {
 public class Main {
     public static void main() {
         Counter counter = new Counter(40);
-        incrementTwice(counter); // Emprunt pour l'appel, pas un transfert.
+        incrementTwice(counter); // A call borrows the owner; it does not transfer it.
         println(read(counter));
 
         {
             borrow Counter first = counter;
             borrow Counter second = counter;
             println(first.getValue() + second.getValue());
-        } // Les deux emprunts partages se terminent ici.
+        } // Both shared borrows end here.
 
         {
             borrow mut Counter editor = counter;
             editor.increment();
-        } // L'emprunt exclusif se termine ici.
+        } // The exclusive borrow ends here.
 
         println(counter.getValue());
     }

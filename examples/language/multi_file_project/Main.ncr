@@ -5,7 +5,7 @@ public class Main {
         values.add(20);
         values.add(12);
 
-        Text message = new Text("Somme = ");
+        Text message = new Text("Sum = ");
         message.appendInt(Statistics.sum(values));
         message.print();
     }

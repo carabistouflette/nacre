@@ -1,7 +1,7 @@
 class Settings {
     public int width = 80;
     public boolean enabled = true;
-    public String label = "Configuration";
+    public String label = "Settings";
     public int doubleWidth() { return this.width * 2; }
     // A default no-argument constructor is synthesized.
 }

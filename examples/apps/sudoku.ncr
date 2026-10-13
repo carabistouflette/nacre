@@ -569,7 +569,7 @@ void main() {
     }
     int argumentCount = Args.count();
     if (argumentCount > 1) {
-        println("Usage: nacre run examples/sudoku.ncr -- [initial-save-file]");
+        println("Usage: nacre run examples/apps/sudoku.ncr -- [initial-save-file]");
         return;
     }
     if (argumentCount == 1) {

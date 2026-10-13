@@ -1,0 +1,8 @@
+public class Main {
+    public static void main() {
+        System.out.println("Hello from Nacre!");
+        int answer = 6 * 7;
+        System.out.println(answer);
+        System.out.println(answer == 42);
+    }
+}

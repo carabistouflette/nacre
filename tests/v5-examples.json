@@ -1,6 +1,6 @@
 {
   "collections": {
-    "stdout": "Somme = 42\n20\n12\n1\n",
+    "stdout": "Sum = 42\n20\n12\n1\n",
     "allocations": 4
   },
   "owned_list": {
@@ -12,7 +12,7 @@
     "allocations": 7
   },
   "dynamic_text": {
-    "stdout": "Bonjour ! Réponse = 42\ntrue\ntrue\nBonjour ! Réponse = 42\n",
+    "stdout": "Hello! Answer = 42\ntrue\ntrue\nHello! Answer = 42\n",
     "allocations": 5
   }
 }

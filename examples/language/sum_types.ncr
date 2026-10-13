@@ -1,4 +1,4 @@
-// V6: tagged values are inline; only the owned Text allocates.
+// Tagged values are inline; only the owned Text allocates.
 enum Parcel<T> {
     Empty;
     Value(T);

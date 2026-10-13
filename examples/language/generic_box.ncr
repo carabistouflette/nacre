@@ -1,4 +1,4 @@
-// Les methodes du modele sont verifiees pour chaque specialisation demandee.
+// The model methods are checked for each requested specialization.
 class Box<T> {
     private T value;
     public Box(T value) { this.value = value; }
@@ -7,7 +7,7 @@ class Box<T> {
 
 void main() {
     Box<int> number = new Box<int>(42);
-    Box<String> text = new Box<String>("Bonjour les generiques !");
+    Box<String> text = new Box<String>("Hello, generics!");
     Box<boolean> flag = new Box<boolean>(true);
     println(number.get());
     println(text.get());

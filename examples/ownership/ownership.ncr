@@ -12,7 +12,7 @@ void consume(Box box) {
 
 void main() {
     Box first = makeBox(42);
-    Box second = first; // Move, not a Java reference copy.
+    Box second = first; // This move transfers the cleanup obligation.
     println(second.get());
     consume(second); // Move into a function parameter.
     first = makeBox(7); // Reinitializing a moved binding is allowed.

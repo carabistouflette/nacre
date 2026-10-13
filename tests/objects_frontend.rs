@@ -12,12 +12,12 @@ macro_rules! rejects {
     }};
 }
 
-accepts!(counter_example, include_str!("../examples/counter.ncr"));
-accepts!(composition_example, include_str!("../examples/composition.ncr"));
-accepts!(ownership_example, include_str!("../examples/ownership.ncr"));
-accepts!(initializers_example, include_str!("../examples/field_initializers.ncr"));
-accepts!(static_example, include_str!("../examples/static_methods.ncr"));
-accepts!(scopes_example, include_str!("../examples/object_scopes.ncr"));
+accepts!(counter_example, include_str!("../examples/language/counter.ncr"));
+accepts!(composition_example, include_str!("../examples/ownership/composition.ncr"));
+accepts!(ownership_example, include_str!("../examples/ownership/ownership.ncr"));
+accepts!(initializers_example, include_str!("../examples/language/field_initialization.ncr"));
+accepts!(static_example, include_str!("../examples/language/static_methods.ncr"));
+accepts!(scopes_example, include_str!("../examples/ownership/scope_cleanup.ncr"));
 accepts!(empty_class, "class Empty {} void main() { Empty e = new Empty(); }");
 accepts!(constructor_implicit_fields, "class C { int x; C(int v) { x = v; } int get() { return x; } } void main() { C c = new C(7); println(c.get()); }");
 accepts!(forward_field_types, "class A { B b = new B(); } class B { int x = 1; } void main() { A a = new A(); println(a.b.x); }");
@@ -114,7 +114,7 @@ fn ownership_emission_contains_move_and_drop() {
 }
 #[test]
 fn object_codegen_is_deterministic() {
-    let source = include_str!("../examples/composition.ncr");
+    let source = include_str!("../examples/ownership/composition.ncr");
     assert_eq!(compile_to_c(source).unwrap(), compile_to_c(source).unwrap());
 }
 #[test]

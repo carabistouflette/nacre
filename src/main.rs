@@ -25,10 +25,10 @@ Usage:
   nacre --version
 
 Examples with Cargo:
-  cargo run -- check examples/hello.ncr
-  cargo run -- run examples/counter.ncr
-  cargo run -- build examples/counter.ncr -o out/counter
-  cargo run -- emit-c examples/counter.ncr -o out/counter.c
+  cargo run -- check examples/language/hello_world.ncr
+  cargo run -- run examples/language/counter.ncr
+  cargo run -- build examples/language/counter.ncr -o out/counter
+  cargo run -- emit-c examples/language/counter.ncr -o out/counter.c
 
 Multiple files or a .ncr directory are accepted by all commands.
 Source files may declare modules and import public names; all requested inputs are compiled together.

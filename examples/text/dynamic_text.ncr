@@ -1,9 +1,9 @@
 void main() {
-    Text message = new Text("Bonjour");
-    message.append(" ! Réponse = ");
+    Text message = new Text("Hello");
+    message.append("! Answer = ");
     message.appendInt(42);
     message.print();
-    Text copy = message.clone(); // Copie explicite et independante.
+    Text copy = message.clone(); // Explicit independent copy.
     println(copy.equals(message));
     message.clear();
     println(message.isEmpty());

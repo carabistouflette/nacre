@@ -130,8 +130,8 @@ fn invalid_utf8_source_is_rejected() {
 }
 #[test]
 fn project_example_is_valid() {
-    let b=SourceBundle::from_paths(&[PathBuf::from("examples/project")]).unwrap();let result=run(&b);
-    assert_eq!(result.stdout,b"Somme = 42\n");assert_eq!(result.stderr,b"NACRE_MEMORY allocations=4 frees=4 live=0\n");
+    let b=SourceBundle::from_paths(&[PathBuf::from("examples/language/multi_file_project")]).unwrap();let result=run(&b);
+    assert_eq!(result.stdout,b"Sum = 42\n");assert_eq!(result.stderr,b"NACRE_MEMORY allocations=4 frees=4 live=0\n");
 }
 #[test]
 fn project_init_then_run() {
@@ -157,7 +157,7 @@ fn doctor_reports_missing_c_compiler() {
 }
 #[test]
 fn cli_multiple_files_check_without_c_compiler() {
-    let out=Command::new(env!("CARGO_BIN_EXE_nacre")).args(["check","examples/project/Main.ncr","examples/project/Statistics.ncr"])
+    let out=Command::new(env!("CARGO_BIN_EXE_nacre")).args(["check","examples/language/multi_file_project/Main.ncr","examples/language/multi_file_project/Statistics.ncr"])
         .env("NACRE_CC","nacre-nonexistent-compiler").output().unwrap();assert!(out.status.success());
 }
 #[test]
@@ -172,7 +172,7 @@ fn source_map_does_not_interpolate_filename_into_c_code() {
 }
 #[test]
 fn native_emission_is_deterministic() {
-    let b=bundle(&[("A.ncr",include_str!("../examples/project/Statistics.ncr")),("Main.ncr",include_str!("../examples/project/Main.ncr"))]);
+    let b=bundle(&[("A.ncr",include_str!("../examples/language/multi_file_project/Statistics.ncr")),("Main.ncr",include_str!("../examples/language/multi_file_project/Main.ncr"))]);
     assert_eq!(b.compile_to_c().unwrap(),b.compile_to_c().unwrap());
 }
 #[test]
@@ -195,5 +195,5 @@ fn hard_link_output_cannot_overwrite_an_input() {
 }
 #[test]
 fn sanitize_is_not_a_frontend_flag() {
-    assert!(!cli(&["check".as_ref(),Path::new("examples/hello.ncr").as_os_str(),"--sanitize".as_ref()]).status.success());
+    assert!(!cli(&["check".as_ref(),Path::new("examples/language/hello_world.ncr").as_os_str(),"--sanitize".as_ref()]).status.success());
 }

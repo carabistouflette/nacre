@@ -14,11 +14,11 @@ void bump(borrow mut CounterAccess counter) { counter.increment(); }
 
 void main() {
     Counter counter = new Counter(40);
-    bump(counter); // Emprunt et conversion d'interface implicites, sans allocation.
+    bump(counter); // Borrow and interface conversion are implicit and allocation-free.
     {
         borrow CounterAccess reader = counter;
         println(reader.getValue());
-        // counter.increment() serait refuse pendant cet emprunt.
+        // counter.increment() would be rejected while this borrow is active.
     }
     counter.increment();
     println(counter.getValue());

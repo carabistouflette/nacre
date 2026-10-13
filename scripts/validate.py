@@ -18,21 +18,56 @@ EXAMPLES = {
     "borrowing": ("42\n84\n43\n", 1),
     "sums": ("42\n0\n", 2),
     "reborrowing": ("1\n2\n2\n", 1),
-    "borrowed_fields": ("Compteur partage\n42\n43\n", 2),
+    "borrowed_fields": ("Shared counter\n42\n43\n", 2),
     "borrowed_loop": ("8\n", 1),
     "readonly_composition": ("120\n130\n", 2),
     "counter": ("42\n", 1),
-    "composition": ("Ma voiture\n150\n", 2),
+    "composition": ("My car\n150\n", 2),
     "ownership": ("42\n42\n7\n", 2),
-    "field_initializers": ("Configuration\ntrue\n200\n", 1),
+    "field_initializers": ("Settings\ntrue\n200\n", 1),
     "static_methods": ("36\n49\n", 0),
     "object_scopes": ("0\n2\n100\n", 5),
     "ownership_loop": ("13\n", 4),
-    "definite_initialization": ("Bonjour !\nHello!\n", 2),
+    "definite_initialization": ("Initialized through the first branch.\nInitialized through the second branch.\n", 2),
     "explicit_drop": ("150\n150\n", 4),
     "ownership_continue": ("40\n", 5),
     "ownership_break": ("7\n", 2),
 }
+EXAMPLE_PATHS = {
+    "borrowing": "ownership/borrowing.ncr",
+    "sums": "language/sum_types.ncr",
+    "reborrowing": "ownership/reborrowing.ncr",
+    "borrowed_fields": "ownership/borrowed_fields.ncr",
+    "borrowed_loop": "ownership/borrowed_loop.ncr",
+    "readonly_composition": "ownership/readonly_composition.ncr",
+    "counter": "language/counter.ncr",
+    "composition": "ownership/composition.ncr",
+    "ownership": "ownership/ownership.ncr",
+    "field_initializers": "language/field_initialization.ncr",
+    "static_methods": "language/static_methods.ncr",
+    "object_scopes": "ownership/scope_cleanup.ncr",
+    "ownership_loop": "ownership/loop_cleanup.ncr",
+    "definite_initialization": "language/definite_initialization.ncr",
+    "explicit_drop": "ownership/explicit_drop.ncr",
+    "ownership_continue": "ownership/continue_cleanup.ncr",
+    "ownership_break": "ownership/break_cleanup.ncr",
+    "interfaces": "language/interfaces.ncr",
+    "interface_borrowing": "ownership/interface_borrowing.ncr",
+    "generic_box": "language/generic_box.ncr",
+    "generic_composition": "ownership/generic_composition.ncr",
+    "generic_interfaces": "language/generic_interfaces.ncr",
+    "interface_composition": "language/interface_composition.ncr",
+    "generic_view": "ownership/generic_view.ncr",
+    "collections": "collections/list_operations.ncr",
+    "owned_list": "collections/owned_list.ncr",
+    "owned_tree": "ownership/owned_tree.ncr",
+    "dynamic_text": "text/dynamic_text.ncr",
+}
+
+
+def example_source(name):
+    return ROOT / "examples" / EXAMPLE_PATHS[name]
+
 
 def command(args, **kwargs):
     return subprocess.run(args, cwd=ROOT, check=True, **kwargs)
@@ -92,11 +127,11 @@ def main():
         with tempfile.TemporaryDirectory(prefix='nacre-validation-') as temporary:
             directory = Path(temporary)
             for name, (stdout, count) in EXAMPLES.items():
-                source = ROOT / 'examples' / f'{name}.ncr'
+                source = example_source(name)
                 results.append(exercise_native(nacre, source, name, stdout, count,
                                                cc, directory, env, args.sanitizers))
-            results.append(exercise_native(nacre, ROOT/'examples/project', 'multifile_project',
-                'Somme = 42\n', 4, cc, directory, env, args.sanitizers))
+            results.append(exercise_native(nacre, ROOT/'examples/language/multi_file_project', 'multifile_project',
+                'Sum = 42\n', 4, cc, directory, env, args.sanitizers))
             command([str(nacre), 'doctor'], env=env)
             for version, case in cases:
                 name = f'v{version}_' + case['name']
@@ -139,7 +174,7 @@ def main():
         with tempfile.TemporaryDirectory(prefix='nacre-llvm-') as temp:
             directory = Path(temp)
             for name in list(json.loads((ROOT/'tests/v4-examples.json').read_text())) + list(json.loads((ROOT/'tests/v5-examples.json').read_text())):
-                source = ROOT/'examples'/f'{name}.ncr'
+                source = example_source(name)
                 ir = directory/f'{name}.ll'
                 exe = directory/name
                 command([str(nacre), 'emit-llvm', str(source), '-O2', '--memory-stats', '-o', str(ir)], capture_output=True)

@@ -24,7 +24,7 @@ fn missing_filename() { assert!(!nacre(&["run"]).status.success()); }
 #[test]
 fn nonexistent_file() { assert!(!nacre(&["check", "file-that-does-not-exist.ncr"]).status.success()); }
 #[test]
-fn checks_valid_file() { let out = nacre(&["check", "examples/hello.ncr"]); assert!(out.status.success()); }
+fn checks_valid_file() { let out = nacre(&["check", "examples/language/hello_world.ncr"]); assert!(out.status.success()); }
 #[test]
 fn rejects_invalid_file_with_caret() {
     let out = nacre(&["check", "examples/invalid/type_error.ncr"]);
@@ -45,19 +45,19 @@ fn source_cannot_be_overwritten() {
 }
 #[test]
 fn run_native_program() {
-    let out = nacre(&["run", "examples/hello.ncr"]);
+    let out = nacre(&["run", "examples/language/hello_world.ncr"]);
     assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
-    assert_eq!(String::from_utf8(out.stdout).unwrap(), "Bonjour depuis Nacre !\n42\ntrue\n");
+    assert_eq!(String::from_utf8(out.stdout).unwrap(), "Hello from Nacre!\n42\ntrue\n");
 }
 #[test]
 fn build_persistent_native_program() {
     let temp = TestDir::new();
     let output = temp.path(if cfg!(windows) { "hello native.exe" } else { "hello native" });
-    let out = nacre(&["build", "examples/hello.ncr", "-o", path_str(&output)]);
+    let out = nacre(&["build", "examples/language/hello_world.ncr", "-o", path_str(&output)]);
     assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
     let result = Command::new(&output).output().unwrap();
     assert!(result.status.success());
-    assert_eq!(String::from_utf8(result.stdout).unwrap(), "Bonjour depuis Nacre !\n42\ntrue\n");
+    assert_eq!(String::from_utf8(result.stdout).unwrap(), "Hello from Nacre!\n42\ntrue\n");
 }
 #[test]
 fn runtime_error_exit_code_is_propagated() {
@@ -72,7 +72,7 @@ fn runtime_error_exit_code_is_propagated() {
 
 #[test]
 fn run_counter_v1() {
-    let out = nacre(&["run", "examples/counter.ncr"]);
+    let out = nacre(&["run", "examples/language/counter.ncr"]);
     assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
     assert_eq!(out.stdout, b"42\n");
 }
@@ -90,7 +90,7 @@ fn rejects_private_field_v1() {
 #[test]
 fn emit_flow_does_not_require_a_c_compiler() {
     let out = Command::new(env!("CARGO_BIN_EXE_nacre"))
-        .args(["emit-flow", "examples/ownership_loop.ncr"])
+        .args(["emit-flow", "examples/ownership/loop_cleanup.ncr"])
         .env("NACRE_CC", "nacre-deliberately-missing-compiler")
         .output().unwrap();
     assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
@@ -100,7 +100,7 @@ fn emit_flow_does_not_require_a_c_compiler() {
 fn emit_flow_writes_a_file() {
     let temp = TestDir::new();
     let path = temp.path("flow graph.txt");
-    let out = nacre(&["emit-flow", "examples/ownership_loop.ncr", "-o", path_str(&path)]);
+    let out = nacre(&["emit-flow", "examples/ownership/loop_cleanup.ncr", "-o", path_str(&path)]);
     assert!(out.status.success());
     assert!(fs::read_to_string(&path).unwrap().contains("ownership CFG"));
 }
@@ -114,22 +114,22 @@ fn emit_flow_cannot_overwrite_source() {
 }
 #[test]
 fn run_with_memory_stats() {
-    let out = nacre(&["run", "examples/ownership_loop.ncr", "--memory-stats"]);
+    let out = nacre(&["run", "examples/ownership/loop_cleanup.ncr", "--memory-stats"]);
     assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
     assert_eq!(out.stdout, b"13\n");
     assert_eq!(out.stderr, b"NACRE_MEMORY allocations=4 frees=4 live=0\n");
 }
 #[test]
 fn memory_stats_is_not_a_check_option() {
-    assert!(!nacre(&["check", "examples/hello.ncr", "--memory-stats"]).status.success());
+    assert!(!nacre(&["check", "examples/language/hello_world.ncr", "--memory-stats"]).status.success());
 }
 #[test]
 fn duplicate_memory_stats_flag_is_rejected() {
-    assert!(!nacre(&["run", "examples/hello.ncr", "--memory-stats", "--memory-stats"]).status.success());
+    assert!(!nacre(&["run", "examples/language/hello_world.ncr", "--memory-stats", "--memory-stats"]).status.success());
 }
 #[test]
 fn missing_emit_flow_output_path_is_rejected() {
-    assert!(!nacre(&["emit-flow", "examples/hello.ncr", "-o"]).status.success());
+    assert!(!nacre(&["emit-flow", "examples/language/hello_world.ncr", "-o"]).status.success());
 }
 #[test]
 fn v2_move_error_has_notes() {
@@ -142,7 +142,7 @@ fn v2_move_error_has_notes() {
 
 #[test]
 fn emits_borrow_analysis_to_stdout() {
-    let out = nacre(&["emit-borrows", "examples/borrowing.ncr"]);
+    let out = nacre(&["emit-borrows", "examples/ownership/borrowing.ncr"]);
     assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
     let text = String::from_utf8_lossy(&out.stdout);
     assert!(text.contains("lexical borrow analysis"));
@@ -152,7 +152,7 @@ fn emits_borrow_analysis_to_stdout() {
 fn emits_borrow_analysis_to_file() {
     let temp = TestDir::new();
     let path = temp.path("borrow report.txt");
-    let out = nacre(&["emit-borrows", "examples/borrowing.ncr", "-o", path_str(&path)]);
+    let out = nacre(&["emit-borrows", "examples/ownership/borrowing.ncr", "-o", path_str(&path)]);
     assert!(out.status.success());
     assert!(fs::read_to_string(path).unwrap().contains("end loan"));
 }
@@ -166,7 +166,7 @@ fn borrow_analysis_protects_the_source_file() {
 }
 #[test]
 fn borrow_analysis_rejects_memory_stats_flag() {
-    assert!(!nacre(&["emit-borrows", "examples/borrowing.ncr", "--memory-stats"]).status.success());
+    assert!(!nacre(&["emit-borrows", "examples/ownership/borrowing.ncr", "--memory-stats"]).status.success());
 }
 #[test]
 fn borrower_diagnostic_reaches_the_cli() {

@@ -183,7 +183,7 @@ async function main() {
   const grammar = await loadGrammar();
   assert(grammar, 'source.nacre grammar was not registered');
 
-  const sudokuSource = fs.readFileSync(path.join(repositoryRoot, 'examples/sudoku.ncr'), 'utf8');
+  const sudokuSource = fs.readFileSync(path.join(repositoryRoot, 'examples/apps/sudoku.ncr'), 'utf8');
   const sudoku = tokenize(grammar, sudokuSource);
   const sudokuClassLine = sudoku.findIndex(({ line }) => line.includes('class Sudoku'));
   assert.notEqual(sudokuClassLine, -1, 'Sudoku example did not contain its class declaration');

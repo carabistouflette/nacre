@@ -33,7 +33,7 @@ impl Drop for Workspace {
 }
 
 fn program() -> native::NativeProgram {
-    let bundle = SourceBundle::from_paths(&[PathBuf::from("examples/lending_desk")]).unwrap();
+    let bundle = SourceBundle::from_paths(&[PathBuf::from("examples/apps/lending_desk")]).unwrap();
     let c = bundle
         .compile_to_c()
         .unwrap_or_else(|diagnostic| panic!("{}", bundle.render(&diagnostic)));

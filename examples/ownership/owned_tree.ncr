@@ -11,6 +11,6 @@ void main() {
     root.add(new Node(2));
     root.add(new Node(3));
     Node detached = root.detachLast();
-    drop(root); // Detruit le sous-arbre restant; pas detached.
+    drop(root); // Destroy the remaining subtree, but not detached.
     println(detached.getValue());
 }

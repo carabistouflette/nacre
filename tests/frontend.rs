@@ -13,12 +13,12 @@ macro_rules! rejects {
 #[test]
 fn accepts_all_examples() {
     for source in [
-        include_str!("../examples/hello.ncr"),
-        include_str!("../examples/fibonacci.ncr"),
-        include_str!("../examples/fizzbuzz.ncr"),
-        include_str!("../examples/control_flow.ncr"),
-        include_str!("../examples/strings.ncr"),
-        include_str!("../examples/overflow.ncr"),
+        include_str!("../examples/language/hello_world.ncr"),
+        include_str!("../examples/algorithms/fibonacci.ncr"),
+        include_str!("../examples/algorithms/fizz_buzz.ncr"),
+        include_str!("../examples/language/control_flow.ncr"),
+        include_str!("../examples/text/text_basics.ncr"),
+        include_str!("../examples/language/integer_overflow.ncr"),
     ] { validate(source).unwrap(); }
 }
 
@@ -49,7 +49,7 @@ fn accepts_comments_and_crlf() {
 
 #[test]
 fn generation_is_deterministic() {
-    let source = include_str!("../examples/fibonacci.ncr");
+    let source = include_str!("../examples/algorithms/fibonacci.ncr");
     assert_eq!(compile_to_c(source).unwrap(), compile_to_c(source).unwrap());
 }
 

@@ -9,11 +9,11 @@ class Person implements Named {
 void main() {
     List<Named> people = new List<Named>();
     Person alice = new Person("Alice");
-    people.add(alice); // Transfert; alice n'est plus utilisable.
+    people.add(alice); // Move; alice is no longer usable.
     people.add(new Person("Bob"));
     Named first = people.remove(0);
     println(first.name());
-    // Vider la liste detruit Bob, mais pas Alice extraite par remove.
+    // Clearing the list destroys Bob, but not Alice, who was extracted by remove.
     people.clear();
     println(first.name());
     println(people.isEmpty());

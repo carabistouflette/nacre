@@ -1,13 +1,13 @@
 //! Native Sudoku example: solution invariants and failed-search rollback.
 use nacre::{compile_to_c, native};
 
-const EXAMPLE: &str = include_str!("../examples/sudoku.ncr");
+const EXAMPLE: &str = include_str!("../examples/apps/sudoku.ncr");
 const PUZZLE: &str = "530070000600195000098000060800060003400803001700020006060000280000419005000080079";
 
 fn run(main: &str) -> String {
     let (class, _) = EXAMPLE.split_once("void main()").unwrap();
     let source = format!("{class}void main() {{ {main} }}");
-    let c = compile_to_c(&source).unwrap_or_else(|e| panic!("{}", e.render("sudoku.ncr", &source)));
+    let c = compile_to_c(&source).unwrap_or_else(|e| panic!("{}", e.render("apps/sudoku.ncr", &source)));
     let program = native::compile_c(&c).unwrap();
     let result = program.output().unwrap();
     assert!(result.status.success(), "{}", String::from_utf8_lossy(&result.stderr));

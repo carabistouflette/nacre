@@ -13,7 +13,7 @@ class Holder<T> {
 void main() {
     Counter counter = new Counter(42);
     Holder<Counter> holder = new Holder<Counter>(counter);
-    // counter a ete transfere dans holder.
+    // Ownership of counter moves into holder.
     println(holder.read());
-    // La destruction de holder detruit aussi son Counter.
+    // Destroying holder also destroys its Counter.
 }

@@ -5,7 +5,7 @@ class Counter {
     readonly int getValue() { return this.value; }
 }
 
-// Classe a champ emprunte : vue locale, non transferable hors de son bloc.
+// A borrowed-field view is scoped to the lifetime of its owner.
 class CounterView {
     private borrow Counter target;
     private String title;
@@ -23,10 +23,10 @@ class CounterView {
 void main() {
     Counter counter = new Counter(42);
     {
-        CounterView view = new CounterView(counter, "Compteur partage");
+        CounterView view = new CounterView(counter, "Shared counter");
         view.display();
-        // counter.increment() serait refuse pendant la vie de view.
-    } // Detruit view, mais pas l'objet qu'elle emprunte.
+        // counter.increment() would be rejected while view borrows it.
+    } // view is destroyed, but not the object it borrows.
     counter.increment();
     println(counter.getValue());
 }

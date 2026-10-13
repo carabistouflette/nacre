@@ -1,0 +1,14 @@
+String greeting(boolean formal) {
+    if (formal) {
+        return "Hello!";
+    } else {
+        return "Hi!";
+    }
+}
+
+void main() {
+    String text = "A UTF-8 string with a café character and no language-level allocation.";
+    println(text);
+    println(greeting(false));
+    println("One line\nand another.");
+}
