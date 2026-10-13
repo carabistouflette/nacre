@@ -1507,8 +1507,9 @@ impl Checker<'_> {
             }
             let task_result = match (self.tables.classes[owner].native, sig.name.as_str()) {
                 (Some(t::NativeClass::Thread(result)), "spawn")
-                | (Some(t::NativeClass::Future(result)), "spawn")
-                | (Some(t::NativeClass::ThreadPool(result)), "submit" | "schedule") => Some(result),
+                | (Some(t::NativeClass::Future(result)), "spawn") => Some(result),
+                (Some(t::NativeClass::ThreadPool(result)), name)
+                    if crate::stdlib::pool_submission_by_name(name).is_some() => Some(result),
                 _ => None,
             };
             if let Some(result) = task_result {

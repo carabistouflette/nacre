@@ -2,6 +2,7 @@
 mod catalog;
 
 use self::catalog::{builtin, PRELUDE_UNITS};
+pub(crate) use self::catalog::{pool_submission_by_name, pool_submission_policy, PoolSubmissionPolicy};
 use crate::ast as a;
 use crate::diagnostic::{Diagnostic, Span};
 use crate::ir::{NativeClass as C, NativeMethod as M};
@@ -82,6 +83,11 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
             C::Database =>
                 unreachable!("factory-only native class has no constructor"),
         };
+    }
+    if let C::ThreadPool(_) = class {
+        if let Some(submission) = pool_submission_by_name(name) {
+            return submission.method;
+        }
     }
     match (class, name) {
         (C::Locale, "available") => M::LocaleAvailable,
@@ -599,8 +605,6 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
         (C::Future(_), "cancel") => M::FutureCancel,
         (C::Future(_), "isDone") => M::FutureIsDone,
         (C::ThreadPool(_), "create") => M::ThreadPoolCreate,
-        (C::ThreadPool(_), "submit") => M::ThreadPoolSubmit,
-        (C::ThreadPool(_), "schedule") => M::ThreadPoolSchedule,
         (C::ThreadPool(_), "shutdown") => M::ThreadPoolShutdown,
         (C::Console, "readLine") => M::ConsoleReadLine,
         (C::Console, "print") => M::ConsolePrint,

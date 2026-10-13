@@ -1775,6 +1775,8 @@ readonly boolean Future.isDone()
 static Result<ThreadPool<T>, Text> ThreadPool.create(int workers, long queueCapacity)
 Result<Future<T>, SubmitError<T>> ThreadPool.submit(CancelableTask<T> task)
 Result<Future<T>, SubmitError<T>> ThreadPool.schedule(CancelableTask<T> task, long delayMs)
+Result<Future<T>, SubmitError<T>> ThreadPool.scheduleAtFixedRate(CancelableTask<T> task, long initialDelayMs, long intervalMs)
+Result<Future<T>, SubmitError<T>> ThreadPool.scheduleWithFixedDelay(CancelableTask<T> task, long initialDelayMs, long intervalMs)
 Result<Unit, Text> ThreadPool.shutdown(boolean drain)
 enum SubmitError<T> { Closed(CancelableTask<T>); Full(CancelableTask<T>); System(Text, CancelableTask<T>); }
 ```
@@ -1791,12 +1793,45 @@ running work.
 creation fails.
 
 Thread-pool submissions reject immediately when the pool is closed or its bounded
-queue is full. Every `SubmitError` variant contains the original task for recovery.
-Scheduling is one-shot with a nonnegative monotonic delay; recurring scheduling
-is not provided. The first `shutdown` call selects the shutdown mode: `drain=true`
-runs queued jobs (including delayed jobs when due), while `drain=false` cancels
-queued jobs; both modes wait for running tasks and join every worker. Pool drop
-uses the cancel-queued mode and can block for noncooperative running tasks.
+capacity is full. Every `SubmitError` variant contains the original task for
+recovery. `schedule` is one-shot with a nonnegative monotonic delay. Recurring
+schedules require a nonnegative initial delay and a strictly positive interval;
+invalid values and deadline overflow return `SubmitError.System` with the
+original task. A deadline overflow while rearming ends the accepted future with
+`Err(Text)`.
+
+`scheduleAtFixedRate` anchors its first deadline at the initial delay and advances
+each later deadline by one interval from the prior scheduled deadline. If a run
+finishes late, missed runs are not skipped: that same task runs again immediately
+and sequentially until it catches up. It never overlaps itself. A task that
+consistently takes at least one interval can therefore run back-to-back and occupy
+a worker continuously. `scheduleWithFixedDelay` instead anchors its next deadline
+one interval after the callback returns successfully; it also never overlaps itself.
+Successful-result destruction is sequential with invocations but does not move
+that deadline. If disposal takes longer than the interval, the next invocation
+becomes eligible immediately after disposal.
+
+A recurring task owns one task instance until it terminates. Each successful
+invocation's `T` value is dropped; the recurring `Future<T>` never completes with
+`Ok(Some(T))`. A task error terminates the recurrence and is returned by
+`Future.await`. `Future.cancel` requests cancellation through the task's token.
+If a running task returns success after cancellation, that value is dropped and
+the future ends with a cancellation error; a task error returned by that run is
+preserved. Cancellation cannot stop a noncooperative invocation.
+
+Each accepted recurring task reserves one queue-capacity slot for its lifetime,
+including while its invocation is running, so its next run can always be queued.
+Ordinary queued tasks use the remaining capacity. This may return `Full` while a
+recurring invocation is active even if the waiting queue is otherwise empty.
+
+The first `shutdown` call selects the shutdown mode. `drain=true` runs queued
+one-shot jobs (including delayed jobs when due), cancels queued recurring jobs,
+and lets each active recurring invocation finish once without rearming it.
+`drain=false` cancels all queued jobs and likewise prevents active recurrences
+from rearming. Neither mode waits for a recurrence's next deadline or permits it
+to run forever. Both modes wait for current invocations and join every worker;
+they do not kill or cancel an already-running callback. Pool drop uses the
+cancel-queued mode and can block for noncooperative running tasks.
 `Future<T>` and `ThreadPool<T>` require recursively sendable task and result
 payloads. Shared synchronizer lifetime uses the existing explicit control handles;
 ordinary objects are never implicitly cloned or garbage-collected.

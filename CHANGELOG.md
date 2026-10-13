@@ -122,8 +122,13 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 - Native affine concurrency adds sequentially consistent atomics, timed semaphores,
   countdown latches, reusable timeout-breaking barriers, mutex-associated conditions,
   cooperative cancellation, one-shot futures, and bounded/delayed thread pools.
-  Pool rejection preserves the original task; workers are joined on shutdown and
-  drop, while noncooperative task cancellation remains unbounded.
+  Recurring pool tasks support fixed-rate catch-up and fixed-delay cadence without
+  overlapping themselves, preserve task ownership on rejection, and terminate cleanly
+  on cancellation, task error, or pool shutdown.
+  Fixed-delay deadlines are captured at callback completion rather than after
+  synchronous result disposal; fixed-rate rearming avoids an unused clock read.
+  Submission names, native methods and scheduling policy now share one metadata
+  classification across validation and native dispatch.
 
 - Condition-bearing synchronizer handles preserve their nodes across explicit clones;
   a later barrier timeout cannot change an earlier generation's result, partial pool

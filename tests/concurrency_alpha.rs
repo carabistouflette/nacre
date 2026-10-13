@@ -1992,3 +1992,367 @@ void main() {
     let output = execute(source, &["-DNACRE_MEMORY_STATS"]);
     assert_clean(&output, "shutdown canceled queued future\n1\n");
 }
+
+#[test]
+fn recurring_pool_cadence_cancellation_shutdown_and_cleanup() {
+    let source = r#"
+class CadenceTask implements CancelableTask<int> {
+    private AtomicInt runs;
+    private AtomicInt active;
+    private AtomicInt overlaps;
+    private CountDownLatch started;
+    private CountDownLatch release;
+    private CountDownLatch secondStarted;
+    public CadenceTask(AtomicInt runs, AtomicInt active, AtomicInt overlaps,
+        CountDownLatch started, CountDownLatch release, CountDownLatch secondStarted) {
+        this.runs = runs;
+        this.active = active;
+        this.overlaps = overlaps;
+        this.started = started;
+        this.release = release;
+        this.secondStarted = secondStarted;
+    }
+    public Result<int, Text> run(borrow CancellationToken token) {
+        int previous = this.active.fetchAdd(1);
+        if (previous != 0) { this.overlaps.fetchAdd(1); }
+        int index = this.runs.fetchAdd(1);
+        if (index == 0) {
+            this.started.countDown()?;
+            boolean opened = this.release.wait(5000L)?;
+            this.active.fetchSubtract(1);
+            if (!opened) { return new Result<int, Text>.Err(new Text("cadence gate timed out")); }
+            return new Result<int, Text>.Ok(index);
+        }
+        this.secondStarted.countDown()?;
+        this.active.fetchSubtract(1);
+        return new Result<int, Text>.Err(new Text("cadence complete"));
+    }
+}
+
+class OwnedRecurringTextTask implements CancelableTask<Text> {
+    private AtomicInt runs;
+    private CountDownLatch started;
+    private Text owned;
+    public OwnedRecurringTextTask(AtomicInt runs, CountDownLatch started, Text owned) {
+        this.runs = runs;
+        this.started = started;
+        this.owned = owned;
+    }
+    public Result<Text, Text> run(borrow CancellationToken token) {
+        int index = this.runs.fetchAdd(1);
+        if (index == 0) { this.started.countDown()?; }
+        if (index < 2) { return new Result<Text, Text>.Ok(new Text("discarded recurring result")); }
+        boolean cancelled = false;
+        while (!cancelled) {
+            cancelled = token.isCancelled()?;
+            if (!cancelled) { Time.sleepMillis(1L)?; }
+        }
+        return new Result<Text, Text>.Ok(new Text("cancelled invocation result"));
+    }
+}
+
+class ImmediateTextTask implements CancelableTask<Text> {
+    public Result<Text, Text> run(borrow CancellationToken token) {
+        return new Result<Text, Text>.Ok(new Text("unexpected task run"));
+    }
+}
+
+class CountTask implements CancelableTask<int> {
+    private AtomicInt runs;
+    public CountTask(AtomicInt runs) { this.runs = runs; }
+    public Result<int, Text> run(borrow CancellationToken token) {
+        this.runs.fetchAdd(1);
+        return new Result<int, Text>.Ok(1);
+    }
+}
+
+Result<Future<int>, Text> scheduleRate(borrow mut ThreadPool<int> pool, CancelableTask<int> task, long initialDelay, long interval) {
+    match (pool.scheduleAtFixedRate(task, initialDelay, interval)) {
+        Ok(future) { return new Result<Future<int>, Text>.Ok(future); }
+        Err(error) {
+            match (error) {
+                Closed(original) { drop(original); return new Result<Future<int>, Text>.Err(new Text("rate pool closed")); }
+                Full(original) { drop(original); return new Result<Future<int>, Text>.Err(new Text("rate pool full")); }
+                System(message, original) { drop(original); return new Result<Future<int>, Text>.Err(message); }
+            }
+        }
+    }
+}
+
+Result<Future<int>, Text> scheduleDelay(borrow mut ThreadPool<int> pool, CancelableTask<int> task, long initialDelay, long interval) {
+    match (pool.scheduleWithFixedDelay(task, initialDelay, interval)) {
+        Ok(future) { return new Result<Future<int>, Text>.Ok(future); }
+        Err(error) {
+            match (error) {
+                Closed(original) { drop(original); return new Result<Future<int>, Text>.Err(new Text("delay pool closed")); }
+                Full(original) { drop(original); return new Result<Future<int>, Text>.Err(new Text("delay pool full")); }
+                System(message, original) { drop(original); return new Result<Future<int>, Text>.Err(message); }
+            }
+        }
+    }
+}
+
+Result<Unit, Text> exercise() {
+    ThreadPool<int> cadencePool = ThreadPool<int>.create(2, 1L)?;
+    AtomicInt rateRuns = AtomicInt.create(0)?;
+    AtomicInt rateActive = AtomicInt.create(0)?;
+    AtomicInt rateOverlaps = AtomicInt.create(0)?;
+    CountDownLatch rateStarted = CountDownLatch.create(1L)?;
+    CountDownLatch rateRelease = CountDownLatch.create(1L)?;
+    CountDownLatch rateSecond = CountDownLatch.create(1L)?;
+    Future<int> rate = scheduleRate(cadencePool,
+        new CadenceTask(rateRuns.cloneHandle()?, rateActive.cloneHandle()?, rateOverlaps.cloneHandle()?,
+            rateStarted.cloneHandle()?, rateRelease.cloneHandle()?, rateSecond.cloneHandle()?), 500L, 200L)?;
+    if (rateStarted.wait(0L)?) { return new Result<Unit, Text>.Err(new Text("fixed-rate task ignored initial delay")); }
+    if (!rateStarted.wait(1000L)?) { return new Result<Unit, Text>.Err(new Text("fixed-rate task did not start")); }
+    Time.sleepMillis(450L)?;
+    rateRelease.countDown()?;
+    if (!rateSecond.wait(100L)?) { return new Result<Unit, Text>.Err(new Text("fixed-rate task did not catch up")); }
+    match (rate.await(1000L)) {
+        Err(error) {
+            boolean expected = error.equalsString("cadence complete");
+            drop(error);
+            if (!expected) { return new Result<Unit, Text>.Err(new Text("fixed-rate task error was lost")); }
+            println("fixed rate catches up");
+        }
+        Ok(value) { drop(value); return new Result<Unit, Text>.Err(new Text("fixed-rate future succeeded")); }
+    }
+    if (rateOverlaps.load() != 0) { return new Result<Unit, Text>.Err(new Text("fixed-rate task overlapped itself")); }
+
+    AtomicInt delayRuns = AtomicInt.create(0)?;
+    AtomicInt delayActive = AtomicInt.create(0)?;
+    AtomicInt delayOverlaps = AtomicInt.create(0)?;
+    CountDownLatch delayStarted = CountDownLatch.create(1L)?;
+    CountDownLatch delayRelease = CountDownLatch.create(1L)?;
+    CountDownLatch delaySecond = CountDownLatch.create(1L)?;
+    Future<int> delayed = scheduleDelay(cadencePool,
+        new CadenceTask(delayRuns.cloneHandle()?, delayActive.cloneHandle()?, delayOverlaps.cloneHandle()?,
+            delayStarted.cloneHandle()?, delayRelease.cloneHandle()?, delaySecond.cloneHandle()?), 500L, 200L)?;
+    if (delayStarted.wait(0L)?) { return new Result<Unit, Text>.Err(new Text("fixed-delay task ignored initial delay")); }
+    if (!delayStarted.wait(1000L)?) { return new Result<Unit, Text>.Err(new Text("fixed-delay task did not start")); }
+    Time.sleepMillis(450L)?;
+    delayRelease.countDown()?;
+    if (delaySecond.wait(100L)?) { return new Result<Unit, Text>.Err(new Text("fixed-delay task skipped its interval")); }
+    match (delayed.await(1000L)) {
+        Err(error) {
+            boolean expected = error.equalsString("cadence complete");
+            drop(error);
+            if (!expected) { return new Result<Unit, Text>.Err(new Text("fixed-delay task error was lost")); }
+            println("fixed delay waits");
+        }
+        Ok(value) { drop(value); return new Result<Unit, Text>.Err(new Text("fixed-delay future succeeded")); }
+    }
+    if (delayOverlaps.load() != 0) { return new Result<Unit, Text>.Err(new Text("fixed-delay task overlapped itself")); }
+    cadencePool.shutdown(true)?;
+    drop(rate);
+    drop(delayed);
+    drop(cadencePool);
+
+    ThreadPool<Text> cancelPool = ThreadPool<Text>.create(1, 1L)?;
+    AtomicInt completedRuns = AtomicInt.create(0)?;
+    CountDownLatch cancelStarted = CountDownLatch.create(1L)?;
+    Future<Text> recurring;
+    match (cancelPool.scheduleWithFixedDelay(
+        new OwnedRecurringTextTask(completedRuns.cloneHandle()?, cancelStarted.cloneHandle()?,
+            new Text("task-owned payload")), 0L, 1L)) {
+        Ok(future) { recurring = future; }
+        Err(error) {
+            match (error) {
+                Closed(original) { drop(original); return new Result<Unit, Text>.Err(new Text("cancel pool closed")); }
+                Full(original) { drop(original); return new Result<Unit, Text>.Err(new Text("cancel pool full")); }
+                System(message, original) { drop(original); return new Result<Unit, Text>.Err(message); }
+            }
+        }
+    }
+    if (!cancelStarted.wait(1000L)?) { return new Result<Unit, Text>.Err(new Text("recurring task did not start")); }
+    int polls = 0;
+    while (completedRuns.load() < 3 && polls < 5000) {
+        Time.sleepMillis(1L)?;
+        polls = polls + 1;
+    }
+    if (completedRuns.load() < 3) { return new Result<Unit, Text>.Err(new Text("recurring task did not repeat")); }
+    match (recurring.await(0L)?) {
+        None {}
+        Some(value) { drop(value); return new Result<Unit, Text>.Err(new Text("recurring future exposed a run value")); }
+    }
+    match (cancelPool.submit(new ImmediateTextTask())) {
+        Ok(extra) { drop(extra); return new Result<Unit, Text>.Err(new Text("active recurrence lost its queue reservation")); }
+        Err(error) {
+            match (error) {
+                Full(original) { println("active recurrence reserves queue capacity"); drop(original); }
+                Closed(original) { drop(original); return new Result<Unit, Text>.Err(new Text("active recurrence pool closed")); }
+                System(message, original) { drop(original); return new Result<Unit, Text>.Err(message); }
+            }
+        }
+    }
+    match (cancelPool.scheduleAtFixedRate(new ImmediateTextTask(), 0L, 0L)) {
+        Ok(future) { drop(future); return new Result<Unit, Text>.Err(new Text("zero recurrence interval accepted")); }
+        Err(error) {
+            match (error) {
+                System(message, original) {
+                    println("nonpositive recurring interval rejected");
+                    drop(message);
+                    drop(original);
+                }
+                Closed(original) { drop(original); return new Result<Unit, Text>.Err(new Text("invalid interval reported closed")); }
+                Full(original) { drop(original); return new Result<Unit, Text>.Err(new Text("invalid interval reported full")); }
+            }
+        }
+    }
+    match (cancelPool.scheduleWithFixedDelay(new ImmediateTextTask(), 0L, 9223372036855L)) {
+        Ok(future) { drop(future); return new Result<Unit, Text>.Err(new Text("overflowing recurring interval accepted")); }
+        Err(error) {
+            match (error) {
+                System(message, original) {
+                    println("recurring interval overflow rejected");
+                    drop(message);
+                    drop(original);
+                }
+                Closed(original) { drop(original); return new Result<Unit, Text>.Err(new Text("overflow reported closed")); }
+                Full(original) { drop(original); return new Result<Unit, Text>.Err(new Text("overflow reported full")); }
+            }
+        }
+    }
+    recurring.cancel()?;
+    match (recurring.await(5000L)) {
+        Err(error) {
+            boolean cancelled = error.equalsString("recurring task cancelled");
+            drop(error);
+            if (!cancelled) { return new Result<Unit, Text>.Err(new Text("wrong recurrence cancellation error")); }
+            println("recurring task cancellation observed");
+        }
+        Ok(value) { drop(value); return new Result<Unit, Text>.Err(new Text("cancelled recurrence succeeded")); }
+    }
+    cancelPool.shutdown(false)?;
+    drop(recurring);
+    drop(cancelPool);
+
+    ThreadPool<int> drainPool = ThreadPool<int>.create(1, 1L)?;
+    AtomicInt drainRuns = AtomicInt.create(0)?;
+    Future<int> draining = scheduleRate(drainPool, new CountTask(drainRuns.cloneHandle()?), 60000L, 200L)?;
+    drainPool.shutdown(true)?;
+    match (draining.await(1000L)) {
+        Err(error) {
+            boolean cancelled = error.equalsString("recurring task cancelled");
+            drop(error);
+            if (!cancelled) { return new Result<Unit, Text>.Err(new Text("wrong drained recurrence error")); }
+        }
+        Ok(value) { drop(value); return new Result<Unit, Text>.Err(new Text("drained recurrence succeeded")); }
+    }
+    if (drainRuns.load() != 0) { return new Result<Unit, Text>.Err(new Text("drain ran a queued recurrence")); }
+    println("draining cancels queued recurrence");
+    drop(draining);
+    drop(drainPool);
+    ThreadPool<int> immediatePool = ThreadPool<int>.create(1, 1L)?;
+    AtomicInt immediateRuns = AtomicInt.create(0)?;
+    Future<int> immediate = scheduleDelay(immediatePool, new CountTask(immediateRuns.cloneHandle()?), 60000L, 200L)?;
+    immediatePool.shutdown(false)?;
+    match (immediate.await(1000L)) {
+        Err(error) {
+            boolean cancelled = error.equalsString("recurring task cancelled");
+            drop(error);
+            if (!cancelled) { return new Result<Unit, Text>.Err(new Text("wrong immediate recurrence error")); }
+        }
+        Ok(value) { drop(value); return new Result<Unit, Text>.Err(new Text("immediate shutdown recurrence succeeded")); }
+    }
+    if (immediateRuns.load() != 0) { return new Result<Unit, Text>.Err(new Text("immediate shutdown ran a queued recurrence")); }
+    println("immediate shutdown cancels queued recurrence");
+    drop(immediate);
+    drop(immediatePool);
+    return new Result<Unit, Text>.Ok(());
+}
+
+void main() {
+    match (exercise()) {
+        Ok(unit) {}
+        Err(error) { error.print(); }
+    }
+}
+"#;
+    let output = execute(source, &["-DNACRE_MEMORY_STATS"]);
+    assert_clean(&output,
+        "fixed rate catches up\nfixed delay waits\nactive recurrence reserves queue capacity\nnonpositive recurring interval rejected\nrecurring interval overflow rejected\nrecurring task cancellation observed\ndraining cancels queued recurrence\nimmediate shutdown cancels queued recurrence\n");
+}
+
+#[test]
+fn fixed_delay_is_anchored_before_synchronous_owned_result_disposal() {
+    let source = r#"
+class BlockingResult implements CancelableTask<Unit> {
+    private CountDownLatch started;
+    private CountDownLatch release;
+    public BlockingResult(CountDownLatch started, CountDownLatch release) {
+        this.started = started; this.release = release;
+    }
+    public Result<Unit, Text> run(borrow CancellationToken token) {
+        this.started.countDown()?;
+        this.release.wait(5000L)?;
+        return new Result<Unit, Text>.Ok(());
+    }
+}
+class ImmediateResult implements CancelableTask<Unit> {
+    public Result<Unit, Text> run(borrow CancellationToken token) {
+        return new Result<Unit, Text>.Ok(());
+    }
+}
+class RecurringResults implements CancelableTask<Future<Unit>> {
+    private CountDownLatch started;
+    private CountDownLatch release;
+    private CountDownLatch second;
+    private AtomicInt runs;
+    public RecurringResults(CountDownLatch started, CountDownLatch release,
+                           CountDownLatch second, AtomicInt runs) {
+        this.started = started; this.release = release;
+        this.second = second; this.runs = runs;
+    }
+    public Result<Future<Unit>, Text> run(borrow CancellationToken token) {
+        int previous = this.runs.fetchAdd(1);
+        Future<Unit> result;
+        if (previous == 0) {
+            result = Future<Unit>.spawn(new BlockingResult(
+                this.started.cloneHandle()?, this.release.cloneHandle()?))?;
+        } else {
+            this.second.countDown()?;
+            result = Future<Unit>.spawn(new ImmediateResult())?;
+        }
+        return new Result<Future<Unit>, Text>.Ok(result);
+    }
+}
+Result<Unit, Text> exercise() {
+    CountDownLatch started = CountDownLatch.create(1L)?;
+    CountDownLatch release = CountDownLatch.create(1L)?;
+    CountDownLatch second = CountDownLatch.create(1L)?;
+    AtomicInt runs = AtomicInt.create(0)?;
+    ThreadPool<Future<Unit>> pool = ThreadPool<Future<Unit>>.create(1, 1L)?;
+    Future<Future<Unit>> scheduled;
+    match (pool.scheduleWithFixedDelay(new RecurringResults(
+            started.cloneHandle()?, release.cloneHandle()?,
+            second.cloneHandle()?, runs.cloneHandle()?), 0L, 1000L)) {
+        Ok(future) { scheduled = future; }
+        Err(error) {
+            match (error) {
+                Closed(task) { return new Result<Unit, Text>.Err(new Text("closed")); }
+                Full(task) { return new Result<Unit, Text>.Err(new Text("full")); }
+                System(message, task) { return new Result<Unit, Text>.Err(message); }
+            }
+        }
+    }
+    if (!started.wait(5000L)?) {
+        return new Result<Unit, Text>.Err(new Text("result worker did not start"));
+    }
+    Time.sleepMillis(1200L)?;
+    release.countDown()?;
+    println(second.wait(500L)?);
+    scheduled.cancel()?;
+    pool.shutdown(false)?;
+    return new Result<Unit, Text>.Ok(());
+}
+void main() {
+    match (exercise()) {
+        Ok(_) {}
+        Err(error) { error.print(); }
+    }
+}
+"#;
+    let output = execute(source, &["-DNACRE_MEMORY_STATS"]);
+    assert_clean(&output, "true\n");
+}

@@ -121,6 +121,8 @@ class ThreadPool<T> {
     public static Result<ThreadPool<T>, Text> create(int workers, long queueCapacity) {}
     public Result<Future<T>, SubmitError<T>> submit(CancelableTask<T> task) {}
     public Result<Future<T>, SubmitError<T>> schedule(CancelableTask<T> task, long delayMs) {}
+    public Result<Future<T>, SubmitError<T>> scheduleAtFixedRate(CancelableTask<T> task, long initialDelayMs, long intervalMs) {}
+    public Result<Future<T>, SubmitError<T>> scheduleWithFixedDelay(CancelableTask<T> task, long initialDelayMs, long intervalMs) {}
     public Result<Unit, Text> shutdown(boolean drain) {}
 }
 

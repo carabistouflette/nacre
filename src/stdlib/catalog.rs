@@ -1,4 +1,38 @@
 use crate::ast::{NativeClass, Type};
+use crate::ir::NativeMethod;
+
+#[derive(Clone, Copy)]
+pub(crate) enum PoolSubmissionPolicy {
+    Immediate,
+    Delayed,
+    Recurring { fixed_rate: bool },
+}
+
+pub(crate) struct PoolSubmission {
+    name: &'static str,
+    pub(crate) method: NativeMethod,
+    pub(crate) policy: PoolSubmissionPolicy,
+}
+
+const POOL_SUBMISSIONS: &[PoolSubmission] = &[
+    PoolSubmission { name: "submit", method: NativeMethod::ThreadPoolSubmit,
+        policy: PoolSubmissionPolicy::Immediate },
+    PoolSubmission { name: "schedule", method: NativeMethod::ThreadPoolSchedule,
+        policy: PoolSubmissionPolicy::Delayed },
+    PoolSubmission { name: "scheduleAtFixedRate", method: NativeMethod::ThreadPoolScheduleAtFixedRate,
+        policy: PoolSubmissionPolicy::Recurring { fixed_rate: true } },
+    PoolSubmission { name: "scheduleWithFixedDelay", method: NativeMethod::ThreadPoolScheduleWithFixedDelay,
+        policy: PoolSubmissionPolicy::Recurring { fixed_rate: false } },
+];
+
+pub(crate) fn pool_submission_by_name(name: &str) -> Option<&'static PoolSubmission> {
+    POOL_SUBMISSIONS.iter().find(|submission| submission.name == name)
+}
+
+pub(crate) fn pool_submission_policy(method: NativeMethod) -> Option<PoolSubmissionPolicy> {
+    POOL_SUBMISSIONS.iter().find(|submission| submission.method == method)
+        .map(|submission| submission.policy)
+}
 
 #[derive(Clone, Copy)]
 enum NativeBuiltin {
