@@ -11,9 +11,9 @@
     }
   ],
   "metadata": {
-    "version": "0.1.0",
+    "version": "0.6.0",
     "license": "MIT",
-    "description": "Tree-sitter grammar for Nacre V6",
+    "description": "Tree-sitter grammar for the Nacre native alpha",
     "authors": [{"name": "Nacre contributors"}],
     "links": {"repository": "file:."}
   }

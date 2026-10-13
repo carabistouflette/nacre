@@ -1,0 +1,35 @@
+{
+  "release": "0.12.0",
+  "status": "passed",
+  "scope": "Actual native desktop applications on private X11/Xvfb profiles; not headless grammar substitutes",
+  "compiler": "0.12.0",
+  "compiler_sha256": "dc8e0cb1d9149722a29dcc9e60a1596dff7b376737a8b8e57192d840544d0430",
+  "extension_version": "0.7.0",
+  "grammar_package_version": "0.6.0",
+  "grammar_metadata_note": "Zed acceptance observed the old descriptor version0.1.0. Final packaging corrects only descriptor version/description to0.6.0/native alpha; parser source and editor queries are unchanged.",
+  "vscode": {
+    "version": "1.141.0",
+    "distribution": "Official Microsoft stable Linux x64 archive",
+    "archive_sha256": "d77d588f0454cbaaa71e723497de4160d15b95fba4988abe177b1432e6bd570a",
+    "vsix_sha256": "73f65533c5fbf296132ca753ba59fe3c6c3cc4e08c62dcd431b98eebc560e288",
+    "observed": ["module/import, primitive/cast/Unit/generic and new native-type highlighting", "Owned task thread completion selected and expanded", "live Guard borrow E3001 and clearing correction", "unsaved cross-file getter rename diagnosed at unchanged caller", "language-server restart republishes active diagnostic", "undo and save-close-reopen clean", "copied current lending application has no workspace problems"],
+    "evidence_location": "Retained outside Git with actual screenshots",
+    "cleanup": "Owned editor, private D-Bus/helpers, Xvfb and temporary app/archive/profile/workspaces removed"
+  },
+  "zed": {
+    "version": "1.23.3+stable",
+    "distribution": "Official native Linux desktop, X11/software rendering",
+    "observed": ["module/import, numeric/cast/Unit/generic, postfix Result propagation, concurrency and network highlighting", "Bounded channel completion selected and expanded", "live Map borrow E3001 and clearing correction", "unsaved cross-file getter rename diagnostic and undo clearing", "language-server restart republishes active E3001", "save-close-reopen clean", "copied current lending application has no workspace problems", "Nacre0.7.0 dev extension installed in actual UI"],
+    "guard_api_observation": "Guard<Text>.read/write are unavailable by specialization; the nominal sample uses getRef/getMut, while copyable Guard<int> uses read/write. No production defect was demonstrated.",
+    "evidence_location": "Retained outside Git with actual screenshots and screenshot SHA-256 hashes",
+    "cleanup": "Owned private editor/Xvfb session stopped and temporary acceptance resources removed"
+  },
+  "parent_review": "Inspected actual VS Code task snippet, Guard E3001, restarted cross-file diagnostic and clean lending surface; actual Zed channel snippet, restarted E3001, cross-file diagnostic and clean lending surface",
+  "host_profile_incident": {
+    "editor": "VS Code",
+    "observed": "One initial direct Electron --version probe was incorrectly invoked before private HOME/XDG/profile/D-Bus isolation and unexpectedly launched the application. Logs showed access to existing host shared-storage and fallback profile databases.",
+    "write_status": "Unknown; writes to existing databases cannot be ruled out",
+    "response": "Stopped only the owned executable's process tree; existing host databases were neither deleted nor restored. Every subsequent invocation used private HOME/XDG, user-data/extensions and D-Bus.",
+    "limits": "No claim of zero host modifications is made. Exact local paths and process details remain in the private evidence, not published source."
+  }
+}
