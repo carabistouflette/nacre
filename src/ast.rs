@@ -24,7 +24,11 @@ impl MapKeyKind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Visibility { Public, Private }
 #[derive(Debug, Clone)]
-pub struct Program { pub functions: Vec<Function>, pub classes: Vec<Class> }
+pub struct Program { pub units: Vec<SourceUnit>, pub functions: Vec<Function>, pub classes: Vec<Class> }
+#[derive(Debug, Clone)]
+pub struct SourceUnit { pub module: String, pub imports: Vec<Import> }
+#[derive(Debug, Clone)]
+pub struct Import { pub path: String, pub wildcard: bool, pub span: Span }
 #[derive(Debug, Clone)]
 pub enum NativeClass { List(Type), Map { key: Type, value: Type, key_kind: Option<MapKeyKind> }, Text, Console, Files, Args }
 #[derive(Debug, Clone)]
@@ -39,6 +43,7 @@ pub struct Class {
     pub type_params: Vec<String>, pub implements: Vec<Type>, pub is_interface: bool,
     pub variants: Option<Vec<Variant>>,
     pub methods: Vec<Function>, pub constructor: Option<Function>,
+    pub qualified_name: String, pub unit: usize, pub visibility: Visibility,
 }
 #[derive(Debug, Clone)]
 pub struct Field {
@@ -50,6 +55,7 @@ pub struct Function {
     pub name: String, pub span: Span, pub return_type: Type,
     pub params: Vec<Param>, pub body: Block,
     pub visibility: Visibility, pub is_static: bool, pub readonly: bool,
+    pub qualified_name: String, pub unit: usize,
 }
 #[derive(Debug, Clone)]
 pub struct Param { pub name: String, pub ty: Type, pub span: Span }

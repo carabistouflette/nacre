@@ -103,10 +103,10 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
         if class.name == "System" || class.name == "println" {
             return Err(Diagnostic::new(class.span, "nom de classe reserve au support d'affichage"));
         }
-        if tables.names.insert(class.name.clone(), id).is_some() {
-            return Err(Diagnostic::new(class.span, format!("classe `{}` deja declaree", class.name)));
+        if tables.names.insert(class.qualified_name.clone(), id).is_some() {
+            return Err(Diagnostic::new(class.span, format!("type `{}` is declared more than once", class.qualified_name)));
         }
-        tables.classes.push(ClassInfo { native: None, name: class.name.clone(), fields: Vec::new(),
+        tables.classes.push(ClassInfo { native: None, name: class.qualified_name.clone(), fields: Vec::new(),
             variants: None, methods: HashMap::new(), constructor: None, has_borrow: false,
             is_interface: class.is_interface, interface_methods: Vec::new(), implementations: Vec::new() });
     }
@@ -242,8 +242,8 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
     let mut declarations: Vec<a::Function> = Vec::new();
     for function in &program.functions {
         let id = tables.add_signature(function, None, Kind::Free)?;
-        if tables.globals.insert(function.name.clone(), id).is_some() {
-            return Err(Diagnostic::new(function.span, format!("fonction `{}` deja declaree; pas de surcharge", function.name)));
+        if tables.globals.insert(function.qualified_name.clone(), id).is_some() {
+            return Err(Diagnostic::new(function.span, format!("function `{}` is declared more than once; overloading is not supported", function.qualified_name)));
         }
         declarations.push(function.clone());
     }
@@ -261,6 +261,7 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
         let constructor = class.constructor.clone().unwrap_or_else(|| a::Function {
             name: class.name.clone(), span: class.span, return_type: a::Type::Void,
             params: Vec::new(), body: Vec::new(), visibility: Visibility::Public, is_static: false, readonly: false,
+            qualified_name: format!("{}::{}", class.qualified_name, class.name), unit: class.unit,
         });
         let id = tables.add_signature(&constructor, Some(class_id), Kind::Constructor)?;
         tables.classes[class_id].constructor = Some(id);

@@ -222,3 +222,51 @@ fn stdio_lsp_reports_utf16_diagnostics_edits_and_unsaved_project_overlays() {
     client.send(json!({ "jsonrpc": "2.0", "method": "exit" }));
     client.finish();
 }
+#[test]
+fn unsaved_cross_module_privacy_errors_clear_when_imported_overlay_changes() {
+    let temp = TempDir::new();
+    let source_dir = temp.0.join("src");
+    fs::create_dir(&source_dir).unwrap();
+    fs::write(temp.0.join("nacre.json"), r#"{"sources":["src"]}"#).unwrap();
+
+    let main_path = source_dir.join("Main.ncr");
+    let item_path = source_dir.join("Item.ncr");
+    let main_source = "module lsp.app;\nimport lsp.model.Item;\nvoid main() { Item value = new Item(); }\n";
+    fs::write(&main_path, main_source).unwrap();
+    fs::write(&item_path, "module lsp.model;\npublic class Item {}\n").unwrap();
+    let main_uri = uri(&main_path);
+    let item_uri = uri(&item_path);
+
+    let mut client = Client::spawn();
+    client.send(json!({
+        "jsonrpc": "2.0", "id": 1, "method": "initialize",
+        "params": { "rootUri": uri(&temp.0), "capabilities": {} }
+    }));
+    client.response(1);
+    client.send(json!({ "jsonrpc": "2.0", "method": "initialized", "params": {} }));
+    client.send(json!({
+        "jsonrpc": "2.0", "method": "textDocument/didOpen",
+        "params": { "textDocument": { "uri": main_uri, "languageId": "nacre", "version": 1, "text": main_source } }
+    }));
+    client.send(json!({
+        "jsonrpc": "2.0", "method": "textDocument/didOpen",
+        "params": { "textDocument": { "uri": item_uri.clone(), "languageId": "nacre", "version": 1,
+            "text": "module lsp.model;\nprivate class Item {}\n" } }
+    }));
+    let private_error = client.diagnostics(&uri(&main_path));
+    assert!(private_error["diagnostics"][0]["message"].as_str().unwrap().contains("private type"));
+
+    client.send(json!({
+        "jsonrpc": "2.0", "method": "textDocument/didChange",
+        "params": {
+            "textDocument": { "uri": item_uri, "version": 2 },
+            "contentChanges": [{ "text": "module lsp.model;\npublic class Item {}\n" }]
+        }
+    }));
+    assert!(client.diagnostics(&uri(&main_path))["diagnostics"].as_array().unwrap().is_empty());
+
+    client.send(json!({ "jsonrpc": "2.0", "id": 2, "method": "shutdown" }));
+    assert!(client.response(2)["result"].is_null());
+    client.send(json!({ "jsonrpc": "2.0", "method": "exit" }));
+    client.finish();
+}

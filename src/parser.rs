@@ -25,11 +25,23 @@ impl Parser {
         else { Err(Diagnostic::new(self.current().span, format!("{what} attendu"))) }
     }
     fn ident(&mut self) -> Result<(String, Span), Diagnostic> {
-        let token = self.bump();
-        match token.kind {
-            K::Ident(name) => Ok((name, token.span)),
-            _ => Err(Diagnostic::new(token.span, "nom attendu")),
+        let token = self.current().clone();
+        if let K::Ident(name) = token.kind {
+            self.bump();
+            Ok((name, token.span))
+        } else {
+            Err(Diagnostic::new(token.span, "identifier expected"))
         }
+    }
+    fn qualified_ident(&mut self) -> Result<(String, Span), Diagnostic> {
+        let (mut path, mut span) = self.ident()?;
+        while self.eat(&K::Dot) {
+            let (part, part_span) = self.ident()?;
+            path.push('.');
+            path.push_str(&part);
+            span = span.join(part_span);
+        }
+        Ok((path, span))
     }
     fn nested<T>(&mut self, f: impl FnOnce(&mut Self) -> Result<T, Diagnostic>) -> Result<T, Diagnostic> {
         if self.depth >= 128 {
@@ -62,65 +74,83 @@ impl Parser {
                 _ => break,
             }
         }
-        // A source bundle has no package boundaries: omitted visibility means public.
         Ok((visibility.unwrap_or(Visibility::Public), is_static, readonly))
     }
     fn program(mut self) -> Result<Program, Diagnostic> {
+        let module = if self.eat(&K::Module) {
+            let (name, _) = self.qualified_ident()?;
+            self.expect(&K::Semicolon, "`;` after module name")?;
+            name
+        } else { String::new() };
+        let mut imports = Vec::new();
+        while self.eat(&K::Import) {
+            let start = self.tokens[self.pos - 1].span;
+            let (mut path, _) = self.ident()?;
+            let mut wildcard = false;
+            while self.eat(&K::Dot) {
+                if self.eat(&K::Star) { wildcard = true; break; }
+                let (part, _) = self.ident()?;
+                path.push('.');
+                path.push_str(&part);
+            }
+            let end = self.expect(&K::Semicolon, "`;` after import")?.span;
+            imports.push(Import { path, wildcard, span: start.join(end) });
+        }
         let mut functions = Vec::new();
         let mut classes = Vec::new();
         while !self.at(&K::Eof) {
             let start = self.current().span;
             let (visibility, is_static, readonly) = self.modifiers()?;
             if self.eat(&K::Class) {
-                if is_static || readonly || visibility == Visibility::Private {
-                    return Err(Diagnostic::new(start, "une classe de premier niveau ne peut pas etre private, static ou readonly"));
+                if is_static || readonly {
+                    return Err(Diagnostic::new(start, "a top-level class cannot be static or readonly"));
                 }
-                classes.push(self.class(start, false)?);
+                classes.push(self.class(start, false, visibility)?);
             } else if self.eat(&K::Enum) {
-                if is_static || readonly || visibility == Visibility::Private {
-                    return Err(Diagnostic::new(start, "une enum de premier niveau ne peut pas etre private, static ou readonly"));
+                if is_static || readonly {
+                    return Err(Diagnostic::new(start, "a top-level enum cannot be static or readonly"));
                 }
-                classes.push(self.enum_decl(start)?);
+                classes.push(self.enum_decl(start, visibility)?);
             } else if self.eat(&K::Interface) {
-                if is_static || readonly || visibility == Visibility::Private {
-                    return Err(Diagnostic::new(start, "[E4001] modificateur invalide sur une interface"));
+                if is_static || readonly {
+                    return Err(Diagnostic::new(start, "invalid modifier on a top-level interface"));
                 }
-                classes.push(self.class(start, true)?);
+                classes.push(self.class(start, true, visibility)?);
             } else {
                 let return_type = self.ty(true)?;
                 let (name, _) = self.ident()?;
-                if readonly { return Err(Diagnostic::new(start, "readonly est reserve aux methodes d'instance")); }
+                if readonly { return Err(Diagnostic::new(start, "readonly is reserved for instance methods")); }
                 functions.push(self.function_tail(name, return_type, visibility, true, false, start)?);
             }
         }
-        Ok(Program { functions, classes })
+        Ok(Program { units: vec![SourceUnit { module, imports }], functions, classes })
     }
-    fn enum_decl(&mut self, start: Span) -> Result<Class, Diagnostic> {
+    fn enum_decl(&mut self, start: Span, visibility: Visibility) -> Result<Class, Diagnostic> {
         let (name, _) = self.ident()?;
         let mut type_params = Vec::new();
         if self.eat(&K::Less) {
             loop {
                 let (param, span) = self.ident()?;
                 if type_params.contains(&param) {
-                    return Err(Diagnostic::new(span, "[E4101] parametre de type duplique"));
+                    return Err(Diagnostic::new(span, "[E4101] duplicate type parameter"));
                 }
                 type_params.push(param);
                 if type_params.len() > 8 {
-                    return Err(Diagnostic::new(start, "[E4199] limite de 8 parametres de type"));
+                    return Err(Diagnostic::new(start, "[E4199] limit of 8 type parameters"));
                 }
                 if !self.eat(&K::Comma) { break; }
             }
             self.expect(&K::Greater, "`>`")?;
         }
         if self.at(&K::Implements) {
-            return Err(Diagnostic::new(self.current().span, "une enum ne peut pas implementer une interface"));
+            return Err(Diagnostic::new(self.current().span, "an enum cannot implement an interface"));
         }
         self.expect(&K::LBrace, "`{`")?;
         let mut variants: Vec<Variant> = Vec::new();
         while !self.at(&K::RBrace) && !self.at(&K::Eof) {
             let (variant, variant_start) = self.ident()?;
             if variants.iter().any(|known| known.name == variant) {
-                return Err(Diagnostic::new(variant_start, format!("variant `{variant}` deja declaree dans `{name}`")));
+                return Err(Diagnostic::new(variant_start, format!("variant `{variant}` is already declared in `{name}`")));
             }
             let mut fields = Vec::new();
             if self.eat(&K::LParen) {
@@ -132,28 +162,29 @@ impl Parser {
                 }
                 self.expect(&K::RParen, "`)`")?;
             }
-            let end = self.expect(&K::Semicolon, "`;` apres une variant")?.span;
+            let end = self.expect(&K::Semicolon, "`;` after a variant")?.span;
             variants.push(Variant { name: variant, fields, span: variant_start.join(end) });
         }
         let end = self.expect(&K::RBrace, "`}`")?.span;
         if variants.is_empty() {
-            return Err(Diagnostic::new(start.join(end), "une enum doit declarer au moins une variant"));
+            return Err(Diagnostic::new(start.join(end), "an enum must declare at least one variant"));
         }
         Ok(Class { native: None, is_builtin: false, name, span: start.join(end), fields: Vec::new(), methods: Vec::new(),
-            constructor: None, type_params, implements: Vec::new(), is_interface: false, variants: Some(variants) })
+            constructor: None, type_params, implements: Vec::new(), is_interface: false, variants: Some(variants),
+            qualified_name: String::new(), unit: 0, visibility })
     }
-    fn class(&mut self, start: Span, is_interface: bool) -> Result<Class, Diagnostic> {
+    fn class(&mut self, start: Span, is_interface: bool, visibility: Visibility) -> Result<Class, Diagnostic> {
         let (name, _) = self.ident()?;
         let mut type_params = Vec::new();
         if self.eat(&K::Less) {
             loop {
                 let (param, span) = self.ident()?;
                 if type_params.contains(&param) {
-                    return Err(Diagnostic::new(span, "[E4101] parametre de type duplique"));
+                    return Err(Diagnostic::new(span, "[E4101] duplicate type parameter"));
                 }
                 type_params.push(param);
                 if type_params.len() > 8 {
-                    return Err(Diagnostic::new(start, "[E4199] limite de 8 parametres de type"));
+                    return Err(Diagnostic::new(start, "[E4199] limit of 8 type parameters"));
                 }
                 if !self.eat(&K::Comma) { break; }
             }
@@ -161,11 +192,11 @@ impl Parser {
         }
         let mut implements = Vec::new();
         if self.eat(&K::Implements) {
-            if is_interface { return Err(Diagnostic::new(start, "[E4001] implements est reserve aux classes")); }
+            if is_interface { return Err(Diagnostic::new(start, "[E4001] implements is reserved for classes")); }
             loop {
                 let ty = self.ty(false)?;
                 if !matches!(ty, Type::Named(_) | Type::Applied { .. }) {
-                    return Err(Diagnostic::new(start, "[E4001] nom d'interface attendu apres implements"));
+                    return Err(Diagnostic::new(start, "[E4001] interface name expected after implements"));
                 }
                 implements.push(ty);
                 if !self.eat(&K::Comma) { break; }
@@ -180,33 +211,34 @@ impl Parser {
             let (visibility, is_static, readonly) = self.modifiers()?;
             if is_interface {
                 if visibility != Visibility::Public || is_static {
-                    return Err(Diagnostic::new(member_start, "[E4001] une interface declare des methodes publiques d'instance"));
+                    return Err(Diagnostic::new(member_start, "[E4001] an interface declares public instance methods"));
                 }
                 let return_type = self.ty(true)?;
                 let (method_name, _) = self.ident()?;
                 let params = self.parameters()?;
-                let end = self.expect(&K::Semicolon, "`;` (pas de corps, de champ ou de methode default dans une interface)")?.span;
+                let end = self.expect(&K::Semicolon, "`;` (interfaces cannot declare bodies, fields, or default methods)")?.span;
                 methods.push(Function { name: method_name, span: member_start.join(end), return_type,
-                    params, body: Vec::new(), visibility, is_static: false, readonly });
+                    params, body: Vec::new(), visibility, is_static: false, readonly,
+                    qualified_name: String::new(), unit: 0 });
                 continue;
             }
             if matches!(&self.current().kind, K::Ident(n) if n == &name)
                 && self.tokens.get(self.pos + 1).is_some_and(|t| t.kind == K::LParen) {
                 self.bump();
-                if is_static || readonly { return Err(Diagnostic::new(member_start, "un constructeur ne peut pas etre static ou readonly")); }
-                if constructor.is_some() { return Err(Diagnostic::new(member_start, "un seul constructeur par classe; pas de surcharge")); }
+                if is_static || readonly { return Err(Diagnostic::new(member_start, "a constructor cannot be static or readonly")); }
+                if constructor.is_some() { return Err(Diagnostic::new(member_start, "one constructor is allowed per class; overloading is not supported")); }
                 constructor = Some(self.function_tail(name.clone(), Type::Void, visibility, false, false, member_start)?);
                 continue;
             }
             let ty = self.ty(true)?;
             let (member_name, _) = self.ident()?;
             if self.at(&K::LParen) {
-                if readonly && is_static { return Err(Diagnostic::new(member_start, "readonly est reserve aux methodes d'instance")); }
+                if readonly && is_static { return Err(Diagnostic::new(member_start, "readonly is reserved for instance methods")); }
                 methods.push(self.function_tail(member_name, ty, visibility, is_static, readonly, member_start)?);
             } else {
-                if readonly { return Err(Diagnostic::new(member_start, "readonly est un modificateur de methode, pas de champ")); }
-                if is_static { return Err(Diagnostic::new(member_start, "les champs static ne sont pas pris en charge")); }
-                if ty == Type::Void { return Err(Diagnostic::new(member_start, "un champ ne peut pas avoir le type void")); }
+                if readonly { return Err(Diagnostic::new(member_start, "readonly modifies a method, not a field")); }
+                if is_static { return Err(Diagnostic::new(member_start, "static fields are not supported")); }
+                if ty == Type::Void { return Err(Diagnostic::new(member_start, "a field cannot have type void")); }
                 let initializer = if self.eat(&K::Equal) { Some(self.expression()?) } else { None };
                 let end = self.expect(&K::Semicolon, "`;`")?.span;
                 fields.push(Field { name: member_name, ty, visibility, initializer, span: member_start.join(end) });
@@ -214,25 +246,31 @@ impl Parser {
         }
         let end = self.expect(&K::RBrace, "`}`")?.span;
         Ok(Class { native: None, is_builtin: false, name, span: start.join(end), fields, methods, constructor, type_params, implements, is_interface,
-            variants: None })
+            variants: None, qualified_name: String::new(), unit: 0, visibility })
     }
     fn ty(&mut self, allow_void: bool) -> Result<Type, Diagnostic> {
         let token = self.bump();
         match token.kind {
             K::Borrow => {
                 let mutable = self.eat(&K::Mut);
-                let (name, _) = self.ident().map_err(|_| Diagnostic::new(token.span, "borrow attend un nom de classe (pas une primitive)"))?;
+                let (name, _) = self.qualified_ident().map_err(|_| Diagnostic::new(token.span, "borrow expects a nominal type, not a primitive"))?;
                 let args = self.type_arguments()?;
                 Ok(Type::Borrow { name, args, mutable })
             }
             K::Int => Ok(Type::Int), K::Boolean => Ok(Type::Boolean),
-            K::StringType => Ok(Type::String), K::Ident(name) => {
+            K::StringType => Ok(Type::String), K::Ident(first) => {
+                let mut name = first;
+                while self.eat(&K::Dot) {
+                    let (part, _) = self.ident()?;
+                    name.push('.');
+                    name.push_str(&part);
+                }
                 let args = self.type_arguments()?;
                 Ok(if args.is_empty() { Type::Named(name) } else { Type::Applied { name, args } })
             },
             K::Void if allow_void => Ok(Type::Void),
-            K::Void => Err(Diagnostic::new(token.span, "`void` est reserve au type de retour d'une fonction")),
-            _ => Err(Diagnostic::new(token.span, "type attendu: int, boolean, String ou nom de classe")),
+            K::Void => Err(Diagnostic::new(token.span, "`void` is reserved for function return types")),
+            _ => Err(Diagnostic::new(token.span, "expected a type: int, boolean, String, or a nominal type")),
         }
     }
     fn type_arguments(&mut self) -> Result<Vec<Type>, Diagnostic> {
@@ -270,7 +308,8 @@ impl Parser {
         let params = self.parameters()?;
         let body = self.block()?;
         let end = self.tokens[self.pos - 1].span;
-        Ok(Function { name, span: start.join(end), return_type, params, body, visibility, is_static, readonly })
+        Ok(Function { name, span: start.join(end), return_type, params, body, visibility, is_static, readonly,
+            qualified_name: String::new(), unit: 0 })
     }
     fn block(&mut self) -> Result<Block, Diagnostic> {
         self.nested(|p| {
@@ -476,7 +515,7 @@ impl Parser {
             K::True => ExprKind::Boolean(true), K::False => ExprKind::Boolean(false),
             K::This => ExprKind::This,
             K::New => {
-                let (class, _) = self.ident()?;
+                let (class, _) = self.qualified_ident()?;
                 let type_args = self.type_arguments()?;
                 let variant = if self.eat(&K::Dot) { Some(self.ident()?.0) } else { None };
                 let (args, end) = self.arguments()?;

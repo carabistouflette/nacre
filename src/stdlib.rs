@@ -6,9 +6,12 @@ use crate::ast as a;
 use crate::diagnostic::{Diagnostic, Span};
 use crate::ir::{NativeClass as C, NativeMethod as M};
 
+pub(crate) fn is_builtin_type_name(name: &str) -> bool {
+    builtin(name).is_some()
+}
 pub fn inject(program: &mut a::Program) -> Result<(), Diagnostic> {
     for class in &program.classes {
-        if builtin(&class.name).is_some() {
+        if is_builtin_type_name(&class.name) {
             return Err(Diagnostic::new(
                 class.span,
                 format!("[E5001] `{}` is reserved by the standard library", class.name),
@@ -18,15 +21,20 @@ pub fn inject(program: &mut a::Program) -> Result<(), Diagnostic> {
     for unit in PRELUDE_UNITS {
         let mut tokens = crate::lexer::lex(unit.source)?;
         // Prelude locations must not index into unrelated user text.
-        for token in &mut tokens {
-            token.span = Span::default();
-        }
+        for token in &mut tokens { token.span = Span::default(); }
         let mut prelude = crate::parser::parse(tokens)?;
         for class in &mut prelude.classes {
             let builtin = unit.builtins.iter().find(|builtin| builtin.name == class.name)
                 .expect("prelude declaration is missing its builtin catalog entry");
             class.is_builtin = true;
+            class.qualified_name = class.name.clone();
             class.native = builtin.native_class();
+            for method in &mut class.methods {
+                method.qualified_name = format!("{}::{}", class.qualified_name, method.name);
+            }
+            if let Some(constructor) = &mut class.constructor {
+                constructor.qualified_name = format!("{}::{}", class.qualified_name, constructor.name);
+            }
         }
         program.classes.extend(prelude.classes);
     }

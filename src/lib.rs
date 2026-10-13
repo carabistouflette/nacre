@@ -14,6 +14,7 @@ mod lexer;
 pub mod native;
 mod parser;
 mod generics;
+mod resolver;
 mod ownership;
 mod borrowing;
 mod stdlib;
@@ -32,6 +33,7 @@ fn front_end(source: &str) -> Result<ir::Program, Diagnostic> {
 }
 
 pub(crate) fn check_parsed(mut parsed: ast::Program) -> Result<ir::Program, Diagnostic> {
+    resolver::resolve(&mut parsed)?;
     stdlib::inject(&mut parsed)?;
     let (expanded, _) = generics::expand(parsed)?;
     let typed = checker::check(&expanded)?;

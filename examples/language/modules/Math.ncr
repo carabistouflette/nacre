@@ -1,0 +1,19 @@
+module examples.math;
+
+public int sum(Map<Text, int> values) {
+    int total = 0;
+    for (borrow Text key, int value : values) {
+        total = total + value;
+    }
+    return total;
+}
+
+public int identity(int value) {
+    return value;
+}
+
+public class Tools {
+    public static int adjust(int value) {
+        return value;
+    }
+}

@@ -32,8 +32,8 @@ pub fn expand(mut program: a::Program) -> Result<(a::Program, Vec<String>), Diag
         if matches!(class.name.as_str(), "System" | "println") {
             return Err(Diagnostic::new(class.span, "nom de classe reserve au support d'affichage"));
         }
-        if expander.definitions.insert(class.name.clone(), class.clone()).is_some() {
-            return Err(Diagnostic::new(class.span, format!("classe ou interface `{}` deja declaree", class.name)));
+        if expander.definitions.insert(class.qualified_name.clone(), class.clone()).is_some() {
+            return Err(Diagnostic::new(class.span, format!("class or interface `{}` is declared more than once", class.qualified_name)));
         }
     }
     for class in &program.classes {
@@ -57,9 +57,13 @@ pub fn expand(mut program: a::Program) -> Result<(a::Program, Vec<String>), Diag
         let mut class = expander.definitions[&request.template].clone();
         let env: Environment = class.type_params.iter().cloned().zip(request.args).collect();
         class.name = request.name.clone();
+        class.qualified_name = request.name.clone();
         if class.is_builtin { class.span = request.span; }
         class.type_params.clear();
-        if let Some(constructor) = &mut class.constructor { constructor.name = class.name.clone(); }
+        if let Some(constructor) = &mut class.constructor {
+            constructor.name = class.name.clone();
+            constructor.qualified_name = format!("{}::{}", class.qualified_name, constructor.name);
+        }
         expander.class(&mut class, &env).map_err(|d| d.with_note(request.span,
             format!("specialisation `{}` demandee ici", request.name)))?;
         concrete.push(class);

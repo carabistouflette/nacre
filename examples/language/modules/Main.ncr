@@ -1,0 +1,17 @@
+module examples.app;
+import examples.math.sum;
+import examples.model.Box;
+
+public class Main {
+    public static void main() {
+        Map<Text, int> values = new Map<Text, int>();
+        values.put(new Text("first"), 10);
+        values.put(new Text("second"), 20);
+        values.put(new Text("third"), 12);
+
+        Box<int> answer = new Box<int>(examples.math.identity(examples.math.Tools.adjust(sum(values))));
+        Text output = new Text("Somme = ");
+        output.appendInt(answer.read());
+        output.print();
+    }
+}

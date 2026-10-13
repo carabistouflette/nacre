@@ -31,7 +31,7 @@ Exemples avec Cargo:
   cargo run -- emit-c examples/counter.ncr -o out/counter.c
 
 Plusieurs fichiers ou un dossier .ncr sont acceptes par toutes les commandes.
-Un espace de noms partage; pas encore de packages/imports ou compilation separee.
+Source files may declare modules and import public names; all requested inputs are compiled together.
 --sanitize (run/build): AddressSanitizer + UndefinedBehaviorSanitizer.
 init: cree un projet neuf; refuse un chemin existant.
 doctor: compile et execute un test de bout en bout avec List et Text.

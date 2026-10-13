@@ -4,7 +4,7 @@ use crate::diagnostic::{Diagnostic, Span};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TokenKind {
     Ident(String), Number(String), String(String),
-    Class, Enum, Match, Interface, Implements, Public, Private, Static, New, This, Borrow, Mut, Readonly,
+    Class, Enum, Match, Interface, Implements, Module, Import, Public, Private, Static, New, This, Borrow, Mut, Readonly,
     Int, Boolean, StringType, Void,
     If, Else, While, For, Return, Break, Continue, True, False,
     LParen, RParen, LBrace, RBrace, Comma, Colon, Semicolon, Dot,
@@ -29,7 +29,9 @@ pub fn lex(source: &str) -> Result<Vec<Token>, Diagnostic> {
             let word = &source[start..lexer.pos];
             match word {
                 "class" => TokenKind::Class, "enum" => TokenKind::Enum, "match" => TokenKind::Match,
-                "interface" => TokenKind::Interface, "implements" => TokenKind::Implements, "public" => TokenKind::Public,
+                "interface" => TokenKind::Interface, "implements" => TokenKind::Implements,
+                "module" => TokenKind::Module, "import" => TokenKind::Import,
+                "public" => TokenKind::Public,
                 "private" => TokenKind::Private, "static" => TokenKind::Static,
                 "new" => TokenKind::New, "this" => TokenKind::This,
                 "borrow" => TokenKind::Borrow, "mut" => TokenKind::Mut,
@@ -42,7 +44,7 @@ pub fn lex(source: &str) -> Result<Vec<Token>, Diagnostic> {
                 "break" => TokenKind::Break, "continue" => TokenKind::Continue,
                 "true" => TokenKind::True, "false" => TokenKind::False,
                 "extends" | "null" |
-                "super" | "import" | "package" | "final" | "throw" |
+                "super" | "package" | "final" | "throw" |
                 "try" | "catch" | "switch" | "long" | "double" | "float" | "char" => {
                     return Err(Diagnostic::new(Span::new(start, lexer.pos), format!("`{word}` n'est pas encore pris en charge")));
                 }

@@ -1,5 +1,5 @@
-//! Multiple source units, one nominal namespace, independent lexing/parsing.
-//! This is whole-program compilation, not packages or separate object linking.
+//! Independent parsing for source units followed by whole-program module resolution.
+//! This is whole-program compilation, not separate package linking.
 use std::collections::HashSet;
 use std::fs;
 use std::io::Read;
@@ -20,7 +20,7 @@ pub struct SourceLocation<'a> {
 }
 
 impl SourceBundle {
-    /// Names are for diagnostics, not module names. All types share one scope.
+    /// Source paths are diagnostic identities; `module` headers define namespaces.
     pub fn from_sources(sources: Vec<(String, String)>) -> Result<Self, String> {
         if sources.is_empty() { return Err("aucun fichier source".to_owned()); }
         if sources.len() > MAX_FILES { return Err("limite de 64 fichiers source".to_owned()); }
@@ -71,17 +71,24 @@ impl SourceBundle {
     pub fn combined_source(&self) -> &str { &self.text }
 
     pub(crate) fn parse(&self) -> Result<ast::Program, Diagnostic> {
-        let mut program = ast::Program { functions: Vec::new(), classes: Vec::new() };
-        for unit in &self.units {
-            let source = &self.text[unit.start..unit.end];
+        let mut program = ast::Program { units: Vec::new(), functions: Vec::new(), classes: Vec::new() };
+        for source_unit in &self.units {
+            let source = &self.text[source_unit.start..source_unit.end];
             let mut tokens = crate::lexer::lex(source).map_err(|mut error| {
-                error.span.start += unit.start; error.span.end += unit.start; error
+                error.span.start += source_unit.start; error.span.end += source_unit.start; error
             })?;
             for token in &mut tokens {
-                token.span.start += unit.start; token.span.end += unit.start;
+                token.span.start += source_unit.start; token.span.end += source_unit.start;
             }
-            // File boundaries cannot complete a declaration or hide a lexer error.
-            let parsed = crate::parser::parse(tokens)?;
+            let mut parsed = crate::parser::parse(tokens)?;
+            let unit_id = program.units.len();
+            for function in &mut parsed.functions { function.unit = unit_id; }
+            for class in &mut parsed.classes {
+                class.unit = unit_id;
+                for method in &mut class.methods { method.unit = unit_id; }
+                if let Some(constructor) = &mut class.constructor { constructor.unit = unit_id; }
+            }
+            program.units.append(&mut parsed.units);
             program.functions.extend(parsed.functions);
             program.classes.extend(parsed.classes);
         }
@@ -186,11 +193,12 @@ pub fn init(path: &Path) -> Result<(), String> {
     fs::create_dir(path).map_err(|e| format!("impossible de creer {} (le chemin doit etre nouveau): {e}", path.display()))?;
     let write = || -> std::io::Result<()> {
         fs::create_dir(path.join("src"))?;
-        fs::write(path.join("src/Main.ncr"), include_str!("../examples/project/Main.ncr"))?;
-        fs::write(path.join("src/Statistics.ncr"), include_str!("../examples/project/Statistics.ncr"))?;
+        fs::write(path.join("src/Main.ncr"), include_str!("../examples/language/modules/Main.ncr"))?;
+        fs::write(path.join("src/Math.ncr"), include_str!("../examples/language/modules/Math.ncr"))?;
+        fs::write(path.join("src/Box.ncr"), include_str!("../examples/language/modules/Box.ncr"))?;
         fs::write(path.join("nacre.json"), "{\"sources\":[\"src\"]}\n")?;
         fs::write(path.join(".gitignore"), "out/\n*.ll\n")?;
-        fs::write(path.join("README.md"), "# Nacre project\n\n```sh\nnacre check src\nnacre run src\nnacre build src -o out/app\n```\n\nTypes in .ncr files share one namespace.\n")?;
+        fs::write(path.join("README.md"), "# Nacre project\n\n```sh\nnacre check src\nnacre run src\nnacre build src -o out/app\n```\n\nSource units declare modules and import public types or functions. All configured source files are compiled together.\n")?;
         Ok(())
     };
     write().map_err(|e| format!("creation partielle de {}: {e}", path.display()))
