@@ -44,11 +44,12 @@ mod websocket;
 use crate::ir::{self as t, NativeClass as C, Type};
 
 pub(crate) fn preamble(program: &t::Program) -> String {
+    let mut preamble = String::new();
     if big_numbers::is_used(program) {
-        "/* nacre-link: gmp */\n#include <gmp.h>\n".to_owned()
-    } else {
-        String::new()
+        preamble.push_str("/* nacre-link: gmp */\n#include <gmp.h>\n");
     }
+    preamble.push_str(&regex::preamble(program));
+    preamble
 }
 pub(crate) fn should_emit_prototype(program: &t::Program, function: &t::Function) -> bool {
     !function.native.is_some_and(big_numbers::is_numeric_method) || big_numbers::is_used(program)

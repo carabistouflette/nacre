@@ -1290,7 +1290,7 @@ writer closes it best-effort and does not claim success. Reader and writer metho
 return `Err` after explicit close.
 
 
-## POSIX regular expressions
+## Regular expressions
 
 ```java
 static Result<Regex, Text> Regex.compile(borrow Text pattern)
@@ -1303,19 +1303,30 @@ readonly int RegexMatch.start(int index)
 readonly int RegexMatch.end(int index)
 ```
 
-`Regex` uses Linux POSIX extended regular expressions (`REG_EXTENDED`), not Java
-regex syntax. Compilation and matching use the `C.UTF-8` locale; compilation returns
-`Err` if it is unavailable, with no fallback. `matches` requires a full-subject
-match. `search` returns the first POSIX leftmost-longest match or `Ok(None)`;
-`RegexMatch` owns copies of its captures, so they do not borrow the input subject.
-Group 0 is the complete match, and `groupCount` includes it. `start` and `end` are
-half-open UTF-8 byte offsets. `hasGroup` is false when a capture did not
-participate; `group`, `start`, and `end` on an absent or out-of-range group are
-fatal runtime boundary errors.
+`Regex` compiles PCRE2 8-bit patterns in UTF-8 and Unicode-property modes. It
+supports PCRE2 syntax, including lookarounds, backreferences, Unicode properties,
+and inline flags. Invalid patterns return `Err` with a PCRE2 diagnostic and byte
+offset. `matches` anchors both the start and end of the subject, allowing the
+engine to backtrack between alternatives until it finds a full match or proves
+there is none. `search` returns PCRE2's leftmost-first match or `Ok(None)`;
+alternatives at the same position are tried in pattern order rather than using
+POSIX leftmost-longest selection.
 
-POSIX regex APIs consume NUL-terminated C strings. `Regex.compile`, `matches`, and
-`search` reject a pattern or subject containing embedded NUL with `Err` rather
-than truncating it. Regex is for text, not arbitrary binary `ByteBuffer` contents.
+Patterns and subjects are passed with explicit byte lengths. Embedded NUL is
+ordinary text in patterns, subjects, and captures; regex APIs do not truncate at
+NUL. `RegexMatch` owns independent copies of its captures, so they remain valid
+after both the subject and `Regex` are dropped. Group 0 is the complete match,
+and `groupCount` includes it. `start` and `end` are half-open UTF-8 byte offsets.
+An empty capture participated and has equal start/end offsets; `hasGroup` is
+false for a group that did not participate. `group`, `start`, and `end` on an
+absent or out-of-range group are fatal runtime boundary errors.
+
+Each PCRE2 execution is limited to 1,000,000 match-loop iterations per candidate
+start position, depth 1,000, and 16 MiB of backtracking heap. Exceeding a limit
+returns `Err`, never `false` or `Ok(None)`; PCRE2 allocation and execution errors
+also return `Err`. Matching state is per call; compiled patterns are shared
+read-only. Programs using `Regex` require PCRE2's 8-bit development headers when
+building and the `libpcre2-8` runtime library.
 
 ## Math, random numbers, and time
 

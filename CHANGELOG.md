@@ -208,8 +208,10 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 - Fixed Arrays transfer List storage and preserve affine element ownership;
   ByteBuffer supports checked long-sized binary storage and shared native I/O reservation.
 - Text supports scalar operations, slicing, search, replacement and splitting.
-  POSIX ERE Regex uses thread-local UTF-8 locale state and owned match captures.
-  Byte-slice endpoint checks remain constant-time under validated Text invariants.
+  PCRE2-8 Regex uses UTF-8 and Unicode properties, explicit lengths including
+  embedded NUL, true full-subject matches, leftmost-first search and owned
+  captures. Match, depth and heap exhaustion return `Err`; byte-slice endpoint
+  checks remain constant-time under validated Text invariants.
 - Set reuses Map table storage without a wrapper allocation; Deque moves affine
   ring elements through wrap and growth. List heapsort and lower-bound searches
   support total primitive ordering or borrowed Comparators, without enum operand copies.

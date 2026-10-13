@@ -1,152 +1,276 @@
-/* POSIX ERE operations run under the Regex owner's C.UTF-8 locale via
-   uselocale, which changes only the calling thread's locale. */
+/* Each call gets private PCRE2 match data and a bounded context. */
+#define NCR_REGEX_MATCH_LIMIT UINT32_C(1000000)
+#define NCR_REGEX_DEPTH_LIMIT UINT32_C(1000)
+#define NCR_REGEX_HEAP_LIMIT_KIB UINT32_C(16384)
+static const PCRE2_UCHAR ncr_regex_empty[] = { 0 };
+
+static bool ncr_regex_text_bytes(
+    const ncr_obj_@TEXT_CLASS@ *text, PCRE2_SPTR *bytes, PCRE2_SIZE *length
+) {
+    if (text == NULL || text->length < 0 || (text->length > 0 && text->bytes == NULL)) {
+        return false;
+    }
+    size_t byte_length = (size_t)text->length;
+    PCRE2_SIZE engine_length = (PCRE2_SIZE)byte_length;
+    if ((size_t)engine_length != byte_length) { return false; }
+    *bytes = byte_length == 0 ? ncr_regex_empty : (PCRE2_SPTR)text->bytes;
+    *length = engine_length;
+    return true;
+}
+
+static int ncr_regex_execute(
+    pcre2_code *compiled, PCRE2_SPTR subject, PCRE2_SIZE subject_length,
+    uint32_t options, pcre2_match_data *match_data
+) {
+    pcre2_match_context *context = pcre2_match_context_create(NULL);
+    if (context == NULL) { return PCRE2_ERROR_NOMEMORY; }
+    if (pcre2_set_match_limit(context, NCR_REGEX_MATCH_LIMIT) != 0
+        || pcre2_set_depth_limit(context, NCR_REGEX_DEPTH_LIMIT) != 0
+        || pcre2_set_heap_limit(context, NCR_REGEX_HEAP_LIMIT_KIB) != 0) {
+        pcre2_match_context_free(context);
+        return PCRE2_ERROR_INTERNAL;
+    }
+    int status = pcre2_match(
+        compiled, subject, subject_length, 0, options, match_data, context);
+    pcre2_match_context_free(context);
+    return status;
+}
+
+static const char *ncr_regex_execution_error(
+    int error_code, const char *operation, char *buffer, size_t capacity,
+    size_t *length
+) {
+    const char *reason = NULL;
+    if (error_code == PCRE2_ERROR_MATCHLIMIT) { reason = "PCRE2 match limit exceeded"; }
+    else if (error_code == PCRE2_ERROR_DEPTHLIMIT) { reason = "PCRE2 depth limit exceeded"; }
+    else if (error_code == PCRE2_ERROR_HEAPLIMIT) { reason = "PCRE2 heap limit exceeded"; }
+    else if (error_code == PCRE2_ERROR_NOMEMORY) { reason = "PCRE2 could not allocate match state"; }
+    if (reason != NULL) {
+        int written = snprintf(buffer, capacity, "%s: %s", operation, reason);
+        if (written < 0) {
+            static const char fallback[] = "Regex: PCRE2 execution failed";
+            *length = sizeof(fallback) - 1;
+            return fallback;
+        }
+        *length = (size_t)written < capacity ? (size_t)written : capacity - 1;
+        return buffer;
+    }
+
+    int prefix = snprintf(buffer, capacity, "%s: ", operation);
+    if (prefix < 0 || (size_t)prefix >= capacity) {
+        static const char fallback[] = "Regex: PCRE2 execution failed";
+        *length = sizeof(fallback) - 1;
+        return fallback;
+    }
+    size_t used = (size_t)prefix;
+    size_t available = capacity - used;
+    PCRE2_SIZE engine_available = (PCRE2_SIZE)available;
+    if ((size_t)engine_available != available) {
+        *length = used;
+        return buffer;
+    }
+    int detail = pcre2_get_error_message(
+        error_code, (PCRE2_UCHAR *)(buffer + used), engine_available);
+    if (detail >= 0 && (size_t)detail < available) {
+        *length = used + (size_t)detail;
+        return buffer;
+    }
+    int written = snprintf(buffer + used, available, "PCRE2 error %d", error_code);
+    if (written < 0) {
+        *length = used;
+    } else {
+        *length = used + ((size_t)written < available ? (size_t)written : available - 1);
+    }
+    return buffer;
+}
+
+static ncr_obj_@COMPILE_RESULT@ ncr_regex_compile_error(
+    int error_code, PCRE2_SIZE error_offset, size_t pattern_length,
+    size_t line, size_t column
+) {
+    if (error_code == PCRE2_ERROR_NOMEMORY) {
+        static const char message[] = "Regex.compile: PCRE2 could not allocate compiled pattern state";
+        return @COMPILE_ERR@(message, sizeof(message) - 1, line, column);
+    }
+    size_t offset = (size_t)error_offset;
+    if ((PCRE2_SIZE)offset != error_offset || offset > pattern_length) {
+        static const char message[] = "Regex.compile: PCRE2 rejected the pattern";
+        return @COMPILE_ERR@(message, sizeof(message) - 1, line, column);
+    }
+    char message[256];
+    int prefix = snprintf(
+        message, sizeof(message), "Regex.compile: PCRE2 pattern error at byte %zu: ", offset);
+    if (prefix < 0 || (size_t)prefix >= sizeof(message)) {
+        static const char fallback[] = "Regex.compile: PCRE2 rejected the pattern";
+        return @COMPILE_ERR@(fallback, sizeof(fallback) - 1, line, column);
+    }
+    size_t used = (size_t)prefix;
+    size_t available = sizeof(message) - used;
+    PCRE2_SIZE engine_available = (PCRE2_SIZE)available;
+    if ((size_t)engine_available != available) {
+        message[used] = '\0';
+        return @COMPILE_ERR@(message, used, line, column);
+    }
+    int detail = pcre2_get_error_message(
+        error_code, (PCRE2_UCHAR *)(message + used), engine_available);
+    if (detail >= 0 && (size_t)detail < available) {
+        used += (size_t)detail;
+    } else {
+        int written = snprintf(message + used, available, "PCRE2 error %d", error_code);
+        if (written > 0) {
+            used += (size_t)written < available ? (size_t)written : available - 1;
+        }
+    }
+    return @COMPILE_ERR@(message, used, line, column);
+}
+
 static ncr_obj_@COMPILE_RESULT@ @REGEX_COMPILE@(
     ncr_obj_@TEXT_CLASS@ *pattern, size_t line, size_t column
 ) {
-    static const char invalid_pattern[] = "Regex.compile: invalid POSIX extended regular expression";
-    static const char embedded_nul[] = "Regex.compile: pattern contains NUL";
-    static const char unavailable_locale[] = "Regex.compile: C.UTF-8 locale is unavailable";
-    if (pattern->length < 0 || (pattern->length > 0 && pattern->bytes == NULL)) {
+    static const char invalid_pattern[] = "Regex.compile: invalid Text pattern state";
+    PCRE2_SPTR pattern_bytes;
+    PCRE2_SIZE pattern_length;
+    if (!ncr_regex_text_bytes(pattern, &pattern_bytes, &pattern_length)) {
         return @COMPILE_ERR@(invalid_pattern, sizeof(invalid_pattern) - 1, line, column);
-    }
-    size_t pattern_length = (size_t)pattern->length;
-    if (pattern_length > 0 && memchr(pattern->bytes, 0, pattern_length) != NULL) {
-        return @COMPILE_ERR@(embedded_nul, sizeof(embedded_nul) - 1, line, column);
     }
 
-    ncr_obj_@REGEX_CLASS@ *compiled = ncr_allocate(sizeof(*compiled), line, column);
-    compiled->locale = newlocale(LC_CTYPE_MASK, "C.UTF-8", (locale_t)0);
-    if (compiled->locale == (locale_t)0) {
-        ncr_deallocate(compiled);
-        return @COMPILE_ERR@(unavailable_locale, sizeof(unavailable_locale) - 1, line, column);
+    int error_code = 0;
+    PCRE2_SIZE error_offset = PCRE2_UNSET;
+    pcre2_code *compiled = pcre2_compile(
+        pattern_bytes, pattern_length, PCRE2_UTF | PCRE2_UCP,
+        &error_code, &error_offset, NULL);
+    if (compiled == NULL) {
+        return ncr_regex_compile_error(
+            error_code, error_offset, (size_t)pattern_length, line, column);
     }
-    locale_t previous = uselocale(compiled->locale);
-    if (previous == (locale_t)0) {
-        freelocale(compiled->locale);
-        ncr_deallocate(compiled);
-        return @COMPILE_ERR@(unavailable_locale, sizeof(unavailable_locale) - 1, line, column);
+    uint32_t capture_count = 0;
+    if (pcre2_pattern_info(compiled, PCRE2_INFO_CAPTURECOUNT, &capture_count) != 0) {
+        pcre2_code_free(compiled);
+        static const char message[] = "Regex.compile: PCRE2 could not inspect compiled pattern";
+        return @COMPILE_ERR@(message, sizeof(message) - 1, line, column);
     }
-    char *pattern_c = ncr_allocate(pattern_length + 1, line, column);
-    if (pattern_length > 0) { memcpy(pattern_c, pattern->bytes, pattern_length); }
-    pattern_c[pattern_length] = '\0';
-    int status = regcomp(&compiled->compiled, pattern_c, REG_EXTENDED);
-    ncr_deallocate(pattern_c);
-    if (uselocale(previous) == (locale_t)0) {
-        ncr_fail("Regex locale restore failed", line, column);
+    if (capture_count >= (uint32_t)INT32_MAX) {
+        pcre2_code_free(compiled);
+        static const char message[] = "Regex.compile: capture count exceeds int32 range";
+        return @COMPILE_ERR@(message, sizeof(message) - 1, line, column);
     }
-    if (status != 0) {
-        freelocale(compiled->locale);
-        ncr_deallocate(compiled);
-        return @COMPILE_ERR@(invalid_pattern, sizeof(invalid_pattern) - 1, line, column);
-    }
-    compiled->compiled_ready = true;
-    if (compiled->compiled.re_nsub >= (size_t)INT32_MAX) {
-        ncr_drop_@REGEX_CLASS@(compiled);
-        static const char too_many_groups[] = "Regex.compile: too many capture groups";
-        return @COMPILE_ERR@(too_many_groups, sizeof(too_many_groups) - 1, line, column);
-    }
-    compiled->group_count = (int32_t)(compiled->compiled.re_nsub + 1);
+    ncr_obj_@REGEX_CLASS@ *result = ncr_allocate(sizeof(*result), line, column);
+    result->compiled = compiled;
+    result->group_count = (int32_t)(capture_count + 1u);
     return (ncr_obj_@COMPILE_RESULT@){
         .tag = @COMPILE_OK_TAG@,
-        .data.v@COMPILE_OK_TAG@.f0 = compiled
+        .data.v@COMPILE_OK_TAG@.f0 = result
     };
 }
 
 static ncr_obj_@MATCHES_RESULT@ @REGEX_MATCHES@(
-    ncr_obj_@REGEX_CLASS@ *regex, ncr_obj_@TEXT_CLASS@ *subject, size_t line, size_t column
+    ncr_obj_@REGEX_CLASS@ *regex, ncr_obj_@TEXT_CLASS@ *subject,
+    size_t line, size_t column
 ) {
-    static const char invalid_subject[] = "Regex.matches: subject contains NUL or invalid Text state";
-    static const char execution_failed[] = "Regex.matches: POSIX regex execution failed";
-    if (subject->length < 0 || (subject->length > 0 && subject->bytes == NULL)) {
+    static const char invalid_subject[] = "Regex.matches: invalid Text subject state";
+    static const char inconsistent_match[] = "Regex.matches: PCRE2 full-match offsets are invalid";
+    PCRE2_SPTR subject_bytes;
+    PCRE2_SIZE subject_length;
+    if (!ncr_regex_text_bytes(subject, &subject_bytes, &subject_length)) {
         return @MATCHES_ERR@(invalid_subject, sizeof(invalid_subject) - 1, line, column);
     }
-    size_t subject_length = (size_t)subject->length;
-    if (subject_length > 0 && memchr(subject->bytes, 0, subject_length) != NULL) {
-        return @MATCHES_ERR@(invalid_subject, sizeof(invalid_subject) - 1, line, column);
+    pcre2_match_data *match_data = pcre2_match_data_create(1, NULL);
+    if (match_data == NULL) {
+        static const char message[] = "Regex.matches: PCRE2 could not allocate match state";
+        return @MATCHES_ERR@(message, sizeof(message) - 1, line, column);
     }
-    char *subject_c = ncr_allocate(subject_length + 1, line, column);
-    if (subject_length > 0) { memcpy(subject_c, subject->bytes, subject_length); }
-    subject_c[subject_length] = '\0';
-
-    locale_t previous = uselocale(regex->locale);
-    if (previous == (locale_t)0) {
-        ncr_deallocate(subject_c);
-        return @MATCHES_ERR@(execution_failed, sizeof(execution_failed) - 1, line, column);
+    int status = ncr_regex_execute(
+        regex->compiled, subject_bytes, subject_length,
+        PCRE2_ANCHORED | PCRE2_ENDANCHORED, match_data);
+    if (status == PCRE2_ERROR_NOMATCH) {
+        pcre2_match_data_free(match_data);
+        return (ncr_obj_@MATCHES_RESULT@){
+            .tag = @MATCHES_OK_TAG@,
+            .data.v@MATCHES_OK_TAG@.f0 = false
+        };
     }
-    regmatch_t match;
-    int status = regexec(&regex->compiled, subject_c, 1, &match, 0);
-    if (uselocale(previous) == (locale_t)0) {
-        ncr_fail("Regex locale restore failed", line, column);
+    if (status < 0) {
+        pcre2_match_data_free(match_data);
+        char message[256];
+        size_t message_length;
+        const char *error = ncr_regex_execution_error(
+            status, "Regex.matches", message, sizeof(message), &message_length);
+        return @MATCHES_ERR@(error, message_length, line, column);
     }
-    ncr_deallocate(subject_c);
-    if (status != 0 && status != REG_NOMATCH) {
-        return @MATCHES_ERR@(execution_failed, sizeof(execution_failed) - 1, line, column);
+    PCRE2_SIZE *offsets = pcre2_get_ovector_pointer(match_data);
+    if (offsets == NULL || offsets[0] != 0 || offsets[1] != subject_length) {
+        pcre2_match_data_free(match_data);
+        return @MATCHES_ERR@(
+            inconsistent_match, sizeof(inconsistent_match) - 1, line, column);
     }
-    bool full_match = status == 0 && match.rm_so == 0 && match.rm_eo >= 0
-        && (uintmax_t)match.rm_eo == (uintmax_t)subject_length;
+    pcre2_match_data_free(match_data);
     return (ncr_obj_@MATCHES_RESULT@){
         .tag = @MATCHES_OK_TAG@,
-        .data.v@MATCHES_OK_TAG@.f0 = full_match
+        .data.v@MATCHES_OK_TAG@.f0 = true
     };
 }
 
 static ncr_obj_@SEARCH_RESULT@ @REGEX_SEARCH@(
-    ncr_obj_@REGEX_CLASS@ *regex, ncr_obj_@TEXT_CLASS@ *subject, size_t line, size_t column
+    ncr_obj_@REGEX_CLASS@ *regex, ncr_obj_@TEXT_CLASS@ *subject,
+    size_t line, size_t column
 ) {
-    static const char invalid_subject[] = "Regex.search: subject contains NUL or invalid Text state";
-    static const char execution_failed[] = "Regex.search: POSIX regex execution failed";
-    if (subject->length < 0 || (subject->length > 0 && subject->bytes == NULL)) {
+    static const char invalid_subject[] = "Regex.search: invalid Text subject state";
+    static const char execution_failed[] = "Regex.search: PCRE2 returned an incomplete capture vector";
+    PCRE2_SPTR subject_bytes;
+    PCRE2_SIZE subject_length;
+    if (!ncr_regex_text_bytes(subject, &subject_bytes, &subject_length)) {
         return @SEARCH_ERR@(invalid_subject, sizeof(invalid_subject) - 1, line, column);
     }
-    size_t subject_length = (size_t)subject->length;
-    if (subject_length > 0 && memchr(subject->bytes, 0, subject_length) != NULL) {
-        return @SEARCH_ERR@(invalid_subject, sizeof(invalid_subject) - 1, line, column);
-    }
-    char *subject_c = ncr_allocate(subject_length + 1, line, column);
-    if (subject_length > 0) { memcpy(subject_c, subject->bytes, subject_length); }
-    subject_c[subject_length] = '\0';
     size_t capture_count = (size_t)regex->group_count;
     if (capture_count == 0
-        || capture_count > SIZE_MAX / sizeof(regmatch_t)
         || capture_count > SIZE_MAX / sizeof(ncr_obj_@TEXT_CLASS@ *)
         || capture_count > SIZE_MAX / sizeof(int32_t)) {
-        ncr_deallocate(subject_c);
         return @SEARCH_ERR@(execution_failed, sizeof(execution_failed) - 1, line, column);
     }
-    regmatch_t *captures = ncr_allocate(capture_count * sizeof(*captures), line, column);
-
-    locale_t previous = uselocale(regex->locale);
-    if (previous == (locale_t)0) {
-        ncr_deallocate(captures);
-        ncr_deallocate(subject_c);
-        return @SEARCH_ERR@(execution_failed, sizeof(execution_failed) - 1, line, column);
+    pcre2_match_data *match_data = pcre2_match_data_create_from_pattern(regex->compiled, NULL);
+    if (match_data == NULL) {
+        static const char message[] = "Regex.search: PCRE2 could not allocate match state";
+        return @SEARCH_ERR@(message, sizeof(message) - 1, line, column);
     }
-    int status = regexec(&regex->compiled, subject_c, capture_count, captures, 0);
-    if (uselocale(previous) == (locale_t)0) {
-        ncr_fail("Regex locale restore failed", line, column);
-    }
-    ncr_deallocate(subject_c);
-    if (status == REG_NOMATCH) {
-        ncr_deallocate(captures);
+    int status = ncr_regex_execute(regex->compiled, subject_bytes, subject_length, 0, match_data);
+    if (status == PCRE2_ERROR_NOMATCH) {
+        pcre2_match_data_free(match_data);
         @OPTION_TYPE@ none = { .tag = @OPTION_NONE_TAG@ };
         return (ncr_obj_@SEARCH_RESULT@){
             .tag = @SEARCH_OK_TAG@,
             .data.v@SEARCH_OK_TAG@.f0 = none
         };
     }
-    if (status != 0) {
-        ncr_deallocate(captures);
+    if (status < 0) {
+        pcre2_match_data_free(match_data);
+        char message[256];
+        size_t message_length;
+        const char *error = ncr_regex_execution_error(
+            status, "Regex.search", message, sizeof(message), &message_length);
+        return @SEARCH_ERR@(error, message_length, line, column);
+    }
+    if (status == 0 || (size_t)pcre2_get_ovector_count(match_data) < capture_count) {
+        pcre2_match_data_free(match_data);
+        return @SEARCH_ERR@(execution_failed, sizeof(execution_failed) - 1, line, column);
+    }
+    PCRE2_SIZE *offsets = pcre2_get_ovector_pointer(match_data);
+    if (offsets == NULL) {
+        pcre2_match_data_free(match_data);
         return @SEARCH_ERR@(execution_failed, sizeof(execution_failed) - 1, line, column);
     }
     for (size_t index = 0; index < capture_count; ++index) {
-        if (captures[index].rm_so < 0) {
-            if (captures[index].rm_so != -1 || captures[index].rm_eo != -1) {
-                ncr_deallocate(captures);
-                return @SEARCH_ERR@(execution_failed, sizeof(execution_failed) - 1, line, column);
-            }
-        } else if (captures[index].rm_eo < captures[index].rm_so
-            || (uintmax_t)captures[index].rm_eo > (uintmax_t)subject_length) {
-            ncr_deallocate(captures);
+        PCRE2_SIZE start = offsets[index * 2];
+        PCRE2_SIZE end = offsets[index * 2 + 1];
+        bool start_unset = start == PCRE2_UNSET;
+        bool end_unset = end == PCRE2_UNSET;
+        if (start_unset || end_unset) {
+            if (start_unset && end_unset && index != 0) { continue; }
+            pcre2_match_data_free(match_data);
+            return @SEARCH_ERR@(execution_failed, sizeof(execution_failed) - 1, line, column);
+        }
+        if (end < start || end > subject_length
+            || start > (PCRE2_SIZE)INT32_MAX || end > (PCRE2_SIZE)INT32_MAX) {
+            pcre2_match_data_free(match_data);
             return @SEARCH_ERR@(execution_failed, sizeof(execution_failed) - 1, line, column);
         }
     }
@@ -154,7 +278,7 @@ static ncr_obj_@SEARCH_RESULT@ @REGEX_SEARCH@(
     size_t pointer_bytes = capture_count * sizeof(ncr_obj_@TEXT_CLASS@ *);
     size_t offset_bytes = capture_count * sizeof(int32_t);
     if (offset_bytes > SIZE_MAX / 2 || pointer_bytes > SIZE_MAX - offset_bytes * 2) {
-        ncr_deallocate(captures);
+        pcre2_match_data_free(match_data);
         return @SEARCH_ERR@(execution_failed, sizeof(execution_failed) - 1, line, column);
     }
     size_t storage_bytes = pointer_bytes + offset_bytes * 2;
@@ -165,18 +289,21 @@ static ncr_obj_@SEARCH_RESULT@ @REGEX_SEARCH@(
     int32_t *starts = (int32_t *)(result->capture_storage + pointer_bytes);
     int32_t *ends = starts + capture_count;
     for (size_t index = 0; index < capture_count; ++index) {
+        PCRE2_SIZE engine_start = offsets[index * 2];
+        PCRE2_SIZE engine_end = offsets[index * 2 + 1];
+        groups[index] = NULL;
         starts[index] = -1;
         ends[index] = -1;
-        if (captures[index].rm_so < 0) { continue; }
-        size_t start = (size_t)captures[index].rm_so;
-        size_t end = (size_t)captures[index].rm_eo;
+        if (engine_start == PCRE2_UNSET) { continue; }
+        size_t start = (size_t)engine_start;
+        size_t end = (size_t)engine_end;
         size_t length = end - start;
         const unsigned char *bytes = length == 0 ? NULL : subject->bytes + start;
         groups[index] = @TEXT_MAKE@(bytes, length, line, column);
         starts[index] = (int32_t)start;
         ends[index] = (int32_t)end;
     }
-    ncr_deallocate(captures);
+    pcre2_match_data_free(match_data);
     @OPTION_TYPE@ some = {
         .tag = @OPTION_SOME_TAG@,
         .data.v@OPTION_SOME_TAG@.f0 = result
@@ -186,4 +313,3 @@ static ncr_obj_@SEARCH_RESULT@ @REGEX_SEARCH@(
         .data.v@SEARCH_OK_TAG@.f0 = some
     };
 }
-

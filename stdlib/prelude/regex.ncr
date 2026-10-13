@@ -1,14 +1,15 @@
-// Linux POSIX extended regular expressions only, not Java-compatible syntax.
-// Compilation requires C.UTF-8 and returns Err if that locale is unavailable; no fallback is used.
-// Patterns and subjects containing NUL are rejected rather than C-string truncated.
+// PCRE2-8 uses UTF-8 and Unicode properties; patterns use PCRE2 syntax.
+// Pattern and subject lengths are explicit, so embedded NUL is matched as text.
+// matches anchors both ends; search follows PCRE2's leftmost-first semantics.
+// Match, depth, or heap limit exhaustion returns Err instead of reporting no match.
 class Regex {
     public static Result<Regex, Text> compile(borrow Text pattern) {}
-    // matches is a full-subject match; search returns POSIX's first leftmost-longest match.
+    // matches is a full-subject match; search returns the first leftmost-first match.
     public readonly Result<boolean, Text> matches(borrow Text subject) {}
     public readonly Result<Option<RegexMatch>, Text> search(borrow Text subject) {}
 }
 
-// Captures are copied into this owner; group 0 is the whole match, offsets are byte-based and half-open.
+// Captures are owned copies, independent of both Regex and subject lifetimes.
 class RegexMatch {
     public readonly int groupCount() {}
     public readonly boolean hasGroup(int index) {}

@@ -24,11 +24,12 @@ C11 headers and a linker; Windows and macOS are not supported targets.
 
 Optional native library APIs require their development headers and libraries:
 OpenSSL 3 for `Crypto`, zlib for `Compression`/`Checksums`, GMP for arbitrary
-precision, ICU for Unicode/calendar APIs, libcurl for HTTP, libarchive for ZIP,
-libxml2 for XML, SQLite for SQL, and uriparser for URI operations. Generated programs
-link only the libraries requested by their emitted native templates; ordinary
-programs retain their existing C11/POSIX dependencies. The compiler accepts only
-a fixed dependency allowlist, never linker flags supplied by Nacre source.
+precision, ICU for Unicode/calendar APIs, PCRE2-8 (`libpcre2-dev`) for Regex,
+libcurl for HTTP, libarchive for ZIP, libxml2 for XML, SQLite for SQL, and
+uriparser for URI operations. Generated programs link only the libraries
+requested by their emitted native templates; ordinary programs retain their
+existing C11/POSIX dependencies. The compiler accepts only a fixed dependency
+allowlist, never linker flags supplied by Nacre source.
 
 ZIP's strict seekable reader needs the upstream correction for zero-entry archives
 that is not in released libarchive 3.8.9. The pinned dependency build verifies the
@@ -235,7 +236,7 @@ complete API reference.
 | `Option<T>`, `Result<T,E>` | Inline affine enum values; exhaustive owning or borrowed matching. |
 | Console, arguments, files | UTF-8 console input/output, arguments, text and byte files, directories, paths, and metadata. |
 | Processes, threads, synchronization | Literal-argv processes, owned threads, and explicit shared mutex/channel handles. |
-| Regex, Math, Random, Time, sockets | POSIX regular expressions, scalar utilities, monotonic/wall-clock time, TCP, and UDP. |
+| Regex, Math, Random, Time, sockets | Unicode PCRE2-8 regular expressions, scalar utilities, monotonic/wall-clock time, TCP, and UDP. |
 
 See the API reference for exact signatures, ownership, error, blocking, and
 platform contracts. Fallible operations do not roll back side effects on `Err`;

@@ -1,6 +1,7 @@
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
 use super::support::{
-    replace_method_ids, replace_placeholders, result_id, text_class, variant, variant_id,
+    has_placeholder, native_class_id_if, replace_method_ids, replace_placeholders, result_id,
+    text_class, variant, variant_id,
 };
 
 fn method(program: &t::Program, receiver: Option<usize>, is: impl Fn(M) -> bool) -> &t::Function {
@@ -9,14 +10,16 @@ fn method(program: &t::Program, receiver: Option<usize>, is: impl Fn(M) -> bool)
     }).expect("compiler-owned Regex native method is present")
 }
 
+pub(super) fn preamble(program: &t::Program) -> String {
+    if native_class_id_if(program, |class| matches!(class, C::Regex)).is_none() {
+        return String::new();
+    }
+    "/* nacre-link: pcre2 */\n#define PCRE2_CODE_UNIT_WIDTH 8\n#include <pcre2.h>\n".to_owned()
+}
+
 pub(super) fn fields(_program: &t::Program, class: C) -> String {
     match class {
-        C::Regex => concat!(
-            "    regex_t compiled;\n",
-            "    locale_t locale;\n",
-            "    int32_t group_count;\n",
-            "    bool compiled_ready;\n",
-        ).to_owned(),
+        C::Regex => "    pcre2_code *compiled;\n    int32_t group_count;\n".to_owned(),
         C::RegexMatch => "    unsigned char *capture_storage; /* Text pointers, then start and end byte offsets. */\n    int32_t group_count;\n".to_owned(),
         _ => unreachable!("regex field request for a non-regex native class"),
     }
@@ -24,15 +27,7 @@ pub(super) fn fields(_program: &t::Program, class: C) -> String {
 
 pub(super) fn drop_fields(program: &t::Program, class: C) -> String {
     match class {
-        C::Regex => concat!(
-            "    if (p->compiled_ready) {\n",
-            "        locale_t previous = uselocale(p->locale);\n",
-            "        if (previous == (locale_t)0) { ncr_fail(\"Regex locale restore failed\", 0, 0); }\n",
-            "        regfree(&p->compiled);\n",
-            "        if (uselocale(previous) == (locale_t)0) { ncr_fail(\"Regex locale restore failed\", 0, 0); }\n",
-            "    }\n",
-            "    if (p->locale != (locale_t)0) { freelocale(p->locale); }\n",
-        ).to_owned(),
+        C::Regex => "    if (p->compiled != NULL) { pcre2_code_free(p->compiled); }\n".to_owned(),
         C::RegexMatch => {
             let text = text_class(program).expect("RegexMatch captures own Text");
             format!(
@@ -42,6 +37,7 @@ pub(super) fn drop_fields(program: &t::Program, class: C) -> String {
         _ => unreachable!("regex drop request for a non-regex native class"),
     }
 }
+
 pub(super) fn implementation(program: &t::Program) -> String {
     let mut body = String::new();
     if let Some(regex_class) = program.classes.iter().find_map(|class| {
@@ -93,6 +89,7 @@ fn regex_implementation(program: &t::Program, regex_class: usize) -> String {
         ("@TEXT_MAKE@", format!("ncr_text_from_bytes_{text}")),
     ]);
     body = replace_method_ids(body, program, None);
+    debug_assert!(!has_placeholder(&body), "unexpanded Regex placeholder");
     body
 }
 
@@ -106,5 +103,6 @@ fn match_implementation(program: &t::Program, match_class: usize) -> String {
         ],
     );
     body = replace_method_ids(body, program, Some(match_class));
+    debug_assert!(!has_placeholder(&body), "unexpanded RegexMatch placeholder");
     body
 }

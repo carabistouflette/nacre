@@ -221,7 +221,7 @@ void main() {
 }
 
 #[test]
-fn regex_uses_utf8_ere_and_owned_capture_text_with_byte_offsets() {
+fn regex_uses_utf8_pcre2_and_owned_capture_text_with_byte_offsets() {
     let output = execute(r#"
 void main() {
     Text dotPattern = new Text(".");
@@ -367,39 +367,188 @@ void main() {
 }
 
 #[test]
-fn regex_reports_invalid_patterns_and_nul_boundaries_as_errors() {
+fn regex_supports_modern_pcre2_syntax_full_matches_and_embedded_nul() {
     let output = execute(r#"
 void main() {
+    Text modernPattern = new Text("(?i)(?=(\\p{L}+)-)\\1-\\p{L}+");
+    match (Regex.compile(modernPattern)) {
+        Err(error) { println("modern PCRE2 pattern rejected"); drop(error); }
+        Ok(regex) {
+            Text exact = new Text("Äbc-äBC");
+            match (regex.matches(exact)) {
+                Err(error) { println("Unicode full match errored"); drop(error); }
+                Ok(value) { println(value); }
+            }
+            Text partial = new Text("xÄbc-äBC");
+            match (regex.matches(partial)) {
+                Err(error) { println("Unicode partial match errored"); drop(error); }
+                Ok(value) { println(value); }
+            }
+            Text searched = new Text("xÄbc-äBCy");
+            match (regex.search(searched)) {
+                Err(error) { println("Unicode search errored"); drop(error); }
+                Ok(found) {
+                    match (found) {
+                        None { println("Unicode match missing"); }
+                        Some(capture) {
+                            println(capture.groupCount());
+                            println(capture.start(0));
+                            println(capture.end(0));
+                            borrow Text whole = capture.group(0);
+                            whole.print();
+                            println(capture.start(1));
+                            println(capture.end(1));
+                            borrow Text letters = capture.group(1);
+                            letters.print();
+                        }
+                    }
+                }
+            }
+            drop(regex);
+        }
+    }
+
+    Text alternativePattern = new Text("a|ab");
+    match (Regex.compile(alternativePattern)) {
+        Err(error) { println("alternative pattern rejected"); drop(error); }
+        Ok(regex) {
+            Text subject = new Text("ab");
+            match (regex.matches(subject)) {
+                Err(error) { println("alternative full match errored"); drop(error); }
+                Ok(value) { println(value); }
+            }
+            match (regex.search(subject)) {
+                Err(error) { println("alternative search errored"); drop(error); }
+                Ok(found) {
+                    match (found) {
+                        None { println("alternative match missing"); }
+                        Some(capture) {
+                            borrow Text first = capture.group(0);
+                            first.print();
+                            println(capture.start(0));
+                            println(capture.end(0));
+                        }
+                    }
+                }
+            }
+            drop(regex);
+        }
+    }
+
+    Text nulPattern = new Text("a\0b");
+    match (Regex.compile(nulPattern)) {
+        Err(error) { println("embedded NUL pattern rejected"); drop(error); }
+        Ok(regex) {
+            Text nulExact = new Text("a\0b");
+            match (regex.matches(nulExact)) {
+                Err(error) { println("embedded NUL full match errored"); drop(error); }
+                Ok(value) { println(value); }
+            }
+            Text nulSubject = new Text("x\0a\0by");
+            match (regex.search(nulSubject)) {
+                Err(error) { println("embedded NUL search errored"); drop(error); }
+                Ok(found) {
+                    match (found) {
+                        None { println("embedded NUL match missing"); }
+                        Some(capture) {
+                            println(capture.start(0));
+                            println(capture.end(0));
+                            borrow Text matched = capture.group(0);
+                            matched.print();
+                            println();
+                        }
+                    }
+                }
+            }
+            drop(regex);
+        }
+    }
+
     Text invalid = new Text("[");
     match (Regex.compile(invalid)) {
         Err(error) { println("invalid pattern rejected"); drop(error); }
         Ok(regex) { println("invalid pattern accepted"); drop(regex); }
     }
-    Text javaLookahead = new Text("(?=a)");
-    match (Regex.compile(javaLookahead)) {
-        Err(error) { println("non-POSIX syntax rejected"); drop(error); }
-        Ok(regex) { println("non-POSIX syntax accepted"); drop(regex); }
-    }
-    Text nulPattern = new Text("a\0b");
-    match (Regex.compile(nulPattern)) {
-        Err(error) { println("NUL pattern rejected"); drop(error); }
-        Ok(regex) { println("NUL pattern accepted"); drop(regex); }
-    }
-    Text pattern = new Text("a");
-    match (Regex.compile(pattern)) {
-        Err(error) { println("pattern unavailable"); drop(error); }
-        Ok(regex) {
-            Text subject = new Text("a\0b");
-            match (regex.matches(subject)) {
-                Err(error) { println("NUL subject rejected by matches"); drop(error); }
-                Ok(value) { println("NUL subject accepted by matches"); println(value); }
+}
+"#);
+    assert_eq!(
+        output.stdout,
+        "true\nfalse\n2\n1\n10\nÄbc-äBC\n1\n5\nÄbc\ntrue\na\n0\n1\ntrue\n2\n5\na\0b\ninvalid pattern rejected\n"
+            .as_bytes()
+    );
+}
+
+#[test]
+fn regex_match_owns_captures_after_subject_and_regex_drop() {
+    let output = execute(r#"
+void main() {
+    Option<RegexMatch> saved = new Option<RegexMatch>.None();
+    {
+        Text pattern = new Text("(é+)");
+        match (Regex.compile(pattern)) {
+            Err(error) { println("pattern rejected"); drop(error); }
+            Ok(regex) {
+                {
+                    Text subject = new Text("xéé!");
+                    match (regex.search(subject)) {
+                        Err(error) { println("search errored"); drop(error); }
+                        Ok(found) {
+                            match (found) {
+                                None { println("match missing"); }
+                                Some(capture) { saved = new Option<RegexMatch>.Some(capture); }
+                            }
+                        }
+                    }
+                }
+                drop(regex);
             }
+        }
+    }
+    match (saved) {
+        None { println("owned match was not retained"); }
+        Some(capture) {
+            println(capture.groupCount());
+            println(capture.start(0));
+            println(capture.end(0));
+            borrow Text whole = capture.group(0);
+            whole.print();
+            println();
+            borrow Text group = capture.group(1);
+            group.print();
+            println();
+        }
+    }
+}
+"#);
+    assert_eq!(output.stdout, "2\n1\n5\néé\néé\n".as_bytes());
+}
+
+#[test]
+fn regex_distinguishes_empty_and_unmatched_capture_groups() {
+    let output = execute(r#"
+void main() {
+    Text pattern = new Text("(a*)(b)?");
+    match (Regex.compile(pattern)) {
+        Err(error) { println("pattern rejected"); drop(error); }
+        Ok(regex) {
+            Text subject = new Text("");
             match (regex.search(subject)) {
-                Err(error) { println("NUL subject rejected by search"); drop(error); }
+                Err(error) { println("search errored"); drop(error); }
                 Ok(found) {
                     match (found) {
-                        None { println("NUL subject had no match"); }
-                        Some(capture) { println("NUL subject matched"); drop(capture); }
+                        None { println("empty match missing"); }
+                        Some(capture) {
+                            println(capture.groupCount());
+                            println(capture.hasGroup(0));
+                            println(capture.hasGroup(1));
+                            println(capture.hasGroup(2));
+                            borrow Text empty = capture.group(1);
+                            println(empty.byteLength());
+                            println(capture.start(1));
+                            println(capture.end(1));
+                            println(capture.start(0));
+                            println(capture.end(0));
+                        }
                     }
                 }
             }
@@ -408,8 +557,40 @@ void main() {
     }
 }
 "#);
-    assert_eq!(output.stdout,
-        "invalid pattern rejected\nnon-POSIX syntax rejected\nNUL pattern rejected\nNUL subject rejected by matches\nNUL subject rejected by search\n".as_bytes());
+    assert_eq!(output.stdout, "3\ntrue\ntrue\nfalse\n0\n0\n0\n0\n0\n".as_bytes());
+}
+
+#[test]
+fn regex_reports_resource_exhaustion_instead_of_a_miss() {
+    let output = execute(r#"
+void main() {
+    Text pattern = new Text("(*NO_AUTO_POSSESS)(*NO_START_OPT)(a+)+$");
+    match (Regex.compile(pattern)) {
+        Err(error) { println("resource pattern rejected"); drop(error); }
+        Ok(regex) {
+            Text subject = new Text("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa!");
+            match (regex.matches(subject)) {
+                Err(error) { println("matches reported resource exhaustion"); drop(error); }
+                Ok(value) { println("matches hid resource exhaustion"); println(value); }
+            }
+            match (regex.search(subject)) {
+                Err(error) { println("search reported resource exhaustion"); drop(error); }
+                Ok(found) {
+                    match (found) {
+                        None { println("search hid resource exhaustion"); }
+                        Some(capture) { println("search hid resource exhaustion"); drop(capture); }
+                    }
+                }
+            }
+            drop(regex);
+        }
+    }
+}
+"#);
+    assert_eq!(
+        output.stdout,
+        "matches reported resource exhaustion\nsearch reported resource exhaustion\n".as_bytes()
+    );
 }
 
 #[test]
