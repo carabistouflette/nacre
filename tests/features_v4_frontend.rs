@@ -618,7 +618,6 @@ fn type_argument_borrow() {
     assert!(_error.message.contains("E4103"), "{}", _error.render("case.ncr", source));
 }
 
-
 #[test]
 fn generic_diamond() {
     let source = "class Box<T> { T value; Box(T value) { this.value = value; } readonly T get() { return this.value; } } void main(){Box<int> b=new Box<>(1);}";
