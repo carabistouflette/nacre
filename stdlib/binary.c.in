@@ -1,4 +1,7 @@
 /* BINARY_GROUP_BEGIN reader */
+_Static_assert(sizeof(float) == sizeof(uint32_t), "BinaryReader requires 32-bit float");
+_Static_assert(FLT_RADIX == 2 && FLT_MANT_DIG == 24 && FLT_MIN_EXP == -125 && FLT_MAX_EXP == 128,
+    "BinaryReader requires IEEE-754 binary32 float");
 _Static_assert(sizeof(double) == sizeof(uint64_t), "BinaryReader requires 64-bit double");
 _Static_assert(FLT_RADIX == 2 && DBL_MANT_DIG == 53 && DBL_MIN_EXP == -1021 && DBL_MAX_EXP == 1024,
     "BinaryReader requires IEEE-754 binary64 double");
@@ -114,6 +117,28 @@ static ncr_obj_@READER_INT64_RESULT@ @BINARY_READER_READ_INT64@(ncr_obj_@READER_
     return (ncr_obj_@READER_INT64_RESULT@){ .tag = @READER_INT64_OK_TAG@, .data.v@READER_INT64_OK_TAG@.f0 = value };
 }
 
+static ncr_obj_@READER_FLOAT32_RESULT@ @BINARY_READER_READ_FLOAT32@(ncr_obj_@READER_ID@ *ncr_self,
+    size_t ncr_line, size_t ncr_column) {
+    if (!ncr_binary_reader_has_@READER_ID@(ncr_self, UINT64_C(4))) {
+        static const char message[] = "BinaryReader.readFloat32: insufficient bytes";
+        return @READER_FLOAT32_ERROR@(message, sizeof(message) - 1, ncr_line, ncr_column);
+    }
+    const unsigned char *bytes = ncr_self->bytes->bytes + (size_t)ncr_self->position;
+    uint32_t bits;
+    if (ncr_self->little_endian) {
+        bits = (uint32_t)bytes[0] | ((uint32_t)bytes[1] << 8)
+            | ((uint32_t)bytes[2] << 16) | ((uint32_t)bytes[3] << 24);
+    } else {
+        bits = ((uint32_t)bytes[0] << 24) | ((uint32_t)bytes[1] << 16)
+            | ((uint32_t)bytes[2] << 8) | (uint32_t)bytes[3];
+    }
+    float value;
+    memcpy(&value, &bits, sizeof(value));
+    double widened = (double)value;
+    ncr_self->position += INT64_C(4);
+    return (ncr_obj_@READER_FLOAT32_RESULT@){ .tag = @READER_FLOAT32_OK_TAG@, .data.v@READER_FLOAT32_OK_TAG@.f0 = widened };
+}
+
 static ncr_obj_@READER_DOUBLE_RESULT@ @BINARY_READER_READ_DOUBLE@(ncr_obj_@READER_ID@ *ncr_self,
     size_t ncr_line, size_t ncr_column) {
     if (!ncr_binary_reader_has_@READER_ID@(ncr_self, UINT64_C(8))) {
@@ -197,6 +222,9 @@ static ncr_obj_@READER_UTF8_RESULT@ @BINARY_READER_READ_UTF8@(ncr_obj_@READER_ID
 /* BINARY_GROUP_END reader */
 
 /* BINARY_GROUP_BEGIN writer */
+_Static_assert(sizeof(float) == sizeof(uint32_t), "BinaryWriter requires 32-bit float");
+_Static_assert(FLT_RADIX == 2 && FLT_MANT_DIG == 24 && FLT_MIN_EXP == -125 && FLT_MAX_EXP == 128,
+    "BinaryWriter requires IEEE-754 binary32 float");
 _Static_assert(sizeof(double) == sizeof(uint64_t), "BinaryWriter requires 64-bit double");
 _Static_assert(FLT_RADIX == 2 && DBL_MANT_DIG == 53 && DBL_MIN_EXP == -1021 && DBL_MAX_EXP == 1024,
     "BinaryWriter requires IEEE-754 binary64 double");
@@ -279,6 +307,29 @@ static ncr_obj_@WRITER_RESULT@ @BINARY_WRITER_WRITE_INT32@(ncr_obj_@WRITER_ID@ *
         return @WRITER_RESULT_ERROR@(message, sizeof(message) - 1, ncr_line, ncr_column);
     }
     uint32_t bits = (uint32_t)ncr_v_@WRITER_WRITE_INT32_VALUE_ID@;
+    size_t offset = ncr_self->buffer->length;
+    for (size_t index = 0; index < 4; ++index) {
+        size_t shift = ncr_self->little_endian ? index * 8 : (3 - index) * 8;
+        ncr_self->buffer->bytes[offset + index] = (unsigned char)(bits >> shift);
+    }
+    ncr_self->buffer->length += 4;
+    return (ncr_obj_@WRITER_RESULT@){ .tag = @WRITER_RESULT_OK_TAG@, .data.v@WRITER_RESULT_OK_TAG@.f0 = UINT8_C(0) };
+}
+
+static ncr_obj_@WRITER_RESULT@ @BINARY_WRITER_WRITE_FLOAT32@(ncr_obj_@WRITER_ID@ *ncr_self,
+    double ncr_v_@WRITER_WRITE_FLOAT32_VALUE_ID@, size_t ncr_line, size_t ncr_column) {
+    double value = ncr_v_@WRITER_WRITE_FLOAT32_VALUE_ID@;
+    if (isfinite(value) && (value > (double)FLT_MAX || value < -(double)FLT_MAX)) {
+        static const char message[] = "BinaryWriter.writeFloat32: value outside IEEE-754 binary32 range";
+        return @WRITER_RESULT_ERROR@(message, sizeof(message) - 1, ncr_line, ncr_column);
+    }
+    float narrowed = (float)value;
+    uint32_t bits;
+    memcpy(&bits, &narrowed, sizeof(bits));
+    if (!ncr_binary_writer_prepare_@WRITER_ID@(ncr_self, 4, ncr_line, ncr_column)) {
+        static const char message[] = "BinaryWriter.writeFloat32: buffer length overflow";
+        return @WRITER_RESULT_ERROR@(message, sizeof(message) - 1, ncr_line, ncr_column);
+    }
     size_t offset = ncr_self->buffer->length;
     for (size_t index = 0; index < 4; ++index) {
         size_t shift = ncr_self->little_endian ? index * 8 : (3 - index) * 8;

@@ -19,6 +19,7 @@ class BinaryReader {
     public Result<int, Text> readInt32() {}
     public Result<long, Text> readInt64() {}
     public Result<double, Text> readDouble() {}
+    public Result<double, Text> readFloat32() {}
     public Result<ByteBuffer, Text> readBytes(long length) {}
     public Result<Text, Text> readUtf8(long length) {}
 }
@@ -31,6 +32,7 @@ class BinaryWriter {
     public Result<Unit, Text> writeInt32(int value) {}
     public Result<Unit, Text> writeInt64(long value) {}
     public Result<Unit, Text> writeDouble(double value) {}
+    public Result<Unit, Text> writeFloat32(double value) {}
     public Result<Unit, Text> writeBytes(borrow ByteBuffer source) {}
     public Result<Unit, Text> writeUtf8(borrow Text value) {}
     public readonly borrow ByteBuffer bytes() {}
@@ -77,11 +79,10 @@ class Streams {
         return new Result<long, Text>.Ok(copied);
     }
 
-    // Reads at most maxBytes. Reaching the bound returns the prefix read so far;
-    // this never consumes an extra byte merely to probe whether more input exists.
-    public static Result<ByteBuffer, Text> readAll(borrow mut ByteSource source, long maxBytes, long bufferSize) {
+    // Returns the prefix read so far when maxBytes is reached without probing.
+    public static Result<ByteBuffer, Text> readUpTo(borrow mut ByteSource source, long maxBytes, long bufferSize) {
         if (maxBytes < 0L || bufferSize <= 0L) {
-            return new Result<ByteBuffer, Text>.Err(new Text("Streams.readAll requires maxBytes >= 0 and bufferSize > 0"));
+            return new Result<ByteBuffer, Text>.Err(new Text("Streams.readUpTo requires maxBytes >= 0 and bufferSize > 0"));
         }
         long chunkCapacity = bufferSize;
         if (chunkCapacity > maxBytes) { chunkCapacity = maxBytes; }
@@ -100,6 +101,20 @@ class Streams {
             output.appendBytes(chunk)?;
         }
         return new Result<ByteBuffer, Text>.Ok(output);
+    }
+
+    // Succeeds only on EOF. If maxBytes are read, a one-byte probe detects
+    // excess input; that byte is consumed before Err is returned.
+    public static Result<ByteBuffer, Text> readAll(borrow mut ByteSource source, long maxBytes, long bufferSize) {
+        ByteBuffer output = Streams.readUpTo(source, maxBytes, bufferSize)?;
+        if (output.length() < maxBytes) { return new Result<ByteBuffer, Text>.Ok(output); }
+        ByteBuffer probe = ByteBuffer.withCapacity(1L)?;
+        long count = source.read(probe, 1L)?;
+        if (count < 0L || count > 1L || probe.length() != count) {
+            return new Result<ByteBuffer, Text>.Err(new Text("ByteSource.read returned an invalid byte count"));
+        }
+        if (count == 0L) { return new Result<ByteBuffer, Text>.Ok(output); }
+        return new Result<ByteBuffer, Text>.Err(new Text("Streams.readAll: input exceeds maxBytes"));
     }
 
     public static Result<Unit, Text> writeAll(borrow mut ByteSink sink, borrow ByteBuffer source) {

@@ -255,6 +255,77 @@ fn binary_reader_writer_known_bytes_cursor_and_finish_ownership() {
     );
 }
 
+const FLOAT32_SOURCE: &str = r#"
+Result<Unit, Text> exercise() {
+    ByteBuffer little = ByteBuffer.withCapacity(0L)?;
+    little.append((byte)0);
+    little.append((byte)0);
+    little.append((byte)192);
+    little.append((byte)63);
+    little.append((byte)0);
+    little.append((byte)0);
+    little.append((byte)0);
+    little.append((byte)128);
+    BinaryReader littleReader = new BinaryReader(little, true);
+    double oneAndHalf = littleReader.readFloat32()?;
+    double negativeZero = littleReader.readFloat32()?;
+    println(oneAndHalf == 1.5);
+    println(negativeZero == 0.0);
+
+    BinaryWriter writer = new BinaryWriter(0L, true);
+    writer.writeFloat32(oneAndHalf)?;
+    writer.writeFloat32(negativeZero)?;
+    match (writer.writeFloat32(1e300)) {
+        Err(error) { println("float32 range rejected"); drop(error); }
+        Ok(unit) { println("float32 range accepted"); }
+    }
+    println(writer.position() == 8L);
+    ByteBuffer output = BinaryWriter.finish(move(writer));
+    println(output.length() == 8L
+        && output.get(0L) == (byte)0 && output.get(1L) == (byte)0
+        && output.get(2L) == (byte)192 && output.get(3L) == (byte)63
+        && output.get(4L) == (byte)0 && output.get(5L) == (byte)0
+        && output.get(6L) == (byte)0 && output.get(7L) == (byte)128);
+
+    ByteBuffer big = ByteBuffer.withCapacity(0L)?;
+    big.append((byte)63);
+    big.append((byte)192);
+    big.append((byte)0);
+    big.append((byte)0);
+    BinaryReader bigReader = new BinaryReader(big, false);
+    println(bigReader.readFloat32()? == 1.5);
+
+    ByteBuffer shortBytes = ByteBuffer.withCapacity(0L)?;
+    shortBytes.append((byte)0);
+    shortBytes.append((byte)0);
+    shortBytes.append((byte)192);
+    BinaryReader shortReader = new BinaryReader(shortBytes, true);
+    match (shortReader.readFloat32()) {
+        Err(error) { println("incomplete float32 rejected"); drop(error); }
+        Ok(value) { println("incomplete float32 accepted"); }
+    }
+    println(shortReader.position() == 0L);
+    return new Result<Unit, Text>.Ok(());
+}
+
+void main() {
+    match (exercise()) {
+        Ok(unit) {}
+        Err(error) { error.print(); }
+    }
+}
+"#;
+
+#[test]
+fn binary32_reader_writer_endian_narrowing_and_atomic_range_failure() {
+    let program = compile(FLOAT32_SOURCE);
+    let output = run(&program, &[]);
+    assert_eq!(
+        output.stdout,
+        b"true\ntrue\nfloat32 range rejected\ntrue\ntrue\ntrue\nincomplete float32 rejected\ntrue\n"
+    );
+}
+
 const STREAMS_SOURCE: &str = r#"
 class ThreeByteFileSink implements ByteSink {
     private File target;
@@ -273,10 +344,12 @@ Result<Unit, Text> exercise() {
     Text copyName = Args.get(1)?;
     Text shortName = Args.get(2)?;
     Text writeAllName = Args.get(3)?;
+    Text emptyName = Args.get(4)?;
     Path sourcePath = Path.fromText(sourceName)?;
     Path copyPath = Path.fromText(copyName)?;
     Path shortPath = Path.fromText(shortName)?;
     Path writeAllPath = Path.fromText(writeAllName)?;
+    Path emptyPath = Path.fromText(emptyName)?;
 
     ByteBuffer payload = ByteBuffer.withCapacity(0L)?;
     int index = 0;
@@ -287,6 +360,8 @@ Result<Unit, Text> exercise() {
     File initial = File.create(sourcePath, 384)?;
     initial.writeAll(payload)?;
     initial.close()?;
+    File emptyCreated = File.create(emptyPath, 384)?;
+    emptyCreated.close()?;
 
     File input = File.openRead(sourcePath)?;
     File output = File.create(copyPath, 384)?;
@@ -318,6 +393,12 @@ Result<Unit, Text> exercise() {
     println(boundedBytes.length() == 13L && boundedBytes.get(0L) == (byte)0
         && boundedBytes.get(12L) == (byte)12);
 
+    File exactBoundFile = File.openRead(shortPath)?;
+    ByteBuffer exactBoundBytes = Streams.readAll(exactBoundFile, 13L, 4L)?;
+    exactBoundFile.close()?;
+    println(exactBoundBytes.length() == 13L && exactBoundBytes.get(0L) == (byte)0
+        && exactBoundBytes.get(12L) == (byte)12);
+
     File shortOutput = File.create(writeAllPath, 384)?;
     ThreeByteFileSink shortSink = new ThreeByteFileSink(shortOutput);
     Streams.writeAll(shortSink, payload)?;
@@ -334,9 +415,36 @@ Result<Unit, Text> exercise() {
     println(allMatch);
 
     File prefixInput = File.openRead(sourcePath)?;
-    ByteBuffer prefix = Streams.readAll(prefixInput, 13L, 4L)?;
+    ByteBuffer prefix = Streams.readUpTo(prefixInput, 13L, 4L)?;
+    ByteBuffer afterPrefix = ByteBuffer.withCapacity(0L)?;
+    long prefixCursorCount = prefixInput.read(afterPrefix, 1L)?;
     prefixInput.close()?;
-    println(prefix.length() == 13L && prefix.get(0L) == (byte)0 && prefix.get(12L) == (byte)12);
+    println(prefix.length() == 13L && prefix.get(0L) == (byte)0 && prefix.get(12L) == (byte)12
+        && prefixCursorCount == 1L && afterPrefix.get(0L) == (byte)13);
+    File emptyInput = File.openRead(emptyPath)?;
+    ByteBuffer emptyRead = Streams.readAll(emptyInput, 0L, 4L)?;
+    emptyInput.close()?;
+    println(emptyRead.length() == 0L);
+
+    File zeroLimitInput = File.openRead(sourcePath)?;
+    match (Streams.readAll(zeroLimitInput, 0L, 4L)) {
+        Err(error) { println("readAll max-zero rejected"); drop(error); }
+        Ok(value) { println("readAll max-zero accepted"); }
+    }
+    ByteBuffer afterZeroProbe = ByteBuffer.withCapacity(0L)?;
+    long zeroProbeCount = zeroLimitInput.read(afterZeroProbe, 1L)?;
+    zeroLimitInput.close()?;
+    println(zeroProbeCount == 1L && afterZeroProbe.get(0L) == (byte)1);
+
+    File excessInput = File.openRead(sourcePath)?;
+    match (Streams.readAll(excessInput, 13L, 4L)) {
+        Err(error) { println("readAll bound rejected"); drop(error); }
+        Ok(value) { println("readAll bound accepted"); }
+    }
+    ByteBuffer afterLimitProbe = ByteBuffer.withCapacity(0L)?;
+    long limitProbeCount = excessInput.read(afterLimitProbe, 1L)?;
+    excessInput.close()?;
+    println(limitProbeCount == 1L && afterLimitProbe.get(0L) == (byte)14);
 
     File shortCopyInput = File.openRead(sourcePath)?;
     File shortCopyFile = File.create(copyPath, 384)?;
@@ -373,6 +481,7 @@ fn streams_copy_file_interfaces_bounds_and_short_write_recovery() {
     let source = scratch.0.join("source.bin");
     let copied = scratch.0.join("copied.bin");
     let short = scratch.0.join("short.bin");
+    let empty = scratch.0.join("empty.bin");
     let write_all = scratch.0.join("write-all.bin");
     let output = run(
         &program,
@@ -381,9 +490,13 @@ fn streams_copy_file_interfaces_bounds_and_short_write_recovery() {
             copied.as_os_str(),
             short.as_os_str(),
             write_all.as_os_str(),
+            empty.as_os_str(),
         ],
     );
-    assert_eq!(output.stdout, b"true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n");
+    assert_eq!(
+        output.stdout,
+        b"true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\nreadAll max-zero rejected\ntrue\nreadAll bound rejected\ntrue\ntrue\ntrue\n"
+    );
 
     let bytes = fs::read(copied).unwrap();
     assert_eq!(bytes.len(), 100);
