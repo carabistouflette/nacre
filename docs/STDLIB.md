@@ -713,8 +713,12 @@ contract. Embedded NUL and invalid patterns return `Err`. Parsing is strict and
 must consume the complete input; trailing text, daylight-saving gaps, and
 ambiguous local times return `Err`. Pattern fields not supplied by the input
 default to `1970-01-01 00:00:00.000` in the requested zone. ICU's `yy` pattern
-uses a fixed 1940 through 2039 year window. Referencing `DateTime` links ICU;
-the dependency-free `Time` clock and sleep APIs remain unchanged.
+uses a fixed 1940 through 2039 year window anchored at local midnight in the
+requested zone. Week-year and localized weekday fields retain the requested
+locale's first-week rules. Unsupported unquoted pattern letters and unmatched
+quotes return `Err`, and formatting errors never return a successful prefix.
+Referencing `DateTime` links ICU; the dependency-free `Time` clock and sleep
+APIs remain unchanged.
 
 
 ## Threads, mutexes, guards, and channels

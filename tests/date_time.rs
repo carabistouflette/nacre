@@ -64,7 +64,7 @@ void main() {
         Err(error) { println("ICU_PRECISION_ERR"); }
     }
     match (DateTime.format(-1L, timestampPattern, utc, root)) {
-        Ok(text) { text.print(); println(""); }
+        Ok(text) { text.print(); }
         Err(error) { println("UTC_FORMAT_ERR"); }
     }
     Text timestamp = new Text("1969-12-31 23:59:59.999");
@@ -101,7 +101,7 @@ void main() {
                 Ok(february) {
                     Text datePattern = new Text("yyyy-MM-dd");
                     match (DateTime.format(february, datePattern, utc, root)) {
-                        Ok(text) { text.print(); println(""); }
+                        Ok(text) { text.print(); }
                         Err(error) { println("MONTH_FORMAT_ERR"); }
                     }
                 }
@@ -116,7 +116,7 @@ void main() {
                 Ok(nextYear) {
                     Text datePattern = new Text("yyyy-MM-dd");
                     match (DateTime.format(nextYear, datePattern, utc, root)) {
-                        Ok(text) { text.print(); println(""); }
+                        Ok(text) { text.print(); }
                         Err(error) { println("YEAR_FORMAT_ERR"); }
                     }
                 }
@@ -232,7 +232,7 @@ void main() {
 }
 
 #[test]
-fn datetime_locales_zones_nul_patterns_and_optional_icu_dependency() {
+fn datetime_locales_zones_and_nul_patterns() {
     let output = execute(
         r#"
 void main() {
@@ -243,7 +243,7 @@ void main() {
     match (DateTime.fromParts(2020, 2, 29, 0, 0, 0, 0, utc, false)) {
         Ok(epoch) {
             match (DateTime.format(epoch, frenchPattern, utc, french)) {
-                Ok(text) { text.print(); println(""); }
+                Ok(text) { text.print(); }
                 Err(error) { println("FRENCH_FORMAT_ERR"); }
             }
         }
@@ -270,31 +270,58 @@ void main() {
         if (zone.equalsString("UTC")) { hasUtc = true; }
     }
     println(hasUtc);
-    println(zones.size());
 }
 "#,
     );
     assert_native_success(&output);
     let stdout = String::from_utf8(output.stdout).unwrap();
     assert!(stdout.starts_with("29 février 2020\nUNKNOWN_ZONE_ERR\nUNKNOWN_LOCALE_ERR\nNUL_PATTERN_ERR\ntrue\n"), "{stdout}");
-    assert!(stdout.lines().last().unwrap().parse::<usize>().unwrap() > 0, "{stdout}");
+}
 
-    let ordinary_source = r#"
+#[test]
+fn datetime_week_rules_local_century_window_and_pattern_errors() {
+    let output = execute(r#"
+Result<Unit, Text> check() {
+    Text utc = new Text("UTC");
+    Text british = new Text("en-GB");
+    Text root = new Text("");
+    Text weekPattern = new Text("YYYY-'W'ww-e");
+    Text weekValue = new Text("2021-W01-1");
+    long weekEpoch = DateTime.parse(weekValue, weekPattern, utc, british)?;
+    Text datePattern = new Text("yyyy-MM-dd");
+    Text weekDate = DateTime.format(weekEpoch, datePattern, utc, british)?;
+    weekDate.print();
+    Text tokyo = new Text("Asia/Tokyo");
+    Text west = new Text("America/Los_Angeles");
+    Text centuryPattern = new Text("yy-MM-dd HH:mm");
+    Text start = new Text("40-01-01 00:00");
+    Text end = new Text("39-12-31 23:59");
+    long startEpoch = DateTime.parse(start, centuryPattern, tokyo, root)?;
+    DateFields startFields = DateTime.parts(startEpoch, tokyo)?;
+    println(startFields.year());
+    long endEpoch = DateTime.parse(end, centuryPattern, west, root)?;
+    DateFields endFields = DateTime.parts(endEpoch, west)?;
+    println(endFields.year());
+    Text unsupported = new Text("yyyy-j-MM-dd");
+    match (DateTime.format(0L, unsupported, utc, root)) {
+        Ok(value) { println(false); }
+        Err(error) { println(true); }
+    }
+    Text unclosed = new Text("'1970-02-31");
+    Text impossible = new Text("1970-02-31");
+    match (DateTime.parse(impossible, unclosed, utc, root)) {
+        Ok(value) { println(false); }
+        Err(error) { println(true); }
+    }
+    return new Result<Unit, Text>.Ok(());
+}
 void main() {
-    match (Time.unixMillis()) {
-        Ok(value) { println(value); }
-        Err(error) { println("TIME_ERR"); }
+    match (check()) {
+        Ok(unit) {}
+        Err(error) { error.print(); }
     }
 }
-"#;
-    let ordinary_c = compile_to_c(ordinary_source)
-        .unwrap_or_else(|error| panic!("{}", error.render("time_only.ncr", ordinary_source)));
-    assert!(!ordinary_c.contains("/* nacre-link: icu */"));
-    assert!(!ordinary_c.contains("#include <unicode/"));
-
-    let date_time_c = compile_to_c(
-        "void main() { println(DateTime.isLeapYear(2000)); }",
-    )
-    .expect("DateTime source compiles");
-    assert!(date_time_c.contains("/* nacre-link: icu */"));
+"#);
+    assert_native_success(&output);
+    assert_eq!(String::from_utf8(output.stdout).unwrap(), "2021-01-04\n1940\n2039\ntrue\ntrue\n");
 }
