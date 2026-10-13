@@ -815,7 +815,7 @@ its pipes. A child that exits nonzero still produces a successful capture result
 
 All socket operations are synchronous and blocking at the API level, with
 nonblocking readiness handling underneath where needed. Socket handles are unique
-affine owners; there is no descriptor clone, background I/O thread, TLS, or
+affine owners; there is no descriptor clone, background I/O thread, or
 cross-platform networking promise.
 
 ```java
@@ -871,8 +871,56 @@ short send is an error. `receiveFrom` consumes one datagram, appends at most
 whether it was truncated. A zero-length datagram is a successful `Datagram` with
 `bytesRead() == 0`, not stream EOF. Oversized datagrams are consumed once and
 reported as truncated. Both UDP methods use the same timeout convention as TCP;
-timeout is `Err`. No TLS, automatic datagram retry, or network service discovery
-is provided.
+timeout is `Err`. No automatic datagram retry or network service discovery is
+provided.
+
+## HTTP(S)
+
+`HttpRequest` and `HttpResponse` are affine values backed by libcurl. A generated
+program links libcurl only when it calls this API. Each request owns its own easy
+handle; `send` may be called again on the same request and produces a fresh,
+independently owned response. It does not retry requests or follow redirects.
+
+```java
+static Result<HttpRequest, Text> HttpRequest.create(borrow Text method, borrow Text url)
+Result<Unit, Text> HttpRequest.setHeader(borrow Text name, borrow Text value)
+void HttpRequest.setBody(borrow ByteBuffer body)
+Result<Unit, Text> HttpRequest.setTimeoutMillis(long timeoutMillis)
+Result<Unit, Text> HttpRequest.setMaxResponseBytes(long maxResponseBytes)
+Result<Unit, Text> HttpRequest.setCaFile(borrow Path caFile)
+Result<HttpResponse, Text> HttpRequest.send()
+
+readonly int HttpResponse.status()
+readonly borrow ByteBuffer HttpResponse.body()
+readonly Option<Text> HttpResponse.header(borrow Text name)
+readonly Text HttpResponse.finalUrl()
+readonly Result<Text, Text> HttpResponse.bodyText()
+```
+
+`create` accepts an HTTP method token and an absolute `http://` or `https://` URL.
+Embedded NUL and URL user information are rejected. Header names must be nonempty
+HTTP tokens; values reject NUL, CR/LF, and other prohibited control bytes. Repeated
+`setHeader` calls append request fields. `setBody` copies the source buffer's
+current bytes into the request and retains no borrow or reference.
+
+Timeouts must be nonnegative; zero means unbounded. The default response-body limit
+is 16 MiB; `setMaxResponseBytes` accepts any nonnegative byte count, with zero
+allowing only an empty body. The write callback checks the bound before growing
+the response buffer, so a failed oversized response never escapes in a partial
+`HttpResponse`. Response headers have a separate 64 KiB total wire-byte limit and
+a limit of 1024 distinct fields. Fields from interim status blocks such as `100
+Continue` are discarded. Header lookup is ASCII case-insensitive, returns an
+owned copy, and uses the last value for duplicate field names; values that are not
+valid UTF-8 make the response malformed. `bodyText` performs strict UTF-8
+validation and returns `Err` for binary bodies that are not valid UTF-8. Embedded
+NUL is valid UTF-8 and remains part of the resulting `Text`.
+
+HTTP status codes, including non-2xx responses, are successful transport results.
+TLS peer and hostname verification are always enabled, using system trust by
+default; `setCaFile` selects an explicit local CA file without disabling verification.
+Redirects are disabled, so caller-supplied `Authorization` or `Cookie` fields are
+never forwarded to another origin. The API does not add TLS to `TcpStream` or
+`UdpSocket`, and it does not provide a general-purpose URI type.
 
 ## Platform, allocation, and timing limits
 

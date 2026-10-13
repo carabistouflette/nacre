@@ -130,7 +130,7 @@ pub enum NativeClass {
     List(Type), Array(Type), Deque(Type), Map(MapKeyKind, Type), Set(MapKeyKind),
     Text, Regex, RegexMatch, Arrays, ByteBuffer, Encoding, Crypto, Path, File, Directory, FileInfo,
     Console, Files, Args, Math, Random, Time, Compression, Checksums, SocketAddress, TcpListener, TcpStream,
-    Datagram, UdpSocket, Thread(Type), Mutex(Type), Guard(Type), Channel(Type),
+    Datagram, UdpSocket, HttpRequest, HttpResponse, Thread(Type), Mutex(Type), Guard(Type), Channel(Type),
     Sender(Type), Receiver(Type), Env, Command, Process, ProcessOutput
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -187,6 +187,9 @@ pub enum NativeMethod {
     TcpStreamPeerAddress, TcpStreamLocalAddress, TcpStreamClose,
     DatagramSource, DatagramBytesRead, DatagramTruncated,
     UdpSocketBind, UdpSocketSendTo, UdpSocketReceiveFrom, UdpSocketLocalAddress, UdpSocketClose,
+    HttpRequestCreate, HttpRequestSetHeader, HttpRequestSetBody, HttpRequestSetTimeoutMillis,
+    HttpRequestSetMaxResponseBytes, HttpRequestSetCaFile, HttpRequestSend,
+    HttpResponseStatus, HttpResponseBody, HttpResponseHeader, HttpResponseFinalUrl, HttpResponseBodyText,
     ThreadSpawn, ThreadJoin, MutexCreate, MutexCloneHandle, MutexLock, MutexTryLock,
     GuardGetRef, GuardGetMut, GuardRead, GuardWrite,
     ChannelBounded, ChannelTakeSender, ChannelTakeReceiver,

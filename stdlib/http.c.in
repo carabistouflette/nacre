@@ -1,0 +1,622 @@
+/* nacre-link: curl */
+#include <curl/curl.h>
+
+#define NCR_HTTP_HEADER_BYTES_LIMIT ((size_t)65536)
+#define NCR_HTTP_HEADER_COUNT_LIMIT ((size_t)1024)
+#define NCR_HTTP_DEFAULT_BODY_LIMIT ((size_t)16777216)
+
+static pthread_once_t ncr_http_global_once = PTHREAD_ONCE_INIT;
+static CURLcode ncr_http_global_status = CURLE_FAILED_INIT;
+
+static void ncr_http_global_initialize(void) {
+    ncr_http_global_status = curl_global_init(CURL_GLOBAL_DEFAULT);
+}
+
+static bool ncr_http_global_ready(void) {
+    return pthread_once(&ncr_http_global_once, ncr_http_global_initialize) == 0
+        && ncr_http_global_status == CURLE_OK;
+}
+
+static bool ncr_http_ascii_equal(const unsigned char *left, size_t left_length, const char *right) {
+    size_t right_length = strlen(right);
+    if (left_length != right_length) { return false; }
+    for (size_t index = 0; index < left_length; index++) {
+        unsigned char a = left[index];
+        unsigned char b = (unsigned char)right[index];
+        if (a >= (unsigned char)'A' && a <= (unsigned char)'Z') { a = (unsigned char)(a + ('a' - 'A')); }
+        if (b >= (unsigned char)'A' && b <= (unsigned char)'Z') { b = (unsigned char)(b + ('a' - 'A')); }
+        if (a != b) { return false; }
+    }
+    return true;
+}
+
+static bool ncr_http_token_byte(unsigned char byte) {
+    if ((byte >= (unsigned char)'0' && byte <= (unsigned char)'9')
+        || (byte >= (unsigned char)'A' && byte <= (unsigned char)'Z')
+        || (byte >= (unsigned char)'a' && byte <= (unsigned char)'z')) { return true; }
+    switch (byte) {
+        case '!': case '#': case '$': case '%': case '&': case '\'': case '*':
+        case '+': case '-': case '.': case '^': case '_': case '`': case '|': case '~':
+            return true;
+        default: return false;
+    }
+}
+
+static bool ncr_http_valid_token(const unsigned char *bytes, size_t length) {
+    if (bytes == NULL || length == 0) { return false; }
+    for (size_t index = 0; index < length; index++) {
+        if (!ncr_http_token_byte(bytes[index])) { return false; }
+    }
+    return true;
+}
+
+static bool ncr_http_valid_header_value(const unsigned char *bytes, size_t length) {
+    if (length > 0 && bytes == NULL) { return false; }
+    for (size_t index = 0; index < length; index++) {
+        unsigned char byte = bytes[index];
+        if (byte == 0 || byte == '\r' || byte == '\n'
+            || (byte < 0x20 && byte != '\t') || byte == 0x7f) { return false; }
+    }
+    return true;
+}
+
+static bool ncr_http_url_has_userinfo(const unsigned char *url, size_t length) {
+    size_t authority = length;
+    for (size_t index = 0; index + 2 < length; index++) {
+        if (url[index] == ':' && url[index + 1] == '/' && url[index + 2] == '/') {
+            authority = index + 3;
+            break;
+        }
+    }
+    if (authority == length) { return false; }
+    for (size_t index = authority; index < length; index++) {
+        if (url[index] == '/' || url[index] == '?' || url[index] == '#') { return false; }
+        if (url[index] == '@') { return true; }
+    }
+    return false;
+}
+
+struct ncr_http_header_entry {
+    unsigned char *name;
+    size_t name_length;
+    unsigned char *value;
+    size_t value_length;
+};
+
+static struct ncr_http_header_entry *ncr_http_header_entries(ncr_obj_@HTTP_RESPONSE_ID@ *response) {
+    return (struct ncr_http_header_entry *)response->headers;
+}
+
+static void ncr_http_clear_headers(ncr_obj_@HTTP_RESPONSE_ID@ *response) {
+    struct ncr_http_header_entry *entries = ncr_http_header_entries(response);
+    for (size_t index = 0; index < response->header_count; index++) {
+        ncr_deallocate(entries[index].name);
+        ncr_deallocate(entries[index].value);
+        entries[index] = (struct ncr_http_header_entry){0};
+    }
+    response->header_count = 0;
+}
+
+static bool ncr_http_grow_headers(ncr_obj_@HTTP_RESPONSE_ID@ *response, size_t line, size_t column) {
+    if (response->header_capacity >= NCR_HTTP_HEADER_COUNT_LIMIT) { return false; }
+    size_t capacity = response->header_capacity == 0 ? 8 : response->header_capacity * 2;
+    if (capacity > NCR_HTTP_HEADER_COUNT_LIMIT) { capacity = NCR_HTTP_HEADER_COUNT_LIMIT; }
+    struct ncr_http_header_entry *entries = ncr_allocate(capacity * sizeof(*entries), line, column);
+    struct ncr_http_header_entry *previous = ncr_http_header_entries(response);
+    if (response->header_count > 0) {
+        memcpy(entries, previous, response->header_count * sizeof(*entries));
+    }
+    ncr_deallocate(previous);
+    response->headers = entries;
+    response->header_capacity = capacity;
+    return true;
+}
+
+static bool ncr_http_header_name_equal(const struct ncr_http_header_entry *entry,
+                                      const unsigned char *name, size_t name_length) {
+    if (entry->name_length != name_length) { return false; }
+    for (size_t index = 0; index < name_length; index++) {
+        unsigned char a = entry->name[index];
+        unsigned char b = name[index];
+        if (a >= (unsigned char)'A' && a <= (unsigned char)'Z') { a = (unsigned char)(a + ('a' - 'A')); }
+        if (b >= (unsigned char)'A' && b <= (unsigned char)'Z') { b = (unsigned char)(b + ('a' - 'A')); }
+        if (a != b) { return false; }
+    }
+    return true;
+}
+
+static size_t ncr_http_format_error(char *message, size_t capacity, const char *operation, const char *detail) {
+    int written = snprintf(message, capacity, "%s: %s", operation, detail);
+    if (written < 0) { if (capacity != 0) { message[0] = '\0'; } return 0; }
+    return (size_t)written < capacity ? (size_t)written : capacity - 1;
+}
+
+static void ncr_http_request_destroy(void *value) {
+    ncr_obj_@HTTP_REQUEST_ID@ *request = value;
+    if (request == NULL) { return; }
+    CURL *easy = (CURL *)request->easy;
+    request->easy = NULL;
+    if (easy != NULL) { curl_easy_cleanup(easy); }
+    curl_slist_free_all((struct curl_slist *)request->header_list);
+    request->header_list = NULL;
+    ncr_deallocate(request->method);
+    request->method = NULL;
+    ncr_deallocate(request->url);
+    request->url = NULL;
+    ncr_deallocate(request->body);
+    request->body = NULL;
+    ncr_deallocate(request->ca_file);
+    request->ca_file = NULL;
+}
+
+static void ncr_http_response_destroy(void *value) {
+    ncr_obj_@HTTP_RESPONSE_ID@ *response = value;
+    if (response == NULL) { return; }
+    ncr_http_clear_headers(response);
+    ncr_deallocate(response->headers);
+    response->headers = NULL;
+    response->header_capacity = 0;
+    ncr_deallocate(response->final_url);
+    response->final_url = NULL;
+    ncr_drop_@BUFFER_ID@(response->body);
+    response->body = NULL;
+}
+
+static bool ncr_http_response_line_is_status(const unsigned char *line, size_t length) {
+    if (length < 5 || memcmp(line, "HTTP/", 5) != 0) { return false; }
+    size_t space = 5;
+    while (space < length && line[space] != ' ') {
+        unsigned char byte = line[space];
+        if (!((byte >= '0' && byte <= '9') || byte == '.')) { return false; }
+        space++;
+    }
+    if (space == 5 || space >= length || line[space] != ' ' || length - space < 4) { return false; }
+    if (line[space + 1] < '0' || line[space + 1] > '9'
+        || line[space + 2] < '0' || line[space + 2] > '9'
+        || line[space + 3] < '0' || line[space + 3] > '9') { return false; }
+    return length == space + 4 || line[space + 4] == ' ';
+}
+
+struct ncr_http_callback_context {
+    ncr_obj_@HTTP_RESPONSE_ID@ *response;
+    size_t body_limit;
+    size_t line;
+    size_t column;
+    bool response_too_large;
+    bool header_limit_exceeded;
+    bool header_count_exceeded;
+    bool malformed_header;
+};
+
+static size_t ncr_http_body_callback(char *bytes, size_t size, size_t count, void *userdata) {
+    struct ncr_http_callback_context *context = userdata;
+    if (size != 0 && count > SIZE_MAX / size) {
+        context->response_too_large = true;
+        return 0;
+    }
+    size_t length = size * count;
+    ncr_obj_@BUFFER_ID@ *body = context->response->body;
+    if (body->length > context->body_limit || length > context->body_limit - body->length) {
+        context->response_too_large = true;
+        return 0;
+    }
+    size_t required = body->length + length;
+    if (required > body->capacity) {
+        size_t capacity = body->capacity == 0
+            ? (context->body_limit < 16 ? context->body_limit : 16)
+            : body->capacity;
+        while (capacity < required) {
+            if (capacity > context->body_limit / 2) { capacity = context->body_limit; break; }
+            capacity *= 2;
+        }
+        if (capacity < required || (uint64_t)capacity > (uint64_t)INT64_MAX) {
+            context->response_too_large = true;
+            return 0;
+        }
+        unsigned char *next = ncr_allocate(capacity, context->line, context->column);
+        if (body->length > 0) { memcpy(next, body->bytes, body->length); }
+        ncr_deallocate(body->bytes);
+        body->bytes = next;
+        body->capacity = capacity;
+    }
+    if (length > 0) { memcpy(body->bytes + body->length, bytes, length); }
+    body->length = required;
+    return length;
+}
+
+static size_t ncr_http_header_callback(char *bytes, size_t size, size_t count, void *userdata) {
+    struct ncr_http_callback_context *context = userdata;
+    if (size != 0 && count > SIZE_MAX / size) {
+        context->header_limit_exceeded = true;
+        return 0;
+    }
+    size_t length = size * count;
+    ncr_obj_@HTTP_RESPONSE_ID@ *response = context->response;
+    if (response->header_bytes > NCR_HTTP_HEADER_BYTES_LIMIT
+        || length > NCR_HTTP_HEADER_BYTES_LIMIT - response->header_bytes) {
+        context->header_limit_exceeded = true;
+        return 0;
+    }
+    response->header_bytes += length;
+
+    size_t content_length = length;
+    if (content_length >= 2 && bytes[content_length - 2] == '\r' && bytes[content_length - 1] == '\n') {
+        content_length -= 2;
+    } else if (content_length > 0 && bytes[content_length - 1] == '\n') {
+        content_length--;
+    }
+    if (content_length == 0) { return length; }
+    if (content_length >= 5 && memcmp(bytes, "HTTP/", 5) == 0) {
+        if (!ncr_http_response_line_is_status((const unsigned char *)bytes, content_length)) {
+            context->malformed_header = true;
+            return 0;
+        }
+        ncr_http_clear_headers(response);
+        return length;
+    }
+
+    size_t colon = 0;
+    while (colon < content_length && bytes[colon] != ':') { colon++; }
+    if (colon == 0 || colon == content_length
+        || !ncr_http_valid_token((const unsigned char *)bytes, colon)) {
+        context->malformed_header = true;
+        return 0;
+    }
+    size_t value_start = colon + 1;
+    size_t value_end = content_length;
+    while (value_start < value_end && (bytes[value_start] == ' ' || bytes[value_start] == '\t')) { value_start++; }
+    while (value_end > value_start && (bytes[value_end - 1] == ' ' || bytes[value_end - 1] == '\t')) { value_end--; }
+    size_t value_length = value_end - value_start;
+    if (!ncr_http_valid_header_value((const unsigned char *)bytes + value_start, value_length)
+        || !ncr_utf8_valid((const unsigned char *)bytes + value_start, value_length)) {
+        context->malformed_header = true;
+        return 0;
+    }
+
+    struct ncr_http_header_entry *entries = ncr_http_header_entries(response);
+    for (size_t index = 0; index < response->header_count; index++) {
+        if (ncr_http_header_name_equal(&entries[index], (const unsigned char *)bytes, colon)) {
+            unsigned char *value = value_length == 0 ? NULL : ncr_allocate(value_length, context->line, context->column);
+            if (value_length > 0) { memcpy(value, bytes + value_start, value_length); }
+            ncr_deallocate(entries[index].value);
+            entries[index].value = value;
+            entries[index].value_length = value_length;
+            return length;
+        }
+    }
+    if (response->header_count >= NCR_HTTP_HEADER_COUNT_LIMIT) {
+        context->header_count_exceeded = true;
+        return 0;
+    }
+    if (response->header_count == response->header_capacity
+        && !ncr_http_grow_headers(response, context->line, context->column)) {
+        context->header_count_exceeded = true;
+        return 0;
+    }
+    entries = ncr_http_header_entries(response);
+    unsigned char *name = ncr_allocate(colon, context->line, context->column);
+    memcpy(name, bytes, colon);
+    unsigned char *value = value_length == 0 ? NULL : ncr_allocate(value_length, context->line, context->column);
+    if (value_length > 0) { memcpy(value, bytes + value_start, value_length); }
+    entries[response->header_count++] = (struct ncr_http_header_entry){
+        .name = name, .name_length = colon, .value = value, .value_length = value_length,
+    };
+    return length;
+}
+
+static bool ncr_http_curl_length(size_t length, curl_off_t *converted) {
+    if ((uintmax_t)length > (uintmax_t)INT64_MAX) { return false; }
+    curl_off_t result = (curl_off_t)length;
+    if (result < 0 || (uintmax_t)result != (uintmax_t)length) { return false; }
+    *converted = result;
+    return true;
+}
+
+static @CREATE_RESULT_TYPE@ @HTTP_REQUEST_CREATE@(ncr_obj_@TEXT_ID@ *@CREATE_METHOD_ID@,
+                                                   ncr_obj_@TEXT_ID@ *@CREATE_URL_ID@,
+                                                   size_t ncr_line, size_t ncr_column) {
+    if (!ncr_http_global_ready()) {
+        return ncr_result_error_@CREATE_RESULT_ID@("HttpRequest.create: libcurl global initialization failed", sizeof("HttpRequest.create: libcurl global initialization failed") - 1, ncr_line, ncr_column);
+    }
+    if (@CREATE_METHOD_ID@ == NULL || !ncr_http_valid_token(@CREATE_METHOD_ID@->bytes, (size_t)@CREATE_METHOD_ID@->length)) {
+        return ncr_result_error_@CREATE_RESULT_ID@("HttpRequest.create: method must be a nonempty HTTP token", sizeof("HttpRequest.create: method must be a nonempty HTTP token") - 1, ncr_line, ncr_column);
+    }
+    if (@CREATE_URL_ID@ == NULL || @CREATE_URL_ID@->length <= 0
+        || memchr(@CREATE_URL_ID@->bytes, 0, (size_t)@CREATE_URL_ID@->length) != NULL) {
+        return ncr_result_error_@CREATE_RESULT_ID@("HttpRequest.create: URL must be nonempty and contain no NUL", sizeof("HttpRequest.create: URL must be nonempty and contain no NUL") - 1, ncr_line, ncr_column);
+    }
+
+    size_t url_length = (size_t)@CREATE_URL_ID@->length;
+    unsigned char *url = ncr_allocate(url_length + 1, ncr_line, ncr_column);
+    memcpy(url, @CREATE_URL_ID@->bytes, url_length);
+    url[url_length] = 0;
+    if (ncr_http_url_has_userinfo(url, url_length)) {
+        ncr_deallocate(url);
+        return ncr_result_error_@CREATE_RESULT_ID@("HttpRequest.create: URL user information is not accepted", sizeof("HttpRequest.create: URL user information is not accepted") - 1, ncr_line, ncr_column);
+    }
+
+    CURLU *parts = curl_url();
+    if (parts == NULL) {
+        ncr_deallocate(url);
+        return ncr_result_error_@CREATE_RESULT_ID@("HttpRequest.create: libcurl could not allocate a URL parser", sizeof("HttpRequest.create: libcurl could not allocate a URL parser") - 1, ncr_line, ncr_column);
+    }
+    CURLUcode parse = curl_url_set(parts, CURLUPART_URL, (const char *)url, CURLU_DISALLOW_USER);
+    char *scheme = NULL;
+    char *host = NULL;
+    bool supported = false;
+    if (parse == CURLUE_OK
+        && curl_url_get(parts, CURLUPART_SCHEME, &scheme, 0) == CURLUE_OK
+        && curl_url_get(parts, CURLUPART_HOST, &host, 0) == CURLUE_OK
+        && scheme != NULL && host != NULL && host[0] != '\0') {
+        supported = ncr_http_ascii_equal((const unsigned char *)scheme, strlen(scheme), "http")
+            || ncr_http_ascii_equal((const unsigned char *)scheme, strlen(scheme), "https");
+    }
+    if (scheme != NULL) { curl_free(scheme); }
+    if (host != NULL) { curl_free(host); }
+    curl_url_cleanup(parts);
+    if (!supported) {
+        ncr_deallocate(url);
+        return ncr_result_error_@CREATE_RESULT_ID@("HttpRequest.create: only absolute HTTP and HTTPS URLs are accepted", sizeof("HttpRequest.create: only absolute HTTP and HTTPS URLs are accepted") - 1, ncr_line, ncr_column);
+    }
+
+    CURL *easy = curl_easy_init();
+    if (easy == NULL) {
+        ncr_deallocate(url);
+        return ncr_result_error_@CREATE_RESULT_ID@("HttpRequest.create: libcurl could not allocate an easy handle", sizeof("HttpRequest.create: libcurl could not allocate an easy handle") - 1, ncr_line, ncr_column);
+    }
+    size_t method_length = (size_t)@CREATE_METHOD_ID@->length;
+    unsigned char *method = ncr_allocate(method_length + 1, ncr_line, ncr_column);
+    memcpy(method, @CREATE_METHOD_ID@->bytes, method_length);
+    method[method_length] = 0;
+    ncr_obj_@HTTP_REQUEST_ID@ *request = ncr_allocate(sizeof(*request), ncr_line, ncr_column);
+    request->easy = easy;
+    request->method = method;
+    request->method_length = method_length;
+    request->url = url;
+    request->url_length = url_length;
+    request->max_response_bytes = NCR_HTTP_DEFAULT_BODY_LIMIT;
+    return (@CREATE_RESULT_TYPE@){ .tag = @CREATE_OK_TAG@, .data.v@CREATE_OK_TAG@.f0 = request };
+}
+
+static @UNIT_RESULT_TYPE@ @HTTP_REQUEST_SET_HEADER@(ncr_obj_@HTTP_REQUEST_ID@ *ncr_self,
+                                                      ncr_obj_@TEXT_ID@ *@SET_HEADER_NAME_ID@,
+                                                      ncr_obj_@TEXT_ID@ *@SET_HEADER_VALUE_ID@,
+                                                      size_t ncr_line, size_t ncr_column) {
+    if (ncr_self == NULL || @SET_HEADER_NAME_ID@ == NULL || @SET_HEADER_VALUE_ID@ == NULL
+        || !ncr_http_valid_token(@SET_HEADER_NAME_ID@->bytes, (size_t)@SET_HEADER_NAME_ID@->length)) {
+        return ncr_result_error_@UNIT_RESULT_ID@("HttpRequest.setHeader: name must be a nonempty HTTP token", sizeof("HttpRequest.setHeader: name must be a nonempty HTTP token") - 1, ncr_line, ncr_column);
+    }
+    size_t name_length = (size_t)@SET_HEADER_NAME_ID@->length;
+    size_t value_length = (size_t)@SET_HEADER_VALUE_ID@->length;
+    if (!ncr_http_valid_header_value(@SET_HEADER_VALUE_ID@->bytes, value_length)) {
+        return ncr_result_error_@UNIT_RESULT_ID@("HttpRequest.setHeader: value contains NUL or a prohibited control byte", sizeof("HttpRequest.setHeader: value contains NUL or a prohibited control byte") - 1, ncr_line, ncr_column);
+    }
+    if (value_length > SIZE_MAX - 3 || name_length > SIZE_MAX - value_length - 3) {
+        return ncr_result_error_@UNIT_RESULT_ID@("HttpRequest.setHeader: header is too large", sizeof("HttpRequest.setHeader: header is too large") - 1, ncr_line, ncr_column);
+    }
+    size_t line_length = name_length + 2 + value_length;
+    unsigned char *line = ncr_allocate(line_length + 1, ncr_line, ncr_column);
+    memcpy(line, @SET_HEADER_NAME_ID@->bytes, name_length);
+    line[name_length] = ':';
+    line[name_length + 1] = ' ';
+    if (value_length > 0) { memcpy(line + name_length + 2, @SET_HEADER_VALUE_ID@->bytes, value_length); }
+    line[line_length] = 0;
+    struct curl_slist *headers = curl_slist_append((struct curl_slist *)ncr_self->header_list, (const char *)line);
+    ncr_deallocate(line);
+    if (headers == NULL) {
+        return ncr_result_error_@UNIT_RESULT_ID@("HttpRequest.setHeader: libcurl could not store the header", sizeof("HttpRequest.setHeader: libcurl could not store the header") - 1, ncr_line, ncr_column);
+    }
+    ncr_self->header_list = headers;
+    return (@UNIT_RESULT_TYPE@){ .tag = @UNIT_OK_TAG@, .data.v@UNIT_OK_TAG@.f0 = UINT8_C(0) };
+}
+
+static void @HTTP_REQUEST_SET_BODY@(ncr_obj_@HTTP_REQUEST_ID@ *ncr_self,
+                                     ncr_obj_@BUFFER_ID@ *@SET_BODY_SOURCE_ID@,
+                                     size_t ncr_line, size_t ncr_column) {
+    if (ncr_self == NULL || @SET_BODY_SOURCE_ID@ == NULL) {
+        ncr_fail("HttpRequest.setBody: invalid request or body", ncr_line, ncr_column);
+    }
+    size_t length = @SET_BODY_SOURCE_ID@->length;
+    unsigned char *copy = length == 0 ? NULL : ncr_allocate(length, ncr_line, ncr_column);
+    if (length > 0) { memcpy(copy, @SET_BODY_SOURCE_ID@->bytes, length); }
+    ncr_deallocate(ncr_self->body);
+    ncr_self->body = copy;
+    ncr_self->body_length = length;
+    ncr_self->body_set = true;
+}
+
+static @UNIT_RESULT_TYPE@ @HTTP_REQUEST_SET_TIMEOUT_MILLIS@(ncr_obj_@HTTP_REQUEST_ID@ *ncr_self,
+                                                            int64_t ncr_v_@SET_TIMEOUT_VALUE_ID@,
+                                                            size_t ncr_line, size_t ncr_column) {
+    if (ncr_self == NULL || ncr_v_@SET_TIMEOUT_VALUE_ID@ < 0
+        || (uint64_t)ncr_v_@SET_TIMEOUT_VALUE_ID@ > (uint64_t)LONG_MAX) {
+        return ncr_result_error_@UNIT_RESULT_ID@("HttpRequest.setTimeoutMillis: timeout must be nonnegative and fit libcurl's long option", sizeof("HttpRequest.setTimeoutMillis: timeout must be nonnegative and fit libcurl's long option") - 1, ncr_line, ncr_column);
+    }
+    ncr_self->timeout_millis = ncr_v_@SET_TIMEOUT_VALUE_ID@;
+    return (@UNIT_RESULT_TYPE@){ .tag = @UNIT_OK_TAG@, .data.v@UNIT_OK_TAG@.f0 = UINT8_C(0) };
+}
+
+static @UNIT_RESULT_TYPE@ @HTTP_REQUEST_SET_MAX_RESPONSE_BYTES@(ncr_obj_@HTTP_REQUEST_ID@ *ncr_self,
+                                                                int64_t ncr_v_@SET_MAX_VALUE_ID@,
+                                                                size_t ncr_line, size_t ncr_column) {
+    if (ncr_self == NULL || ncr_v_@SET_MAX_VALUE_ID@ < 0
+        || (uintmax_t)ncr_v_@SET_MAX_VALUE_ID@ > (uintmax_t)SIZE_MAX) {
+        return ncr_result_error_@UNIT_RESULT_ID@("HttpRequest.setMaxResponseBytes: limit must be nonnegative and fit size_t", sizeof("HttpRequest.setMaxResponseBytes: limit must be nonnegative and fit size_t") - 1, ncr_line, ncr_column);
+    }
+    ncr_self->max_response_bytes = (size_t)ncr_v_@SET_MAX_VALUE_ID@;
+    return (@UNIT_RESULT_TYPE@){ .tag = @UNIT_OK_TAG@, .data.v@UNIT_OK_TAG@.f0 = UINT8_C(0) };
+}
+
+static @UNIT_RESULT_TYPE@ @HTTP_REQUEST_SET_CA_FILE@(ncr_obj_@HTTP_REQUEST_ID@ *ncr_self,
+                                                      ncr_obj_@PATH_ID@ *@SET_CA_PATH_ID@,
+                                                      size_t ncr_line, size_t ncr_column) {
+    if (ncr_self == NULL || @SET_CA_PATH_ID@ == NULL || @SET_CA_PATH_ID@->text == NULL) {
+        return ncr_result_error_@UNIT_RESULT_ID@("HttpRequest.setCaFile: invalid Path", sizeof("HttpRequest.setCaFile: invalid Path") - 1, ncr_line, ncr_column);
+    }
+    ncr_obj_@TEXT_ID@ *path_text = @SET_CA_PATH_ID@->text;
+    size_t length = (size_t)path_text->length;
+    if (length == 0 || memchr(path_text->bytes, 0, length) != NULL) {
+        return ncr_result_error_@UNIT_RESULT_ID@("HttpRequest.setCaFile: path must be nonempty and contain no NUL", sizeof("HttpRequest.setCaFile: path must be nonempty and contain no NUL") - 1, ncr_line, ncr_column);
+    }
+    unsigned char *path = ncr_allocate(length + 1, ncr_line, ncr_column);
+    memcpy(path, path_text->bytes, length);
+    path[length] = 0;
+    ncr_deallocate(ncr_self->ca_file);
+    ncr_self->ca_file = path;
+    ncr_self->ca_file_length = length;
+    return (@UNIT_RESULT_TYPE@){ .tag = @UNIT_OK_TAG@, .data.v@UNIT_OK_TAG@.f0 = UINT8_C(0) };
+}
+
+static @SEND_RESULT_TYPE@ @HTTP_REQUEST_SEND@(ncr_obj_@HTTP_REQUEST_ID@ *ncr_self,
+                                               size_t ncr_line, size_t ncr_column) {
+    if (ncr_self == NULL || ncr_self->easy == NULL) {
+        return ncr_result_error_@SEND_RESULT_ID@("HttpRequest.send: invalid request", sizeof("HttpRequest.send: invalid request") - 1, ncr_line, ncr_column);
+    }
+    curl_off_t body_length = 0;
+    if (ncr_self->body_set && !ncr_http_curl_length(ncr_self->body_length, &body_length)) {
+        return ncr_result_error_@SEND_RESULT_ID@("HttpRequest.send: request body length does not fit libcurl", sizeof("HttpRequest.send: request body length does not fit libcurl") - 1, ncr_line, ncr_column);
+    }
+    if (ncr_self->timeout_millis < 0 || (uint64_t)ncr_self->timeout_millis > (uint64_t)LONG_MAX) {
+        return ncr_result_error_@SEND_RESULT_ID@("HttpRequest.send: timeout does not fit libcurl", sizeof("HttpRequest.send: timeout does not fit libcurl") - 1, ncr_line, ncr_column);
+    }
+
+    ncr_obj_@HTTP_RESPONSE_ID@ *response = ncr_allocate(sizeof(*response), ncr_line, ncr_column);
+    response->body = ncr_allocate(sizeof(*response->body), ncr_line, ncr_column);
+    struct ncr_http_callback_context context = {
+        .response = response,
+        .body_limit = ncr_self->max_response_bytes,
+        .line = ncr_line,
+        .column = ncr_column,
+    };
+    CURL *easy = (CURL *)ncr_self->easy;
+    curl_easy_reset(easy);
+    char error_buffer[CURL_ERROR_SIZE] = {0};
+    CURLcode option_status = CURLE_OK;
+    const char *option_error = NULL;
+#define NCR_HTTP_SETOPT(option, value) do { \
+    option_status = curl_easy_setopt(easy, option, value); \
+    if (option_status != CURLE_OK) { option_error = curl_easy_strerror(option_status); goto http_option_error; } \
+} while (0)
+    NCR_HTTP_SETOPT(CURLOPT_URL, (const char *)ncr_self->url);
+    NCR_HTTP_SETOPT(CURLOPT_PROTOCOLS_STR, "http,https");
+    NCR_HTTP_SETOPT(CURLOPT_REDIR_PROTOCOLS_STR, "http,https");
+    NCR_HTTP_SETOPT(CURLOPT_FOLLOWLOCATION, 0L);
+    /* Avoid libcurl's stale-connection replay path; requests are never retried. */
+    NCR_HTTP_SETOPT(CURLOPT_FRESH_CONNECT, 1L);
+    NCR_HTTP_SETOPT(CURLOPT_FORBID_REUSE, 1L);
+    NCR_HTTP_SETOPT(CURLOPT_MAXREDIRS, 0L);
+    NCR_HTTP_SETOPT(CURLOPT_NOSIGNAL, 1L);
+    NCR_HTTP_SETOPT(CURLOPT_SSL_VERIFYPEER, 1L);
+    NCR_HTTP_SETOPT(CURLOPT_SSL_VERIFYHOST, 2L);
+    NCR_HTTP_SETOPT(CURLOPT_CUSTOMREQUEST, (const char *)ncr_self->method);
+    NCR_HTTP_SETOPT(CURLOPT_HTTPHEADER, (struct curl_slist *)ncr_self->header_list);
+    NCR_HTTP_SETOPT(CURLOPT_WRITEFUNCTION, ncr_http_body_callback);
+    NCR_HTTP_SETOPT(CURLOPT_WRITEDATA, &context);
+    NCR_HTTP_SETOPT(CURLOPT_HEADERFUNCTION, ncr_http_header_callback);
+    NCR_HTTP_SETOPT(CURLOPT_HEADERDATA, &context);
+    NCR_HTTP_SETOPT(CURLOPT_ERRORBUFFER, error_buffer);
+    if (ncr_self->timeout_millis > 0) {
+        NCR_HTTP_SETOPT(CURLOPT_TIMEOUT_MS, (long)ncr_self->timeout_millis);
+    }
+    if (ncr_self->ca_file != NULL) {
+        NCR_HTTP_SETOPT(CURLOPT_CAINFO, (const char *)ncr_self->ca_file);
+    }
+    if (ncr_self->method_length == sizeof("HEAD") - 1
+        && memcmp(ncr_self->method, "HEAD", sizeof("HEAD") - 1) == 0) {
+        NCR_HTTP_SETOPT(CURLOPT_NOBODY, 1L);
+    }
+    if (ncr_self->body_set) {
+        NCR_HTTP_SETOPT(CURLOPT_POSTFIELDS, ncr_self->body_length == 0 ? "" : (const char *)ncr_self->body);
+        NCR_HTTP_SETOPT(CURLOPT_POSTFIELDSIZE_LARGE, body_length);
+    }
+#undef NCR_HTTP_SETOPT
+
+    CURLcode transfer_status = curl_easy_perform(easy);
+    if (transfer_status != CURLE_OK) {
+        const char *detail = error_buffer[0] == '\0' ? curl_easy_strerror(transfer_status) : error_buffer;
+        if (context.response_too_large) { detail = "response body exceeds configured byte limit"; }
+        else if (context.header_limit_exceeded) { detail = "response headers exceed the 65536-byte limit"; }
+        else if (context.header_count_exceeded) { detail = "response has more than 1024 distinct headers"; }
+        else if (context.malformed_header) { detail = "response contains a malformed or non-UTF-8 header"; }
+        char message[256];
+        size_t message_length = ncr_http_format_error(message, sizeof(message), "HttpRequest.send", detail);
+        ncr_http_response_destroy(response);
+        return ncr_result_error_@SEND_RESULT_ID@(message, message_length, ncr_line, ncr_column);
+    }
+
+    long response_code = 0;
+    CURLcode info_status = curl_easy_getinfo(easy, CURLINFO_RESPONSE_CODE, &response_code);
+    if (info_status != CURLE_OK || response_code < 100 || response_code > 599) {
+        ncr_http_response_destroy(response);
+        return ncr_result_error_@SEND_RESULT_ID@("HttpRequest.send: invalid HTTP response status", sizeof("HttpRequest.send: invalid HTTP response status") - 1, ncr_line, ncr_column);
+    }
+    char *effective_url = NULL;
+    info_status = curl_easy_getinfo(easy, CURLINFO_EFFECTIVE_URL, &effective_url);
+    if (info_status != CURLE_OK || effective_url == NULL) {
+        ncr_http_response_destroy(response);
+        return ncr_result_error_@SEND_RESULT_ID@("HttpRequest.send: libcurl did not provide the final URL", sizeof("HttpRequest.send: libcurl did not provide the final URL") - 1, ncr_line, ncr_column);
+    }
+    size_t final_url_length = strlen(effective_url);
+    if (final_url_length > (size_t)INT32_MAX || final_url_length == SIZE_MAX) {
+        ncr_http_response_destroy(response);
+        return ncr_result_error_@SEND_RESULT_ID@("HttpRequest.send: final URL exceeds Text limits", sizeof("HttpRequest.send: final URL exceeds Text limits") - 1, ncr_line, ncr_column);
+    }
+    response->final_url = ncr_allocate(final_url_length + 1, ncr_line, ncr_column);
+    memcpy(response->final_url, effective_url, final_url_length + 1);
+    response->final_url_length = final_url_length;
+    response->status = (int32_t)response_code;
+    return (@SEND_RESULT_TYPE@){ .tag = @SEND_OK_TAG@, .data.v@SEND_OK_TAG@.f0 = response };
+
+http_option_error:
+#undef NCR_HTTP_SETOPT
+    {
+        char message[256];
+        size_t message_length = ncr_http_format_error(message, sizeof(message), "HttpRequest.send option", option_error);
+        ncr_http_response_destroy(response);
+        return ncr_result_error_@SEND_RESULT_ID@(message, message_length, ncr_line, ncr_column);
+    }
+}
+
+static @RESPONSE_STATUS_RESULT_TYPE@ @HTTP_RESPONSE_STATUS@(ncr_obj_@HTTP_RESPONSE_ID@ *ncr_self,
+                                                              size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column;
+    return ncr_self->status;
+}
+
+static @RESPONSE_BODY_RESULT_TYPE@ @HTTP_RESPONSE_BODY@(ncr_obj_@HTTP_RESPONSE_ID@ *ncr_self,
+                                                          size_t ncr_line, size_t ncr_column) {
+    (void)ncr_line; (void)ncr_column;
+    return ncr_self->body;
+}
+
+static @OPTION_RESULT_TYPE@ @HTTP_RESPONSE_HEADER@(ncr_obj_@HTTP_RESPONSE_ID@ *ncr_self,
+                                                    ncr_obj_@TEXT_ID@ *@RESPONSE_HEADER_NAME_ID@,
+                                                    size_t ncr_line, size_t ncr_column) {
+    if (ncr_self == NULL || @RESPONSE_HEADER_NAME_ID@ == NULL
+        || !ncr_http_valid_token(@RESPONSE_HEADER_NAME_ID@->bytes, (size_t)@RESPONSE_HEADER_NAME_ID@->length)) {
+        return (@OPTION_RESULT_TYPE@){ .tag = @OPTION_NONE_TAG@ };
+    }
+    struct ncr_http_header_entry *entries = ncr_http_header_entries(ncr_self);
+    size_t length = (size_t)@RESPONSE_HEADER_NAME_ID@->length;
+    for (size_t index = 0; index < ncr_self->header_count; index++) {
+        if (ncr_http_header_name_equal(&entries[index], @RESPONSE_HEADER_NAME_ID@->bytes, length)) {
+            ncr_obj_@TEXT_ID@ *value = @TEXT_FROM_BYTES@(entries[index].value, entries[index].value_length, ncr_line, ncr_column);
+            return (@OPTION_RESULT_TYPE@){ .tag = @OPTION_SOME_TAG@, .data.v@OPTION_SOME_TAG@.f0 = value };
+        }
+    }
+    return (@OPTION_RESULT_TYPE@){ .tag = @OPTION_NONE_TAG@ };
+}
+
+static @RESPONSE_FINAL_URL_RESULT_TYPE@ @HTTP_RESPONSE_FINAL_URL@(ncr_obj_@HTTP_RESPONSE_ID@ *ncr_self,
+                                                                   size_t ncr_line, size_t ncr_column) {
+    return @TEXT_FROM_BYTES@(ncr_self->final_url, ncr_self->final_url_length, ncr_line, ncr_column);
+}
+
+static @BODY_TEXT_RESULT_TYPE@ @HTTP_RESPONSE_BODY_TEXT@(ncr_obj_@HTTP_RESPONSE_ID@ *ncr_self,
+                                                          size_t ncr_line, size_t ncr_column) {
+    if (!ncr_utf8_valid(ncr_self->body->bytes, ncr_self->body->length)) {
+        return ncr_result_error_@BODY_TEXT_RESULT_ID@("HTTP response body is not valid UTF-8", sizeof("HTTP response body is not valid UTF-8") - 1, ncr_line, ncr_column);
+    }
+    ncr_obj_@TEXT_ID@ *text = @TEXT_FROM_BYTES@(ncr_self->body->bytes, ncr_self->body->length, ncr_line, ncr_column);
+    return (@BODY_TEXT_RESULT_TYPE@){ .tag = @BODY_TEXT_OK_TAG@, .data.v@BODY_TEXT_OK_TAG@.f0 = text };
+}

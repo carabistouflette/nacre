@@ -123,7 +123,8 @@ impl Tables {
                         t::NativeClass::Compression | t::NativeClass::Checksums |
                         t::NativeClass::SocketAddress | t::NativeClass::TcpListener |
                         t::NativeClass::TcpStream | t::NativeClass::Datagram |
-                        t::NativeClass::UdpSocket | t::NativeClass::Env |
+                        t::NativeClass::UdpSocket | t::NativeClass::HttpRequest |
+                        t::NativeClass::HttpResponse | t::NativeClass::Env |
                         t::NativeClass::Command | t::NativeClass::Process |
                         t::NativeClass::ProcessOutput) | None => None,
                 };
@@ -246,6 +247,8 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
             Some(a::NativeClass::TcpStream) => Some(t::NativeClass::TcpStream),
             Some(a::NativeClass::Datagram) => Some(t::NativeClass::Datagram),
             Some(a::NativeClass::UdpSocket) => Some(t::NativeClass::UdpSocket),
+            Some(a::NativeClass::HttpRequest) => Some(t::NativeClass::HttpRequest),
+            Some(a::NativeClass::HttpResponse) => Some(t::NativeClass::HttpResponse),
             Some(a::NativeClass::Thread(_)) => Some(t::NativeClass::Thread(Type::Void)),
             Some(a::NativeClass::Mutex(_)) => Some(t::NativeClass::Mutex(Type::Void)),
             Some(a::NativeClass::Guard(_)) => Some(t::NativeClass::Guard(Type::Void)),

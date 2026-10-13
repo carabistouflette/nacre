@@ -43,7 +43,7 @@ pub enum NativeClass {
     Set { key: Type, key_kind: Option<MapKeyKind> }, Comparator(Type),
     Text, Regex, RegexMatch, Arrays, ByteBuffer, Encoding, Crypto, Path, File, Directory, FileInfo,
     Console, Files, Args, Math, Random, Time, Compression, Checksums,
-    SocketAddress, TcpListener, TcpStream, Datagram, UdpSocket,
+    SocketAddress, TcpListener, TcpStream, Datagram, UdpSocket, HttpRequest, HttpResponse,
     Thread(Type), Mutex(Type), Guard(Type), Channel(Type), Sender(Type), Receiver(Type),
     Env, Command, Process, ProcessOutput,
 }

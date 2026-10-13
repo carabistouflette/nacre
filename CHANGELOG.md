@@ -59,6 +59,14 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   while datagram truncation is successful metadata (CQS/DbC/POLA). Console and Args
   now have separate backend leaves; the IO storage helper has no emitter routing.
 
+- Affine `HttpRequest` and `HttpResponse` use per-request libcurl easy handles
+  with `pthread_once` global initialization, verified HTTPS, no automatic
+  redirects/retries, copied request bodies, and bounded binary response capture.
+  Response headers are parsed with an explicit byte/count bound, duplicate fields
+  use last-value lookup, interim blocks are discarded, and non-2xx status codes
+  remain successful transport results. Loopback tests cover methods, headers,
+  binary bodies, malformed inputs/headers, limits, timeouts, and local-CA TLS.
+
 - Tree-sitter, Zed and VS Code syntax now cover module/import paths, qualified
   generic static calls, native scalar literals and casts, and postfix Result
   propagation. Editor snippets exercise owned task joins, bounded channels,

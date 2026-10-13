@@ -59,7 +59,8 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
             C::Thread(_) | C::Mutex(_) | C::Guard(_) | C::Channel(_) |
             C::Sender(_) | C::Receiver(_) | C::Env | C::Command | C::Process | C::ProcessOutput =>
                 unreachable!("static or factory-only native class has no constructor"),
-            C::SocketAddress | C::TcpListener | C::TcpStream | C::Datagram | C::UdpSocket =>
+            C::SocketAddress | C::TcpListener | C::TcpStream | C::Datagram | C::UdpSocket |
+            C::HttpRequest | C::HttpResponse =>
                 unreachable!("factory-only native class has no constructor"),
         };
     }
@@ -339,6 +340,18 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
         (C::UdpSocket, "receiveFrom") => M::UdpSocketReceiveFrom,
         (C::UdpSocket, "localAddress") => M::UdpSocketLocalAddress,
         (C::UdpSocket, "close") => M::UdpSocketClose,
+        (C::HttpRequest, "create") => M::HttpRequestCreate,
+        (C::HttpRequest, "setHeader") => M::HttpRequestSetHeader,
+        (C::HttpRequest, "setBody") => M::HttpRequestSetBody,
+        (C::HttpRequest, "setTimeoutMillis") => M::HttpRequestSetTimeoutMillis,
+        (C::HttpRequest, "setMaxResponseBytes") => M::HttpRequestSetMaxResponseBytes,
+        (C::HttpRequest, "setCaFile") => M::HttpRequestSetCaFile,
+        (C::HttpRequest, "send") => M::HttpRequestSend,
+        (C::HttpResponse, "status") => M::HttpResponseStatus,
+        (C::HttpResponse, "body") => M::HttpResponseBody,
+        (C::HttpResponse, "header") => M::HttpResponseHeader,
+        (C::HttpResponse, "finalUrl") => M::HttpResponseFinalUrl,
+        (C::HttpResponse, "bodyText") => M::HttpResponseBodyText,
         (C::Args, "get") => M::ArgsGet,
         (C::Env, "get") => M::EnvGet,
         (C::Env, "set") => M::EnvSet,

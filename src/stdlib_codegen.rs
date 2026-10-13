@@ -18,6 +18,7 @@ mod support;
 mod text;
 mod time;
 mod network;
+mod http;
 mod monotonic;
 mod regex;
 mod concurrency;
@@ -48,6 +49,7 @@ pub fn fields(program: &t::Program, class: C, class_id: usize) -> String {
         C::Regex | C::RegexMatch => regex::fields(program, class),
         C::SocketAddress | C::TcpListener | C::TcpStream | C::Datagram | C::UdpSocket =>
             network::fields(program, class, class_id),
+        C::HttpRequest | C::HttpResponse => http::fields(program, class),
         C::Thread(_) | C::Mutex(_) | C::Guard(_) | C::Channel(_) |
         C::Sender(_) | C::Receiver(_) => concurrency::fields(program, class, class_id),
     }
@@ -74,6 +76,7 @@ pub fn drop_fields(program: &t::Program, class: C, class_id: usize) -> String {
         C::Regex | C::RegexMatch => regex::drop_fields(program, class),
         C::SocketAddress | C::TcpListener | C::TcpStream | C::Datagram | C::UdpSocket =>
             network::drop_fields(program, class),
+        C::HttpRequest | C::HttpResponse => http::drop_fields(program, class),
         C::Thread(_) | C::Mutex(_) | C::Guard(_) | C::Channel(_) |
         C::Sender(_) | C::Receiver(_) => concurrency::drop_fields(class_id),
     }
@@ -84,7 +87,9 @@ pub fn hash_table_definition(class_id: usize) -> String {
 }
 
 pub(crate) fn drop_helper_prototypes(program: &t::Program) -> String {
-    concurrency::drop_helper_prototypes(program)
+    let mut out = concurrency::drop_helper_prototypes(program);
+    out.push_str(&http::drop_helper_prototypes(program));
+    out
 }
 
 pub fn map_entry_definition(program: &t::Program, class_id: usize, key: MapKeyKind, value: Type) -> String {
@@ -124,6 +129,7 @@ fn append_body(program: &t::Program, out: &mut String, class: &t::Class, native:
         C::Path | C::File | C::Directory | C::FileInfo => return,
         C::Thread(_) | C::Mutex(_) | C::Guard(_) | C::Channel(_) |
         C::Sender(_) | C::Receiver(_) => return,
+        C::HttpRequest | C::HttpResponse => return,
         C::Compression | C::Checksums | C::Regex | C::RegexMatch | C::Console | C::Files | C::Args |
         C::Env | C::Command | C::Process | C::ProcessOutput => return,
     };
@@ -175,6 +181,7 @@ pub fn implementations(program: &t::Program) -> String {
         out.push('\n');
     }
     out.push_str(&network::implementation(program));
+    out.push_str(&http::implementation(program));
     if let Some(filesystem) = filesystem::implementations(program) {
         out.push_str(&filesystem);
         out.push('\n');

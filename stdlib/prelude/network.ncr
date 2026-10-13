@@ -33,3 +33,20 @@ class UdpSocket {
     public Result<SocketAddress, Text> localAddress() {}
     public Result<Unit, Text> close() {}
 }
+class HttpRequest {
+    public static Result<HttpRequest, Text> create(borrow Text method, borrow Text url) {}
+    public Result<Unit, Text> setHeader(borrow Text name, borrow Text value) {}
+    public void setBody(borrow ByteBuffer body) {}
+    public Result<Unit, Text> setTimeoutMillis(long timeoutMillis) {}
+    public Result<Unit, Text> setMaxResponseBytes(long maxResponseBytes) {}
+    public Result<Unit, Text> setCaFile(borrow Path caFile) {}
+    public Result<HttpResponse, Text> send() {}
+}
+
+class HttpResponse {
+    public readonly int status() {}
+    public readonly borrow ByteBuffer body() {}
+    public readonly Option<Text> header(borrow Text name) {}
+    public readonly Text finalUrl() {}
+    public readonly Result<Text, Text> bodyText() {}
+}
