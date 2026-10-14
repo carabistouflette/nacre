@@ -79,11 +79,9 @@ fn any_used(usage: &IcuUsage, methods: &[M]) -> bool {
 fn mark_expr_icu(program: &t::Program, expr: &Expr, usage: &mut IcuUsage) {
     match &expr.kind {
         E::Call { target, args, .. } => {
-            if let CallTarget::Function(id) = target {
-                if let Some(method) = program.functions[*id].native {
-                    if let Some(index) = method_index(method) { usage[index] = true; }
-                }
-            }
+            if let CallTarget::Function(id) = target
+                && let Some(method) = program.functions[*id].native
+                    && let Some(index) = method_index(method) { usage[index] = true; }
             for arg in args { mark_expr_icu(program, arg, usage); }
         }
         E::New { args, .. } | E::Variant { args, .. } =>

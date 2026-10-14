@@ -28,6 +28,12 @@ uses the supplied C runtime and system C library. It has no garbage collector or
 implicit reference counting for ordinary language values; sharing synchronization
 controls requires explicit mutex/channel handles.
 
+Compiler, fuzz, and Zed crates use Rust 2024 with a Rust 1.99 minimum;
+`rust-toolchain.toml` selects the exact stable development toolchain. Conditional
+pattern matching uses let chains where guards share one short-circuit path.
+Process tests configure child environments through `Command::envs`, without
+mutating the multithreaded Rust test runner's environment.
+
 Disk and in-memory sources share source-bundle assembly, separator-aware byte
 limits, and unit offset/line bookkeeping. Disk acquisition retains native
 `PathBuf` identities and rejects duplicates by canonical path; it does not use
@@ -41,6 +47,12 @@ LSP disk scans, and unsaved-source admission reuse these predicates on native
 `OsStr` names, without allocating lossy display strings. Explicit CLI file inputs
 retain their separate admission behavior; traversal budgets and symlink checks
 remain with their callers.
+
+The parser retains immutable token storage for speculative parsing. Its private
+`TokenPosition` groups the physical index with a pending virtual `>` from a split
+`>>`; declaration and generic-call lookahead restore that state together.
+Identifier parsing validates the token kind before advancing and takes the
+owned identifier from the consumed token, avoiding a redundant string clone.
 
 ## AST and generic specialization
 

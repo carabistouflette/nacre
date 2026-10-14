@@ -7,7 +7,7 @@
   "license": "MIT",
   "main": "./dist/extension.js",
   "engines": {
-    "vscode": "^1.82.0"
+    "vscode": "^1.91.0"
   },
   "categories": [
     "Programming Languages"
@@ -18,7 +18,7 @@
   ],
   "scripts": {
     "test": "node ./scripts/validate.js",
-    "compile": "esbuild ./src/extension.js --bundle --platform=node --target=node16 --external:vscode --outfile=dist/extension.js",
+    "compile": "esbuild ./src/extension.js --bundle --platform=node --target=node20 --external:vscode --outfile=dist/extension.js",
     "prepackage": "node -e \"require('node:fs').copyFileSync('../../LICENSE', 'LICENSE')\"",
     "package": "npm run compile && vsce package --allow-missing-repository"
   },
@@ -73,11 +73,11 @@
     }
   },
   "dependencies": {
-    "vscode-languageclient": "9.0.1"
+    "vscode-languageclient": "10.1.2"
   },
   "devDependencies": {
     "@vscode/vsce": "4.0.0",
-    "esbuild": "0.25.5",
+    "esbuild": "0.28.2",
     "vscode-oniguruma": "2.0.1",
     "vscode-textmate": "9.3.2"
   },

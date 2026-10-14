@@ -3,6 +3,19 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Upgrade development to stable Rust 1.99.0 and edition 2024 across compiler,
+  fuzz, and Zed crates. Pin Node 26.12.0, npm 12.2.0, and Python 3.15.0;
+  refresh Rust/npm locks and current stable editor/parser dependencies.
+- Use Rust let chains, typed slice chunks, and `is_multiple_of` where applicable.
+  Process boundary tests inject invalid UTF-8 into the child environment rather
+  than changing the parallel test runner's global environment.
+- Parser lookahead snapshots the token index and split-generic closer together.
+  Identifier parsing takes the consumed token's owned name instead of cloning
+  it again; failed lookahead and generated output retain their behavior.
+- Port the private ZIP-boundary correction to libarchive 3.8.10, reserving a
+  filename-validation flag distinct from its new timestamp flags and retaining
+  upstream's inclusive EOCD search. Release hashing and zero-fuzz application
+  remain required.
 - Native dependency selection is encapsulated in a private policy module,
   separate from compiler processes and temporary-file ownership. The driver
   consumes an opaque, prerequisite-closed set through header/linker queries.

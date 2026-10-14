@@ -70,11 +70,11 @@
  #include "archive_entry_locale.h"
  #include "archive_hmac_private.h"
  #include "archive_private.h"
-@@ -135,6 +136,57 @@
- /* Bits used in flags. */
- #define LA_USED_ZIP64	(1 << 0)
- #define LA_FROM_CENTRAL_DIRECTORY (1 << 1)
-+#define LA_INVALID_FILENAME (1 << 2)
+@@ -148,6 +149,57 @@
+ #define LA_NTFS_MTIME (1 << 5)
+ #define LA_NTFS_ATIME (1 << 6)
+ #define LA_NTFS_BTIME (1 << 7)
++#define LA_INVALID_FILENAME (1 << 8)
 +
 +/* Validate length-delimited names before conversion or C-string use. */
 +static int
@@ -430,21 +430,16 @@
  	current_offset = __archive_read_seek(a, -tail, SEEK_END);
  	if (current_offset < 0)
  		return 0;
-@@ -4051,20 +4095,44 @@
- 	 * to match the last EOCD in the file (there can be more than
- 	 * one if there is an uncompressed Zip archive as a member
- 	 * within this Zip archive). */
--	for (i = tail - 22; i > 0;) {
-+	for (i = tail - 22; i >= 0;) {
- 		switch (p[i]) {
+@@ -4229,16 +4273,40 @@
+ 		switch (h[i]) {
  		case 'P':
- 			if (memcmp(p + i, "PK\005\006", 4) == 0) {
--				int ret = read_eocd(zip, p + i,
+ 			if (memcmp(h + i, "PK\005\006", 4) == 0) {
+-				int ret = read_eocd(zip, h + i,
 -				    current_offset + i);
 -				/* Zip64 EOCD locator precedes
 -				 * regular EOCD if present. */
 +				int64_t eocd_offset = current_offset + i;
-+				int ret = read_eocd(zip, p + i, eocd_offset, file_size);
++				int ret = read_eocd(zip, h + i, eocd_offset, file_size);
 +				char locator[20];
 +				int sought = 0, have_locator = 0;
 +
@@ -453,11 +448,11 @@
 +					i -= 4;
 +					break;
 +				}
- 				if (i >= 20 && memcmp(p + i - 20, "PK\006\007", 4) == 0) {
--					int ret_zip64 = read_zip64_eocd(a, zip, p + i - 20);
+ 				if (i >= 20 && memcmp(h + i - 20, "PK\006\007", 4) == 0) {
+-					int ret_zip64 = read_zip64_eocd(a, zip, h + i - 20);
 -					if (ret_zip64 > ret)
 -						ret = ret_zip64;
-+					memcpy(locator, p + i - 20, sizeof(locator));
++					memcpy(locator, h + i - 20, sizeof(locator));
 +					have_locator = 1;
 +				} else if (i < 20 && eocd_offset >= 20) {
 +					const char *q;
@@ -478,7 +473,7 @@
 +				/* A failed candidate must not invalidate the tail search buffer. */
 +				if (sought) {
 +					if (__archive_read_seek(a, current_offset, SEEK_SET) < 0 ||
-+					    (p = __archive_read_ahead(a, (size_t)tail, NULL)) == NULL)
++					    (h = __archive_read_ahead(a, (size_t)tail, NULL)) == NULL)
 +						return 0;
 +				}
  			}

@@ -616,11 +616,10 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
         states[id] = 1;
         if let Some(variants) = &tables.classes[id].variants {
             for field in variants.iter().flat_map(|variant| &variant.fields) {
-                if let Type::Object(child) = field {
-                    if tables.classes[*child].variants.is_some() && !inline_visit(*child, tables, states) {
+                if let Type::Object(child) = field
+                    && tables.classes[*child].variants.is_some() && !inline_visit(*child, tables, states) {
                         return false;
                     }
-                }
             }
         }
         states[id] = 2;
@@ -1805,12 +1804,11 @@ impl Checker<'_> {
             return Ok(t::Expr { kind: t::ExprKind::Borrow { place, mutable }, ty: expected, span: expr.span });
         }
         let value = self.expression(expr)?;
-        if let (Type::Object(interface), Type::Object(concrete)) = (expected, value.ty) {
-            if interface != concrete && self.tables.can_upcast(concrete, interface) {
+        if let (Type::Object(interface), Type::Object(concrete)) = (expected, value.ty)
+            && interface != concrete && self.tables.can_upcast(concrete, interface) {
                 return Ok(t::Expr { kind: t::ExprKind::Upcast { value: Box::new(value), interface, concrete },
                     ty: expected, span: expr.span });
             }
-        }
         if expected == value.ty { return Ok(value); }
         if expected.is_numeric() && value.ty.is_numeric() {
             let source = value.ty.promoted_numeric().expect("numeric source has a promotion");
@@ -1882,13 +1880,12 @@ impl Checker<'_> {
                 (Some(t::NativeClass::ThreadPool(value)), "create") => Some(value),
                 _ => None,
             };
-            if let Some(value) = send_type {
-                if !self.tables.is_sendable(value) {
+            if let Some(value) = send_type
+                && !self.tables.is_sendable(value) {
                     return Err(Diagnostic::new(span, format!(
                         "[E7101] {} requires a recursively sendable value; `{}` contains a borrow, view, or non-sendable control handle",
                         sig.name, self.tables.type_name(value))));
                 }
-            }
             let task_result = match (self.tables.classes[owner].native, sig.name.as_str()) {
                 (Some(t::NativeClass::Thread(result)), "spawn")
                 | (Some(t::NativeClass::Future(result)), "spawn") => Some(result),

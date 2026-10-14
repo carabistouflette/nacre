@@ -105,11 +105,10 @@ fn enum_order(program: &t::Program) -> Vec<usize> {
         states[id] = 1;
         if let Some(variants) = &program.classes[id].variants {
             for field in variants.iter().flat_map(|variant| &variant.fields) {
-                if let Type::Object(child) = field {
-                    if program.classes[*child].variants.is_some() {
+                if let Type::Object(child) = field
+                    && program.classes[*child].variants.is_some() {
                         visit(*child, program, states, order);
                     }
-                }
             }
         }
         states[id] = 2;
@@ -458,14 +457,12 @@ impl Emitter<'_> {
                                 format!("&({payload})")
                             } else { payload };
                             self.line(&format!("{} ncr_v_{id} = {initializer};", ctype(self.program, binding_type)));
-                            if !borrowed {
-                                if let Type::Object(owner) = ty {
+                            if !borrowed
+                                && let Type::Object(owner) = ty {
                                     self.owners.last_mut().unwrap().push((*id, owner));
                                 }
-                            }
-                        } else if !borrowed {
-                            if let Type::Object(owner) = ty { self.drop_value(owner, &payload); }
-                        }
+                        } else if !borrowed
+                            && let Type::Object(owner) = ty { self.drop_value(owner, &payload); }
                     }
                     self.block(&arm.body);
                     self.cleanup_from(self.owners.len() - 1);

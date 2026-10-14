@@ -5,10 +5,12 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        rust: ["1.74.0", stable]
         cc: [gcc, clang]
     steps:
       - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.0.0
+        with:
+          python-version-file: ".python-version"
       - name: Install native library headers
         run: |
           sudo apt-get update
@@ -18,9 +20,8 @@ jobs:
           prefix="$RUNNER_TEMP/nacre-native-deps"
           python3 scripts/build_libarchive.py --prefix "$prefix"
           printf '%s\n' "CPATH=$prefix/include" "LIBRARY_PATH=$prefix/lib" "LD_LIBRARY_PATH=$prefix/lib" >> "$GITHUB_ENV"
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ matrix.rust }}
+      - name: Install repository Rust toolchain
+        run: rustup show active-toolchain
       - run: python3 scripts/generate_v2_tests.py --check
       - run: python3 scripts/generate_v3_tests.py --check
       - run: python3 scripts/generate_v4_tests.py --check
@@ -42,13 +43,15 @@ jobs:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-node@v7.1.0
         with:
-          node-version: "22"
+          node-version-file: ".node-version"
+      - run: npm install --global "npm@$(cat .npm-version)"
       - uses: actions/setup-python@v7.0.0
         with:
-          python-version: "3.13"
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-wasip2
+          python-version-file: ".python-version"
+      - name: Install repository Rust toolchain and WASI target
+        run: |
+          rustup show active-toolchain
+          rustup target add wasm32-wasip2
       - run: cargo build --locked
       - run: npm --prefix editors/vscode ci
       - run: npm --prefix editors/vscode test
@@ -56,7 +59,7 @@ jobs:
       - run: npm --prefix editors/tree-sitter-nacre ci
       - run: npm --prefix editors/tree-sitter-nacre run generate
       - run: npm --prefix editors/tree-sitter-nacre test
-      - run: python3 -m pip install tree-sitter==0.25.2
+      - run: python3 -m pip install tree-sitter==0.26.0
       - run: python3 editors/zed/check.py
       - run: python3 editors/zed/prepare.py
       - run: cargo build --manifest-path editors/zed/dist/nacre/Cargo.toml --target wasm32-wasip2 --release --locked
@@ -65,6 +68,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.0.0
+        with:
+          python-version-file: ".python-version"
       - uses: dtolnay/rust-toolchain@nightly
-      - run: cargo install cargo-fuzz --version 0.13.2 --locked
+      - run: cargo +nightly install cargo-fuzz --version 0.13.2 --locked
       - run: python3 scripts/fuzz_smoke.py

@@ -361,10 +361,10 @@ fn sha1(input: &[u8]) -> [u8; 20] {
     while bytes.len() % 64 != 56 { bytes.push(0); }
     bytes.extend_from_slice(&bit_length.to_be_bytes());
     let mut state = [0x6745_2301u32, 0xefcd_ab89, 0x98ba_dcfe, 0x1032_5476, 0xc3d2_e1f0];
-    for block in bytes.chunks_exact(64) {
+    for block in bytes.as_chunks::<64>().0 {
         let mut words = [0u32; 80];
-        for (index, word) in block.chunks_exact(4).enumerate() {
-            words[index] = u32::from_be_bytes(word.try_into().unwrap());
+        for (index, word) in block.as_chunks::<4>().0.iter().enumerate() {
+            words[index] = u32::from_be_bytes(*word);
         }
         for index in 16..80 {
             words[index] = (words[index - 3] ^ words[index - 8] ^ words[index - 14] ^ words[index - 16]).rotate_left(1);

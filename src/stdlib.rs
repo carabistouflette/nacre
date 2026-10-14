@@ -67,11 +67,10 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
             _ => unreachable!("native constructor has no codegen mapping"),
         };
     }
-    if let C::ThreadPool(_) = class {
-        if let Some(submission) = pool_submission_by_name(name) {
+    if let C::ThreadPool(_) = class
+        && let Some(submission) = pool_submission_by_name(name) {
             return submission.method;
         }
-    }
     match (class, name) {
         (C::Locale, "available") => M::LocaleAvailable,
         (C::Locale, "formatNumber") => M::LocaleFormatNumber,

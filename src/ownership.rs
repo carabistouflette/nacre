@@ -330,9 +330,8 @@ fn move_origin(graph: &Graph, states: &States, at: NodeId, variable: usize) -> O
         let Some(state) = &states[id] else { continue; };
         let op = graph.nodes[id].op;
         if transferred(op, variable, state[variable]) & MOVED == 0 { continue; }
-        if let Op::Move { id: v, span } = op {
-            if v == variable { return Some(span); }
-        }
+        if let Op::Move { id: v, span } = op
+            && v == variable { return Some(span); }
         queue.extend(previous[id].iter().copied());
     }
     None

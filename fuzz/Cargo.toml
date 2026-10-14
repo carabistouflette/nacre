@@ -2,13 +2,14 @@
 name = "nacre-fuzz"
 version = "0.0.0"
 publish = false
-edition = "2021"
+edition = "2024"
+rust-version = "1.99"
 
 [package.metadata]
 cargo-fuzz = true
 
 [dependencies]
-libfuzzer-sys = "=0.4.10"
+libfuzzer-sys = "=0.4.13"
 nacre = { path = "..", features = ["fuzzing"] }
 
 [[bin]]

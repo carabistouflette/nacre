@@ -276,11 +276,10 @@ impl Server {
         }
         if let Some(added) = event.get("added").and_then(Value::as_array) {
             for folder in added {
-                if let Some(path) = folder.get("uri").and_then(Value::as_str).and_then(uri_to_path) {
-                    if !self.workspace_roots.contains(&path) && self.workspace_roots.len() < MAX_WORKSPACE_ROOTS {
+                if let Some(path) = folder.get("uri").and_then(Value::as_str).and_then(uri_to_path)
+                    && !self.workspace_roots.contains(&path) && self.workspace_roots.len() < MAX_WORKSPACE_ROOTS {
                         self.workspace_roots.push(path);
                     }
-                }
             }
         }
     }
@@ -332,13 +331,12 @@ impl Server {
             }
         };
         let mut diagnostics = HashMap::new();
-        if let Err(diagnostic) = bundle.validate() {
-            if let Some((uri, value)) = diagnostic_json(&diagnostic, &bundle, |path| {
+        if let Err(diagnostic) = bundle.validate()
+            && let Some((uri, value)) = diagnostic_json(&diagnostic, &bundle, |path| {
                 files.iter().find(|file| file.path.as_path() == path).map(|file| file.uri.as_str())
             }) {
                 diagnostics.insert(uri, vec![value]);
             }
-        }
         self.publish_scope_diagnostics(scope, output, excluded_uri, diagnostics, Some(&files))
     }
 
@@ -395,15 +393,14 @@ impl Server {
             }
         }
         for (path, document) in &self.documents {
-            if self.scope_for(path) == *scope {
-                if let Some(input) = inputs.iter().find(|input| source_root_contains(input, path)) {
+            if self.scope_for(path) == *scope
+                && let Some(input) = inputs.iter().find(|input| source_root_contains(input, path)) {
                     reject_symlink_path(path, input)?;
                     if document.text.is_none() {
                         return Err(format!("{} exceeds the {MAX_SOURCE_BYTES}-byte per-project source limit", path.display()));
                     }
                     paths.push(path.clone());
                 }
-            }
         }
         paths.sort();
         paths.dedup();
@@ -472,9 +469,8 @@ fn initial_roots(params: &Value) -> Vec<PathBuf> {
     let mut roots = Vec::new();
     if let Some(folders) = params.get("workspaceFolders").and_then(Value::as_array) {
         for folder in folders {
-            if let Some(path) = folder.get("uri").and_then(Value::as_str).and_then(uri_to_path) {
-                if !roots.contains(&path) && roots.len() < MAX_WORKSPACE_ROOTS { roots.push(path); }
-            }
+            if let Some(path) = folder.get("uri").and_then(Value::as_str).and_then(uri_to_path)
+                && !roots.contains(&path) && roots.len() < MAX_WORKSPACE_ROOTS { roots.push(path); }
         }
     }
     if roots.is_empty() {

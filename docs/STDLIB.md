@@ -1579,7 +1579,7 @@ schema evolution.
 ## ZIP archives
 
 The pinned private dependency build in `scripts/build_libarchive.py` applies
-ZIP-specific corrections to libarchive 3.8.9: complete filename validation before
+ZIP-specific corrections to libarchive 3.8.10: complete filename validation before
 conversion, EOCD comment extent and exact directory byte/entry-count checks, and a
 search across the full legal 65,557-byte EOCD/comment range. Invalid EOCD signatures
 inside a comment do not stop the search; Zip64 locators are read separately when

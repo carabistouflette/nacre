@@ -1,7 +1,7 @@
 #![cfg(target_os = "linux")]
 
 use nacre::{compile_to_c, native};
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::os::unix::ffi::OsStringExt;
 use std::os::unix::fs::PermissionsExt;
@@ -33,27 +33,6 @@ impl Drop for TempDir {
     fn drop(&mut self) { let _ = fs::remove_dir_all(&self.0); }
 }
 
-struct EnvValueGuard {
-    key: OsString,
-    previous: Option<OsString>,
-}
-
-impl EnvValueGuard {
-    fn set(key: OsString, value: OsString) -> Self {
-        let previous = std::env::var_os(&key);
-        std::env::set_var(&key, value);
-        Self { key, previous }
-    }
-}
-
-impl Drop for EnvValueGuard {
-    fn drop(&mut self) {
-        match self.previous.take() {
-            Some(value) => std::env::set_var(&self.key, value),
-            None => std::env::remove_var(&self.key),
-        }
-    }
-}
 fn source_path(path: &Path) -> String {
     let path = path.to_str().expect("ASCII process test path");
     format!(
@@ -73,11 +52,12 @@ fn compile_program(source: &str, flags: &[&str]) -> native::NativeProgram {
         .unwrap_or_else(|error| panic!("native process test compilation failed:\n{error}"))
 }
 
-fn execute(program: &native::NativeProgram, cwd: &Path) -> Output {
+fn execute(program: &native::NativeProgram, cwd: &Path, environment: &[(&str, &OsStr)]) -> Output {
     let output = Command::new("timeout")
         .arg("20s")
         .arg(program.path())
         .current_dir(cwd)
+        .envs(environment.iter().copied())
         .output()
         .expect("run Nacre process test under a finite host timeout");
     assert!(output.status.success(), "native consumer failed or timed out:\n{}\n{}",
@@ -111,7 +91,7 @@ fn execute_with_input(program: &native::NativeProgram, cwd: &Path, input: &[u8])
 
 fn run(source: &str, cwd: &Path) -> Output {
     let program = compile_program(source, &["-DNACRE_MEMORY_STATS"]);
-    execute(&program, cwd)
+    execute(&program, cwd, &[])
 }
 
 fn build_helper(directory: &Path) -> PathBuf {
@@ -423,9 +403,9 @@ void main() {{
         absent_name = source_path(Path::new(&absent_name)),
         invalid_utf8_name = source_path(Path::new(&invalid_utf8_name)),
     );
-    let key = OsString::from(&invalid_utf8_name);
-    let _invalid_environment = EnvValueGuard::set(key, OsString::from_vec(vec![0xff, 0xfe]));
-    let output = run(&source, directory.path());
+    let value = OsString::from_vec(vec![0xff, 0xfe]);
+    let program = compile_program(&source, &["-DNACRE_MEMORY_STATS"]);
+    let output = execute(&program, directory.path(), &[(&invalid_utf8_name, &value)]);
     let stdout = String::from_utf8_lossy(&output.stdout);
     for marker in [
         "missing environment is None",
@@ -982,7 +962,7 @@ void main() {{
         &c,
         &["-DNACRE_MEMORY_STATS", "-fsanitize=address,undefined", "-fno-omit-frame-pointer"],
     ).unwrap_or_else(|error| panic!("sanitized native consumer compilation failed:\n{error}"));
-    let output = execute(&program, directory.path());
+    let output = execute(&program, directory.path(), &[]);
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("sanitized concurrent process capture complete\n"), "{stdout}");
     assert!(stdout.contains("sanitized child status preserved\n"), "{stdout}");
@@ -1000,6 +980,6 @@ fn standalone_process_types_compile_without_command_dependencies() {
             .unwrap_or_else(|error| panic!("{}", error.render("standalone_process.ncr", source)));
         let program = native::compile_c_optimized(&c, "-O0", &["-DNACRE_MEMORY_STATS"])
             .unwrap_or_else(|error| panic!("standalone native type failed to compile:\n{error}"));
-        assert_eq!(execute(&program, directory.path()).stdout, b"42\n");
+        assert_eq!(execute(&program, directory.path(), &[]).stdout, b"42\n");
     }
 }

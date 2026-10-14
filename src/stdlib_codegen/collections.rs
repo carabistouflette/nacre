@@ -162,11 +162,10 @@ fn try_owned_list_methods(program: &t::Program, list_class: usize, element: Type
         .replace("@STRICT_REMOVE_CALL@", &format!("ncr_fn_{}", remove.id))
 }
 fn map_query_view(program: &t::Program, key: Type, query_type: Type, expression: &str) -> String {
-    if let Type::Borrow { class, .. } = query_type {
-        if key == Type::Object(class) && program.classes[class].variants.is_some() {
+    if let Type::Borrow { class, .. } = query_type
+        && key == Type::Object(class) && program.classes[class].variants.is_some() {
             return format!("&({expression})");
         }
-    }
     expression.to_owned()
 }
 

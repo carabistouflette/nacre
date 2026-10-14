@@ -177,20 +177,18 @@ impl Resolver {
                 if crate::stdlib::is_builtin_type_name(name) && binding.qualified != *name {
                     return Err(Diagnostic::new(binding.span, format!("an import cannot shadow built-in type `{name}`")));
                 }
-                if let Some(local) = self.classes.get(&(unit.module.clone(), name.clone())) {
-                    if local.qualified != binding.qualified {
+                if let Some(local) = self.classes.get(&(unit.module.clone(), name.clone()))
+                    && local.qualified != binding.qualified {
                         return Err(Diagnostic::new(binding.span, format!("imported type `{name}` conflicts with a declaration in this module"))
                             .with_note(local.span, "local declaration is here"));
                     }
-                }
             }
             for (name, binding) in &self.imports[unit_id].functions {
-                if let Some(local) = self.functions.get(&(unit.module.clone(), name.clone())) {
-                    if local.qualified != binding.qualified {
+                if let Some(local) = self.functions.get(&(unit.module.clone(), name.clone()))
+                    && local.qualified != binding.qualified {
                         return Err(Diagnostic::new(binding.span, format!("imported function `{name}` conflicts with a declaration in this module"))
                             .with_note(local.span, "local declaration is here"));
                     }
-                }
             }
         }
         Ok(())
@@ -410,8 +408,8 @@ impl Resolver {
         if let E::MethodCall { receiver, name, args } = &mut expression.kind {
             let system_print = name == "println" && matches!(&receiver.kind,
                 E::Field { base, name } if name == "out" && matches!(&base.kind, E::Var(system) if system == "System"));
-            if !system_print {
-                if let Some(path) = expression_path(receiver) {
+            if !system_print
+                && let Some(path) = expression_path(receiver) {
                     let root = path.split('.').next().unwrap_or(&path);
                     let shadowed = context.scopes.iter().rev().any(|scope| scope.contains(root))
                         || context.owner_fields.contains(root);
@@ -432,7 +430,6 @@ impl Resolver {
                         }
                     }
                 }
-            }
         }
         match &mut expression.kind {
             E::StaticCall { class, type_args, args, .. } => {

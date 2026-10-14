@@ -74,8 +74,9 @@ impl Client {
             let mut line = String::new();
             assert_ne!(self.output.read_line(&mut line).unwrap(), 0, "LSP process closed stdout");
             if line == "\r\n" || line == "\n" { break; }
-            if let Some((name, value)) = line.trim_end().split_once(':') {
-                if name.eq_ignore_ascii_case("Content-Length") { content_length = Some(value.trim().parse::<usize>().unwrap()); }
+            if let Some((name, value)) = line.trim_end().split_once(':')
+                && name.eq_ignore_ascii_case("Content-Length") {
+                content_length = Some(value.trim().parse::<usize>().unwrap());
             }
         }
         let mut body = vec![0; content_length.expect("Content-Length header")];

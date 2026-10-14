@@ -4,18 +4,22 @@ use crate::diagnostic::{Diagnostic, Span};
 use crate::lexer::{Token, TokenKind as K};
 
 pub fn parse(tokens: Vec<Token>) -> Result<Program, Diagnostic> {
-    Parser { tokens, pos: 0, depth: 0, pending_greater: None }.program()
+    Parser { tokens, position: TokenPosition::default(), depth: 0 }.program()
 }
 
-struct Parser { tokens: Vec<Token>, pos: usize, depth: usize, pending_greater: Option<Token> }
+struct Parser { tokens: Vec<Token>, position: TokenPosition, depth: usize }
+
+/// Speculative parsing must checkpoint the physical and virtual token positions together.
+#[derive(Clone, Default)]
+struct TokenPosition { index: usize, pending_greater: Option<Token> }
 
 impl Parser {
-    fn current(&self) -> &Token { self.pending_greater.as_ref().unwrap_or(&self.tokens[self.pos]) }
+    fn current(&self) -> &Token { self.position.pending_greater.as_ref().unwrap_or(&self.tokens[self.position.index]) }
     fn at(&self, kind: &K) -> bool { self.current().kind == *kind }
     fn bump(&mut self) -> Token {
-        if let Some(token) = self.pending_greater.take() { return token; }
+        if let Some(token) = self.position.pending_greater.take() { return token; }
         let token = self.current().clone();
-        if token.kind != K::Eof { self.pos += 1; }
+        if token.kind != K::Eof { self.position.index += 1; }
         token
     }
     fn eat(&mut self, kind: &K) -> bool {
@@ -26,13 +30,12 @@ impl Parser {
         else { Err(Diagnostic::new(self.current().span, format!("{what} expected"))) }
     }
     fn ident(&mut self) -> Result<(String, Span), Diagnostic> {
-        let token = self.current().clone();
-        if let K::Ident(name) = token.kind {
-            self.bump();
-            Ok((name, token.span))
-        } else {
-            Err(Diagnostic::new(token.span, "identifier expected"))
+        if !matches!(self.current().kind, K::Ident(_)) {
+            return Err(Diagnostic::new(self.current().span, "identifier expected"));
         }
+        let token = self.bump();
+        let K::Ident(name) = token.kind else { unreachable!("identifier checked before consumption") };
+        Ok((name, token.span))
     }
     fn qualified_ident(&mut self) -> Result<(String, Span), Diagnostic> {
         let (mut path, mut span) = self.ident()?;
@@ -85,7 +88,7 @@ impl Parser {
         } else { String::new() };
         let mut imports = Vec::new();
         while self.eat(&K::Import) {
-            let start = self.tokens[self.pos - 1].span;
+            let start = self.tokens[self.position.index - 1].span;
             let (mut path, _) = self.ident()?;
             let mut wildcard = false;
             while self.eat(&K::Dot) {
@@ -224,7 +227,7 @@ impl Parser {
                 continue;
             }
             if matches!(&self.current().kind, K::Ident(n) if n == &name)
-                && self.tokens.get(self.pos + 1).is_some_and(|t| t.kind == K::LParen) {
+                && self.tokens.get(self.position.index + 1).is_some_and(|t| t.kind == K::LParen) {
                 self.bump();
                 if is_static || readonly { return Err(Diagnostic::new(member_start, "a constructor cannot be static or readonly")); }
                 if constructor.is_some() { return Err(Diagnostic::new(member_start, "one constructor is allowed per class; overloading is not supported")); }
@@ -297,7 +300,7 @@ impl Parser {
         if self.at(&K::ShiftRight) {
             let token = self.bump();
             let middle = token.span.start + 1;
-            self.pending_greater = Some(Token { kind: K::Greater, span: Span::new(middle, token.span.end) });
+            self.position.pending_greater = Some(Token { kind: K::Greater, span: Span::new(middle, token.span.end) });
             return Ok(Token { kind: K::Greater, span: Span::new(token.span.start, middle) });
         }
         self.expect(&K::Greater, "`>`")
@@ -320,7 +323,7 @@ impl Parser {
                      is_static: bool, readonly: bool, start: Span) -> Result<Function, Diagnostic> {
         let params = self.parameters()?;
         let body = self.block()?;
-        let end = self.tokens[self.pos - 1].span;
+        let end = self.tokens[self.position.index - 1].span;
         Ok(Function { name, span: start.join(end), return_type, params, body, visibility, is_static, readonly,
             qualified_name: String::new(), unit: 0 })
     }
@@ -341,11 +344,9 @@ impl Parser {
             K::Byte | K::CharType | K::Int | K::Long | K::Double | K::UnitType |
             K::Boolean | K::StringType | K::Borrow) { return true; }
         if !matches!(self.current().kind, K::Ident(_)) { return false; }
-        let save = self.pos;
-        let saved_greater = self.pending_greater.clone();
+        let saved = self.position.clone();
         let result = self.ty(false).is_ok() && matches!(self.current().kind, K::Ident(_));
-        self.pos = save;
-        self.pending_greater = saved_greater;
+        self.position = saved;
         result
     }
     fn statement_inner(&mut self) -> Result<Stmt, Diagnostic> {
@@ -418,7 +419,7 @@ impl Parser {
                         self.expect(&K::RParen, "`)`")?;
                     }
                     let body = self.block()?;
-                    let arm_end = self.tokens[self.pos - 1].span;
+                    let arm_end = self.tokens[self.position.index - 1].span;
                     arms.push(MatchArm { variant, bindings, body, span: arm_start.join(arm_end) });
                     self.eat(&K::Comma);
                 }
@@ -450,15 +451,15 @@ impl Parser {
                 result
             }
         };
-        let end = self.tokens[self.pos - 1].span;
+        let end = self.tokens[self.position.index - 1].span;
         Ok(Stmt { kind, span: start.join(end) })
     }
     fn expression(&mut self) -> Result<Expr, Diagnostic> { self.binary(1) }
     fn cast_ahead(&self) -> bool {
-        let target = self.tokens.get(self.pos + 1).map(|token| &token.kind);
+        let target = self.tokens.get(self.position.index + 1).map(|token| &token.kind);
         self.at(&K::LParen)
             && matches!(target, Some(K::Byte | K::CharType | K::Int | K::Long | K::Double))
-            && self.tokens.get(self.pos + 2).is_some_and(|token| token.kind == K::RParen)
+            && self.tokens.get(self.position.index + 2).is_some_and(|token| token.kind == K::RParen)
     }
     fn binary(&mut self, min_precedence: u8) -> Result<Expr, Diagnostic> {
         self.nested(|p| {
@@ -496,8 +497,8 @@ impl Parser {
             };
             if let Some(op) = op {
                 let start = p.bump().span;
-                if op == UnaryOp::Neg {
-                    if let K::Number(text) = &p.current().kind {
+                if op == UnaryOp::Neg
+                    && let K::Number(text) = &p.current().kind {
                         if let Some(magnitude) = text.strip_suffix('L') {
                             if magnitude.parse::<u64>() == Ok(9_223_372_036_854_775_808) {
                                 let end = p.bump().span;
@@ -508,7 +509,6 @@ impl Parser {
                             return make_expr(ExprKind::Int(i32::MIN), start.join(end));
                         }
                     }
-                }
                 let expr = p.unary()?;
                 let span = start.join(expr.span);
                 make_expr(ExprKind::Unary { op, expr: Box::new(expr) }, span)
@@ -550,7 +550,7 @@ impl Parser {
         Ok(expr)
     }
     fn generic_static_call(&mut self, first: &str, start: Span) -> Result<Option<Expr>, Diagnostic> {
-        let mut probe = self.pos;
+        let mut probe = self.position.index;
         while self.tokens.get(probe).is_some_and(|token| token.kind == K::Dot)
             && self.tokens.get(probe + 1).is_some_and(|token| matches!(token.kind, K::Ident(_))) {
             probe += 2;
@@ -558,7 +558,7 @@ impl Parser {
         if !self.tokens.get(probe).is_some_and(|token| token.kind == K::Less) {
             return Ok(None);
         }
-        let saved = (self.pos, self.pending_greater.clone());
+        let saved = self.position.clone();
         let mut class = first.to_owned();
         while self.eat(&K::Dot) {
             let (part, _) = self.ident()?;
@@ -571,8 +571,7 @@ impl Parser {
             self.at(&K::LParen).then_some((type_args, name))
         });
         let Some((type_args, name)) = candidate else {
-            self.pos = saved.0;
-            self.pending_greater = saved.1;
+            self.position = saved;
             return Ok(None);
         };
         let (args, end) = self.arguments()?;
@@ -608,7 +607,7 @@ impl Parser {
                 } else { ExprKind::Var(name) }
             }
             K::LParen => {
-                if self.eat(&K::RParen) { return make_expr(ExprKind::Unit, span.join(self.tokens[self.pos - 1].span)); }
+                if self.eat(&K::RParen) { return make_expr(ExprKind::Unit, span.join(self.tokens[self.position.index - 1].span)); }
                 let mut expr = self.expression()?;
                 expr.span = span.join(self.expect(&K::RParen, "`)`")?.span);
                 return Ok(expr);

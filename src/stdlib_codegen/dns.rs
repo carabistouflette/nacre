@@ -163,8 +163,8 @@ pub(super) fn implementation(
             ("@SOCKET_ADDRESS_RESOLVE@", format!("ncr_fn_{}", socket_resolve.id)),
         ]);
     }
-    if let Some(socket_resolve) = socket_resolve {
-        if transport_needs_resolver && resolve_function.is_none() {
+    if let Some(socket_resolve) = socket_resolve
+        && transport_needs_resolver && resolve_function.is_none() {
             assert_eq!(socket_resolve.params.len(), 3,
                 "SocketAddress.resolve accepts host, port, and passive mode");
             substitutions.extend([
@@ -180,9 +180,8 @@ pub(super) fn implementation(
                 ("@SOCKET_ADDRESS_RESOLVE@", format!("ncr_fn_{}", socket_resolve.id)),
             ]);
         }
-    }
-    if let Some(reverse) = reverse_function {
-        if !substitutions.iter().any(|(key, _)| *key == "@TEXT_RESULT_TYPE@") {
+    if let Some(reverse) = reverse_function
+        && !substitutions.iter().any(|(key, _)| *key == "@TEXT_RESULT_TYPE@") {
             let (result, ok, err) = text_result_layout(program, reverse, text);
             substitutions.extend([
                 ("@TEXT_RESULT_TYPE@", ctype(program, reverse.return_type).into_owned()),
@@ -191,9 +190,8 @@ pub(super) fn implementation(
                 ("@TEXT_RESULT_ERR_TAG@", err.to_string()),
             ]);
         }
-    }
-    if let Some(hostname) = hostname_function {
-        if !substitutions.iter().any(|(key, _)| *key == "@TEXT_RESULT_TYPE@") {
+    if let Some(hostname) = hostname_function
+        && !substitutions.iter().any(|(key, _)| *key == "@TEXT_RESULT_TYPE@") {
             let (result, ok, err) = text_result_layout(program, hostname, text);
             substitutions.extend([
                 ("@TEXT_RESULT_TYPE@", ctype(program, hostname.return_type).into_owned()),
@@ -202,7 +200,6 @@ pub(super) fn implementation(
                 ("@TEXT_RESULT_ERR_TAG@", err.to_string()),
             ]);
         }
-    }
 
     body = replace_placeholders(body, &substitutions);
     body = replace_method_ids(body, program, None);

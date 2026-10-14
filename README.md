@@ -5,8 +5,8 @@ in Rust, with Java-like source syntax and the pipeline **Nacre → C11 →
 GCC/Clang → native executable**. It has no JVM, garbage collector, or implicit
 reference counting/cloning. Ordinary owners are affine; only named mutex and
 channel handles are shared explicitly. Cargo package/CLI: `nacre` **0.12.0**;
-source files: `.ncr`; project marker: `nacre.json`. Rust **1.74** is the
-declared minimum.
+source files: `.ncr`; project marker: `nacre.json`. Rust **1.99** is the
+declared minimum; compiler and extension crates use edition **2024**.
 
 Nacre includes module/import name resolution within a whole source bundle,
 generic classes/interfaces/enums, built-in collections, receiver-bound borrowing,
@@ -22,6 +22,10 @@ and [standard-library reference](docs/STDLIB.md).
 Linux is the supported native target. Install Rust/Cargo and GCC or Clang with
 C11 headers and a linker; Windows and macOS are not supported targets.
 
+`rust-toolchain.toml` pins stable Rust 1.99.0 with Clippy and rustfmt. Development
+and CI runtimes are pinned in `.node-version` (26.12.0), `.npm-version` (12.2.0),
+and `.python-version` (3.15.0). Nightly is used only for sanitizer-backed fuzzing.
+
 Optional native library APIs require their development headers and libraries:
 OpenSSL 3 for `Crypto`, zlib for `Compression`/`Checksums`, GMP for arbitrary
 precision, ICU for Unicode/calendar APIs, PCRE2 10.30+ 8-bit for Regex,
@@ -31,7 +35,7 @@ requested by their emitted native templates; ordinary programs retain their
 existing C11/POSIX dependencies. The compiler accepts only a fixed dependency
 allowlist, never linker flags supplied by Nacre source.
 
-ZIP uses pinned libarchive 3.8.9 with a private ZIP-boundary correction. It
+ZIP uses pinned libarchive 3.8.10 with a private ZIP-boundary correction. It
 validates length-delimited filenames before conversion, preserves ZIP path names,
 checks EOCD comment extent and exact directory byte/entry counts, and searches the
 complete legal 65,557-byte EOCD range, including zero-entry archives at offset zero.
@@ -303,7 +307,7 @@ Install `editors/vscode/nacre-0.7.0.vsix`; configure `nacre.serverPath` if the
 compiler is not on PATH. The `Nacre: Restart Language Server` command supports
 recovery after failed startup and serializes lifecycle operations.
 
-For Zed, install Python `tree-sitter==0.25.2`, then run:
+For Zed, install Python `tree-sitter==0.26.0`, then run:
 
 ```sh
 python3 editors/zed/check.py
@@ -322,7 +326,7 @@ versions, project roots, and diagnostic clearing after fixes/close.
 ```sh
 cargo test --offline --locked --features fuzzing --no-fail-fast
 cargo clippy --offline --locked --all-targets --features fuzzing -- -D warnings
-cargo +1.74.0 check --offline --locked --all-targets
+cargo check --offline --locked --all-targets
 python3 scripts/validate.py --cc gcc --cc clang --sanitizers --llvm
 python3 scripts/fuzz_smoke.py
 ```

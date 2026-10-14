@@ -24,9 +24,9 @@ impl zed::Extension for NacreExtension {
             Some(binary) => (
                 binary.path,
                 binary.arguments.unwrap_or_else(|| vec!["lsp".to_string()]),
-                binary.env.unwrap_or_default().into_iter().collect(),
+                binary.env.unwrap_or_default(),
             ),
-            None => (None, vec!["lsp".to_string()], Vec::new()),
+            None => (None, vec!["lsp".to_string()], Default::default()),
         };
         let command = configured_path
             .or_else(|| worktree.which("nacre"))
@@ -34,7 +34,7 @@ impl zed::Extension for NacreExtension {
                 "Nacre compiler `nacre` was not found on PATH; install it or configure lsp.nacre.binary.path.".to_string()
             })?;
 
-        Ok(zed::Command { command, args, env })
+        Ok(zed::Command::new(command).args(args).envs(env))
     }
 }
 

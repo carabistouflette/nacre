@@ -27,11 +27,9 @@ fn rewrite_borrowed_type_parameter_to_value(
 ) {
     if let Some(param) = methods.iter_mut().find(|method| method.name == method_name)
         .and_then(|method| method.params.get_mut(index))
-    {
-        if matches!(&param.ty, Type::Borrow { name, args, .. } if name == parameter_name && args.is_empty()) {
+        && matches!(&param.ty, Type::Borrow { name, args, .. } if name == parameter_name && args.is_empty()) {
             param.ty = Type::Named(parameter_name.to_owned());
         }
-    }
 }
 
 fn rewrite_borrowed_t_parameter_to_value(methods: &mut [a::Function], method_name: &str, index: usize) {
@@ -39,11 +37,10 @@ fn rewrite_borrowed_t_parameter_to_value(methods: &mut [a::Function], method_nam
 }
 
 fn rewrite_borrowed_return_to_value(methods: &mut [a::Function], method_name: &str, parameter_name: &str) {
-    if let Some(method) = methods.iter_mut().find(|method| method.name == method_name) {
-        if matches!(&method.return_type, Type::Borrow { name, args, .. } if name == parameter_name && args.is_empty()) {
+    if let Some(method) = methods.iter_mut().find(|method| method.name == method_name)
+        && matches!(&method.return_type, Type::Borrow { name, args, .. } if name == parameter_name && args.is_empty()) {
             method.return_type = Type::Named(parameter_name.to_owned());
         }
-    }
 }
 
 fn prune_indexed_collection_methods(class: &mut a::Class, element: &Type) {
@@ -198,11 +195,10 @@ impl Expander {
                     if matches!(arg, Type::Void | Type::Borrow { .. }) {
                         return Err(Diagnostic::new(span, "[E4103] a generic argument cannot be `void` or a borrow; write `borrow Box<T>` at the use site"));
                     }
-                    if let Type::Named(n) = arg {
-                        if !self.definitions.contains_key(n) && !self.requested.contains(n) {
+                    if let Type::Named(n) = arg
+                        && !self.definitions.contains_key(n) && !self.requested.contains(n) {
                             return Err(Diagnostic::new(span, format!("[E4103] type argument `{n}` is unknown")));
                         }
-                    }
                 }
                 let key = format!("{}<{}>", name, args.iter().map(display_type).collect::<Vec<_>>().join(","));
                 if key.len() > MAX_TYPE_NAME {
@@ -222,11 +218,9 @@ impl Expander {
                 Ok(Type::Named(key))
             }
             Type::Borrow { name, args, mutable } => {
-                if args.is_empty() && !mutable {
-                    if let Some(bound) = env.get(name) {
-                        if bound.is_copy() { return Ok(bound.clone()); }
-                    }
-                }
+                if args.is_empty() && !mutable
+                    && let Some(bound) = env.get(name)
+                        && bound.is_copy() { return Ok(bound.clone()); }
                 let base = if args.is_empty() { Type::Named(name.clone()) }
                     else { Type::Applied { name: name.clone(), args: args.clone() } };
                 let base = self.ty(&base, env, span, depth + 1)?;
@@ -536,12 +530,11 @@ impl Expander {
             E::Field { base, .. } => self.expression(base, env)?,
             E::Call { args, .. } => { for arg in args { self.expression(arg, env)?; } }
             E::MethodCall { receiver, args, .. } => {
-                if let E::Var(name) = &receiver.kind {
-                    if self.definitions.get(name).is_some_and(|class|
+                if let E::Var(name) = &receiver.kind
+                    && self.definitions.get(name).is_some_and(|class|
                         class.native.is_some() && class.type_params.is_empty()) {
                         self.ty(&Type::Named(name.clone()), env, receiver.span, 0)?;
                     }
-                }
                 self.expression(receiver, env)?;
                 for arg in args { self.expression(arg, env)?; }
             }

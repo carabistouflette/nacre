@@ -238,7 +238,7 @@ def rust_build(
 ) -> None:
     command = [
         rustc,
-        "--edition=2021",
+        "--edition=2024",
         "-C",
         "opt-level=3",
         "-C",
@@ -627,7 +627,7 @@ def main() -> int:
         ],
         "nacre_allocation_run_extra": ["-DNACRE_MEMORY_STATS"],
         "rust_reference": [
-            "--edition=2021",
+            "--edition=2024",
             "-C opt-level=3",
             "-C overflow-checks=yes",
             "-C target-cpu=generic",

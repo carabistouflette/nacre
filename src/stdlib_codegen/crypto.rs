@@ -40,12 +40,11 @@ fn expression_uses_method(
         E::New { args, .. } | E::Variant { args, .. } =>
             args.iter().any(|argument| expression_uses_method(program, argument, matches_method)),
         E::Call { target, args, .. } => {
-            if let t::CallTarget::Function(id) = target {
-                if program.functions.get(*id).and_then(|function| function.native)
+            if let t::CallTarget::Function(id) = target
+                && program.functions.get(*id).and_then(|function| function.native)
                     .is_some_and(matches_method) {
                     return true;
                 }
-            }
             args.iter().any(|argument| expression_uses_method(program, argument, matches_method))
         }
         E::MapSlot { index, .. } => expression_uses_method(program, index, matches_method),

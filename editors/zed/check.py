@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Smoke the exact parser and queries used by Zed (requires tree-sitter==0.25.2)."""
+"""Smoke the exact parser and queries used by Zed (requires tree-sitter==0.26.0)."""
 import ctypes
 import os
 from pathlib import Path

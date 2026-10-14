@@ -4,7 +4,39 @@ Nacre is experimental pre-1.0. Executed checks are evidence, not a safety certif
 [validation-0.12.0.json](validation-0.12.0.json) records portable local results.
 Historical reports retain their original release labels; they are not current-release proof.
 
-## Portable standard-library integration
+## Stable-toolchain modernization (2026-10-14)
+
+Current compiler, fuzz, and Zed manifests use Rust 2024 and require Rust 1.99.
+The repository pins stable Rust 1.99.0, Node 26.12.0, npm 12.2.0, and Python
+3.15.0. Older Rust 1.74 records below describe historical executions, not the
+current supported minimum.
+
+| Exercised path | Observed result |
+| --- | --- |
+| Stable Rust, GCC, locked/offline suite | 1,259 passed across 62 suites; two ordinarily ignored LLVM tests |
+| Stable Rust, Clang, locked/offline suite with `fuzzing` | 1,264 passed across 62 suites; two ordinarily ignored LLVM tests |
+| Clippy, all targets, `fuzzing`, `-D warnings` | Passed without lint suppressions |
+| Explicit ignored LLVM tests | Both passed |
+| Corrected libarchive 3.8.10 | Release hash verified; complete private patch applied with zero fuzz; prefix-local build succeeded |
+| Actual generic-factory CLI under ASan/UBSan | Expected output retained; three native allocations, three frees, zero live allocations |
+| Actual C/LLVM validator, GCC and Clang | 414 successful native runs, 14 expected fatal exits, 418 invalid-source rejections, 11 LLVM round trips; sanitizers enabled for successful native runs |
+| Real nightly fuzz campaigns | 31,602 frontend inputs and 2,673,327 LSP framing inputs; 31 seconds each, no observed crash or timeout |
+| Rust 2024 benchmark reference | Four collection kernels passed paired checksum checks at smoke dimensions, including separate allocator-counter runs |
+| Tree-sitter CLI 0.27.1 | All six corpus parses passed |
+| VS Code package | Compiler-backed syntax/snippet validation and VSIX packaging passed on pinned Node/npm |
+| Zed, Python Tree-sitter 0.26.0 | 63 examples parsed without errors; all four queries executed |
+| Zed SDK 0.7.0 | Locked WASI build and prepared release build passed |
+| Generated V2–V5 fixtures | All synchronization checks passed |
+
+Parser allocation profiling used the production parser and the same generic-factory
+input, excluding lexing: 1,000 parses fell from 116,000 to 96,000 allocator calls
+after eliminating the redundant identifier clone. Before/after generated C was
+byte-identical. This is a focused allocation result, not a general throughput claim.
+Desktop editor hosts were unavailable; parser/query, compiler-backed syntax,
+package, and WASI checks do not constitute GUI acceptance.
+
+
+## Historical portable standard-library integration
 
 The integrated standard-library feature branch was exercised on Linux with
 GCC and Clang. Each full locked/offline suite with `fuzzing` passed **1,255 tests
@@ -107,7 +139,7 @@ From the repository root, with dependencies cached for offline commands:
 ```sh
 cargo test --offline --locked --features fuzzing --no-fail-fast
 cargo clippy --offline --locked --all-targets --features fuzzing -- -D warnings
-cargo +1.74.0 test --offline --locked
+cargo check --offline --locked --all-targets --features fuzzing
 python3 scripts/validate.py --cc gcc --cc clang --sanitizers --llvm
 NACRE_CC=clang cargo test --offline --locked --test features_v4_tools -- --ignored
 python3 examples/run.py
@@ -119,7 +151,7 @@ python3 editors/zed/prepare.py
 cargo build --manifest-path editors/zed/dist/nacre/Cargo.toml --target wasm32-wasip2 --release --locked
 ```
 
-`editors/zed/check.py` requires `tree-sitter==0.25.2`. Source inventory counts
+`editors/zed/check.py` requires `tree-sitter==0.26.0`. Source inventory counts
 are not executed tests. Template checks alone are not generated-program proof.
 Compiler input limits are resource bounds, not a sandbox guarantee.
 
@@ -186,7 +218,8 @@ JVM compatibility, dynamic loading, sandbox or Windows/macOS certification is im
 
 ## Private publication
 
-CI covers Rust 1.74/stable × GCC/Clang, editor packages/locked WASI, and real
-nightly fuzzing. Publish curated portable sources only: no credentials, personal
+CI uses the pinned stable Rust toolchain with GCC and Clang, pinned editor
+runtimes and locked WASI builds, and real nightly fuzzing. Publish curated portable
+sources only: no credentials, personal
 paths, process IDs, app profiles, caches or session-local artifact links. Preserve
 the original MIT attribution. Git history is not rewritten.

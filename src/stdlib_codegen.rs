@@ -299,11 +299,10 @@ pub fn implementations(program: &t::Program) -> String {
         }
     }
     for class in &program.classes {
-        if let Some(native) = class.native {
-            if !matches!(native, C::Map { .. } | C::OrderedMap(_, _) | C::ByteBuffer) {
+        if let Some(native) = class.native
+            && !matches!(native, C::Map { .. } | C::OrderedMap(_, _) | C::ByteBuffer) {
                 append_body(program, &mut out, class, native);
             }
-        }
     }
     out.push_str(&compression::implementation(program));
     out.push_str(&big_numbers::implementation(program));
