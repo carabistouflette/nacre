@@ -37,7 +37,7 @@ impl Diagnostic {
         self.help = Some(message.into()); self
     }
     pub fn render(&self, filename: &str, source: &str) -> String {
-        let mut result = self.render_primary(filename, source);
+        let mut result = self.render_primary(filename, source, self.span);
         for (span, note) in &self.notes {
             let (line, column) = line_column(source, span.start);
             result.push_str(&format!("  = note: {note} ({filename}:{line}:{column})\n"));
@@ -45,14 +45,15 @@ impl Diagnostic {
         if let Some(help) = &self.help { result.push_str(&format!("  = help: {help}\n")); }
         result
     }
-    fn render_primary(&self, filename: &str, source: &str) -> String {
-        let start = char_boundary(source, self.span.start);
+    /// Render the primary error using a source-local span; notes and help are separate.
+    pub(crate) fn render_primary(&self, filename: &str, source: &str, span: Span) -> String {
+        let start = char_boundary(source, span.start);
         let (line, column) = line_column(source, start);
         let line_start = source[..start].rfind('\n').map_or(0, |i| i + 1);
         let line_end = source[start..].find('\n').map_or(source.len(), |i| start + i);
         let text = &source[line_start..line_end];
         let indent = source[line_start..start].chars().map(|c| if c == '\t' { 4 } else { 1 }).sum::<usize>();
-        let end = char_boundary(source, self.span.end.min(line_end)).max(start);
+        let end = char_boundary(source, span.end.min(line_end)).max(start);
         let width = source[start..end].chars().count().clamp(1, 60);
         format!("{filename}:{line}:{column}: error: {}\n  |\n{line:>3} | {}\n  | {}{}\n",
             self.message, text.replace('\t', "    "), " ".repeat(indent), "^".repeat(width))

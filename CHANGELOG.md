@@ -3,6 +3,10 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- CLI diagnostic rendering reuses the source bundle's authoritative file-local
+  span mapping and borrows the original message instead of copying a diagnostic.
+  LSP and CLI share UTF-8 boundary normalization while retaining their respective
+  UTF-16 and Unicode-scalar column conventions. Cross-file notes are unchanged.
 - Top-level C emission formats literal bytes, prototypes, and the entry point
   directly into its output buffer instead of allocating intermediate strings.
   Static UTF-8 literal contents and generated C remain unchanged.

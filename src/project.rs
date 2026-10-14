@@ -119,16 +119,14 @@ impl SourceBundle {
             .unwrap_or_else(|| self.units.last().expect("nonempty source bundle"))
     }
     pub fn render(&self, diagnostic: &Diagnostic) -> String {
-        let unit = self.unit_at(diagnostic.span.start);
-        let source = &self.text[unit.start..unit.end];
-        let span = Span::new(diagnostic.span.start.saturating_sub(unit.start),
-                             diagnostic.span.end.saturating_sub(unit.start));
-        let mut result = Diagnostic::new(span, &diagnostic.message)
-            .render(&unit.path.to_string_lossy(), source);
+        let location = self.locate(diagnostic.span);
+        let mut result = diagnostic.render_primary(
+            &location.path.to_string_lossy(), location.source, location.span,
+        );
         for (span, note) in &diagnostic.notes {
-            let unit = self.unit_at(span.start);
-            let (line, column) = line_column(&self.text[unit.start..unit.end], span.start.saturating_sub(unit.start));
-            result.push_str(&format!("  = note: {note} ({}:{line}:{column})\n", unit.path.display()));
+            let location = self.locate(*span);
+            let (line, column) = line_column(location.source, location.span.start);
+            result.push_str(&format!("  = note: {note} ({}:{line}:{column})\n", location.path.display()));
         }
         if let Some(help) = &diagnostic.help { result.push_str(&format!("  = help: {help}\n")); }
         result

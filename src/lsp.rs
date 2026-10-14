@@ -8,7 +8,7 @@ use std::path::{Component, Path, PathBuf};
 
 use serde_json::{json, Value};
 
-use crate::diagnostic::{Diagnostic, Span};
+use crate::diagnostic::{char_boundary, Diagnostic, Span};
 use crate::project::{SourceBundle, MAX_FILES, MAX_SOURCE_BYTES};
 
 mod framing;
@@ -637,8 +637,8 @@ struct LocalSpan<'a> {
 fn map_span<'a>(span: Span, bundle: &'a SourceBundle, files: &'a [SourceFile]) -> Option<LocalSpan<'a>> {
     let location = bundle.locate(span);
     let file = files.iter().find(|file| file.path.as_path() == location.path)?;
-    let start = floor_char_boundary(location.source, location.span.start);
-    let end = floor_char_boundary(location.source, location.span.end.min(location.source.len())).max(start);
+    let start = char_boundary(location.source, location.span.start);
+    let end = char_boundary(location.source, location.span.end).max(start);
     Some(LocalSpan { file, source: location.source, start, end })
 }
 
@@ -652,20 +652,13 @@ fn range_json(source: &str, start: usize, end: usize) -> Value {
 }
 
 fn offset_position(source: &str, offset: usize) -> (usize, usize, usize) {
-    let offset = floor_char_boundary(source, offset);
+    let offset = char_boundary(source, offset);
     let prefix = &source[..offset];
     let line = prefix.bytes().filter(|byte| *byte == b'\n').count();
     let line_start = prefix.rfind('\n').map_or(0, |index| index + 1);
     let line_prefix = prefix[line_start..].strip_suffix('\r').unwrap_or(&prefix[line_start..]);
     (line, line_prefix.encode_utf16().count(), offset)
 }
-
-fn floor_char_boundary(source: &str, offset: usize) -> usize {
-    let mut offset = offset.min(source.len());
-    while !source.is_char_boundary(offset) { offset -= 1; }
-    offset
-}
-
 
 fn uri_to_path(uri: &str) -> Option<PathBuf> {
     if uri.len() > MAX_URI_BYTES { return None; }

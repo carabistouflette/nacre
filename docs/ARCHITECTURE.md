@@ -299,6 +299,12 @@ separate compilation, package linking, or external dependency resolution.
 Primary diagnostics and their notes map back to the original file. Multi-file C
 output includes a compact table of file starting lines for runtime errors.
 `emit-flow` and `emit-borrows` currently retain lines from the combined text.
+`SourceBundle::locate` owns bundle-to-file span translation for both CLI errors
+and LSP diagnostics. CLI rendering borrows the original diagnostic message and
+passes its translated span to the primary renderer rather than constructing a
+second diagnostic. UTF-8 byte-boundary normalization belongs to `diagnostic`;
+CLI Unicode-scalar columns and LSP UTF-16 columns remain separate presentation
+contracts.
 
 `doctor` exercises the real compiler pipeline rather than a fixed fixture.
 `init` creates a new local project skeleton. `--sanitize` passes memory-safety

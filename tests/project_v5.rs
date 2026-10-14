@@ -111,11 +111,20 @@ fn single_file_keeps_the_original_runtime_format() {
     assert!(String::from_utf8_lossy(&result.stderr).contains("[1:"));
 }
 #[test]
-fn diagnostic_offsets_at_every_utf8_byte_are_safe() {
+fn diagnostic_offsets_round_down_to_utf8_boundaries() {
     let text="é🐈\nbonjour";
-    for i in 0..=text.len()+2 {
-        let d=Diagnostic::new(Span::new(i,i+1),"test");
-        assert!(d.render("unicode",text).contains("test"));let _=line_column(text,i);
+    let positions = [
+        (1,1), (1,1), (1,2), (1,2), (1,2), (1,2), (1,3),
+        (2,1), (2,2), (2,3), (2,4), (2,5), (2,6), (2,7),
+        (2,8), (2,8), (2,8),
+    ];
+    for (offset, expected) in positions.into_iter().enumerate() {
+        assert_eq!(line_column(text, offset), expected);
+        let rendered = Diagnostic::new(Span::new(offset, offset+1), "test").render("unicode", text);
+        let mut location = rendered.split(':').skip(1);
+        let line = location.next().unwrap().parse::<usize>().unwrap();
+        let column = location.next().unwrap().parse::<usize>().unwrap();
+        assert_eq!((line, column), expected);
     }
 }
 #[test]
