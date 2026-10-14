@@ -3,6 +3,10 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- XSLT text output recognizes the supported Unicode UTF-8 labels independently
+  of the installed libxml alias table, without global alias registration, extra
+  dependencies, or transcoding already-UTF-8 bytes. Alias matching is case-insensitive
+  and exact; malformed suffixes remain unsupported encodings.
 - Recursive expression emission keeps binary-operation formatting in a separate
   non-recursive helper. Long arithmetic and short-circuit chains compile on the
   default Rust test-thread stack, preserving operand order and conditional evaluation.

@@ -361,6 +361,21 @@ static ncr_obj_@TRANSFORM_RESULT@ @XSLT_STYLESHEET_TRANSFORM@(ncr_obj_@STYLESHEE
         .data.v@TRANSFORM_OK_TAG@.f0 = owner };
 }
 
+/* Keep UTF-8 label classification independent of libxml's installed alias table. */
+static bool ncr_xslt_utf8_encoding(const char *encoding) {
+    xmlCharEncoding parsed = xmlParseCharEncoding(encoding);
+    if (parsed != XML_CHAR_ENCODING_ERROR) { return parsed == XML_CHAR_ENCODING_UTF8; }
+    static const char *const aliases[] = {
+        "unicode-1-1-utf-8", "unicode11utf8", "unicode20utf8", "x-unicode20utf8"
+    };
+    for (size_t i = 0; i < sizeof(aliases) / sizeof(aliases[0]); ++i) {
+        if (xmlStrcasecmp((const xmlChar *)encoding, (const xmlChar *)aliases[i]) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 static ncr_obj_@BYTES_RESULT@ @XSLT_STYLESHEET_TRANSFORM_BYTES@(ncr_obj_@STYLESHEET_ID@ *ncr_self,
         ncr_obj_@DOCUMENT_ID@ *ncr_v_@BYTES_DOCUMENT_ID@,
         size_t ncr_line, size_t ncr_column) {
@@ -385,7 +400,7 @@ static ncr_obj_@BYTES_RESULT@ @XSLT_STYLESHEET_TRANSFORM_BYTES@(ncr_obj_@STYLESH
         (const char *)stylesheet->encoding;
     const char *alias = xmlGetEncodingAlias(encoding);
     if (alias != NULL) { encoding = alias; }
-    if (xmlParseCharEncoding(encoding) != XML_CHAR_ENCODING_UTF8) {
+    if (!ncr_xslt_utf8_encoding(encoding)) {
         bool supported;
         if (xmlStrEqual(stylesheet->method, (const xmlChar *)"text")) {
             text_output.encoder = iconv_open(encoding, "UTF-8");

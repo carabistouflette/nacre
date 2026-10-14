@@ -968,7 +968,18 @@ Result<Unit, Text> exercise() {
     Text input = new Text("<root/>");
     XmlDocument document = XmlDocument.parse(input)?;
     ByteBuffer alias = render(document, "text", "unicode-1-1-utf-8", "<xsl:text>é</xsl:text>")?;
-    println(alias.length() == 2L && alias.get(0L) == (byte)195 && alias.get(1L) == (byte)169);
+    ByteBuffer unicode11 = render(document, "text", "unicode11utf8", "<xsl:text>é</xsl:text>")?;
+    ByteBuffer unicode20 = render(document, "text", "unicode20utf8", "<xsl:text>é</xsl:text>")?;
+    ByteBuffer prefixed = render(document, "text", "X-Unicode20UTF8", "<xsl:text>é</xsl:text>")?;
+    boolean malformedAlias = false;
+    match (render(document, "text", "unicode-1-1-utf-8-extra", "<xsl:text>é</xsl:text>")) {
+        Ok(bytes) {} Err(error) { malformedAlias = true; }
+    }
+    println(alias.length() == 2L && alias.get(0L) == (byte)195 && alias.get(1L) == (byte)169
+        && unicode11.length() == 2L && unicode11.get(0L) == (byte)195 && unicode11.get(1L) == (byte)169
+        && unicode20.length() == 2L && unicode20.get(0L) == (byte)195 && unicode20.get(1L) == (byte)169
+        && prefixed.length() == 2L && prefixed.get(0L) == (byte)195 && prefixed.get(1L) == (byte)169
+        && malformedAlias);
     boolean unrepresentable = false;
     match (render(document, "text", "US-ASCII", "<xsl:text>é</xsl:text>")) {
         Ok(bytes) {} Err(error) { unrepresentable = true; }

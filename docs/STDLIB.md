@@ -810,7 +810,10 @@ HTML, and text, including empty text output. Bytes are written directly into the
 returned `ByteBuffer`, without an intermediate full-output copy. Unsupported
 encodings and serialization failures return `Err`. Text-method conversion is strict:
 unrepresentable characters return `Err`, never XML numeric references or replacement
-bytes. UTF-8 aliases are accepted; stateful encodings flush their final shift sequence.
+bytes. UTF-8 aliases are accepted independently of the installed libxml alias table,
+including case-insensitive `unicode-1-1-utf-8`, `unicode11utf8`, `unicode20utf8`, and
+`x-unicode20utf8`; labels with extra suffixes are not aliases. Stateful encodings
+flush their final shift sequence.
 XML and HTML retain their numeric-reference encoding behavior. Unsupported output
 methods return `Err` even for empty results. Use `Charset.decode` with a supported
 declared encoding when owned text is needed. Both result forms outlive the source

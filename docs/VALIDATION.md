@@ -51,6 +51,16 @@ The post-fix locked/offline all-targets suites with `fuzzing` each passed 1,255
 tests across 61 executable suites (two ignored): Rust 1.74.0/Clang and stable/GCC,
 both with `RUST_MIN_STACK` unset. Strict Clippy and the package/checksum audits passed.
 
+The subsequent remote XSLT failure was reproduced with an isolated libxml 2.9.14 /
+libxslt 1.1.39 build: the required `unicode-1-1-utf-8` label returned an unsupported
+encoding error before the fix. After version-independent UTF-8 label classification,
+the expanded actual CLI consumer passed GCC and Clang sanitizers against both that
+legacy stack and libxml 2.15.4 / libxslt 1.1.45: seven `true` results and balanced
+70-allocation/70-free counters, including mixed-case aliases, rejected malformed
+suffixes, strict ASCII rejection, and the final ISO-2022-JP shift sequence.
+The complete 13-case XML suite also passed Rust 1.74.0/GCC and stable/Clang against
+the real isolated legacy libraries. No system libraries were replaced.
+
 ## Historical 0.12.0 baseline
 
 The following measurements predate the portable standard-library integration.
