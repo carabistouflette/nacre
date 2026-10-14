@@ -1,7 +1,7 @@
 use crate::codegen::ctype;
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
 use super::{
-    support::{marker, replace_method_ids, replace_placeholders, result_id, variant},
+    support::{marker, option_tags, replace_method_ids, replace_placeholders},
 };
 
 fn native_method(program: &t::Program, receiver: usize, method: M) -> Option<&t::Function> {
@@ -28,22 +28,12 @@ pub(super) fn drop_fields(_program: &t::Program, class: C, _class_id: usize) -> 
     }
 }
 
-fn option_tags(program: &t::Program, function: &t::Function) -> (usize, usize) {
-    let option = result_id(function);
-    let (none_tag, none) = variant(program, option, "None");
-    let (some_tag, some) = variant(program, option, "Some");
-    assert!(none.fields.is_empty(), "Option None has no payload");
-    assert!(matches!(some.fields.as_slice(), [Type::Long]),
-        "BitSet.nextSetBit returns Option<long>");
-    (none_tag, some_tag)
-}
-
 pub(super) fn implementation(program: &t::Program, class_id: usize) -> String {
     let constructor = required_method(program, class_id, M::BitSetNew);
     assert_eq!(constructor.params.first().map(|(_, ty)| *ty), Some(Type::Long),
         "BitSet constructor takes the initial bit count");
     let next = required_method(program, class_id, M::BitSetNextSetBit);
-    let (none_tag, some_tag) = option_tags(program, next);
+    let (none_tag, some_tag) = option_tags(program, next, Type::Long);
     let clone = required_method(program, class_id, M::BitSetClone);
     assert_eq!(clone.return_type, Type::Object(class_id), "BitSet.clone returns a new BitSet");
     let and = required_method(program, class_id, M::BitSetAnd);

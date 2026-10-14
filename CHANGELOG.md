@@ -3,6 +3,13 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Native generator value cleanup, cleared-value expressions, and specialized
+  Option payload contracts live in shared support. Collection/iterator/ordering
+  emitters no longer form a sibling dependency cycle; generated C and affine
+  transfer/cleanup behavior remain unchanged.
+- Native dependency markers, implicit requirements, headers, and ordered linker
+  arguments derive from one fixed catalog. Standalone SSL and XSLT markers retain
+  their crypto/XML prerequisites; malformed or unknown markers cannot add flags.
 - XSLT text output recognizes the supported Unicode UTF-8 labels independently
   of the installed libxml alias table, without global alias registration, extra
   dependencies, or transcoding already-UTF-8 bytes. Alias matching is case-insensitive

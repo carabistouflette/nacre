@@ -1,6 +1,6 @@
 use crate::codegen::ctype;
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
-use super::{iterators, support::{marker, result_id, variant}};
+use super::{iterators, support::{drop_element, marker, option_tags, zero}};
 pub(super) fn list_fields(program: &t::Program, element: Type) -> String {
     format!("    {} *items;\n    int32_t length;\n    int32_t capacity;\n", ctype(program, element))
 }
@@ -24,9 +24,6 @@ const MAP_HASH_FINALIZER: &str = concat!(
 );
 fn is_text_key(program: &t::Program, key: Type) -> bool {
     matches!(key, Type::Object(id) if matches!(program.classes[id].native, Some(C::Text)))
-}
-fn drop_map_key(key: Type, expression: &str) -> String {
-    drop_element(key, expression)
 }
 pub(super) fn map_entry_definition(program: &t::Program, class_id: usize, key: Type, value: Type) -> String {
     format!(
@@ -72,12 +69,6 @@ pub(super) fn map_slot_expression(
         stored
     }
 }
-pub(super) fn drop_element(ty: Type, expression: &str) -> String {
-    match ty {
-        Type::Object(id) => format!("ncr_drop_{id}({expression});"),
-        _ => "/* Copy value: no destructor. */".to_owned(),
-    }
-}
 pub(super) fn drop_list_fields(element: Type) -> String {
     format!(
         "    while (p->length > 0) {{\n        --p->length;\n        {}\n    }}\n    ncr_deallocate(p->items);\n",
@@ -93,25 +84,12 @@ pub(super) fn drop_hash_table_fields(key: Type, value: Type, hasher: Option<Type
     };
     format!(
         "    for (int32_t index = 0; index < {table}.capacity; ++index) {{\n        if ({entries}[index].occupied) {{\n            {}\n            {}\n        }}\n    }}\n    ncr_deallocate({entries});\n    {drop_policy}\n",
-        drop_map_key(key, &format!("{entries}[index].key")),
+        drop_element(key, &format!("{entries}[index].key")),
         drop_element(value, &format!("{entries}[index].value")))
 }
 
 pub(super) fn drop_map_fields(key: Type, value: Type, hasher: Option<Type>) -> String {
     drop_hash_table_fields(key, value, hasher, "p->table")
-}
-pub(super) fn zero(program: &t::Program, ty: Type) -> String {
-    match ty {
-        Type::Byte | Type::Unit => "UINT8_C(0)".to_owned(),
-        Type::Char => "UINT32_C(0)".to_owned(),
-        Type::Long => "INT64_C(0)".to_owned(),
-        Type::Double => "0.0".to_owned(),
-        Type::Int => "INT32_C(0)".to_owned(),
-        Type::Boolean => "false".to_owned(),
-        Type::String => "(ncr_string){NULL, 0}".to_owned(),
-        Type::Object(id) => crate::codegen::object_zero(program, id),
-        _ => unreachable!("checked native collection value"),
-    }
 }
 fn borrowed_list_method(program: &t::Program, function: &t::Function, element_class: usize) -> String {
     let Type::Borrow { class, .. } = function.return_type else {
@@ -154,16 +132,6 @@ fn list_native_function(
         function.receiver == Some(list_class)
             && function.native.is_some_and(&is)
     })
-}
-
-fn option_tags(program: &t::Program, function: &t::Function, element: Type) -> (usize, usize) {
-    let option = result_id(function);
-    let (none_tag, none) = variant(program, option, "None");
-    let (some_tag, some) = variant(program, option, "Some");
-    assert!(none.fields.is_empty(), "Option None must have no payload");
-    assert!(matches!(some.fields.as_slice(), [field] if *field == element),
-        "Option Some payload must match its collection value type");
-    (none_tag, some_tag)
 }
 
 fn try_get_list_method(program: &t::Program, list_class: usize, element: Type) -> String {
@@ -437,8 +405,8 @@ pub(super) fn map_implementation(
         .replace("@KEY_QUERY@", &key_query)
         .replace("@KEY_EQUAL@", &key_equal)
         .replace("@STORE_HASH@", "table->entries[target].hash = hash;")
-        .replace("@DROP_DUPLICATE_KEY@", &drop_map_key(key, "key"))
-        .replace("@DROP_KEY_AT_INDEX@", &drop_map_key(key, "table->entries[index].key"))
+        .replace("@DROP_DUPLICATE_KEY@", &drop_element(key, "key"))
+        .replace("@DROP_KEY_AT_INDEX@", &drop_element(key, "table->entries[index].key"))
         .replace("@ELEMENT@", &ctype(program, value))
         .replace("@DROP_VALUE@", &drop_element(value, "table->entries[index].value"))
         .replace("@OPTION_TYPE@", &ctype(program, put.return_type))

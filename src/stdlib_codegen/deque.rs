@@ -1,6 +1,6 @@
 use crate::codegen::ctype;
 use crate::ir::{self as t, NativeMethod as M, Type};
-use super::{collections, iterators, support::{marker, result_id, variant_id}};
+use super::{iterators, support::{drop_element, marker, option_tags, zero}};
 
 fn native_method(program: &t::Program, receiver: usize, is: impl Fn(M) -> bool) -> Option<&t::Function> {
     program.functions.iter().find(|function| {
@@ -22,7 +22,7 @@ pub(super) fn fields(program: &t::Program, element: Type) -> String {
 pub(super) fn drop_fields(element: Type) -> String {
     format!(
         "    for (int32_t logical = 0; logical < p->length; ++logical) {{\n        int32_t until_end = p->capacity - p->head;\n        int32_t physical = logical < until_end ? p->head + logical : logical - until_end;\n        {}\n    }}\n    ncr_deallocate(p->items);\n",
-        collections::drop_element(element, "p->items[physical]"),
+        drop_element(element, "p->items[physical]"),
     )
 }
 
@@ -72,13 +72,13 @@ fn try_get_method(program: &t::Program, class_id: usize, element: Type) -> Strin
         return String::new();
     };
     assert!(element.is_copy(), "Deque.tryGet is pruned for affine elements");
-    let option_class = result_id(function);
+    let (none_tag, some_tag) = option_tags(program, function, element);
     include_str!("../../stdlib/deque_try_get.c.in")
         .replace("@OPTION_TYPE@", &ctype(program, function.return_type))
         .replace("@DEQUE_TRY_GET@", marker(function.native.expect("native Deque.tryGet")))
         .replace("@INDEX_TYPE@", &ctype(program, function.params[0].1))
-        .replace("@NONE_TAG@", &variant_id(program, option_class, "None").to_string())
-        .replace("@SOME_TAG@", &variant_id(program, option_class, "Some").to_string())
+        .replace("@NONE_TAG@", &none_tag.to_string())
+        .replace("@SOME_TAG@", &some_tag.to_string())
         .replace("@ELEMENT@", &ctype(program, element))
 }
 
@@ -96,17 +96,13 @@ fn try_pop_method(program: &t::Program, class_id: usize, element: Type, front: b
     let Some(function) = native_method(program, class_id, is_try) else { return String::new(); };
     let pop = required_method(program, class_id, is_pop);
     assert_eq!(pop.return_type, element, "Deque strict pop transfers one element");
-    let option_class = result_id(function);
-    let variants = program.classes[option_class].variants.as_ref().expect("Deque Option specialization");
-    let some = variants.iter().find(|variant| variant.name == "Some").expect("Option Some variant");
-    assert!(matches!(some.fields.as_slice(), [field] if *field == element),
-        "Deque tryPop Option payload matches its element");
+    let (none_tag, some_tag) = option_tags(program, function, element);
     include_str!("../../stdlib/deque_try_pop.c.in")
         .replace("@OPTION_TYPE@", &ctype(program, function.return_type))
         .replace("@METHOD@", marker(function.native.expect("native Deque tryPop")))
         .replace("@STRICT_CALL@", &format!("ncr_fn_{}", pop.id))
-        .replace("@NONE_TAG@", &variant_id(program, option_class, "None").to_string())
-        .replace("@SOME_TAG@", &variant_id(program, option_class, "Some").to_string())
+        .replace("@NONE_TAG@", &none_tag.to_string())
+        .replace("@SOME_TAG@", &some_tag.to_string())
 }
 
 fn try_pop_methods(program: &t::Program, class_id: usize, element: Type) -> String {
@@ -122,8 +118,8 @@ pub(super) fn implementation(program: &t::Program, class_id: usize, element: Typ
     let try_pops = try_pop_methods(program, class_id, element);
     let mut body = include_str!("../../stdlib/deque.c.in")
         .replace("@ELEMENT@", &ctype(program, element))
-        .replace("@ZERO@", &collections::zero(program, element))
-        .replace("@DROP_AT_INDEX@", &collections::drop_element(element, "p->items[physical]"))
+        .replace("@ZERO@", &zero(program, element))
+        .replace("@DROP_AT_INDEX@", &drop_element(element, "p->items[physical]"))
         .replace("@GET_METHOD@", &get)
         .replace("@BORROWED_GETTERS@", &borrowed)
         .replace("@TRY_GET_METHOD@", &try_get)

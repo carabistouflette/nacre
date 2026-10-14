@@ -1,6 +1,6 @@
 use crate::codegen::ctype;
 use crate::ir::{self as t, NativeMethod as M, Type};
-use super::{collections, support::{result_id, variant_id}};
+use super::support::{result_id, variant_id, zero};
 
 fn native_method(program: &t::Program, class_id: usize, is: impl Fn(M) -> bool) -> Option<&t::Function> {
     program.functions.iter().find(|function| {
@@ -180,7 +180,7 @@ fn comparator_sort_helpers(program: &t::Program, class_id: usize, element: Type)
             "    @ELEMENT@ value = *left;\n    *left = *right;\n    *right = value;\n"
         } else {
             "    @ELEMENT@ value = *left;\n    *left = @ZERO@;\n    *left = *right;\n    *right = @ZERO@;\n    *right = value;\n    value = @ZERO@;\n"
-        }.replace("@ZERO@", &collections::zero(program, element)).as_str(),
+        }.replace("@ZERO@", &zero(program, element)).as_str(),
     );
     helper + &heap
 }

@@ -157,6 +157,19 @@ conditional short-circuit evaluation rather than evaluating both operands
 early. Fatal runtime exits do not unwind owners; memory counters therefore do
 not guarantee cleanup after a fatal failure.
 
+### Native generator contracts
+
+`stdlib_codegen/support.rs` owns shared stored-value destruction, cleared-value
+expressions, and the specialized `Option<T>` layout contract. Collection,
+iterator, and ordering emitters depend on this shared support rather than on a
+concrete collection emitter for generic value operations. `None` must have no
+payload; `Some` must contain exactly the expected element type. Variant tags
+continue to come from the specialized IR, not hard-coded indices.
+
+Concrete emitters retain their own storage layout and native method bodies.
+They may compose another emitter's actual implementation, such as drain
+callbacks, without giving it responsibility for unrelated value contracts.
+
 ## Native code and LLVM
 
 `run` and `build` emit C and invoke GCC or Clang at `-O0`, `-O1`, `-O2`
@@ -166,6 +179,13 @@ code. Measured comparisons and their limits belong in [VALIDATION.md](VALIDATION
 `emit-llvm` invokes Clang with `-S -emit-llvm` on the same generated C. Nacre has no
 direct LLVM backend written in Rust. `NACRE_CLANG` selects that Clang executable;
 `NACRE_CC`/`CC` separately select the compiler used by `run` and `build`.
+
+`native.rs` has one fixed catalog for exact standalone dependency markers,
+trusted header/linker arguments, dependency closure, and stable linker order.
+SSL requires crypto; XSLT requires XML and its include path. Repeated markers
+coalesce without allocating a dependency collection. Unknown or incomplete
+markers cannot supply compiler arguments. Native compilation and LLVM emission
+consume the same header requirements.
 
 ## Inspection and tests
 

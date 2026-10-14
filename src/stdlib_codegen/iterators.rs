@@ -1,6 +1,6 @@
 use crate::codegen::ctype;
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
-use super::{collections, ordering, support::{result_id, variant}};
+use super::{ordering, support::{drop_element, option_tags, zero}};
 
 fn class_method(program: &t::Program, class_id: usize, method: M) -> Option<&t::Function> {
     let class_prefix = format!("{}.", program.classes[class_id].name);
@@ -21,16 +21,6 @@ fn method_slot(program: &t::Program, interface: usize, suffix: &str) -> usize {
         .collect();
     assert_eq!(methods.len(), 1, "iterator callback interface declares one {suffix} method");
     methods[0].virtual_slot.expect("interface method has a vtable slot")
-}
-
-fn option_tags(program: &t::Program, function: &t::Function, element: Type) -> (usize, usize) {
-    let option = result_id(function);
-    let (none_tag, none) = variant(program, option, "None");
-    let (some_tag, some) = variant(program, option, "Some");
-    assert!(none.fields.is_empty(), "Option None has no payload");
-    assert!(matches!(some.fields.as_slice(), [field] if *field == element),
-        "iterator Option payload matches its element type");
-    (none_tag, some_tag)
 }
 
 fn implemented_iterator(program: &t::Program, concrete: usize, element: Type) -> usize {
@@ -85,7 +75,7 @@ pub(super) fn drop_fields(class: C) -> String {
     match class {
         C::ListIterator(element) => format!(
             "    if (p->ncr_drop_fn != NULL) {{\n        p->ncr_drop_fn(p->state, p->cursor, p->length);\n    }} else {{\n        for (int32_t index = p->cursor; index < p->length; ++index) {{\n            int32_t physical = index;\n            if (p->capacity > 0) {{\n                int32_t until_end = p->capacity - p->head;\n                physical = index < until_end ? p->head + index : index - until_end;\n            }}\n            {}\n        }}\n        ncr_deallocate(p->items);\n    }}\n",
-            collections::drop_element(element, "p->items[physical]"),
+            drop_element(element, "p->items[physical]"),
         ),
         C::MapIterator(_, _) | C::FilterIterator(_) | C::TakeIterator(_) |
         C::SkipIterator(_) | C::Iterators(_) => String::new(),
@@ -179,11 +169,11 @@ fn list_iterator_next(program: &t::Program, class_id: usize, element: Type) -> S
     format!(
         "static {} ncr_fn_{}(ncr_obj_{} *p, size_t line, size_t column) {{\n    (void)line; (void)column;\n    if (p->ncr_next_fn != NULL) {{\n        {} value = {};\n        bool available = false;\n        p->ncr_next_fn(p->state, &p->cursor, p->length, &value, &available);\n        if (!available) {{ return ({}){{ .tag = {} }}; }}\n        return ({}){{ .tag = {}, .data.v{}.f0 = value }};\n    }}\n    if (p->cursor >= p->length) {{ return ({}){{ .tag = {} }}; }}\n    int32_t index = p->cursor++;\n    int32_t physical = index;\n    if (p->capacity > 0) {{\n        int32_t until_end = p->capacity - p->head;\n        physical = index < until_end ? p->head + index : index - until_end;\n    }}\n    {} value = p->items[physical];\n    p->items[physical] = {};\n    return ({}){{ .tag = {}, .data.v{}.f0 = value }};\n}}\n",
         ctype(program, function.return_type), function.id, class_id,
-        ctype(program, element), collections::zero(program, element),
+        ctype(program, element), zero(program, element),
         ctype(program, function.return_type), none_tag,
         ctype(program, function.return_type), some_tag, some_tag,
         ctype(program, function.return_type), none_tag,
-        ctype(program, element), collections::zero(program, element),
+        ctype(program, element), zero(program, element),
         ctype(program, function.return_type), some_tag, some_tag,
     )
 }
@@ -256,7 +246,7 @@ fn filter_iterator(program: &t::Program, class_id: usize, element: Type) -> Stri
         some_tag = input_some,
         test_slot = test_slot,
         borrowed = borrowed,
-        drop_value = collections::drop_element(element, "value"),
+        drop_value = drop_element(element, "value"),
     )
 }
 
@@ -298,7 +288,7 @@ fn take_or_skip_iterator(program: &t::Program, class_id: usize, element: Type, t
             input_none = input_none,
             element = ctype(program, element),
             input_some = input_some,
-            drop_value = collections::drop_element(element, "value"),
+            drop_value = drop_element(element, "value"),
         )
     };
     format!(

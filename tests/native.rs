@@ -120,3 +120,45 @@ fn generated_file_is_removed_on_drop() {
     drop(program);
     assert!(!path.exists());
 }
+
+#[test]
+fn standalone_native_markers_include_required_libraries_and_headers() {
+    for source in [
+        r#"/* nacre-link: ssl */
+#include <openssl/ssl.h>
+#include <openssl/evp.h>
+#include <stdio.h>
+int main(void) {
+    SSL_CTX *context = SSL_CTX_new(TLS_method());
+    if (context == NULL) { return 1; }
+    printf("%d\n", EVP_MD_size(EVP_sha256()));
+    SSL_CTX_free(context);
+    return 0;
+}"#,
+        r#"/* nacre-link: xslt */
+#include <libxslt/xsltInternals.h>
+#include <stdio.h>
+int main(void) {
+    xmlDocPtr document = xmlNewDoc(BAD_CAST "1.0");
+    xsltStylesheetPtr stylesheet = xsltNewStylesheet();
+    if (document == NULL || stylesheet == NULL) { return 1; }
+    printf("%d\n", xmlStrlen(BAD_CAST "abcdefghijklmnopqrstuvwxyz123456"));
+    xmlFreeDoc(document);
+    xsltFreeStylesheet(stylesheet);
+    return 0;
+}"#,
+    ] {
+        let output = native::compile_c(source).unwrap().output().unwrap();
+        assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+        assert_eq!(output.stdout, b"32\n");
+    }
+}
+
+#[test]
+fn native_dependency_comments_must_be_complete_standalone_markers() {
+    let source = r#"#include <libxslt/xsltInternals.h>
+int main(void) { xsltFreeStylesheet(xsltNewStylesheet()); return 0; }"#;
+    for marker in ["/* nacre-link: xslt */ trailing", "/* nacre-link: unknown */"] {
+        assert!(native::compile_c(&format!("{marker}\n{source}")).is_err());
+    }
+}

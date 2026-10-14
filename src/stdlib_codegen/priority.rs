@@ -1,8 +1,8 @@
 use crate::codegen::ctype;
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
 use super::{
-    collections, iterators, ordering, ordered,
-    support::{marker, replace_method_ids, replace_placeholders, result_id, variant},
+    iterators, ordering, ordered,
+    support::{drop_element, marker, option_tags, replace_method_ids, replace_placeholders, zero},
 };
 
 pub(super) fn fields(program: &t::Program, class: C, _class_id: usize) -> String {
@@ -21,7 +21,7 @@ pub(super) fn drop_fields(class: C) -> String {
     };
     format!(
         "    while (p->length > 0) {{\n        --p->length;\n        {}\n    }}\n    ncr_deallocate(p->items);\n",
-        collections::drop_element(element, "p->items[p->length]"),
+        drop_element(element, "p->items[p->length]"),
     )
 }
 
@@ -34,17 +34,6 @@ fn native_method(program: &t::Program, receiver: usize, method: M) -> Option<&t:
 fn required_method(program: &t::Program, receiver: usize, method: M) -> &t::Function {
     native_method(program, receiver, method).expect("compiler-owned PriorityQueue method is present")
 }
-
-fn option_tags(program: &t::Program, function: &t::Function, element: Type) -> (usize, usize) {
-    let option = result_id(function);
-    let (none_tag, none) = variant(program, option, "None");
-    let (some_tag, some) = variant(program, option, "Some");
-    assert!(none.fields.is_empty(), "Option None has no payload");
-    assert!(matches!(some.fields.as_slice(), [field] if *field == element),
-        "Option Some payload matches PriorityQueue<T>");
-    (none_tag, some_tag)
-}
-
 
 fn peek_method(program: &t::Program, class_id: usize, element: Type) -> String {
     let Some(function) = native_method(program, class_id, M::PriorityQueuePeek) else {
@@ -128,7 +117,7 @@ pub(super) fn implementation(program: &t::Program, class_id: usize, element: Typ
         ("@COMPARATOR_ID@", comparator.to_string()),
         ("@COMPARATOR_FIELD@", ordered::comparator_field_name()),
         ("@ELEMENT@", ctype(program, element)),
-        ("@ZERO@", collections::zero(program, element)),
+        ("@ZERO@", zero(program, element)),
         ("@RIGHT_CHILD_KEY@", right),
         ("@LEFT_CHILD_KEY@", left),
         ("@CHILD_KEY@", child),
@@ -142,7 +131,7 @@ pub(super) fn implementation(program: &t::Program, class_id: usize, element: Typ
         ("@GET_REF_METHOD@", borrowed_getter(program, class_id, element)),
         ("@TRY_PEEK_METHOD@", try_peek_method(program, class_id, element)),
         ("@VALUE_AT_METHOD@", value_at_method(program, class_id, element)),
-        ("@DROP_AT_INDEX@", collections::drop_element(element, "p->items[index]")),
+        ("@DROP_AT_INDEX@", drop_element(element, "p->items[index]")),
     ];
     body = replace_placeholders(body, &substitutions);
     body = replace_method_ids(body, program, Some(class_id));

@@ -1,8 +1,8 @@
 use crate::codegen::ctype;
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
 use super::{
-    collections, iterators, ordering,
-    support::{marker, replace_method_ids, replace_placeholders, result_id, variant},
+    iterators, ordering,
+    support::{drop_element, marker, option_tags, replace_method_ids, replace_placeholders, zero},
 };
 
 fn native_method(program: &t::Program, receiver: usize, method: M) -> Option<&t::Function> {
@@ -33,17 +33,6 @@ pub(super) fn comparator_field_name() -> String {
 fn comparator_info(program: &t::Program, class_id: usize, method: M) -> (usize, usize, Type) {
     ordering::comparator_info(program, required_method(program, class_id, method))
 }
-
-fn option_tags(program: &t::Program, function: &t::Function, element: Type) -> (usize, usize) {
-    let option = result_id(function);
-    let (none_tag, none) = variant(program, option, "None");
-    let (some_tag, some) = variant(program, option, "Some");
-    assert!(none.fields.is_empty(), "Option None has no payload");
-    assert!(matches!(some.fields.as_slice(), [field] if *field == element),
-        "Option Some payload matches the ordered collection result");
-    (none_tag, some_tag)
-}
-
 
 fn ordered_map_for_set(program: &t::Program, key: Type) -> &t::Class {
     program.classes.iter().find(|class| {
@@ -82,18 +71,18 @@ fn ordered_map_drain(
     };
     let next_body = format!(
         "    {entry} *entries = raw;\n    if (*cursor >= length) {{ *available = false; return; }}\n    int32_t index = (*cursor)++;\n    *value = entries[index].{field};\n    entries[index].{field} = {};\n    *available = true;",
-        collections::zero(program, element),
+        zero(program, element),
     );
     let drop_body = format!(
         "    {entry} *entries = raw;\n    for (int32_t index = cursor; index < length; ++index) {{\n        {}\n    }}\n    ncr_deallocate(entries);",
-        collections::drop_element(element, &format!("entries[index].{field}")),
+        drop_element(element, &format!("entries[index].{field}")),
     );
     // Erased entry halves must not carry thread-affine owners into a sendable iterator.
     let discard_unused = if matches!(unused, Type::Object(_)) {
         let slot = format!("p->table.items[index].{unused_field}");
         format!(
             "for (int32_t index = 0; index < p->table.length; ++index) {{\n    {}\n    {slot} = {};\n}}\n",
-            collections::drop_element(unused, &slot), collections::zero(program, unused),
+            drop_element(unused, &slot), zero(program, unused),
         )
     } else {
         String::new()
@@ -123,11 +112,11 @@ fn ordered_set_drain(program: &t::Program, class_id: usize, key: Type) -> String
     let entry = format!("struct ncr_ordered_entry_{}", map.id);
     let next_body = format!(
         "    {entry} *entries = raw;\n    if (*cursor >= length) {{ *available = false; return; }}\n    int32_t index = (*cursor)++;\n    *value = entries[index].key;\n    entries[index].key = {};\n    entries[index].value = UINT8_C(0);\n    *available = true;",
-        collections::zero(program, key),
+        zero(program, key),
     );
     let drop_body = format!(
         "    {entry} *entries = raw;\n    for (int32_t index = cursor; index < length; ++index) {{\n        {}\n    }}\n    ncr_deallocate(entries);",
-        collections::drop_element(key, "entries[index].key"),
+        drop_element(key, "entries[index].key"),
     );
     let callbacks = iterators::drain_callbacks(program, drain.id, key, &next_body, &drop_body);
     let setup = format!(
@@ -180,8 +169,8 @@ fn ordered_storage_drop(key: Type, value: Type) -> String {
     let items = "p->table.items[index]";
     format!(
         "    while (p->table.length > 0) {{\n        int32_t index = --p->table.length;\n        {}\n        {}\n    }}\n    ncr_deallocate(p->table.items);\n",
-        collections::drop_element(key, &format!("{items}.key")),
-        collections::drop_element(value, &format!("{items}.value")),
+        drop_element(key, &format!("{items}.key")),
+        drop_element(value, &format!("{items}.value")),
     )
 }
 
@@ -235,11 +224,11 @@ pub(super) fn map_implementation(program: &t::Program, class_id: usize, key: Typ
     let entry_middle = ordering::borrow_storage(program, key, "table->items[middle].key");
     let entry_lower = ordering::borrow_storage(program, key, "table->items[low].key");
     let key_query = ordering::borrow_storage(program, key, "key");
-    let drop_key_field = collections::drop_element(key, "table->items[index].key");
-    let drop_value_field = collections::drop_element(value, "table->items[index].value");
-    let drop_key_at = collections::drop_element(key, "p->table.items[index].key");
-    let zero_key = collections::zero(program, key);
-    let zero_value = collections::zero(program, value);
+    let drop_key_field = drop_element(key, "table->items[index].key");
+    let drop_value_field = drop_element(value, "table->items[index].value");
+    let drop_key_at = drop_element(key, "p->table.items[index].key");
+    let zero_key = zero(program, key);
+    let zero_value = zero(program, value);
     let key_at = required_method(program, class_id, M::OrderedMapKeyAt);
     let value_at = required_method(program, class_id, M::OrderedMapValueAt);
     let key_at_expr = ordering::borrow_storage(program, key, "p->table.items[index].key");
@@ -263,7 +252,7 @@ pub(super) fn map_implementation(program: &t::Program, class_id: usize, key: Typ
         ("@OPTION_TYPE@", ctype(program, put.return_type)),
         ("@NONE_TAG@", none_tag.to_string()),
         ("@SOME_TAG@", some_tag.to_string()),
-        ("@DROP_DUPLICATE_KEY@", collections::drop_element(key, "key")),
+        ("@DROP_DUPLICATE_KEY@", drop_element(key, "key")),
         ("@DROP_KEY_AT_INDEX@", drop_key_at),
         ("@QUERY_TYPE@", query_type_c),
         ("@TRY_GET_METHOD@", try_get),
@@ -298,7 +287,7 @@ pub(super) fn set_implementation(program: &t::Program, class_id: usize, key: Typ
         ("@KEY_TYPE@", ctype(program, key)),
         ("@QUERY_TYPE@", ctype(program, query)),
         ("@KEY_QUERY_EXPR@", key_query),
-        ("@DROP_DUPLICATE_KEY@", collections::drop_element(key, "key")),
+        ("@DROP_DUPLICATE_KEY@", drop_element(key, "key")),
         ("@ORDERED_SET_KEY_AT@", ordered_set_key_at(program, class_id, key)),
     ]);
     body = replace_method_ids(body, program, Some(class_id));

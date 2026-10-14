@@ -603,6 +603,44 @@ pub(super) fn variant<'a>(program: &'a t::Program, class: usize, name: &str) -> 
 pub(super) fn variant_id(program: &t::Program, class: usize, name: &str) -> usize {
     variant(program, class, name).0
 }
+
+pub(super) fn drop_element(ty: Type, expression: &str) -> String {
+    match ty {
+        Type::Object(id) => format!("ncr_drop_{id}({expression});"),
+        _ => "/* Copy value: no destructor. */".to_owned(),
+    }
+}
+
+pub(super) fn zero(program: &t::Program, ty: Type) -> String {
+    match ty {
+        Type::Byte | Type::Unit => "UINT8_C(0)".to_owned(),
+        Type::Char => "UINT32_C(0)".to_owned(),
+        Type::Long => "INT64_C(0)".to_owned(),
+        Type::Double => "0.0".to_owned(),
+        Type::Int => "INT32_C(0)".to_owned(),
+        Type::Boolean => "false".to_owned(),
+        Type::String => "(ncr_string){NULL, 0}".to_owned(),
+        Type::Object(id) => crate::codegen::object_zero(program, id),
+        _ => unreachable!("checked native collection value"),
+    }
+}
+
+pub(super) fn option_tags(
+    program: &t::Program,
+    function: &t::Function,
+    element: Type,
+) -> (usize, usize) {
+    let option = result_id(function);
+    let (none_tag, none) = variant(program, option, "None");
+    let (some_tag, some) = variant(program, option, "Some");
+    assert!(none.fields.is_empty(), "Option None must have no payload");
+    assert!(
+        matches!(some.fields.as_slice(), [field] if *field == element),
+        "Option Some payload must be exactly its element type",
+    );
+    (none_tag, some_tag)
+}
+
 pub(super) fn text_class(program: &t::Program) -> Option<usize> {
     program.classes.iter().find(|class| matches!(class.native, Some(C::Text))).map(|class| class.id)
 }
