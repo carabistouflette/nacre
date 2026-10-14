@@ -108,6 +108,10 @@ caller-side result loans survive call cleanup. Local views remain non-exportable
 
 ## C representation
 
+`c_repr.rs` maps nominal IR values to C types and cleared object representations.
+Both the expression backend and native emitters depend on this IR-only leaf;
+native emitters do not import representation helpers from the backend orchestrator.
+
 A concrete class is a pointer to its nominal structure. An owned or borrowed
 interface is a two-pointer structure passed by value:
 
@@ -165,6 +169,9 @@ iterator, and ordering emitters depend on this shared support rather than on a
 concrete collection emitter for generic value operations. `None` must have no
 payload; `Some` must contain exactly the expected element type. Variant tags
 continue to come from the specialized IR, not hard-coded indices.
+Iterator callback and adapter lookups inspect existing IR lists by reference,
+without building temporary collections. Callback selection still requires exactly
+one matching method, and an adapter still requires exactly one iterator interface.
 
 Concrete emitters retain their own storage layout and native method bodies.
 They may compose another emitter's actual implementation, such as drain

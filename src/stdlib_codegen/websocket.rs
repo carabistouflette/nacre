@@ -1,4 +1,4 @@
-use crate::codegen::ctype;
+use crate::c_repr::ctype;
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
 use super::support::{
     has_placeholder, native_class_id, native_class_id_if, native_function_if,

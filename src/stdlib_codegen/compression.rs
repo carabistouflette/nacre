@@ -76,8 +76,8 @@ fn compression_body(program: &t::Program, buffer: usize) -> String {
 
     replace_placeholders(template_section(TEMPLATE,
         "/* COMPRESSION_GROUP compression */", "/* COMPRESSION_GROUP_END compression */").to_owned(), &[
-        ("@BUFFER_TYPE@", crate::codegen::ctype(program, Type::Object(buffer))),
-        ("@RESULT_TYPE@", crate::codegen::ctype(program, deflate.return_type)),
+        ("@BUFFER_TYPE@", crate::c_repr::ctype(program, Type::Object(buffer))),
+        ("@RESULT_TYPE@", crate::c_repr::ctype(program, deflate.return_type)),
         ("@RESULT_CLASS@", result.to_string()),
         ("@RESULT_OK_TAG@", ok_tag.to_string()),
         ("@BUFFER_CLASS_ID@", buffer.to_string()),
@@ -101,7 +101,7 @@ fn checksum_body(program: &t::Program, buffer: usize) -> String {
     assert_eq!(adler32.return_type, Type::Long);
     replace_placeholders(template_section(TEMPLATE,
         "/* COMPRESSION_GROUP checksums */", "/* COMPRESSION_GROUP_END checksums */").to_owned(), &[
-        ("@BUFFER_TYPE@", crate::codegen::ctype(program, Type::Object(buffer))),
+        ("@BUFFER_TYPE@", crate::c_repr::ctype(program, Type::Object(buffer))),
         ("@CRC32_INPUT_ID@", input_id(crc32, buffer).to_string()),
         ("@ADLER32_INPUT_ID@", input_id(adler32, buffer).to_string()),
     ])

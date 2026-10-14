@@ -1,6 +1,6 @@
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
 use super::support::{result_id, variant_id};
-use crate::codegen::ctype;
+use crate::c_repr::ctype;
 
 fn matching_class(program: &t::Program, predicate: impl Fn(C) -> Option<Type>, value: Type) -> usize {
     program.classes.iter().find_map(|class| {

@@ -7,6 +7,7 @@
 #![forbid(unsafe_code)]
 mod ast;
 mod checker;
+mod c_repr;
 mod codegen;
 pub mod diagnostic;
 mod ir;

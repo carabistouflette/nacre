@@ -620,7 +620,7 @@ pub(super) fn zero(program: &t::Program, ty: Type) -> String {
         Type::Int => "INT32_C(0)".to_owned(),
         Type::Boolean => "false".to_owned(),
         Type::String => "(ncr_string){NULL, 0}".to_owned(),
-        Type::Object(id) => crate::codegen::object_zero(program, id),
+        Type::Object(id) => crate::c_repr::object_zero(program, id),
         _ => unreachable!("checked native collection value"),
     }
 }

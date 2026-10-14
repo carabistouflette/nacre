@@ -1,4 +1,4 @@
-use crate::codegen::ctype;
+use crate::c_repr::ctype;
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
 use super::{collections, iterators, support::{drop_element, result_id, variant_id, zero}};
 

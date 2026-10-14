@@ -310,7 +310,7 @@ fn files_implementation(
         ("@TEXT_TAKE_BYTES@", format!("ncr_text_take_bytes_{text}")),
         ("@PATH_FROM_TEXT@", format!("ncr_fn_{}", path_from_text.id)),
         ("@LIST_ID@", list_class.to_string()),
-        ("@LIST_TYPE@", crate::codegen::ctype(program, Type::Object(*list_class))),
+        ("@LIST_TYPE@", crate::c_repr::ctype(program, Type::Object(*list_class))),
         ("@LIST_NEW@", format!("ncr_fn_{}", list_new.id)),
         ("@LIST_ADD@", format!("ncr_fn_{}", list_add.id)),
     ];

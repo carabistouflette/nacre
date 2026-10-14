@@ -3,6 +3,7 @@
 use crate::ast::{BinaryOp as B, UnaryOp};
 use crate::diagnostic::line_column;
 use crate::ir::{self as t, CallTarget, Place, PlaceKind, Type};
+use crate::c_repr::{ctype, object_zero};
 
 const TEMPORARY_PREFIX: &str = "ncr_t_";
 
@@ -32,31 +33,6 @@ pub fn generate(program: &t::Program, source: &str) -> String {
     out.push_str(&emitter.output);
     out.push_str(&format!("int main(int argc, char **argv) {{\n    ncr_argc = argc;\n    ncr_argv = argv;\n    ncr_fn_{}();\n    ncr_memory_report();\n    return 0;\n}}\n", program.main));
     out
-}
-pub(crate) fn ctype(program: &t::Program, ty: Type) -> String {
-    match ty {
-        Type::Byte => "uint8_t".to_owned(), Type::Char => "uint32_t".to_owned(),
-        Type::Int => "int32_t".to_owned(), Type::Long => "int64_t".to_owned(),
-        Type::Double => "double".to_owned(), Type::Unit => "uint8_t".to_owned(),
-        Type::Boolean => "bool".to_owned(), Type::String => "ncr_string".to_owned(),
-        Type::Void => "void".to_owned(),
-        Type::Object(id) => {
-            if program.classes[id].variants.is_some() || program.classes[id].is_interface {
-                format!("ncr_obj_{id}")
-            } else {
-                format!("ncr_obj_{id} *")
-            }
-        }
-        Type::Borrow { class: id, .. } => {
-            if program.classes[id].is_interface { format!("ncr_obj_{id}") }
-            else { format!("ncr_obj_{id} *") }
-        }
-    }
-}
-pub(crate) fn object_zero(program: &t::Program, id: usize) -> String {
-    if program.classes[id].is_interface { format!("(ncr_obj_{id}){{NULL, NULL}}") }
-    else if program.classes[id].variants.is_some() { format!("(ncr_obj_{id}){{.tag = -1}}") }
-    else { "NULL".to_owned() }
 }
 fn cast_expression(target: Type, source: Type, value: &str, line: usize, column: usize) -> String {
     let checked = |name: &str| format!("{name}({value}, {line}, {column})");

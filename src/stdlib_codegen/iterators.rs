@@ -1,12 +1,13 @@
-use crate::codegen::ctype;
+use crate::c_repr::ctype;
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
 use super::{ordering, support::{drop_element, option_tags, zero}};
 
 fn class_method(program: &t::Program, class_id: usize, method: M) -> Option<&t::Function> {
-    let class_prefix = format!("{}.", program.classes[class_id].name);
+    let class_name = program.classes[class_id].name.as_str();
     program.functions.iter().find(|function| {
         function.native == Some(method)
-            && (function.receiver == Some(class_id) || function.name.starts_with(&class_prefix))
+            && (function.receiver == Some(class_id)
+                || function.name.strip_prefix(class_name).is_some_and(|suffix| suffix.starts_with('.')))
     })
 }
 
@@ -15,19 +16,18 @@ fn required_method(program: &t::Program, class_id: usize, method: M) -> &t::Func
 }
 
 fn method_slot(program: &t::Program, interface: usize, suffix: &str) -> usize {
-    let methods: Vec<_> = program.classes[interface].interface_methods.iter()
+    let mut methods = program.classes[interface].interface_methods.iter()
         .map(|id| &program.functions[*id])
-        .filter(|method| method.name.ends_with(suffix))
-        .collect();
-    assert_eq!(methods.len(), 1, "iterator callback interface declares one {suffix} method");
-    methods[0].virtual_slot.expect("interface method has a vtable slot")
+        .filter(|method| method.name.ends_with(suffix));
+    let method = methods.next().expect("iterator callback interface declares one method");
+    assert!(methods.next().is_none(), "iterator callback interface declares one {suffix} method");
+    method.virtual_slot.expect("interface method has a vtable slot")
 }
 
 fn implemented_iterator(program: &t::Program, concrete: usize, element: Type) -> usize {
-    let interfaces = program.classes[concrete].implementations.iter()
-        .map(|(interface, _)| *interface).collect::<Vec<_>>();
+    let interfaces = &program.classes[concrete].implementations;
     assert_eq!(interfaces.len(), 1, "iterator adapter implements one Iterator<T>");
-    let interface = interfaces[0];
+    let interface = interfaces[0].0;
     assert!(program.classes[interface].is_interface, "Iterator<T> is an interface");
     let next = program.classes[interface].interface_methods.iter()
         .map(|id| &program.functions[*id])

@@ -3,6 +3,12 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- C type and cleared-object representations live in an IR-only shared leaf,
+  separating native emitters from the expression backend's orchestration.
+  All internal callers use the leaf directly; emitted C representations remain
+  unchanged.
+- Iterator method/interface contract lookups use borrowed iteration instead of
+  temporary vectors or allocated class-name prefixes, retaining uniqueness checks.
 - Native generator value cleanup, cleared-value expressions, and specialized
   Option payload contracts live in shared support. Collection/iterator/ordering
   emitters no longer form a sibling dependency cycle; generated C and affine

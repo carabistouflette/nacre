@@ -1,4 +1,4 @@
-use crate::codegen::ctype;
+use crate::c_repr::ctype;
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
 use super::{iterators, support::{drop_element, marker, option_tags, zero}};
 pub(super) fn list_fields(program: &t::Program, element: Type) -> String {
