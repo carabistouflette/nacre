@@ -3,6 +3,10 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- LSP diagnostic JSON and UTF-16 range conversion live in a private presentation
+  module. URI resolution uses a borrowed path query instead of exposing server
+  source-file records. Cross-file notes, malformed-offset clamping, and diagnostic
+  publication behavior are preserved.
 - LSP local file-URI conversion and lexical path normalization live in a private
   standard-library-only module, separate from workspace and document state.
   The 16 KiB input limit, local-authority restriction, malformed URI rejection,

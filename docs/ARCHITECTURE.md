@@ -319,6 +319,12 @@ compiler, on bounded snapshots of disk sources and open buffers. Frontend byte
 positions are converted to LSP UTF-16 positions; notes become related
 information.
 
+The private `lsp/diagnostics.rs` module owns diagnostic JSON, related information,
+and UTF-16 ranges. It receives a borrowed path-to-URI query rather than server
+source-file records; document versions, workspace state, and publication remain
+in the server. Unresolvable primary locations suppress the diagnostic, while
+unresolvable note locations are omitted from related information.
+
 The private `lsp/framing.rs` module owns bounded header decoding, body acquisition,
 and flushed byte-length-prefixed JSON output. It depends only on standard I/O
 and JSON serialization, not workspace or compiler state. The server supplies its

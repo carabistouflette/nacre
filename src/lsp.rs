@@ -8,13 +8,14 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{json, Value};
 
-use crate::diagnostic::{char_boundary, Diagnostic, Span};
 use crate::project::{SourceBundle, MAX_FILES, MAX_SOURCE_BYTES};
 
 mod framing;
 use framing::{read_frame, send};
 mod file_uri;
 use file_uri::{normalize_path, path_to_uri, uri_to_path};
+mod diagnostics;
+use diagnostics::diagnostic_json;
 
 const MAX_MESSAGE_BYTES: usize = 8 * MAX_SOURCE_BYTES;
 const MAX_DIRECTORY_ENTRIES: usize = 4096;
@@ -332,7 +333,9 @@ impl Server {
         };
         let mut diagnostics = HashMap::new();
         if let Err(diagnostic) = bundle.validate() {
-            if let Some((uri, value)) = diagnostic_json(&diagnostic, &bundle, &files) {
+            if let Some((uri, value)) = diagnostic_json(&diagnostic, &bundle, |path| {
+                files.iter().find(|file| file.path.as_path() == path).map(|file| file.uri.as_str())
+            }) {
                 diagnostics.insert(uri, vec![value]);
             }
         }
@@ -598,67 +601,6 @@ fn read_source(path: &Path, remaining: usize) -> Result<String, String> {
         .map_err(|error| format!("{}: {error}", path.display()))?;
     if bytes.len() > remaining { return Err(format!("{} exceeds the project source size limit", path.display())); }
     String::from_utf8(bytes).map_err(|error| format!("{}: UTF-8 required ({error})", path.display()))
-}
-
-fn diagnostic_json(diagnostic: &Diagnostic, bundle: &SourceBundle, files: &[SourceFile]) -> Option<(String, Value)> {
-    let primary = map_span(diagnostic.span, bundle, files)?;
-    let mut related = Vec::new();
-    for (span, message) in &diagnostic.notes {
-        if let Some(location) = map_span(*span, bundle, files) {
-            related.push(json!({
-                "location": {
-                    "uri": location.file.uri,
-                    "range": range_json(location.source, location.start, location.end)
-                },
-                "message": message
-            }));
-        }
-    }
-    let message = diagnostic.help.as_ref().map_or_else(
-        || diagnostic.message.clone(),
-        |help| format!("{}\nhelp: {help}", diagnostic.message),
-    );
-    let mut value = json!({
-        "range": range_json(primary.source, primary.start, primary.end),
-        "severity": 1,
-        "source": "Nacre",
-        "message": message
-    });
-    if !related.is_empty() { value["relatedInformation"] = json!(related); }
-    Some((primary.file.uri.clone(), value))
-}
-
-struct LocalSpan<'a> {
-    file: &'a SourceFile,
-    source: &'a str,
-    start: usize,
-    end: usize,
-}
-
-fn map_span<'a>(span: Span, bundle: &'a SourceBundle, files: &'a [SourceFile]) -> Option<LocalSpan<'a>> {
-    let location = bundle.locate(span);
-    let file = files.iter().find(|file| file.path.as_path() == location.path)?;
-    let start = char_boundary(location.source, location.span.start);
-    let end = char_boundary(location.source, location.span.end).max(start);
-    Some(LocalSpan { file, source: location.source, start, end })
-}
-
-fn range_json(source: &str, start: usize, end: usize) -> Value {
-    let start = offset_position(source, start);
-    let end = offset_position(source, end.max(start.2));
-    json!({
-        "start": { "line": start.0, "character": start.1 },
-        "end": { "line": end.0, "character": end.1 }
-    })
-}
-
-fn offset_position(source: &str, offset: usize) -> (usize, usize, usize) {
-    let offset = char_boundary(source, offset);
-    let prefix = &source[..offset];
-    let line = prefix.bytes().filter(|byte| *byte == b'\n').count();
-    let line_start = prefix.rfind('\n').map_or(0, |index| index + 1);
-    let line_prefix = prefix[line_start..].strip_suffix('\r').unwrap_or(&prefix[line_start..]);
-    (line, line_prefix.encode_utf16().count(), offset)
 }
 
 #[cfg(feature = "fuzzing")]
