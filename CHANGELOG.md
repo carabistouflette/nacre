@@ -3,6 +3,10 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- LSP byte framing lives in a private I/O/JSON-only module, separate from workspace
+  and frontend validation. The server supplies message-size policy; header limits,
+  duplicate/truncated frame rejection, output flushing, and the public fuzz entry
+  point retain their existing behavior.
 - Project loading preserves native filesystem paths through shared source-bundle
   assembly instead of cloning paths and round-tripping through lossy strings.
   Distinct non-UTF-8 Unix filenames no longer collide as duplicate sources.

@@ -1,7 +1,9 @@
 //! A small stdio Language Server Protocol implementation backed by project validation.
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::io::{self, BufRead, BufReader, BufWriter, Read, Write};
+use std::io::{self, BufReader, BufWriter, Read, Write};
+#[cfg(feature = "fuzzing")]
+use std::io::BufRead;
 use std::path::{Component, Path, PathBuf};
 
 use serde_json::{json, Value};
@@ -9,7 +11,9 @@ use serde_json::{json, Value};
 use crate::diagnostic::{Diagnostic, Span};
 use crate::project::{SourceBundle, MAX_FILES, MAX_SOURCE_BYTES};
 
-const MAX_HEADER_BYTES: usize = 8 * 1024;
+mod framing;
+use framing::{read_frame, send};
+
 const MAX_MESSAGE_BYTES: usize = 8 * MAX_SOURCE_BYTES;
 const MAX_DIRECTORY_ENTRIES: usize = 4096;
 const MAX_URI_BYTES: usize = 16 * 1024;
@@ -37,7 +41,7 @@ pub fn run() -> Result<(), String> {
     let mut server = Server::default();
 
     loop {
-        let body = read_frame(&mut input).map_err(|error| format!("LSP input framing failed: {error}"))?;
+        let body = read_frame(&mut input, MAX_MESSAGE_BYTES).map_err(|error| format!("LSP input framing failed: {error}"))?;
         let Some(body) = body else { return Ok(()); };
         let message: Value = match serde_json::from_slice(&body) {
             Ok(message) => message,
@@ -739,69 +743,6 @@ fn normalize_path(path: &Path) -> PathBuf {
     normalized
 }
 
-fn read_frame(reader: &mut impl BufRead) -> io::Result<Option<Vec<u8>>> {
-    let mut content_length = None;
-    let mut total_header_bytes = 0usize;
-    loop {
-        let Some(line) = read_header_line(reader, total_header_bytes == 0)? else {
-            return Ok(None);
-        };
-        total_header_bytes += line.len();
-        if total_header_bytes > MAX_HEADER_BYTES {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "header exceeds size limit"));
-        }
-        if line == b"\r\n" || line == b"\n" { break; }
-        let line = line.strip_suffix(b"\n").unwrap_or(&line);
-        let line = line.strip_suffix(b"\r").unwrap_or(line);
-        let line = std::str::from_utf8(line)
-            .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "header is not ASCII"))?;
-        let Some((name, value)) = line.split_once(':') else {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "malformed header"));
-        };
-        if name.eq_ignore_ascii_case("Content-Length") {
-            if content_length.is_some() {
-                return Err(io::Error::new(io::ErrorKind::InvalidData, "duplicate Content-Length"));
-            }
-            let length = value.trim().parse::<usize>()
-                .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid Content-Length"))?;
-            if length > MAX_MESSAGE_BYTES {
-                return Err(io::Error::new(io::ErrorKind::InvalidData, "message exceeds size limit"));
-            }
-            content_length = Some(length);
-        }
-    }
-    let Some(length) = content_length else {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, "missing Content-Length"));
-    };
-    let mut body = vec![0; length];
-    reader.read_exact(&mut body)?;
-    Ok(Some(body))
-}
-
-fn read_header_line(reader: &mut impl BufRead, allow_eof: bool) -> io::Result<Option<Vec<u8>>> {
-    let mut line = Vec::new();
-    loop {
-        let available = reader.fill_buf()?;
-        if available.is_empty() {
-            if line.is_empty() && allow_eof { return Ok(None); }
-            return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "truncated header"));
-        }
-        if let Some(newline) = available.iter().position(|byte| *byte == b'\n') {
-            if line.len() + newline + 1 > MAX_HEADER_BYTES {
-                return Err(io::Error::new(io::ErrorKind::InvalidData, "header line exceeds size limit"));
-            }
-            line.extend_from_slice(&available[..=newline]);
-            reader.consume(newline + 1);
-            return Ok(Some(line));
-        }
-        let count = available.len();
-        if line.len() + count > MAX_HEADER_BYTES {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "header line exceeds size limit"));
-        }
-        line.extend_from_slice(available);
-        reader.consume(count);
-    }
-}
 
 #[cfg(feature = "fuzzing")]
 pub fn fuzz_read_frame(input: &[u8]) -> FuzzFrameOutcome {
@@ -810,7 +751,7 @@ pub fn fuzz_read_frame(input: &[u8]) -> FuzzFrameOutcome {
     }
     let chunk_size = input.first().map_or(1, |byte| usize::from(*byte & 0x1f) + 1);
     let mut reader = FuzzChunkedCursor { cursor: io::Cursor::new(input), chunk_size };
-    match read_frame(&mut reader) {
+    match read_frame(&mut reader, MAX_MESSAGE_BYTES) {
         Ok(None) => FuzzFrameOutcome::EndOfInput,
         Ok(Some(body)) => {
             if serde_json::from_slice::<Value>(&body).is_ok() {
@@ -852,16 +793,11 @@ impl BufRead for FuzzChunkedCursor<'_> {
     }
 }
 
-fn send(output: &mut impl Write, message: Value) -> io::Result<()> {
-    let body = serde_json::to_vec(&message).map_err(io::Error::other)?;
-    write!(output, "Content-Length: {}\r\n\r\n", body.len())?;
-    output.write_all(&body)?;
-    output.flush()
-}
 
 #[cfg(all(test, feature = "fuzzing"))]
 mod fuzz_framing_tests {
-    use super::{fuzz_read_frame, FuzzFrameOutcome, MAX_FUZZ_INPUT_BYTES, MAX_HEADER_BYTES, MAX_MESSAGE_BYTES};
+    use super::{fuzz_read_frame, FuzzFrameOutcome, MAX_FUZZ_INPUT_BYTES, MAX_MESSAGE_BYTES};
+    use super::framing::MAX_HEADER_BYTES;
 
     fn frame(body: &[u8]) -> Vec<u8> {
         let mut result = format!("Content-Length: {}\r\n\r\n", body.len()).into_bytes();

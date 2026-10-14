@@ -304,6 +304,12 @@ compiler, on bounded snapshots of disk sources and open buffers. Frontend byte
 positions are converted to LSP UTF-16 positions; notes become related
 information.
 
+The private `lsp/framing.rs` module owns bounded header decoding, body acquisition,
+and flushed byte-length-prefixed JSON output. It depends only on standard I/O
+and JSON serialization, not workspace or compiler state. The server supplies its
+message-size budget and retains JSON parsing, routing, and document policy.
+The existing fuzz entry point exercises this same decoder through fragmented reads.
+
 The nearest ancestor `nacre.json` declares project source roots. Within a project
 scope, open buffers override disk files, including unsaved new source files under
 the configured roots. Stale document versions do not replace newer snapshots.
