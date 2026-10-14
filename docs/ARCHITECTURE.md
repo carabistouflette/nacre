@@ -372,7 +372,15 @@ The private `lsp/file_uri.rs` module owns local file-URI conversion and lexical
 path normalization. Its decoder accepts only local `file` URIs with valid UTF-8,
 rejects NULs, query/fragment components, and inputs above 16 KiB. Percent-encoded
 reserved path characters remain valid. It does not resolve symlinks or decide
-workspace access; source discovery and symlink checks stay in the server.
+workspace access; filesystem admission belongs to `lsp/source_files.rs`.
+
+The private `lsp/source_files.rs` module owns project configuration parsing,
+configured-root membership, directory traversal, symlink rejection, and bounded
+UTF-8 reads. It reuses the project's filename predicates and file-count limit,
+and the file-URI module's lexical path normalization. The server supplies the
+remaining source-byte budget and retains document versions, overlay precedence,
+scope association, combined snapshots, and diagnostic publication. The policy
+module does not depend on `Server`, `Document`, or protocol output.
 
 The nearest ancestor `nacre.json` declares project source roots. Within a project
 scope, open buffers override disk files, including unsaved new source files under

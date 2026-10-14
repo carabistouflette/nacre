@@ -271,3 +271,47 @@ fn unsaved_cross_module_privacy_errors_clear_when_imported_overlay_changes() {
     client.send(json!({ "jsonrpc": "2.0", "method": "exit" }));
     client.finish();
 }
+
+#[test]
+fn unsaved_sources_under_a_missing_configured_root_resolve_and_revalidate() {
+    let temp = TempDir::new();
+    fs::write(temp.0.join("nacre.json"), r#"{"sources":["src"]}"#).unwrap();
+    let source_dir = temp.0.join("src");
+    let main_path = source_dir.join("Main file-é.ncr");
+    let item_path = source_dir.join("Item.ncr");
+    let mut client = Client::spawn();
+    client.send(json!({
+        "jsonrpc": "2.0", "id": 1, "method": "initialize",
+        "params": { "rootUri": uri(&temp.0), "capabilities": {} }
+    }));
+    client.response(1);
+    client.send(json!({ "jsonrpc": "2.0", "method": "initialized", "params": {} }));
+    client.send(json!({
+        "jsonrpc": "2.0", "method": "textDocument/didOpen",
+        "params": { "textDocument": { "uri": uri(&main_path), "languageId": "nacre", "version": 7,
+            "text": "void main() { Item value = new Item(); }\n" } }
+    }));
+    assert!(!client.diagnostics(&uri(&main_path))["diagnostics"].as_array().unwrap().is_empty());
+
+    client.send(json!({
+        "jsonrpc": "2.0", "method": "textDocument/didOpen",
+        "params": { "textDocument": { "uri": uri(&item_path), "languageId": "nacre", "version": 12,
+            "text": "class Item {}\n" } }
+    }));
+    let resolved = client.diagnostics(&uri(&main_path));
+    assert!(resolved["diagnostics"].as_array().unwrap().is_empty());
+    assert_eq!(resolved["version"], 7);
+    assert_eq!(client.diagnostics(&uri(&item_path))["version"], 12);
+    assert!(!source_dir.exists(), "unsaved overlays must not require or create disk sources");
+
+    client.send(json!({
+        "jsonrpc": "2.0", "method": "textDocument/didClose",
+        "params": { "textDocument": { "uri": uri(&item_path) } }
+    }));
+    assert!(!client.diagnostics(&uri(&main_path))["diagnostics"].as_array().unwrap().is_empty());
+
+    client.send(json!({ "jsonrpc": "2.0", "id": 2, "method": "shutdown" }));
+    assert!(client.response(2)["result"].is_null());
+    client.send(json!({ "jsonrpc": "2.0", "method": "exit" }));
+    client.finish();
+}

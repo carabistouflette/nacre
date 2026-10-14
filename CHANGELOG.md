@@ -3,6 +3,12 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Separate LSP project-file admission into a private source-files module,
+  independent of document state and diagnostic publication. Configuration,
+  traversal, symlink, exclusion, and size-limit behavior are preserved.
+  Source snapshots take ownership of collected paths instead of cloning them.
+  Add a live stdio regression for cross-file unsaved overlays under a configured
+  source directory that does not yet exist on disk.
 - Add `scripts/publish.py` to regenerate hashes from staged Git blobs, audit an
   isolated export, commit selected changes, and push the feature branch.
   Unstaged sources and the working test inventory are preserved; Graphify

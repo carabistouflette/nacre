@@ -4,6 +4,32 @@ Nacre is experimental pre-1.0. Executed checks are evidence, not a safety certif
 [validation-0.12.0.json](validation-0.12.0.json) records portable local results.
 Historical reports retain their original release labels; they are not current-release proof.
 
+## LSP source-admission boundary
+
+Graphify scoped the configuration/discovery helpers inside the LSP server;
+live cargo-modules output confirmed their extraction into the private
+`lsp::source_files` module. That module depends on shared project predicates
+and lexical path normalization, not server document state or protocol output.
+The server retains overlays, versions, combined snapshots, and publication.
+
+Before/after actual stdio sessions retained identical type-diagnostic payloads,
+resolved cross-file unsaved buffers under a configured directory absent from
+disk, preserved document versions, and restored the unresolved-type diagnostic
+when the dependent buffer closed. A permanent end-to-end regression covers
+that missing-root overlay lifecycle.
+
+Live sessions also exercised hidden-directory exclusion, symlink rejection,
+invalid UTF-8, and source paths escaping the project root. Configuration at
+64 KiB, project sources at 1 MiB, 64 source files, 4,096 scanned entries, and
+directory depth 32 remained enforced. Diagnostics recovered after each rejected
+input was removed or corrected.
+
+Both GCC and Clang full locked/offline suites with `fuzzing` passed **1,265 tests
+across 62 suites**, with two ordinarily ignored LLVM tests. The dedicated live
+LSP suite passed all three scenarios; strict all-targets Clippy with `fuzzing`
+and `-D warnings` passed.
+
+
 ## Native-call helper selection
 
 Graphify scoped the duplicated Crypto, HTTP, and Unicode typed-IR walks;
