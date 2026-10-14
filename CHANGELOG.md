@@ -3,6 +3,11 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Native dependency selection is encapsulated in a private policy module,
+  separate from compiler processes and temporary-file ownership. The driver
+  consumes an opaque, prerequisite-closed set through header/linker queries.
+  Exact marker matching, implicit requirements, flag ordering, and public
+  compilation APIs retain their existing behavior.
 - Resolved IR type names share one spelling implementation across checker
   diagnostics and nominal reports. Existing primitive and class names are
   borrowed; qualified borrow names remain owned. Type-report layout lives in an

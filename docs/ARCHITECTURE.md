@@ -220,8 +220,12 @@ code. Measured comparisons and their limits belong in [VALIDATION.md](VALIDATION
 direct LLVM backend written in Rust. `NACRE_CLANG` selects that Clang executable;
 `NACRE_CC`/`CC` separately select the compiler used by `run` and `build`.
 
-`native.rs` has one fixed catalog for exact standalone dependency markers,
-trusted header/linker arguments, dependency closure, and stable linker order.
+The private `native/dependencies.rs` module owns the fixed catalog for exact
+standalone dependency markers, trusted header/linker arguments, dependency
+closure, and stable linker order. The driver sees only an opaque dependency set
+with read-only header/linker queries; it cannot construct raw membership bits or
+mutate an unclosed selection. Compiler discovery, processes, and temporary-file
+ownership remain in `native.rs`.
 SSL requires crypto; XSLT requires XML and its include path. Repeated markers
 coalesce without allocating a dependency collection. Unknown or incomplete
 markers cannot supply compiler arguments. Native compilation and LLVM emission
