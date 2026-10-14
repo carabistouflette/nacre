@@ -28,6 +28,14 @@ uses the supplied C runtime and system C library. It has no garbage collector or
 implicit reference counting for ordinary language values; sharing synchronization
 controls requires explicit mutex/channel handles.
 
+Disk and in-memory sources share source-bundle assembly, separator-aware byte
+limits, and unit offset/line bookkeeping. Disk acquisition retains native
+`PathBuf` identities and rejects duplicates by canonical path; it does not use
+lossy display strings as identity keys. Source contents must still be UTF-8.
+Named in-memory sources retain their separate exact string-name duplicate rule.
+Diagnostic display may render non-UTF-8 filename bytes lossily without changing
+the paths retained by the bundle.
+
 ## AST and generic specialization
 
 The AST distinguishes `Named`, `Applied { name, args }`, and

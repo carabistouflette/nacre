@@ -138,6 +138,42 @@ fn invalid_utf8_source_is_rejected() {
     let t=Temp::new();let p=t.0.join("invalid.ncr");fs::write(&p,[255,254]).unwrap();
     assert!(SourceBundle::from_paths(&[p]).unwrap_err().contains("UTF-8"));
 }
+
+#[cfg(unix)]
+#[test]
+fn distinct_non_utf8_source_paths_do_not_collide_after_display_conversion() {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+    let t = Temp::new();
+    let paths = [
+        t.0.join(OsString::from_vec(b"\xff.ncr".to_vec())),
+        t.0.join(OsString::from_vec(b"\xfe.ncr".to_vec())),
+    ];
+    fs::write(&paths[0], "int answer() { return 42; }\n").unwrap();
+    fs::write(&paths[1], "void main() { println(answer()); }\n").unwrap();
+    let sources = SourceBundle::from_paths(&paths).unwrap();
+    assert_eq!(sources.paths().collect::<Vec<_>>(), paths.iter().map(PathBuf::as_path).collect::<Vec<_>>());
+    let output = run(&sources);
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert_eq!(output.stdout, b"42\n");
+    assert_memory_balanced(&output);
+}
+
+#[test]
+fn source_byte_budget_includes_the_unit_separator_for_both_input_apis() {
+    use nacre::project::MAX_SOURCE_BYTES;
+    let t = Temp::new();
+    let code = "void main() {}";
+    let source = format!("{code}{}", " ".repeat(MAX_SOURCE_BYTES - code.len() - 1));
+    let in_memory = SourceBundle::from_sources(vec![("main.ncr".into(), source.clone())]).unwrap();
+    in_memory.validate().unwrap();
+    let path = t.file("main.ncr", &source);
+    SourceBundle::from_paths(std::slice::from_ref(&path)).unwrap().validate().unwrap();
+    let oversized = source + " ";
+    assert!(SourceBundle::from_sources(vec![("main.ncr".into(), oversized.clone())]).is_err());
+    fs::write(&path, oversized).unwrap();
+    assert!(SourceBundle::from_paths(&[path]).is_err());
+}
 #[test]
 fn project_example_is_valid() {
     let b=SourceBundle::from_paths(&[PathBuf::from("examples/language/multi_file_project")]).unwrap();let result=run(&b);

@@ -3,6 +3,11 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Project loading preserves native filesystem paths through shared source-bundle
+  assembly instead of cloning paths and round-tripping through lossy strings.
+  Distinct non-UTF-8 Unix filenames no longer collide as duplicate sources.
+  Canonical duplicate checks, UTF-8 source-content validation, and separator-aware
+  source-size limits remain enforced for their respective input APIs.
 - Collection emitters share receiver-scoped native-method lookup and required
   declaration contracts instead of duplicating per-family search helpers.
   Static factories retain their separate exact qualification rules; custom

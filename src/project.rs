@@ -22,24 +22,11 @@ pub struct SourceLocation<'a> {
 impl SourceBundle {
     /// Source paths are diagnostic identities; `module` headers define namespaces.
     pub fn from_sources(sources: Vec<(String, String)>) -> Result<Self, String> {
-        if sources.is_empty() { return Err("no source files".to_owned()); }
-        if sources.len() > MAX_FILES { return Err("source file limit is 64".to_owned()); }
-        let mut bundle = Self { text: String::new(), units: Vec::new() };
         let mut names = HashSet::new();
-        let mut first_line = 1;
-        for (name, source) in sources {
+        Self::from_units(sources.into_iter().map(|(name, source)| {
             if !names.insert(name.clone()) { return Err(format!("duplicate source: {name}")); }
-            if source.len().saturating_add(bundle.text.len()).saturating_add(1) > MAX_SOURCE_BYTES {
-                return Err("combined source exceeds the 1 MiB limit".to_owned());
-            }
-            let start = bundle.text.len();
-            bundle.text.push_str(&source);
-            let end = bundle.text.len();
-            bundle.text.push('\n');
-            bundle.units.push(Unit { path: PathBuf::from(name), start, end, first_line });
-            first_line += source.bytes().filter(|&b| b == b'\n').count() + 1;
-        }
-        Ok(bundle)
+            Ok((PathBuf::from(name), source))
+        }))
     }
     /// Recursively collect .ncr files, sorted within each requested directory.
     /// Symlinks are rejected; hidden directories, target and out are excluded.
@@ -47,10 +34,8 @@ impl SourceBundle {
         let mut files = Vec::new();
         for path in paths { collect(path, 0, &mut files)?; }
         let mut seen = HashSet::new();
-        let mut sources = Vec::new();
         let mut remaining = MAX_SOURCE_BYTES;
-        let original_paths = files.clone();
-        for path in files {
+        Self::from_units(files.into_iter().map(|path| {
             let canonical = path.canonicalize().map_err(|e| format!("{}: {e}", path.display()))?;
             if !seen.insert(canonical) { return Err(format!("duplicate source: {}", path.display())); }
             let mut data = Vec::new();
@@ -60,10 +45,29 @@ impl SourceBundle {
             if data.len() >= remaining { return Err("combined source exceeds the 1 MiB limit".to_owned()); }
             remaining -= data.len() + 1;
             let text = String::from_utf8(data).map_err(|e| format!("{}: expected UTF-8 ({e})", path.display()))?;
-            sources.push((path.to_string_lossy().into_owned(), text));
+            Ok((path, text))
+        }))
+    }
+
+    fn from_units(
+        sources: impl ExactSizeIterator<Item = Result<(PathBuf, String), String>>,
+    ) -> Result<Self, String> {
+        if sources.len() == 0 { return Err("no source files".to_owned()); }
+        if sources.len() > MAX_FILES { return Err("source file limit is 64".to_owned()); }
+        let mut bundle = Self { text: String::new(), units: Vec::new() };
+        let mut first_line = 1;
+        for source in sources {
+            let (path, source) = source?;
+            if source.len().saturating_add(bundle.text.len()).saturating_add(1) > MAX_SOURCE_BYTES {
+                return Err("combined source exceeds the 1 MiB limit".to_owned());
+            }
+            let start = bundle.text.len();
+            bundle.text.push_str(&source);
+            let end = bundle.text.len();
+            bundle.text.push('\n');
+            bundle.units.push(Unit { path, start, end, first_line });
+            first_line += source.bytes().filter(|&b| b == b'\n').count() + 1;
         }
-        let mut bundle = Self::from_sources(sources)?;
-        for (unit, path) in bundle.units.iter_mut().zip(original_paths) { unit.path = path; }
         Ok(bundle)
     }
     pub fn paths(&self) -> impl Iterator<Item = &Path> { self.units.iter().map(|u| u.path.as_path()) }
