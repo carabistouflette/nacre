@@ -122,6 +122,9 @@ native emitters do not import representation helpers from the backend orchestrat
 Fixed primitive C type names are borrowed static strings; nominal names own their
 formatted class IDs. Emitters allocate an owned name only where template storage
 requires it, preserving the same generated C types.
+Top-level translation-unit assembly formats literal bytes, prototype declarations,
+and the entry point directly into its output buffer. String literals retain
+their exact UTF-8 bytes, trailing C sentinel, and static lifetime.
 
 A concrete class is a pointer to its nominal structure. An owned or borrowed
 interface is a two-pointer structure passed by value:

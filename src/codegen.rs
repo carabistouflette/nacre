@@ -4,6 +4,7 @@ use crate::ast::{BinaryOp as B, UnaryOp};
 use crate::diagnostic::line_column;
 use crate::ir::{self as t, CallTarget, Place, PlaceKind, Type};
 use crate::c_repr::{ctype, object_zero};
+use std::fmt::Write;
 
 const TEMPORARY_PREFIX: &str = "ncr_t_";
 
@@ -17,21 +18,21 @@ pub fn generate(program: &t::Program, source: &str) -> String {
     out.push_str(&class_support(program));
     out.push_str("\n/* UTF-8 string literals, with static lifetime. */\n");
     for (i, text) in emitter.literals.iter().enumerate() {
-        out.push_str(&format!("static const unsigned char ncr_lit_{i}[] = {{"));
-        for byte in text.as_bytes() { out.push_str(&format!("{byte},")); }
+        write!(out, "static const unsigned char ncr_lit_{i}[] = {{").unwrap();
+        for byte in text.as_bytes() { write!(out, "{byte},").unwrap(); }
         out.push_str("0};\n");
     }
     out.push_str("\n/* Prototypes support recursion and forward calls. */\n");
     for function in &program.functions {
         if crate::stdlib_codegen::should_emit_prototype(program, function) {
-            out.push_str(&format!("{};\n", signature(program, function)));
+            writeln!(out, "{};", signature(program, function)).unwrap();
         }
     }
     out.push('\n');
     out.push_str(&crate::stdlib_codegen::implementations(program));
     out.push_str(&interface_implementations(program));
     out.push_str(&emitter.output);
-    out.push_str(&format!("int main(int argc, char **argv) {{\n    ncr_argc = argc;\n    ncr_argv = argv;\n    ncr_fn_{}();\n    ncr_memory_report();\n    return 0;\n}}\n", program.main));
+    writeln!(out, "int main(int argc, char **argv) {{\n    ncr_argc = argc;\n    ncr_argv = argv;\n    ncr_fn_{}();\n    ncr_memory_report();\n    return 0;\n}}", program.main).unwrap();
     out
 }
 fn cast_expression(target: Type, source: Type, value: &str, line: usize, column: usize) -> String {

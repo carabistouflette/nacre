@@ -3,6 +3,9 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Top-level C emission formats literal bytes, prototypes, and the entry point
+  directly into its output buffer instead of allocating intermediate strings.
+  Static UTF-8 literal contents and generated C remain unchanged.
 - Native C template substitution skips absent method markers and placeholders,
   avoiding no-op body copies and unused function-name formatting. Replacement
   order, receiver selection, and emitted C remain unchanged.
