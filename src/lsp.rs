@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{json, Value};
 
-use crate::project::{SourceBundle, MAX_FILES, MAX_SOURCE_BYTES};
+use crate::project::{is_excluded_name, is_source_file, SourceBundle, MAX_FILES, MAX_SOURCE_BYTES};
 
 mod framing;
 use framing::{read_frame, send};
@@ -492,8 +492,6 @@ fn bounded_text(text: &str) -> Option<String> {
     (text.len() <= MAX_SOURCE_BYTES).then(|| text.to_owned())
 }
 
-fn is_source_file(path: &Path) -> bool { path.extension().is_some_and(|extension| extension == "ncr") }
-
 fn configured_source_roots(root: &Path) -> Result<Vec<PathBuf>, String> {
     const MAX_CONFIG_BYTES: usize = 64 * 1024;
     let config = root.join("nacre.json");
@@ -531,10 +529,7 @@ fn source_root_contains(root: &Path, path: &Path) -> bool {
             && matches!(fs::symlink_metadata(root), Err(error) if error.kind() == io::ErrorKind::NotFound)
     );
     root_is_directory && path.strip_prefix(root).is_ok_and(|relative| {
-        relative.components().all(|component| {
-            let name = component.as_os_str().to_string_lossy();
-            !name.starts_with('.') && !matches!(name.as_ref(), "out" | "target")
-        })
+        relative.components().all(|component| !is_excluded_name(component.as_os_str()))
     })
 }
 fn reject_symlink_path(path: &Path, root: &Path) -> Result<(), String> {
@@ -564,8 +559,7 @@ fn collect_recursive(path: &Path, depth: usize, visited: &mut usize, output: &mu
     }
     if !metadata.is_dir() { return Ok(()); }
     for entry in directory_entries(path, visited)? {
-        let name = entry.file_name().unwrap_or_default().to_string_lossy().into_owned();
-        if name.starts_with('.') || matches!(name.as_str(), "out" | "target") { continue; }
+        if is_excluded_name(entry.file_name().unwrap_or_default()) { continue; }
         let kind = fs::symlink_metadata(&entry).map_err(|error| format!("{}: {error}", entry.display()))?;
         if kind.is_dir() { collect_recursive(&entry, depth + 1, visited, output)?; }
         else if is_source_file(&entry) {

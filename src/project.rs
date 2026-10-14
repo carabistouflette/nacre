@@ -155,6 +155,15 @@ impl SourceBundle {
         out
     }
 }
+pub(crate) fn is_source_file(path: &Path) -> bool {
+    path.extension().is_some_and(|extension| extension == "ncr")
+}
+
+/// Shared discovery policy for directory entries and unsaved path components.
+pub(crate) fn is_excluded_name(name: &std::ffi::OsStr) -> bool {
+    name.as_encoded_bytes().starts_with(b".") || name == "out" || name == "target"
+}
+
 fn collect(path: &Path, depth: usize, output: &mut Vec<PathBuf>) -> Result<(), String> {
     if depth > 32 { return Err("source directory nesting limit is 32".to_owned()); }
     let meta = fs::symlink_metadata(path).map_err(|e| format!("{}: {e}", path.display()))?;
@@ -168,10 +177,9 @@ fn collect(path: &Path, depth: usize, output: &mut Vec<PathBuf>) -> Result<(), S
             .map_err(|e| format!("{}: {e}", path.display()))?;
         entries.sort();
         for entry in entries {
-            let name = entry.file_name().unwrap_or_default().to_string_lossy();
-            if name.starts_with('.') || matches!(name.as_ref(), "out" | "target") { continue; }
+            if is_excluded_name(entry.file_name().unwrap_or_default()) { continue; }
             let kind = fs::symlink_metadata(&entry).map_err(|e| format!("{}: {e}", entry.display()))?;
-            if kind.is_dir() || entry.extension().is_some_and(|e| e == "ncr") {
+            if kind.is_dir() || is_source_file(&entry) {
                 collect(&entry, depth + 1, output)?;
             }
         }
@@ -211,10 +219,4 @@ mod tests {
     use super::*;
     #[test]
     fn c_filename_is_escaped() { assert_eq!(c_string("a\"\\\n"), "\"a\\\"\\\\\\012\""); }
-    #[test]
-    fn utf8_offsets_do_not_panic() {
-        let sources = SourceBundle::from_sources(vec![("unicode.ncr".into(), "é".into())]).unwrap();
-        assert!(sources.render(&Diagnostic::new(Span::new(1, 2), "test")).contains("test"));
-        assert_eq!(crate::diagnostic::char_boundary("é", 1), 0);
-    }
 }

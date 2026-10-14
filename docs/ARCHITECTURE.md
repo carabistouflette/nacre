@@ -35,6 +35,12 @@ lossy display strings as identity keys. Source contents must still be UTF-8.
 Named in-memory sources retain their separate exact string-name duplicate rule.
 Diagnostic display may render non-UTF-8 filename bytes lossily without changing
 the paths retained by the bundle.
+The project module owns shared discovery predicates for the exact `.ncr`
+extension and excluded names (leading dot, `out`, `target`). CLI directory scans,
+LSP disk scans, and unsaved-source admission reuse these predicates on native
+`OsStr` names, without allocating lossy display strings. Explicit CLI file inputs
+retain their separate admission behavior; traversal budgets and symlink checks
+remain with their callers.
 
 ## AST and generic specialization
 

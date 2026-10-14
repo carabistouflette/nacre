@@ -130,9 +130,30 @@ fn diagnostic_offsets_round_down_to_utf8_boundaries() {
 #[test]
 fn directory_sources_are_sorted_and_outputs_excluded() {
     let t=Temp::new();t.file("B.ncr","class B{}");t.file("A.ncr","void main(){}");
-    fs::create_dir(t.0.join("out")).unwrap();fs::write(t.0.join("out/bad.ncr"),"invalid").unwrap();
+    for name in [".hidden", "out", "target"] {
+        fs::create_dir(t.0.join(name)).unwrap();
+        fs::write(t.0.join(name).join("bad.ncr"), "invalid").unwrap();
+    }
+    t.file(".hidden.ncr", "invalid");
+    t.file("Skipped.NCR", "invalid");
+    t.file("out.ncr", "class Output{}");
+    t.file("target.ncr", "class Target{}");
+    t.file("é.ncr", "class UnicodeName{}");
+    let mut expected = vec!["A.ncr", "B.ncr", "out.ncr", "target.ncr", "é.ncr"]
+        .into_iter().map(PathBuf::from).collect::<Vec<_>>();
+    #[cfg(unix)]
+    {
+        use std::ffi::OsString;
+        use std::os::unix::ffi::OsStringExt;
+        let name = OsString::from_vec(b"\xff.ncr".to_vec());
+        fs::write(t.0.join(&name), "class NativeName{}").unwrap();
+        fs::write(t.0.join(OsString::from_vec(b".\xff.ncr".to_vec())), "invalid").unwrap();
+        expected.push(PathBuf::from(name));
+    }
+    expected.sort();
     let b=SourceBundle::from_paths(std::slice::from_ref(&t.0)).unwrap();
-    assert_eq!(b.source_count(),2);assert!(b.paths().next().unwrap().ends_with("A.ncr"));b.validate().unwrap();
+    assert_eq!(b.paths().map(|path| path.strip_prefix(&t.0).unwrap().to_owned()).collect::<Vec<_>>(), expected);
+    b.validate().unwrap();
 }
 #[test]
 fn duplicate_disk_input_is_rejected() {

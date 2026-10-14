@@ -3,6 +3,10 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- CLI source discovery and LSP disk/overlay admission share exact extension and
+  excluded-name predicates in the project module. Native names are inspected
+  without lossy string allocation; hidden/output exclusions and explicit CLI
+  file behavior remain unchanged.
 - LSP diagnostic JSON and UTF-16 range conversion live in a private presentation
   module. URI resolution uses a borrowed path query instead of exposing server
   source-file records. Cross-file notes, malformed-offset clamping, and diagnostic
