@@ -1,4 +1,5 @@
-use crate::ir::{self as t, CallTarget, Expr, ExprKind as E, NativeMethod as M, Stmt, Type};
+use crate::ir::{self as t, NativeMethod as M, Type};
+use super::native_usage;
 use super::support::{
     native_function, replace_placeholders, result_id, template_section, variant_id,
 };
@@ -76,55 +77,6 @@ fn any_used(usage: &IcuUsage, methods: &[M]) -> bool {
     methods.iter().any(|method| uses(usage, *method))
 }
 
-fn mark_expr_icu(program: &t::Program, expr: &Expr, usage: &mut IcuUsage) {
-    match &expr.kind {
-        E::Call { target, args, .. } => {
-            if let CallTarget::Function(id) = target
-                && let Some(method) = program.functions[*id].native
-                    && let Some(index) = method_index(method) { usage[index] = true; }
-            for arg in args { mark_expr_icu(program, arg, usage); }
-        }
-        E::New { args, .. } | E::Variant { args, .. } =>
-            for arg in args { mark_expr_icu(program, arg, usage); },
-        E::Drop(value) | E::Upcast { value, .. } | E::Unary { expr: value, .. } |
-        E::Try { value, .. } | E::Cast { value } => mark_expr_icu(program, value, usage),
-        E::MapSlot { index, .. } => mark_expr_icu(program, index, usage),
-        E::Binary { left, right, .. } => {
-            mark_expr_icu(program, left, usage);
-            mark_expr_icu(program, right, usage);
-        }
-        E::Char(_) | E::Int(_) | E::Long(_) | E::Double(_) | E::Unit | E::Boolean(_) |
-        E::String(_) | E::Read(_) | E::Move(_) | E::Borrow { .. } | E::MapCapacity(_) => {}
-    }
-}
-
-fn mark_block_icu(program: &t::Program, block: &[Stmt], usage: &mut IcuUsage) {
-    for stmt in block {
-        match stmt {
-            Stmt::Let { value, .. } => {
-                if let Some(value) = value { mark_expr_icu(program, value, usage); }
-            }
-            Stmt::Assign { value, .. } | Stmt::Expr(value) | Stmt::Return(Some(value)) =>
-                mark_expr_icu(program, value, usage),
-            Stmt::If { condition, then_block, else_block } => {
-                mark_expr_icu(program, condition, usage);
-                mark_block_icu(program, then_block, usage);
-                if let Some(block) = else_block { mark_block_icu(program, block, usage); }
-            }
-            Stmt::While { condition, body } => {
-                mark_expr_icu(program, condition, usage);
-                mark_block_icu(program, body, usage);
-            }
-            Stmt::Match { value, arms } => {
-                mark_expr_icu(program, value, usage);
-                for arm in arms { mark_block_icu(program, &arm.body, usage); }
-            }
-            Stmt::Block(block) => mark_block_icu(program, block, usage),
-            Stmt::Return(None) | Stmt::Break | Stmt::Continue => {}
-        }
-    }
-}
-
 fn class_id(program: &t::Program, is: impl Fn(t::NativeClass) -> bool) -> usize {
     program.classes.iter().find(|class| class.native.is_some_and(&is))
         .expect("Unicode native prelude class is present").id
@@ -148,9 +100,9 @@ fn add_result(program: &t::Program, substitutions: &mut Vec<(&'static str, Strin
 
 pub(super) fn implementation(program: &t::Program) -> String {
     let mut usage = [false; ICU_METHODS.len()];
-    for function in program.functions.iter().filter(|function| function.native.is_none()) {
-        mark_block_icu(program, &function.body, &mut usage);
-    }
+    native_usage::for_each(program, |method| {
+        if let Some(index) = method_index(method) { usage[index] = true; }
+    });
     if !usage.iter().any(|used| *used) { return String::new(); }
 
     let has_unicode = any_used(&usage, UNICODE_METHODS);

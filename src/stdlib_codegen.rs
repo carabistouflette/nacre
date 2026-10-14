@@ -22,6 +22,7 @@ mod iterators;
 mod ordered;
 mod priority;
 mod support;
+mod native_usage;
 mod text;
 mod unicode;
 mod time;

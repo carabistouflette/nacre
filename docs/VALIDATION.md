@@ -4,6 +4,27 @@ Nacre is experimental pre-1.0. Executed checks are evidence, not a safety certif
 [validation-0.12.0.json](validation-0.12.0.json) records portable local results.
 Historical reports retain their original release labels; they are not current-release proof.
 
+## Native-call helper selection
+
+Graphify scoped the duplicated Crypto, HTTP, and Unicode typed-IR walks;
+live cargo-modules dependency output confirmed their replacement by the
+private `stdlib_codegen::native_usage` leaf. Family policy remains local,
+while one exhaustive traversal owns expression and statement coverage.
+
+Both GCC and Clang locked/offline suites with `fuzzing` passed **1,264 tests
+across 62 suites**, with two ordinarily ignored LLVM tests. Strict all-targets
+Clippy with `fuzzing` and `-D warnings` passed.
+
+An actual combined CLI consumer exercised native calls in returned expressions,
+match values, nested call/try arguments, and conditional/loop headers. Before
+and after the refactor, generated C was byte-identical (294,827 bytes).
+GCC and Clang ASan/UBSan executions retained exact output and balanced native
+allocation counters: 12 allocations, 12 frees, zero live allocations.
+Separate `-O0` consumers proved that an unused HTTP type declaration does not
+link libcurl, while native calls in unexecuted function bodies still select
+their required HTTP, Crypto, and ICU helpers and link successfully.
+
+
 ## Stable-toolchain modernization (2026-10-14)
 
 Current compiler, fuzz, and Zed manifests use Rust 2024 and require Rust 1.99.

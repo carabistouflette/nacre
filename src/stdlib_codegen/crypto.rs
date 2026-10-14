@@ -1,4 +1,5 @@
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
+use super::native_usage;
 use super::support::{
     native_function, replace_method_ids, replace_placeholders, result_id, template_section,
     text_class, variant_id,
@@ -29,65 +30,8 @@ fn is_crypto_method(method: M) -> bool {
         M::CryptoConstantTimeEquals)
 }
 
-
-fn expression_uses_method(
-    program: &t::Program,
-    expression: &t::Expr,
-    matches_method: fn(M) -> bool,
-) -> bool {
-    use t::ExprKind as E;
-    match &expression.kind {
-        E::New { args, .. } | E::Variant { args, .. } =>
-            args.iter().any(|argument| expression_uses_method(program, argument, matches_method)),
-        E::Call { target, args, .. } => {
-            if let t::CallTarget::Function(id) = target
-                && program.functions.get(*id).and_then(|function| function.native)
-                    .is_some_and(matches_method) {
-                    return true;
-                }
-            args.iter().any(|argument| expression_uses_method(program, argument, matches_method))
-        }
-        E::MapSlot { index, .. } => expression_uses_method(program, index, matches_method),
-        E::Drop(value) | E::Upcast { value, .. } | E::Unary { expr: value, .. }
-        | E::Try { value, .. } | E::Cast { value } =>
-            expression_uses_method(program, value, matches_method),
-        E::Binary { left, right, .. } =>
-            expression_uses_method(program, left, matches_method) ||
-                expression_uses_method(program, right, matches_method),
-        E::Char(_) | E::Int(_) | E::Long(_) | E::Double(_) | E::Unit | E::Boolean(_)
-        | E::String(_) | E::Read(_) | E::Move(_) | E::Borrow { .. } | E::MapCapacity(_) => false,
-    }
-}
-
-fn block_uses_method(program: &t::Program, block: &t::Block, matches_method: fn(M) -> bool) -> bool {
-    block.iter().any(|statement| {
-        use t::Stmt as S;
-        match statement {
-            S::Let { value, .. } => value.as_ref()
-                .is_some_and(|value| expression_uses_method(program, value, matches_method)),
-            S::Assign { value, .. } | S::Expr(value) =>
-                expression_uses_method(program, value, matches_method),
-            S::If { condition, then_block, else_block } =>
-                expression_uses_method(program, condition, matches_method)
-                    || block_uses_method(program, then_block, matches_method)
-                    || else_block.as_ref().is_some_and(|block| block_uses_method(program, block, matches_method)),
-            S::While { condition, body } =>
-                expression_uses_method(program, condition, matches_method)
-                    || block_uses_method(program, body, matches_method),
-            S::Match { value, arms } => expression_uses_method(program, value, matches_method)
-                || arms.iter().any(|arm| block_uses_method(program, &arm.body, matches_method)),
-            S::Return(value) => value.as_ref()
-                .is_some_and(|value| expression_uses_method(program, value, matches_method)),
-            S::Block(block) => block_uses_method(program, block, matches_method),
-            S::Break | S::Continue => false,
-        }
-    })
-}
-
 fn is_used(program: &t::Program) -> bool {
-    program.functions.iter().any(|function| {
-        function.native.is_none() && block_uses_method(program, &function.body, is_crypto_method)
-    })
+    native_usage::any(program, is_crypto_method)
 }
 
 

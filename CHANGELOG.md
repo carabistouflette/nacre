@@ -3,6 +3,11 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Crypto, HTTP, and Unicode helper selection share a private, exhaustive
+  native-call traversal instead of three copies of the typed-IR grammar.
+  Short-circuit queries and full usage marking have separate interfaces;
+  backend-specific method lists remain local. Traversal borrows IR without
+  allocating a visitor or collecting nodes, and generated C is unchanged.
 - Upgrade development to stable Rust 1.99.0 and edition 2024 across compiler,
   fuzz, and Zed crates. Pin Node 26.12.0, npm 12.2.0, and Python 3.15.0;
   refresh Rust/npm locks and current stable editor/parser dependencies.

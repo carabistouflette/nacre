@@ -1,5 +1,6 @@
 use crate::c_repr::ctype;
-use crate::ir::{self as t, CallTarget, Expr, ExprKind, NativeClass as C, NativeMethod as M, Stmt, Type};
+use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
+use super::native_usage;
 use super::support::{
     native_function, replace_method_ids, replace_placeholders, result_id, text_class, variant_id,
 };
@@ -29,47 +30,8 @@ fn method(program: &t::Program, native: M) -> &t::Function {
     native_function(program, |candidate| candidate == native)
 }
 
-fn http_call(program: &t::Program, expr: &Expr) -> bool {
-    match &expr.kind {
-        ExprKind::Call { target, args, .. } => {
-            let direct = matches!(target, CallTarget::Function(id)
-                if program.functions.get(*id).and_then(|function| function.native)
-                    .is_some_and(|native| HTTP_METHODS.contains(&native)));
-            direct
-                || args.iter().any(|argument| http_call(program, argument))
-        }
-        ExprKind::Drop(value) | ExprKind::Upcast { value, .. } |
-        ExprKind::Unary { expr: value, .. } | ExprKind::Try { value, .. } |
-        ExprKind::Cast { value } => http_call(program, value),
-        ExprKind::MapSlot { index, .. } => http_call(program, index),
-        ExprKind::New { args, .. } | ExprKind::Variant { args, .. } =>
-            args.iter().any(|argument| http_call(program, argument)),
-        ExprKind::Binary { left, right, .. } =>
-            http_call(program, left) || http_call(program, right),
-        ExprKind::Char(_) | ExprKind::Int(_) | ExprKind::Long(_) | ExprKind::Double(_) |
-        ExprKind::Unit | ExprKind::Boolean(_) | ExprKind::String(_) | ExprKind::Read(_) |
-        ExprKind::Move(_) | ExprKind::Borrow { .. } | ExprKind::MapCapacity(_) => false,
-    }
-}
-
-fn http_block(program: &t::Program, block: &[Stmt]) -> bool {
-    block.iter().any(|statement| match statement {
-        Stmt::Let { value, .. } => value.as_ref().is_some_and(|value| http_call(program, value)),
-        Stmt::Assign { value, .. } | Stmt::Expr(value) => http_call(program, value),
-        Stmt::If { condition, then_block, else_block } => http_call(program, condition)
-            || http_block(program, then_block)
-            || else_block.as_ref().is_some_and(|block| http_block(program, block)),
-        Stmt::While { condition, body } => http_call(program, condition) || http_block(program, body),
-        Stmt::Match { value, arms } => http_call(program, value)
-            || arms.iter().any(|arm| http_block(program, &arm.body)),
-        Stmt::Return(value) => value.as_ref().is_some_and(|value| http_call(program, value)),
-        Stmt::Block(block) => http_block(program, block),
-        Stmt::Break | Stmt::Continue => false,
-    })
-}
-
 pub(super) fn uses_http(program: &t::Program) -> bool {
-    program.functions.iter().any(|function| http_block(program, &function.body))
+    native_usage::any(program, |method| HTTP_METHODS.contains(&method))
 }
 
 pub(super) fn fields(program: &t::Program, class: C) -> String {

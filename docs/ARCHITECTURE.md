@@ -277,6 +277,14 @@ exempt from analysis. `ownership.rs` and `borrowing.rs` do not prove native
 method safety; user calls are checked against the same contracts as ordinary
 functions.
 
+`stdlib_codegen/native_usage.rs` owns typed-IR traversal for native helper
+selection. Crypto and HTTP use its short-circuit query; Unicode uses its
+complete call inspection to mark required ICU sections. Only resolved calls
+count, not native declarations. All function bodies and branches are inspected
+because C emission includes them regardless of runtime reachability. Traversal
+borrows IR nodes, uses static callbacks, and allocates no collection; family
+method lists and template policy remain in their respective emitters.
+
 List storage contains a buffer pointer, size, and capacity. Only initialized
 slots own values. The concrete element type selects the destructor, including
 dynamic destruction for interface values. `pop` and `remove` clear the stored
