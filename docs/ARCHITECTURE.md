@@ -275,6 +275,9 @@ numeric identifiers into C templates. Buffers use the same accounting as object
 allocations. Ordinary values do not use garbage collection or implicit reference
 counts; mutexes and channels explicitly share their synchronization control
 blocks. See [STDLIB.md](STDLIB.md).
+Shared native template substitution skips markers absent from the current body
+before formatting function names or copying strings. Present placeholders retain
+ordered replacement, including expansion by later substitutions.
 
 The existing check for cycles of required fields still applies. A native list
 does not require an element field, so its empty state supplies a base case. A

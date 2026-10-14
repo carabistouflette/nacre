@@ -3,6 +3,9 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Native C template substitution skips absent method markers and placeholders,
+  avoiding no-op body copies and unused function-name formatting. Replacement
+  order, receiver selection, and emitted C remain unchanged.
 - Primitive C type names are borrowed rather than allocated on every lookup.
   Nominal names remain owned; native template storage explicitly takes ownership
   where required. Generated C types and runtime behavior are unchanged.

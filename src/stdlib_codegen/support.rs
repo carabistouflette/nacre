@@ -698,7 +698,10 @@ pub(super) fn replace_method_ids(
             if function.receiver != Some(class) && !is_static_factory { continue; }
         }
         if let Some(method) = function.native {
-            body = body.replace(marker(method), &format!("ncr_fn_{}", function.id));
+            let placeholder = marker(method);
+            if body.contains(placeholder) {
+                body = body.replace(placeholder, &format!("ncr_fn_{}", function.id));
+            }
         }
     }
     body
@@ -706,7 +709,10 @@ pub(super) fn replace_method_ids(
 
 pub(super) fn replace_placeholders(mut body: String, substitutions: &[(impl AsRef<str>, String)]) -> String {
     for (placeholder, replacement) in substitutions {
-        body = body.replace(placeholder.as_ref(), replacement.as_str());
+        let placeholder = placeholder.as_ref();
+        if body.contains(placeholder) {
+            body = body.replace(placeholder, replacement.as_str());
+        }
     }
     body
 }
