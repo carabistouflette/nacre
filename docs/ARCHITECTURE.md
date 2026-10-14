@@ -89,6 +89,13 @@ a class pointer, interface value, or inline affine sum.
 `Borrow { class: id, mutable }` is non-owning access. Thus `Type::is_object()`
 means **owned**, not necessarily a heap pointer.
 
+`ir::Type::name` owns resolved language-type spelling for checker diagnostics
+and nominal reports. Each phase supplies a borrowed class-name lookup, keeping
+the IR independent of checker tables. Primitive and owning nominal names are
+borrowed; borrow-qualified names own their formatted prefix. `type_report.rs`
+renders checked IR directly into the report buffer; API entry points retain
+frontend validation. AST generic-template spelling remains separate.
+
 An IR class retains its name, interfaces, and concrete methods for each contract
 slot. An interface retains declaration order. Virtual signatures have a
 `virtual_slot`; `Upcast` records an owning class-to-interface conversion.

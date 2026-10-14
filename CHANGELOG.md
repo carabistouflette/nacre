@@ -3,6 +3,12 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Resolved IR type names share one spelling implementation across checker
+  diagnostics and nominal reports. Existing primitive and class names are
+  borrowed; qualified borrow names remain owned. Type-report layout lives in an
+  IR-only presentation module and streams fields without temporary vectors.
+  Public APIs still perform full validation; report and diagnostic text are
+  unchanged.
 - CLI source discovery and LSP disk/overlay admission share exact extension and
   excluded-name predicates in the project module. Native names are inspected
   without lossy string allocation; hidden/output exclusions and explicit CLI

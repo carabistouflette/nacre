@@ -2,10 +2,24 @@
 //! ownership.rs lowers this into an analysis CFG; codegen inserts lexical drops.
 use crate::ast::{BinaryOp, UnaryOp};
 use crate::diagnostic::Span;
+use std::borrow::Cow;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Type { Byte, Char, Int, Long, Double, Unit, Boolean, String, Void, Object(usize), Borrow { class: usize, mutable: bool } }
 impl Type {
+    /// Language-level spelling; the owning phase resolves nominal class names.
+    pub fn name<'a>(self, class_name: impl FnOnce(usize) -> &'a str) -> Cow<'a, str> {
+        match self {
+            Self::Byte => Cow::Borrowed("byte"), Self::Char => Cow::Borrowed("char"),
+            Self::Int => Cow::Borrowed("int"), Self::Long => Cow::Borrowed("long"),
+            Self::Double => Cow::Borrowed("double"), Self::Unit => Cow::Borrowed("Unit"),
+            Self::Boolean => Cow::Borrowed("boolean"), Self::String => Cow::Borrowed("String"),
+            Self::Void => Cow::Borrowed("void"),
+            Self::Object(id) => Cow::Borrowed(class_name(id)),
+            Self::Borrow { class, mutable } =>
+                Cow::Owned(format!("borrow {}{}", if mutable { "mut " } else { "" }, class_name(class))),
+        }
+    }
     /// True only for an owning object/enum value, never for a borrowed pointer.
     pub fn is_object(self) -> bool { matches!(self, Self::Object(_)) }
     pub fn is_borrow(self) -> bool { matches!(self, Self::Borrow { .. }) }

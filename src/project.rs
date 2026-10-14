@@ -112,7 +112,7 @@ impl SourceBundle {
     pub fn emit_borrows(&self) -> Result<String, Diagnostic> {
         crate::borrowing::dump(&self.typed()?, &self.text)
     }
-    pub fn emit_types(&self) -> Result<String, Diagnostic> { Ok(crate::type_dump(&self.typed()?)) }
+    pub fn emit_types(&self) -> Result<String, Diagnostic> { Ok(crate::type_report::dump(&self.typed()?)) }
 
     fn unit_at(&self, offset: usize) -> &Unit {
         self.units.iter().find(|u| offset >= u.start && offset <= u.end)

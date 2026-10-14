@@ -2,6 +2,7 @@
 //! Definite initialization and moves across control flow are checked separately
 //! by ownership.rs. Object parameters consume; borrowed returns are receiver-bound.
 use std::collections::{HashMap, HashSet};
+use std::borrow::Cow;
 use crate::ast::{self as a, BinaryOp as B, UnaryOp, Visibility};
 use crate::diagnostic::{Diagnostic, Span};
 use crate::ir::{self as t, CallTarget, Place, PlaceKind, Type};
@@ -57,16 +58,8 @@ impl Tables {
     fn is_static_native(&self, id: usize) -> bool {
         self.classes[id].static_native
     }
-    fn type_name(&self, ty: Type) -> String {
-        match ty {
-            Type::Byte => "byte".to_owned(), Type::Char => "char".to_owned(),
-            Type::Int => "int".to_owned(), Type::Long => "long".to_owned(),
-            Type::Double => "double".to_owned(), Type::Unit => "Unit".to_owned(),
-            Type::Boolean => "boolean".to_owned(), Type::String => "String".to_owned(),
-            Type::Void => "void".to_owned(),
-            Type::Object(id) => self.classes[id].name.clone(),
-            Type::Borrow { class, mutable } => format!("borrow {}{}", if mutable { "mut " } else { "" }, self.classes[class].name),
-        }
+    fn type_name(&self, ty: Type) -> Cow<'_, str> {
+        ty.name(|class| self.classes[class].name.as_str())
     }
     fn is_view(&self, ty: Type) -> bool {
         ty.object_class().is_some_and(|id| self.classes[id].has_borrow)

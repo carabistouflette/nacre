@@ -3,7 +3,7 @@
 //! Lexical shared/exclusive borrows, readonly methods, and scoped shared views.
 //! Interfaces use allocation-free fat pointers; generic classes/enums are monomorphized.
 //! Native Option/Result, IO/text support, and multi-source projects.
-//! No borrowed returns, class inheritance, or general lifetime parameters.
+//! Borrowed returns are receiver-bound; no class inheritance or general lifetime parameters.
 #![forbid(unsafe_code)]
 mod ast;
 mod checker;
@@ -22,6 +22,7 @@ mod stdlib;
 mod stdlib_codegen;
 pub mod lsp;
 pub mod project;
+mod type_report;
 
 use diagnostic::{Diagnostic, Span};
 
@@ -68,35 +69,6 @@ pub fn emit_borrows(source: &str) -> Result<String, Diagnostic> {
 /// Inspect the deterministic template specializations used by this program.
 /// Full validation is performed first; this is not a bypass around safety checks.
 pub fn emit_types(source: &str) -> Result<String, Diagnostic> {
-    Ok(type_dump(&front_end(source)?))
+    Ok(type_report::dump(&front_end(source)?))
 }
 
-pub(crate) fn type_dump(typed: &ir::Program) -> String {
-    let mut out = String::from("Nacre — nominal types and specializations\n");
-    for class in &typed.classes {
-        let kind = if class.variants.is_some() { "enum" } else if class.is_interface { "interface" } else { "class" };
-        out.push_str(&format!("#{} {kind} {}\n", class.id, class.name));
-        if let Some(variants) = &class.variants {
-            for variant in variants {
-                out.push_str(&format!("  {}({})\n", variant.name, variant.fields.iter()
-                    .map(|ty| match ty {
-                        ir::Type::Byte => "byte".to_owned(),
-                        ir::Type::Char => "char".to_owned(),
-                        ir::Type::Int => "int".to_owned(),
-                        ir::Type::Long => "long".to_owned(),
-                        ir::Type::Double => "double".to_owned(),
-                        ir::Type::Unit => "Unit".to_owned(),
-                        ir::Type::Boolean => "boolean".to_owned(),
-                        ir::Type::String => "String".to_owned(),
-                        ir::Type::Void => "void".to_owned(),
-                        ir::Type::Object(id) => typed.classes[*id].name.clone(),
-                        ir::Type::Borrow { class, mutable } => format!("borrow {}{}", if *mutable { "mut " } else { "" }, typed.classes[*class].name),
-                    }).collect::<Vec<_>>().join(", ")));
-            }
-        }
-        for (interface, _) in &class.implementations {
-            out.push_str(&format!("  implements {}\n", typed.classes[*interface].name));
-        }
-    }
-    out
-}
