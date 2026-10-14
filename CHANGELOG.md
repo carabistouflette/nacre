@@ -3,6 +3,11 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Add `scripts/publish.py` to regenerate hashes from staged Git blobs, audit an
+  isolated export, commit selected changes, and push the feature branch.
+  Unstaged sources and the working test inventory are preserved; Graphify
+  artifacts and direct main/master publication are rejected. Real disposable
+  Git/remote regression scenarios run in CI.
 - Crypto, HTTP, and Unicode helper selection share a private, exhaustive
   native-call traversal instead of three copies of the typed-IR grammar.
   Short-circuit queries and full usage marking have separate interfaces;

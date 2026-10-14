@@ -26,6 +26,9 @@ jobs:
       - run: python3 scripts/generate_v3_tests.py --check
       - run: python3 scripts/generate_v4_tests.py --check
       - run: python3 scripts/generate_v5_tests.py --check
+      - name: Exercise publishing workflow
+        if: matrix.cc == 'gcc'
+        run: python3 scripts/test_publish.py
       - run: cargo fetch --locked
       - run: cargo test --locked --offline
         env:

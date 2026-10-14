@@ -358,6 +358,32 @@ no desktop-acceptance or remote-CI claim.
 The private repository's current GitHub plan does not permit protected branches;
 these merge gates are procedural, not server-enforced.
 
+### Staged publication
+
+After reviewing the change, exercising affected behavior, and staging explicit
+owned paths, run:
+
+```sh
+python3 scripts/publish.py --message "Describe the verified change"
+```
+
+The command regenerates `MANIFEST.sha256` from exact staged Git blobs, including
+added/deleted files; exports staged sources to a temporary directory; verifies
+checksums and runs the package audit there; then stages only the manifest,
+commits the selected changes, and pushes the current feature branch to `origin`.
+Unstaged edits and untracked files are not included. The audit's generated test
+inventory never overwrites the working copy.
+
+Use `--check` instead of `--message` for a non-mutating publication preview, or
+add `--no-push` to commit locally. The command rejects main/master, detached HEAD,
+Graphify outputs/caches, non-regular sources, ambiguous checksum filenames, and
+unstaged manifest edits. Graphify analysis stays outside Git, even if someone
+force-stages its output. A failed push leaves the local commit intact; retry
+the push, not the commit. Package checks do not replace compiler/native tests.
+
+`python3 scripts/test_publish.py` exercises the workflow with real disposable
+Git repositories and a local bare remote; CI runs these regression scenarios.
+
 ## Boundaries and design notes
 
 Modules and `import` resolve names only inside the source files selected for one
