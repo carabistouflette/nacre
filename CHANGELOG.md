@@ -3,6 +3,10 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- LSP local file-URI conversion and lexical path normalization live in a private
+  standard-library-only module, separate from workspace and document state.
+  The 16 KiB input limit, local-authority restriction, malformed URI rejection,
+  and percent-encoded filename behavior are preserved.
 - CLI diagnostic rendering reuses the source bundle's authoritative file-local
   span mapping and borrows the original message instead of copying a diagnostic.
   LSP and CLI share UTF-8 boundary normalization while retaining their respective

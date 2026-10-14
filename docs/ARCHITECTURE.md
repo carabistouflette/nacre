@@ -325,6 +325,12 @@ and JSON serialization, not workspace or compiler state. The server supplies its
 message-size budget and retains JSON parsing, routing, and document policy.
 The existing fuzz entry point exercises this same decoder through fragmented reads.
 
+The private `lsp/file_uri.rs` module owns local file-URI conversion and lexical
+path normalization. Its decoder accepts only local `file` URIs with valid UTF-8,
+rejects NULs, query/fragment components, and inputs above 16 KiB. Percent-encoded
+reserved path characters remain valid. It does not resolve symlinks or decide
+workspace access; source discovery and symlink checks stay in the server.
+
 The nearest ancestor `nacre.json` declares project source roots. Within a project
 scope, open buffers override disk files, including unsaved new source files under
 the configured roots. Stale document versions do not replace newer snapshots.

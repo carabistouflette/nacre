@@ -4,7 +4,7 @@ use std::fs;
 use std::io::{self, BufReader, BufWriter, Read, Write};
 #[cfg(feature = "fuzzing")]
 use std::io::BufRead;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 
 use serde_json::{json, Value};
 
@@ -13,10 +13,11 @@ use crate::project::{SourceBundle, MAX_FILES, MAX_SOURCE_BYTES};
 
 mod framing;
 use framing::{read_frame, send};
+mod file_uri;
+use file_uri::{normalize_path, path_to_uri, uri_to_path};
 
 const MAX_MESSAGE_BYTES: usize = 8 * MAX_SOURCE_BYTES;
 const MAX_DIRECTORY_ENTRIES: usize = 4096;
-const MAX_URI_BYTES: usize = 16 * 1024;
 #[cfg(feature = "fuzzing")]
 const MAX_FUZZ_INPUT_BYTES: usize = 64 * 1024;
 
@@ -659,83 +660,6 @@ fn offset_position(source: &str, offset: usize) -> (usize, usize, usize) {
     let line_prefix = prefix[line_start..].strip_suffix('\r').unwrap_or(&prefix[line_start..]);
     (line, line_prefix.encode_utf16().count(), offset)
 }
-
-fn uri_to_path(uri: &str) -> Option<PathBuf> {
-    if uri.len() > MAX_URI_BYTES { return None; }
-    let (scheme, rest) = uri.split_once("://")?;
-    if !scheme.eq_ignore_ascii_case("file") { return None; }
-    if rest.contains('?') || rest.contains('#') { return None; }
-    let slash = rest.find('/')?;
-    let authority = &rest[..slash];
-    if !authority.is_empty() && !authority.eq_ignore_ascii_case("localhost") { return None; }
-    let encoded = &rest[slash..];
-    let mut bytes = Vec::with_capacity(encoded.len());
-    let source = encoded.as_bytes();
-    let mut index = 0;
-    while index < source.len() {
-        if source[index] == b'%' {
-            let high = hex(source.get(index + 1).copied()?)?;
-            let low = hex(source.get(index + 2).copied()?)?;
-            bytes.push(high * 16 + low);
-            index += 3;
-        } else {
-            bytes.push(source[index]);
-            index += 1;
-        }
-    }
-    if bytes.contains(&0) { return None; }
-    let decoded = String::from_utf8(bytes).ok()?;
-    let path = Path::new(&decoded);
-    if !path.is_absolute() { return None; }
-    Some(normalize_path(path))
-}
-
-
-fn path_to_uri(path: &Path) -> Option<String> {
-    let path = normalize_path(path);
-    let path = path.to_str()?;
-    let mut uri = String::from("file://");
-    if !path.starts_with('/') { uri.push('/'); }
-    for byte in path.bytes() {
-        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~' | b'/' | b':') {
-            uri.push(byte as char);
-        } else {
-            uri.push('%');
-            uri.push(char::from_digit((byte >> 4) as u32, 16)?.to_ascii_uppercase());
-            uri.push(char::from_digit((byte & 0x0f) as u32, 16)?.to_ascii_uppercase());
-        }
-    }
-    Some(uri)
-}
-
-fn hex(byte: u8) -> Option<u8> {
-    match byte {
-        b'0'..=b'9' => Some(byte - b'0'),
-        b'a'..=b'f' => Some(byte - b'a' + 10),
-        b'A'..=b'F' => Some(byte - b'A' + 10),
-        _ => None,
-    }
-}
-
-fn normalize_path(path: &Path) -> PathBuf {
-    let absolute = if path.is_absolute() {
-        path.to_owned()
-    } else {
-        std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/" )).join(path)
-    };
-    let mut normalized = PathBuf::new();
-    for component in absolute.components() {
-        match component {
-            Component::Prefix(prefix) => normalized.push(prefix.as_os_str()),
-            Component::RootDir => normalized.push(component.as_os_str()),
-            Component::CurDir => {}
-            Component::ParentDir => { normalized.pop(); }
-            Component::Normal(part) => normalized.push(part),
-        }
-    }
-    normalized
-}
-
 
 #[cfg(feature = "fuzzing")]
 pub fn fuzz_read_frame(input: &[u8]) -> FuzzFrameOutcome {
