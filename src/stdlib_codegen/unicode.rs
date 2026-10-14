@@ -367,7 +367,7 @@ pub(super) fn implementation(program: &t::Program) -> String {
         let list_add = program.functions.iter().find(|function| {
             function.receiver == Some(list) && function.native == Some(M::ListAdd)
         }).expect("available List<Text>.add").id;
-        substitutions.push(("@LIST_TYPE@", crate::c_repr::ctype(program, Type::Object(list))));
+        substitutions.push(("@LIST_TYPE@", crate::c_repr::ctype(program, Type::Object(list)).into_owned()));
         substitutions.push(("@LIST_NEW@", format!("ncr_fn_{list_new}")));
         substitutions.push(("@LIST_ADD@", format!("ncr_fn_{list_add}")));
         substitutions.push(("@LIST_ID@", list.to_string()));

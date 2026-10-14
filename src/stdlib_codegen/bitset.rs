@@ -57,7 +57,7 @@ pub(super) fn implementation(program: &t::Program, class_id: usize) -> String {
         ("@BIT_SET_OR@", marker(M::BitSetOr).to_owned()),
         ("@BIT_SET_XOR@", marker(M::BitSetXor).to_owned()),
         ("@BIT_SET_AND_NOT@", marker(M::BitSetAndNot).to_owned()),
-        ("@OPTION_LONG_TYPE@", ctype(program, next.return_type)),
+        ("@OPTION_LONG_TYPE@", ctype(program, next.return_type).into_owned()),
         ("@NONE_TAG@", none_tag.to_string()),
         ("@SOME_TAG@", some_tag.to_string()),
     ];

@@ -181,7 +181,7 @@ fn class_support(program: &t::Program) -> String {
         out.push_str(&format!("struct ncr_vtable_{} {{\n    void (*destroy)(void *);\n", class.id));
         for (slot, id) in class.interface_methods.iter().enumerate() {
             let method = &program.functions[*id];
-            let mut params = vec!["void *".to_owned()];
+            let mut params = vec![std::borrow::Cow::Borrowed("void *")];
             params.extend(method.params.iter().map(|(_, ty)| ctype(program, *ty)));
             out.push_str(&format!("    {} (*m{slot})({});\n", ctype(program, method.return_type), params.join(", ")));
         }

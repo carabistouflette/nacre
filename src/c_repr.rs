@@ -1,22 +1,23 @@
 //! C value representations shared by expression and native-method emission.
 use crate::ir::{self as t, Type};
-pub(crate) fn ctype(program: &t::Program, ty: Type) -> String {
+use std::borrow::Cow;
+pub(crate) fn ctype(program: &t::Program, ty: Type) -> Cow<'static, str> {
     match ty {
-        Type::Byte => "uint8_t".to_owned(), Type::Char => "uint32_t".to_owned(),
-        Type::Int => "int32_t".to_owned(), Type::Long => "int64_t".to_owned(),
-        Type::Double => "double".to_owned(), Type::Unit => "uint8_t".to_owned(),
-        Type::Boolean => "bool".to_owned(), Type::String => "ncr_string".to_owned(),
-        Type::Void => "void".to_owned(),
+        Type::Byte => Cow::Borrowed("uint8_t"), Type::Char => Cow::Borrowed("uint32_t"),
+        Type::Int => Cow::Borrowed("int32_t"), Type::Long => Cow::Borrowed("int64_t"),
+        Type::Double => Cow::Borrowed("double"), Type::Unit => Cow::Borrowed("uint8_t"),
+        Type::Boolean => Cow::Borrowed("bool"), Type::String => Cow::Borrowed("ncr_string"),
+        Type::Void => Cow::Borrowed("void"),
         Type::Object(id) => {
             if program.classes[id].variants.is_some() || program.classes[id].is_interface {
-                format!("ncr_obj_{id}")
+                Cow::Owned(format!("ncr_obj_{id}"))
             } else {
-                format!("ncr_obj_{id} *")
+                Cow::Owned(format!("ncr_obj_{id} *"))
             }
         }
         Type::Borrow { class: id, .. } => {
-            if program.classes[id].is_interface { format!("ncr_obj_{id}") }
-            else { format!("ncr_obj_{id} *") }
+            if program.classes[id].is_interface { Cow::Owned(format!("ncr_obj_{id}")) }
+            else { Cow::Owned(format!("ncr_obj_{id} *")) }
         }
     }
 }

@@ -98,7 +98,7 @@ pub(super) fn implementation(
     if let Some(idna) = idna_function {
         let (result, ok, err) = text_result_layout(program, idna, text);
         substitutions.extend([
-            ("@TEXT_RESULT_TYPE@", ctype(program, idna.return_type)),
+            ("@TEXT_RESULT_TYPE@", ctype(program, idna.return_type).into_owned()),
             ("@TEXT_RESULT_ID@", result.to_string()),
             ("@TEXT_RESULT_OK_TAG@", ok.to_string()),
             ("@TEXT_RESULT_ERR_TAG@", err.to_string()),
@@ -115,7 +115,7 @@ pub(super) fn implementation(
             assert_eq!(result, result_id(hostname), "DNS text results share Result<Text, Text>");
         }
         substitutions.extend([
-            ("@TEXT_RESULT_TYPE@", ctype(program, reverse.return_type)),
+            ("@TEXT_RESULT_TYPE@", ctype(program, reverse.return_type).into_owned()),
             ("@TEXT_RESULT_ID@", result.to_string()),
             ("@TEXT_RESULT_OK_TAG@", ok.to_string()),
             ("@TEXT_RESULT_ERR_TAG@", err.to_string()),
@@ -129,7 +129,7 @@ pub(super) fn implementation(
             assert_eq!(result, result_id(idna), "DNS text results share Result<Text, Text>");
         }
         substitutions.extend([
-            ("@TEXT_RESULT_TYPE@", ctype(program, hostname.return_type)),
+            ("@TEXT_RESULT_TYPE@", ctype(program, hostname.return_type).into_owned()),
             ("@TEXT_RESULT_ID@", result.to_string()),
             ("@TEXT_RESULT_OK_TAG@", ok.to_string()),
             ("@TEXT_RESULT_ERR_TAG@", err.to_string()),
@@ -156,7 +156,7 @@ pub(super) fn implementation(
                 ctype(program, socket_resolve.return_type),
                 ctype(program, socket_resolve.params[0].1),
                 ctype(program, socket_resolve.params[1].1))),
-            ("@DNS_RESOLVE_RESULT_TYPE@", ctype(program, socket_resolve.return_type)),
+            ("@DNS_RESOLVE_RESULT_TYPE@", ctype(program, socket_resolve.return_type).into_owned()),
             ("@DNS_RESOLVE_RESULT_ID@", result_id(socket_resolve).to_string()),
             ("@DNS_RESOLVE_ERROR_TAG@", program.classes[result_id(socket_resolve)].result
                 .expect("SocketAddress.resolve returns Result").err_variant.to_string()),
@@ -173,7 +173,7 @@ pub(super) fn implementation(
                     ctype(program, socket_resolve.return_type),
                     ctype(program, socket_resolve.params[0].1),
                     ctype(program, socket_resolve.params[1].1))),
-                ("@DNS_RESOLVE_RESULT_TYPE@", ctype(program, socket_resolve.return_type)),
+                ("@DNS_RESOLVE_RESULT_TYPE@", ctype(program, socket_resolve.return_type).into_owned()),
                 ("@DNS_RESOLVE_RESULT_ID@", result_id(socket_resolve).to_string()),
                 ("@DNS_RESOLVE_ERROR_TAG@", program.classes[result_id(socket_resolve)].result
                     .expect("SocketAddress.resolve returns Result").err_variant.to_string()),
@@ -185,7 +185,7 @@ pub(super) fn implementation(
         if !substitutions.iter().any(|(key, _)| *key == "@TEXT_RESULT_TYPE@") {
             let (result, ok, err) = text_result_layout(program, reverse, text);
             substitutions.extend([
-                ("@TEXT_RESULT_TYPE@", ctype(program, reverse.return_type)),
+                ("@TEXT_RESULT_TYPE@", ctype(program, reverse.return_type).into_owned()),
                 ("@TEXT_RESULT_ID@", result.to_string()),
                 ("@TEXT_RESULT_OK_TAG@", ok.to_string()),
                 ("@TEXT_RESULT_ERR_TAG@", err.to_string()),
@@ -196,7 +196,7 @@ pub(super) fn implementation(
         if !substitutions.iter().any(|(key, _)| *key == "@TEXT_RESULT_TYPE@") {
             let (result, ok, err) = text_result_layout(program, hostname, text);
             substitutions.extend([
-                ("@TEXT_RESULT_TYPE@", ctype(program, hostname.return_type)),
+                ("@TEXT_RESULT_TYPE@", ctype(program, hostname.return_type).into_owned()),
                 ("@TEXT_RESULT_ID@", result.to_string()),
                 ("@TEXT_RESULT_OK_TAG@", ok.to_string()),
                 ("@TEXT_RESULT_ERR_TAG@", err.to_string()),

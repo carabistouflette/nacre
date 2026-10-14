@@ -103,11 +103,11 @@ pub(super) fn implementation(program: &t::Program, class_id: usize, element: Typ
     let parent_at_index = ordering::borrow_storage(program, element, "p->items[index]");
     let mut body = include_str!("../../stdlib/priority_queue.c.in").to_owned();
     let substitutions = [
-        ("@COMPARE_TYPE@", ctype(program, compare_type)),
+        ("@COMPARE_TYPE@", ctype(program, compare_type).into_owned()),
         ("@COMPARE_SLOT@", compare_slot.to_string()),
         ("@COMPARATOR_ID@", comparator.to_string()),
         ("@COMPARATOR_FIELD@", ordered::comparator_field_name()),
-        ("@ELEMENT@", ctype(program, element)),
+        ("@ELEMENT@", ctype(program, element).into_owned()),
         ("@ZERO@", zero(program, element)),
         ("@RIGHT_CHILD_KEY@", right),
         ("@LEFT_CHILD_KEY@", left),
@@ -115,7 +115,7 @@ pub(super) fn implementation(program: &t::Program, class_id: usize, element: Typ
         ("@PARENT_KEY@", parent_at_index),
         ("@ITEM_KEY@", item),
         ("@PARENT_KEY_FOR_ADD@", parent),
-        ("@OPTION_TYPE@", ctype(program, try_pop.return_type)),
+        ("@OPTION_TYPE@", ctype(program, try_pop.return_type).into_owned()),
         ("@NONE_TAG@", none_tag.to_string()),
         ("@SOME_TAG@", some_tag.to_string()),
         ("@PEEK_METHOD@", peek_method(program, class_id, element)),

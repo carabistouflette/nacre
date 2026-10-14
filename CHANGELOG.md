@@ -3,6 +3,9 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Primitive C type names are borrowed rather than allocated on every lookup.
+  Nominal names remain owned; native template storage explicitly takes ownership
+  where required. Generated C types and runtime behavior are unchanged.
 - LSP byte framing lives in a private I/O/JSON-only module, separate from workspace
   and frontend validation. The server supplies message-size policy; header limits,
   duplicate/truncated frame rejection, output flushing, and the public fuzz entry

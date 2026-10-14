@@ -119,6 +119,9 @@ caller-side result loans survive call cleanup. Local views remain non-exportable
 `c_repr.rs` maps nominal IR values to C types and cleared object representations.
 Both the expression backend and native emitters depend on this IR-only leaf;
 native emitters do not import representation helpers from the backend orchestrator.
+Fixed primitive C type names are borrowed static strings; nominal names own their
+formatted class IDs. Emitters allocate an owned name only where template storage
+requires it, preserving the same generated C types.
 
 A concrete class is a pointer to its nominal structure. An owned or borrowed
 interface is a two-pointer structure passed by value:

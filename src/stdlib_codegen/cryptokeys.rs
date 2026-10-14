@@ -72,7 +72,7 @@ fn add_result(
 ) {
     let function = method(program, native);
     let result = result_id(function);
-    replacements.push((result_placeholder, ctype(program, function.return_type)));
+    replacements.push((result_placeholder, ctype(program, function.return_type).into_owned()));
     replacements.push((ok_tag_placeholder, variant_id(program, result, "Ok").to_string()));
     replacements.push((error_result_placeholder, result.to_string()));
 }
@@ -171,22 +171,22 @@ pub(super) fn implementation(program: &t::Program) -> String {
 
     let text = text_class(program).expect("crypto key APIs require Text");
     let mut replacements = vec![
-        ("@TEXT_TYPE@", ctype(program, Type::Object(text))),
+        ("@TEXT_TYPE@", ctype(program, Type::Object(text)).into_owned()),
         ("@TEXT_FROM_BYTES@", format!("ncr_text_from_bytes_{text}")),
     ];
     if needs_buffer {
         let buffer = class_id(program, |class| matches!(class, C::ByteBuffer))
             .expect("crypto key, digest, and MAC APIs require ByteBuffer");
-        replacements.push(("@BUFFER_TYPE@", ctype(program, Type::Object(buffer))));
+        replacements.push(("@BUFFER_TYPE@", ctype(program, Type::Object(buffer)).into_owned()));
     }
-    if let Some(id) = key { replacements.push(("@KEY_TYPE@", ctype(program, Type::Object(id)))); }
-    if let Some(id) = digest { replacements.push(("@DIGEST_TYPE@", ctype(program, Type::Object(id)))); }
-    if let Some(id) = mac { replacements.push(("@MAC_TYPE@", ctype(program, Type::Object(id)))); }
+    if let Some(id) = key { replacements.push(("@KEY_TYPE@", ctype(program, Type::Object(id)).into_owned())); }
+    if let Some(id) = digest { replacements.push(("@DIGEST_TYPE@", ctype(program, Type::Object(id)).into_owned())); }
+    if let Some(id) = mac { replacements.push(("@MAC_TYPE@", ctype(program, Type::Object(id)).into_owned())); }
     if let Some(id) = certificate {
         let path = class_id(program, |class| matches!(class, C::Path))
             .expect("Certificate.verify requires Path");
-        replacements.push(("@CERTIFICATE_TYPE@", ctype(program, Type::Object(id))));
-        replacements.push(("@PATH_TYPE@", ctype(program, Type::Object(path))));
+        replacements.push(("@CERTIFICATE_TYPE@", ctype(program, Type::Object(id)).into_owned()));
+        replacements.push(("@PATH_TYPE@", ctype(program, Type::Object(path)).into_owned()));
     }
     add_method_placeholders(program, &mut replacements, key.is_some(), digest.is_some(), mac.is_some(), certificate.is_some());
     body = replace_placeholders(body, &replacements);

@@ -83,7 +83,7 @@ fn regex_implementation(program: &t::Program, regex_class: usize) -> String {
         ("@SEARCH_RESULT@", search_result.to_string()),
         ("@SEARCH_OK_TAG@", variant_id(program, search_result, "Ok").to_string()),
         ("@SEARCH_ERR@", format!("ncr_result_error_{search_result}")),
-        ("@OPTION_TYPE@", crate::c_repr::ctype(program, Type::Object(*option_class))),
+        ("@OPTION_TYPE@", crate::c_repr::ctype(program, Type::Object(*option_class)).into_owned()),
         ("@OPTION_NONE_TAG@", variant_id(program, *option_class, "None").to_string()),
         ("@OPTION_SOME_TAG@", variant_id(program, *option_class, "Some").to_string()),
         ("@TEXT_MAKE@", format!("ncr_text_from_bytes_{text}")),

@@ -1,5 +1,6 @@
 use crate::c_repr::ctype;
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
+use std::borrow::Cow;
 use super::support::{
     has_placeholder, native_class_id, native_class_id_if, native_function_if,
     replace_placeholders, result_id, template_section, variant, variant_id,
@@ -62,11 +63,11 @@ fn arg(function: &t::Function, index: usize) -> String {
     format!("ncr_v_{}", function.params[index].0)
 }
 
-fn arg_type(program: &t::Program, function: &t::Function, index: usize) -> String {
+fn arg_type(program: &t::Program, function: &t::Function, index: usize) -> Cow<'static, str> {
     ctype(program, function.params[index].1)
 }
 
-fn result_type(program: &t::Program, function: &t::Function) -> String {
+fn result_type(program: &t::Program, function: &t::Function) -> Cow<'static, str> {
     ctype(program, function.return_type)
 }
 

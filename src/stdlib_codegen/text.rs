@@ -48,7 +48,7 @@ fn text_method_placeholders(body: String, program: &t::Program, text: usize) -> 
         ("@ERROR_SLICE_RESULT@", format!("ncr_result_error_{slice_id}")),
         ("@TEXT_MAKE@", format!("ncr_text_from_bytes_{text}")),
         ("@TEXT_TAKE@", format!("ncr_text_take_bytes_{text}")),
-        ("@LIST_TYPE@", crate::c_repr::ctype(program, split.return_type)),
+        ("@LIST_TYPE@", crate::c_repr::ctype(program, split.return_type).into_owned()),
         ("@LIST_NEW@", format!("ncr_fn_{}", list_new.id)),
         ("@LIST_ADD@", format!("ncr_fn_{}", list_add.id)),
     ])
