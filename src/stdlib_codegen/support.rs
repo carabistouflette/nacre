@@ -582,6 +582,19 @@ pub(super) fn native_function_if(program: &t::Program, is: impl Fn(M) -> bool) -
 pub(super) fn native_function(program: &t::Program, is: impl Fn(M) -> bool) -> &t::Function {
     native_function_if(program, is).expect("compiler-owned native function is present")
 }
+/// Receiver-scoped lookup; static factories use their own qualification rules.
+pub(super) fn native_method_if(
+    program: &t::Program, receiver: usize, is: impl Fn(M) -> bool,
+) -> Option<&t::Function> {
+    program.functions.iter().find(|function| {
+        function.receiver == Some(receiver) && function.native.is_some_and(&is)
+    })
+}
+pub(super) fn native_method(
+    program: &t::Program, receiver: usize, is: impl Fn(M) -> bool,
+) -> &t::Function {
+    native_method_if(program, receiver, is).expect("compiler-owned native method is present")
+}
 pub(super) fn native_class_id_if(program: &t::Program, is: impl Fn(C) -> bool) -> Option<usize> {
     program.classes.iter().find(|class| class.native.is_some_and(&is)).map(|class| class.id)
 }
@@ -680,7 +693,8 @@ pub(super) fn replace_method_ids(
         if let Some(class) = receiver {
             let is_static_factory = function.receiver.is_none()
                 && matches!(function.native, Some(M::MapWithHasher | M::SetWithHasher))
-                && function.name == format!("{}.withHasher", program.classes[class].name);
+                && function.name.strip_prefix(program.classes[class].name.as_str())
+                    == Some(".withHasher");
             if function.receiver != Some(class) && !is_static_factory { continue; }
         }
         if let Some(method) = function.native {

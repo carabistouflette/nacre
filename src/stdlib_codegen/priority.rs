@@ -2,7 +2,7 @@ use crate::c_repr::ctype;
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
 use super::{
     iterators, ordering, ordered,
-    support::{drop_element, marker, option_tags, replace_method_ids, replace_placeholders, zero},
+    support::{drop_element, marker, native_method, native_method_if, option_tags, replace_method_ids, replace_placeholders, zero},
 };
 
 pub(super) fn fields(program: &t::Program, class: C, _class_id: usize) -> String {
@@ -25,18 +25,9 @@ pub(super) fn drop_fields(class: C) -> String {
     )
 }
 
-fn native_method(program: &t::Program, receiver: usize, method: M) -> Option<&t::Function> {
-    program.functions.iter().find(|function| {
-        function.receiver == Some(receiver) && function.native == Some(method)
-    })
-}
-
-fn required_method(program: &t::Program, receiver: usize, method: M) -> &t::Function {
-    native_method(program, receiver, method).expect("compiler-owned PriorityQueue method is present")
-}
 
 fn peek_method(program: &t::Program, class_id: usize, element: Type) -> String {
-    let Some(function) = native_method(program, class_id, M::PriorityQueuePeek) else {
+    let Some(function) = native_method_if(program, class_id, |candidate| candidate == M::PriorityQueuePeek) else {
         return String::new();
     };
     assert!(element.is_copy(), "PriorityQueue.peek is specialized for copied values");
@@ -47,7 +38,7 @@ fn peek_method(program: &t::Program, class_id: usize, element: Type) -> String {
 }
 
 fn borrowed_getter(program: &t::Program, class_id: usize, element: Type) -> String {
-    let Some(function) = native_method(program, class_id, M::PriorityQueueGetRef) else {
+    let Some(function) = native_method_if(program, class_id, |candidate| candidate == M::PriorityQueueGetRef) else {
         return String::new();
     };
     let Type::Borrow { class, .. } = function.return_type else {
@@ -62,7 +53,7 @@ fn borrowed_getter(program: &t::Program, class_id: usize, element: Type) -> Stri
 }
 
 fn try_peek_method(program: &t::Program, class_id: usize, element: Type) -> String {
-    let Some(function) = native_method(program, class_id, M::PriorityQueueTryPeek) else {
+    let Some(function) = native_method_if(program, class_id, |candidate| candidate == M::PriorityQueueTryPeek) else {
         return String::new();
     };
     assert!(element.is_copy(), "PriorityQueue.tryPeek is specialized for copied values");
@@ -74,7 +65,7 @@ fn try_peek_method(program: &t::Program, class_id: usize, element: Type) -> Stri
     )
 }
 fn value_at_method(program: &t::Program, class_id: usize, element: Type) -> String {
-    let Some(function) = native_method(program, class_id, M::PriorityQueueValueAt) else {
+    let Some(function) = native_method_if(program, class_id, |candidate| candidate == M::PriorityQueueValueAt) else {
         return String::new();
     };
     let index = function.params.first().expect("PriorityQueue.valueAt index parameter").1;
@@ -88,7 +79,7 @@ fn value_at_method(program: &t::Program, class_id: usize, element: Type) -> Stri
 
 
 pub(super) fn implementation(program: &t::Program, class_id: usize, element: Type) -> String {
-    let constructor = required_method(program, class_id, M::PriorityQueueNew);
+    let constructor = native_method(program, class_id, |candidate| candidate == M::PriorityQueueNew);
     let (comparator, compare_slot, compare_type) = ordering::comparator_info(program, constructor);
     assert_eq!(program.classes[class_id].fields.first(), Some(&Type::Object(comparator)),
         "PriorityQueue stores its owned Comparator<T> interface");
@@ -98,11 +89,11 @@ pub(super) fn implementation(program: &t::Program, class_id: usize, element: Typ
     };
     assert_eq!(compare_type, expected_compare_type,
         "Comparator<T> borrows affine values and copies scalar values");
-    let add = required_method(program, class_id, M::PriorityQueueAdd);
+    let add = native_method(program, class_id, |candidate| candidate == M::PriorityQueueAdd);
     assert_eq!(add.params.first().map(|(_, ty)| *ty), Some(element));
-    let pop = required_method(program, class_id, M::PriorityQueuePop);
+    let pop = native_method(program, class_id, |candidate| candidate == M::PriorityQueuePop);
     assert_eq!(pop.return_type, element, "PriorityQueue.pop transfers an element");
-    let try_pop = required_method(program, class_id, M::PriorityQueueTryPop);
+    let try_pop = native_method(program, class_id, |candidate| candidate == M::PriorityQueueTryPop);
     let (none_tag, some_tag) = option_tags(program, try_pop, element);
     let item = ordering::borrow_storage(program, element, "p->items[index]");
     let parent = ordering::borrow_storage(program, element, "p->items[parent]");

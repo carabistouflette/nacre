@@ -2,18 +2,9 @@ use crate::c_repr::ctype;
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
 use super::{
     iterators, ordering,
-    support::{drop_element, marker, option_tags, replace_method_ids, replace_placeholders, zero},
+    support::{drop_element, marker, native_method, native_method_if, option_tags, replace_method_ids, replace_placeholders, zero},
 };
 
-fn native_method(program: &t::Program, receiver: usize, method: M) -> Option<&t::Function> {
-    program.functions.iter().find(|function| {
-        function.receiver == Some(receiver) && function.native == Some(method)
-    })
-}
-
-fn required_method(program: &t::Program, receiver: usize, method: M) -> &t::Function {
-    native_method(program, receiver, method).expect("compiler-owned ordered collection method is present")
-}
 
 const COMPARATOR_FIELD: usize = 0;
 
@@ -31,7 +22,7 @@ pub(super) fn comparator_field_name() -> String {
 }
 
 fn comparator_info(program: &t::Program, class_id: usize, method: M) -> (usize, usize, Type) {
-    ordering::comparator_info(program, required_method(program, class_id, method))
+    ordering::comparator_info(program, native_method(program, class_id, |candidate| candidate == method))
 }
 
 fn ordered_map_for_set(program: &t::Program, key: Type) -> &t::Class {
@@ -40,7 +31,7 @@ fn ordered_map_for_set(program: &t::Program, key: Type) -> &t::Class {
     }).expect("OrderedSet specialization owns its shared OrderedMap<K, Unit> core")
 }
 fn value_at_mut_method(program: &t::Program, class_id: usize, value: Type) -> String {
-    let Some(function) = native_method(program, class_id, M::OrderedMapValueAtMut) else {
+    let Some(function) = native_method_if(program, class_id, |candidate| candidate == M::OrderedMapValueAtMut) else {
         return String::new();
     };
     let index_type = function.params.first().expect("OrderedMap.valueAtMut index").1;
@@ -60,7 +51,7 @@ fn ordered_map_drain(
     method: M,
     drain_keys: bool,
 ) -> String {
-    let Some(drain) = native_method(program, class_id, method) else { return String::new(); };
+    let Some(drain) = native_method_if(program, class_id, |candidate| candidate == method) else { return String::new(); };
     let element = if drain_keys { key } else { value };
     let (next_name, drop_name) = iterators::callback_names(drain.id);
     let entry = format!("struct ncr_ordered_entry_{class_id}");
@@ -95,7 +86,7 @@ fn ordered_map_drain(
 }
 
 fn ordered_set_key_at(program: &t::Program, class_id: usize, key: Type) -> String {
-    let Some(function) = native_method(program, class_id, M::OrderedSetKeyAt) else { return String::new(); };
+    let Some(function) = native_method_if(program, class_id, |candidate| candidate == M::OrderedSetKeyAt) else { return String::new(); };
     let index_type = function.params.first().expect("OrderedSet.keyAt index").1;
     assert_eq!(index_type, Type::Int, "OrderedSet.keyAt index is int32");
     let stored = ordering::borrow_storage(program, key, "p->table.items[index].key");
@@ -106,7 +97,7 @@ fn ordered_set_key_at(program: &t::Program, class_id: usize, key: Type) -> Strin
 }
 
 fn ordered_set_drain(program: &t::Program, class_id: usize, key: Type) -> String {
-    let Some(drain) = native_method(program, class_id, M::OrderedSetDrain) else { return String::new(); };
+    let Some(drain) = native_method_if(program, class_id, |candidate| candidate == M::OrderedSetDrain) else { return String::new(); };
     let map = ordered_map_for_set(program, key);
     let (next_name, drop_name) = iterators::callback_names(drain.id);
     let entry = format!("struct ncr_ordered_entry_{}", map.id);
@@ -175,7 +166,7 @@ fn ordered_storage_drop(key: Type, value: Type) -> String {
 }
 
 fn try_get_method(program: &t::Program, class_id: usize, value: Type) -> String {
-    let Some(function) = native_method(program, class_id, M::OrderedMapTryGet) else {
+    let Some(function) = native_method_if(program, class_id, |candidate| candidate == M::OrderedMapTryGet) else {
         return String::new();
     };
     assert!(value.is_copy(), "OrderedMap.tryGet is specialized for copied values");
@@ -192,7 +183,7 @@ fn try_get_method(program: &t::Program, class_id: usize, value: Type) -> String 
 fn borrowed_getters(program: &t::Program, class_id: usize, value: Type) -> String {
     let mut output = String::new();
     for method in [M::OrderedMapGetRef, M::OrderedMapGetMut] {
-        let Some(function) = native_method(program, class_id, method) else { continue; };
+        let Some(function) = native_method_if(program, class_id, |candidate| candidate == method) else { continue; };
         let Type::Borrow { class: value_class, .. } = function.return_type else {
             unreachable!("OrderedMap borrowed getters return borrowed values");
         };
@@ -209,15 +200,15 @@ fn borrowed_getters(program: &t::Program, class_id: usize, value: Type) -> Strin
 }
 
 pub(super) fn map_implementation(program: &t::Program, class_id: usize, key: Type, value: Type) -> String {
-    let constructor = required_method(program, class_id, M::OrderedMapNew);
+    let constructor = native_method(program, class_id, |candidate| candidate == M::OrderedMapNew);
     let (comparator, compare_slot, compare_type) = ordering::comparator_info(program, constructor);
     assert_eq!(comparator_field(program, class_id), Type::Object(comparator));
-    let contains = required_method(program, class_id, M::OrderedMapContains);
+    let contains = native_method(program, class_id, |candidate| candidate == M::OrderedMapContains);
     let query_type = contains.params.first().expect("OrderedMap key query").1;
     assert_eq!(query_type, compare_type, "borrowed key query matches Comparator<K> representation");
-    let put = required_method(program, class_id, M::OrderedMapPut);
+    let put = native_method(program, class_id, |candidate| candidate == M::OrderedMapPut);
     let (none_tag, some_tag) = option_tags(program, put, value);
-    let floor = required_method(program, class_id, M::OrderedMapFloorIndex);
+    let floor = native_method(program, class_id, |candidate| candidate == M::OrderedMapFloorIndex);
     let (index_none_tag, index_some_tag) = option_tags(program, floor, Type::Int);
     let try_get = try_get_method(program, class_id, value);
     let borrowed = borrowed_getters(program, class_id, value);
@@ -229,8 +220,8 @@ pub(super) fn map_implementation(program: &t::Program, class_id: usize, key: Typ
     let drop_key_at = drop_element(key, "p->table.items[index].key");
     let zero_key = zero(program, key);
     let zero_value = zero(program, value);
-    let key_at = required_method(program, class_id, M::OrderedMapKeyAt);
-    let value_at = required_method(program, class_id, M::OrderedMapValueAt);
+    let key_at = native_method(program, class_id, |candidate| candidate == M::OrderedMapKeyAt);
+    let value_at = native_method(program, class_id, |candidate| candidate == M::OrderedMapValueAt);
     let key_at_expr = ordering::borrow_storage(program, key, "p->table.items[index].key");
     let value_at_expr = ordering::borrow_storage(program, value, "p->table.items[index].value");
     let query_type_c = ctype(program, query_type);
@@ -275,7 +266,7 @@ pub(super) fn map_implementation(program: &t::Program, class_id: usize, key: Typ
 pub(super) fn set_implementation(program: &t::Program, class_id: usize, key: Type) -> String {
     let map = ordered_map_for_set(program, key);
     let (_, _, compare_type) = comparator_info(program, class_id, M::OrderedSetNew);
-    let contains = required_method(program, class_id, M::OrderedSetContains);
+    let contains = native_method(program, class_id, |candidate| candidate == M::OrderedSetContains);
     let query = contains.params.first().expect("OrderedSet key query").1;
     assert_eq!(query, compare_type, "borrowed key query matches Comparator<T> representation");
     let key_query = ordering::borrow_storage(program, key, "key");

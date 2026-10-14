@@ -173,6 +173,12 @@ Iterator callback and adapter lookups inspect existing IR lists by reference,
 without building temporary collections. Callback selection still requires exactly
 one matching method, and an adapter still requires exactly one iterator interface.
 
+Collection emitters share receiver-scoped native-method lookup in support.
+Optional lookup preserves specialization pruning; required lookup enforces the
+compiler-owned declaration contract. Static factories are not receiver methods:
+custom Map/Set factories retain exact qualified-name matching, using borrowed
+name slices rather than allocating comparison strings.
+
 Concrete emitters retain their own storage layout and native method bodies.
 They may compose another emitter's actual implementation, such as drain
 callbacks, without giving it responsibility for unrelated value contracts.

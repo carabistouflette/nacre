@@ -1,12 +1,7 @@
 use crate::c_repr::ctype;
 use crate::ir::{self as t, NativeMethod as M, Type};
-use super::support::{result_id, variant_id, zero};
+use super::support::{native_method_if, result_id, variant_id, zero};
 
-fn native_method(program: &t::Program, class_id: usize, is: impl Fn(M) -> bool) -> Option<&t::Function> {
-    program.functions.iter().find(|function| {
-        function.receiver == Some(class_id) && function.native.is_some_and(&is)
-    })
-}
 
 fn default_compare(class_id: usize, element: Type, element_c: &str) -> String {
     let body = match element {
@@ -89,7 +84,7 @@ fn heapsort_core(
 }
 
 fn default_sort_method(program: &t::Program, class_id: usize) -> String {
-    let Some(function) = native_method(program, class_id, |method| matches!(method, M::ListSort)) else {
+    let Some(function) = native_method_if(program, class_id, |method| matches!(method, M::ListSort)) else {
         return String::new();
     };
     format!(
@@ -99,7 +94,7 @@ fn default_sort_method(program: &t::Program, class_id: usize) -> String {
 }
 
 fn sort_by_method(program: &t::Program, class_id: usize) -> String {
-    let Some(function) = native_method(program, class_id, |method| matches!(method, M::ListSortBy)) else {
+    let Some(function) = native_method_if(program, class_id, |method| matches!(method, M::ListSortBy)) else {
         return String::new();
     };
     let (comparator, _, _) = comparator_info(program, function);
@@ -110,7 +105,7 @@ fn sort_by_method(program: &t::Program, class_id: usize) -> String {
 }
 
 fn default_search(program: &t::Program, class_id: usize, element: Type) -> String {
-    let Some(function) = native_method(program, class_id, |method| matches!(method, M::ListBinarySearch)) else {
+    let Some(function) = native_method_if(program, class_id, |method| matches!(method, M::ListBinarySearch)) else {
         return String::new();
     };
     assert_eq!(function.params.first().expect("binarySearch query").1, element);
@@ -126,7 +121,7 @@ fn default_search(program: &t::Program, class_id: usize, element: Type) -> Strin
 }
 
 fn binary_search_by(program: &t::Program, class_id: usize, element: Type) -> String {
-    let Some(function) = native_method(program, class_id, |method| matches!(method, M::ListBinarySearchBy)) else {
+    let Some(function) = native_method_if(program, class_id, |method| matches!(method, M::ListBinarySearchBy)) else {
         return String::new();
     };
     let (comparator, slot, comparison_type) = comparator_info(program, function);
@@ -154,8 +149,8 @@ fn binary_search_by(program: &t::Program, class_id: usize, element: Type) -> Str
 }
 
 fn comparator_sort_helpers(program: &t::Program, class_id: usize, element: Type) -> String {
-    let sort = native_method(program, class_id, |method| matches!(method, M::ListSortBy));
-    let search = native_method(program, class_id, |method| matches!(method, M::ListBinarySearchBy));
+    let sort = native_method_if(program, class_id, |method| matches!(method, M::ListSortBy));
+    let search = native_method_if(program, class_id, |method| matches!(method, M::ListBinarySearchBy));
     let source = sort.or(search).expect("comparator methods retained on List specialization");
     let (comparator, slot, comparison_type) = comparator_info(program, source);
     let element_c = ctype(program, element);
@@ -186,10 +181,10 @@ fn comparator_sort_helpers(program: &t::Program, class_id: usize, element: Type)
 }
 
 pub(super) fn list_implementation(program: &t::Program, class_id: usize, element: Type) -> String {
-    let default_sort = native_method(program, class_id, |method| matches!(method, M::ListSort)).is_some();
-    let has_default_search = native_method(program, class_id, |method| matches!(method, M::ListBinarySearch)).is_some();
-    let sort_by = native_method(program, class_id, |method| matches!(method, M::ListSortBy)).is_some();
-    let search_by = native_method(program, class_id, |method| matches!(method, M::ListBinarySearchBy)).is_some();
+    let default_sort = native_method_if(program, class_id, |method| matches!(method, M::ListSort)).is_some();
+    let has_default_search = native_method_if(program, class_id, |method| matches!(method, M::ListBinarySearch)).is_some();
+    let sort_by = native_method_if(program, class_id, |method| matches!(method, M::ListSortBy)).is_some();
+    let search_by = native_method_if(program, class_id, |method| matches!(method, M::ListBinarySearchBy)).is_some();
     let mut output = String::new();
     if default_sort || has_default_search {
         let element_c = ctype(program, element);

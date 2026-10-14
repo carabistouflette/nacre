@@ -1,16 +1,7 @@
 use crate::c_repr::ctype;
 use crate::ir::{self as t, NativeMethod as M, Type};
-use super::{iterators, support::{drop_element, marker, option_tags, zero}};
+use super::{iterators, support::{drop_element, marker, native_method, native_method_if, option_tags, zero}};
 
-fn native_method(program: &t::Program, receiver: usize, is: impl Fn(M) -> bool) -> Option<&t::Function> {
-    program.functions.iter().find(|function| {
-        function.receiver == Some(receiver) && function.native.is_some_and(&is)
-    })
-}
-
-fn required_method(program: &t::Program, receiver: usize, is: impl Fn(M) -> bool) -> &t::Function {
-    native_method(program, receiver, is).expect("compiler-owned Deque method is present")
-}
 
 pub(super) fn fields(program: &t::Program, element: Type) -> String {
     format!(
@@ -58,7 +49,7 @@ fn borrowed_getters(program: &t::Program, class_id: usize, element: Type) -> Str
 }
 
 fn get_method(program: &t::Program, class_id: usize, element: Type) -> String {
-    let Some(function) = native_method(program, class_id, |method| matches!(method, M::DequeGet)) else {
+    let Some(function) = native_method_if(program, class_id, |method| matches!(method, M::DequeGet)) else {
         return String::new();
     };
     assert!(element.is_copy(), "Deque.get is pruned for affine elements");
@@ -68,7 +59,7 @@ fn get_method(program: &t::Program, class_id: usize, element: Type) -> String {
 }
 
 fn try_get_method(program: &t::Program, class_id: usize, element: Type) -> String {
-    let Some(function) = native_method(program, class_id, |method| matches!(method, M::DequeTryGet)) else {
+    let Some(function) = native_method_if(program, class_id, |method| matches!(method, M::DequeTryGet)) else {
         return String::new();
     };
     assert!(element.is_copy(), "Deque.tryGet is pruned for affine elements");
@@ -93,8 +84,8 @@ fn try_pop_method(program: &t::Program, class_id: usize, element: Type, front: b
     } else {
         matches!(method, M::DequePopBack)
     };
-    let Some(function) = native_method(program, class_id, is_try) else { return String::new(); };
-    let pop = required_method(program, class_id, is_pop);
+    let Some(function) = native_method_if(program, class_id, is_try) else { return String::new(); };
+    let pop = native_method(program, class_id, is_pop);
     assert_eq!(pop.return_type, element, "Deque strict pop transfers one element");
     let (none_tag, some_tag) = option_tags(program, function, element);
     include_str!("../../stdlib/deque_try_pop.c.in")

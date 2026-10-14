@@ -1,6 +1,6 @@
 use crate::c_repr::ctype;
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
-use super::{iterators, support::{drop_element, marker, option_tags, zero}};
+use super::{iterators, support::{drop_element, marker, native_method_if, option_tags, zero}};
 pub(super) fn list_fields(program: &t::Program, element: Type) -> String {
     format!("    {} *items;\n    int32_t length;\n    int32_t capacity;\n", ctype(program, element))
 }
@@ -123,19 +123,9 @@ fn borrowed_list_methods(program: &t::Program, list_class: usize, element: Type)
     }
     methods
 }
-fn list_native_function(
-    program: &t::Program,
-    list_class: usize,
-    is: impl Fn(M) -> bool,
-) -> Option<&t::Function> {
-    program.functions.iter().find(|function| {
-        function.receiver == Some(list_class)
-            && function.native.is_some_and(&is)
-    })
-}
 
 fn try_get_list_method(program: &t::Program, list_class: usize, element: Type) -> String {
-    let Some(function) = list_native_function(program, list_class, |method| matches!(method, M::ListTryGet))
+    let Some(function) = native_method_if(program, list_class, |method| matches!(method, M::ListTryGet))
     else { return String::new(); };
     assert!(element.is_copy(),
         "List tryGet must be pruned for non-copy elements");
@@ -150,15 +140,15 @@ fn try_get_list_method(program: &t::Program, list_class: usize, element: Type) -
 }
 
 fn try_owned_list_methods(program: &t::Program, list_class: usize, element: Type) -> String {
-    let try_pop = list_native_function(program, list_class, |method| matches!(method, M::ListTryPop))
+    let try_pop = native_method_if(program, list_class, |method| matches!(method, M::ListTryPop))
         .expect("compiler-owned List.tryPop method is present");
-    let try_remove = list_native_function(program, list_class, |method| matches!(method, M::ListTryRemove))
+    let try_remove = native_method_if(program, list_class, |method| matches!(method, M::ListTryRemove))
         .expect("compiler-owned List.tryRemove method is present");
     assert_eq!(try_pop.return_type, try_remove.return_type,
         "List.tryPop and tryRemove must return the same Option specialization");
-    let pop = list_native_function(program, list_class, |method| matches!(method, M::ListPop))
+    let pop = native_method_if(program, list_class, |method| matches!(method, M::ListPop))
         .expect("compiler-owned List.pop method is present");
-    let remove = list_native_function(program, list_class, |method| matches!(method, M::ListRemove))
+    let remove = native_method_if(program, list_class, |method| matches!(method, M::ListRemove))
         .expect("compiler-owned List.remove method is present");
     let (none_tag, some_tag) = option_tags(program, try_pop, element);
     let index_type = try_remove.params.first().expect("List.tryRemove index parameter").1;
@@ -170,15 +160,6 @@ fn try_owned_list_methods(program: &t::Program, list_class: usize, element: Type
         .replace("@ELEMENT@", &ctype(program, element))
         .replace("@STRICT_POP_CALL@", &format!("ncr_fn_{}", pop.id))
         .replace("@STRICT_REMOVE_CALL@", &format!("ncr_fn_{}", remove.id))
-}
-fn map_native_function(
-    program: &t::Program,
-    map_class: usize,
-    is: impl Fn(M) -> bool,
-) -> Option<&t::Function> {
-    program.functions.iter().find(|function| {
-        function.receiver == Some(map_class) && function.native.is_some_and(&is)
-    })
 }
 fn map_query_view(program: &t::Program, key: Type, query_type: Type, expression: &str) -> String {
     if let Type::Borrow { class, .. } = query_type {
@@ -267,15 +248,15 @@ fn map_table_initializers(map_class: usize) -> String {
 fn map_initializer_methods(program: &t::Program, map_class: usize, hasher: Option<Type>) -> String {
     let map_type = ctype(program, Type::Object(map_class));
     let mut methods = String::new();
-    if map_native_function(program, map_class, |method| matches!(method, M::MapNew)).is_some() {
+    if native_method_if(program, map_class, |method| matches!(method, M::MapNew)).is_some() {
         methods.push_str(&format!(
             "static void @MAP_NEW@({map_type} p, size_t line, size_t column) {{\n    (void)line;\n    (void)column;\n    ncr_map_init_{map_class}(&p->table);\n}}\n"
         ));
     }
     if let Some(policy) = hasher {
-        let factory_name = format!("{}.withHasher", program.classes[map_class].name);
+        let class_name = program.classes[map_class].name.as_str();
         assert!(program.functions.iter().any(|function| {
-            function.name == factory_name && function.native == Some(M::MapWithHasher)
+            function.name.strip_prefix(class_name) == Some(".withHasher") && function.native == Some(M::MapWithHasher)
         }), "custom Map specialization must retain Map.withHasher");
         methods.push_str(&format!(
             "static {map_type} @MAP_WITH_HASHER@({} hasher, size_t line, size_t column) {{\n    {map_type} p = ncr_allocate(sizeof(*p), line, column);\n    ncr_map_init_{map_class}(&p->table);\n    p->table.hasher = hasher;\n    return p;\n}}\n",
@@ -312,7 +293,7 @@ fn borrowed_map_methods(program: &t::Program, map_class: usize, value: Type) -> 
 }
 
 fn try_get_map_method(program: &t::Program, map_class: usize, value: Type) -> String {
-    let Some(function) = map_native_function(program, map_class, |method| matches!(method, M::MapTryGet))
+    let Some(function) = native_method_if(program, map_class, |method| matches!(method, M::MapTryGet))
     else { return String::new(); };
     assert!(value.is_copy(), "Map tryGet must be pruned for non-copy values");
     let (none_tag, some_tag) = option_tags(program, function, value);
@@ -332,7 +313,7 @@ fn map_drain_implementation(
     method: M,
     drain_keys: bool,
 ) -> String {
-    let Some(drain) = map_native_function(program, map_class, |candidate|
+    let Some(drain) = native_method_if(program, map_class, |candidate|
         if drain_keys { matches!(candidate, M::MapDrainKeys) } else { matches!(candidate, M::MapDrainValues) })
     else { return String::new(); };
     assert_eq!(drain.native, Some(method), "map drain method dispatch matches its source signature");
@@ -372,14 +353,14 @@ fn map_drain_implementation(
 pub(super) fn map_implementation(
     program: &t::Program, map_class: usize, key: Type, value: Type, hasher: Option<Type>,
 ) -> String {
-    let put = map_native_function(program, map_class, |method| matches!(method, M::MapPut))
+    let put = native_method_if(program, map_class, |method| matches!(method, M::MapPut))
         .expect("compiler-owned Map.put method is present");
     assert_eq!(put.params.first().expect("Map.put key parameter").1, key,
         "Map.put must take an owned key");
-    let contains = map_native_function(program, map_class, |method| matches!(method, M::MapContainsKey))
+    let contains = native_method_if(program, map_class, |method| matches!(method, M::MapContainsKey))
         .expect("compiler-owned Map.containsKey method is present");
     let query_type = contains.params.first().expect("Map.containsKey key parameter").1;
-    let remove = map_native_function(program, map_class, |method| matches!(method, M::MapTryRemove))
+    let remove = native_method_if(program, map_class, |method| matches!(method, M::MapTryRemove))
         .expect("compiler-owned Map.tryRemove method is present");
     assert_eq!(remove.params.first().expect("Map.tryRemove key parameter").1, query_type,
         "Map query methods must share the specialized key ABI");

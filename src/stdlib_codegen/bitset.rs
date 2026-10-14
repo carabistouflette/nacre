@@ -1,18 +1,9 @@
 use crate::c_repr::ctype;
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
 use super::{
-    support::{marker, option_tags, replace_method_ids, replace_placeholders},
+    support::{marker, native_method, option_tags, replace_method_ids, replace_placeholders},
 };
 
-fn native_method(program: &t::Program, receiver: usize, method: M) -> Option<&t::Function> {
-    program.functions.iter().find(|function| {
-        function.receiver == Some(receiver) && function.native == Some(method)
-    })
-}
-
-fn required_method(program: &t::Program, receiver: usize, method: M) -> &t::Function {
-    native_method(program, receiver, method).expect("compiler-owned BitSet method is present")
-}
 
 pub(super) fn fields(_program: &t::Program, class: C, _class_id: usize) -> String {
     match class {
@@ -29,17 +20,17 @@ pub(super) fn drop_fields(_program: &t::Program, class: C, _class_id: usize) -> 
 }
 
 pub(super) fn implementation(program: &t::Program, class_id: usize) -> String {
-    let constructor = required_method(program, class_id, M::BitSetNew);
+    let constructor = native_method(program, class_id, |candidate| candidate == M::BitSetNew);
     assert_eq!(constructor.params.first().map(|(_, ty)| *ty), Some(Type::Long),
         "BitSet constructor takes the initial bit count");
-    let next = required_method(program, class_id, M::BitSetNextSetBit);
+    let next = native_method(program, class_id, |candidate| candidate == M::BitSetNextSetBit);
     let (none_tag, some_tag) = option_tags(program, next, Type::Long);
-    let clone = required_method(program, class_id, M::BitSetClone);
+    let clone = native_method(program, class_id, |candidate| candidate == M::BitSetClone);
     assert_eq!(clone.return_type, Type::Object(class_id), "BitSet.clone returns a new BitSet");
-    let and = required_method(program, class_id, M::BitSetAnd);
-    let or = required_method(program, class_id, M::BitSetOr);
-    let xor = required_method(program, class_id, M::BitSetXor);
-    let and_not = required_method(program, class_id, M::BitSetAndNot);
+    let and = native_method(program, class_id, |candidate| candidate == M::BitSetAnd);
+    let or = native_method(program, class_id, |candidate| candidate == M::BitSetOr);
+    let xor = native_method(program, class_id, |candidate| candidate == M::BitSetXor);
+    let and_not = native_method(program, class_id, |candidate| candidate == M::BitSetAndNot);
     for function in [and, or, xor, and_not] {
         assert_eq!(function.params.first().map(|(_, ty)| *ty),
             Some(Type::Borrow { class: class_id, mutable: false }),

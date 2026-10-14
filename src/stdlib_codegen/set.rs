@@ -1,6 +1,6 @@
 use crate::c_repr::ctype;
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
-use super::{collections, iterators, support::{drop_element, result_id, variant_id, zero}};
+use super::{collections, iterators, support::{drop_element, native_method, native_method_if, result_id, variant_id, zero}};
 
 fn map_for_set(program: &t::Program, key: Type, hasher: Option<Type>) -> &t::Class {
     program.classes.iter().find(|class| {
@@ -12,30 +12,21 @@ fn map_for_set(program: &t::Program, key: Type, hasher: Option<Type>) -> &t::Cla
     }).expect("Set specialization requests its shared Map<K, Unit> table")
 }
 
-fn native_method(program: &t::Program, receiver: usize, is: impl Fn(M) -> bool) -> Option<&t::Function> {
-    program.functions.iter().find(|function| {
-        function.receiver == Some(receiver) && function.native.is_some_and(&is)
-    })
-}
-
-fn required_method(program: &t::Program, receiver: usize, is: impl Fn(M) -> bool) -> &t::Function {
-    native_method(program, receiver, is).expect("compiler-owned collection method is present")
-}
 
 fn initializer_methods(
     program: &t::Program, class_id: usize, table_id: usize, hasher: Option<Type>,
 ) -> String {
     let set_type = ctype(program, Type::Object(class_id));
     let mut methods = String::new();
-    if native_method(program, class_id, |method| matches!(method, M::SetNew)).is_some() {
+    if native_method_if(program, class_id, |method| matches!(method, M::SetNew)).is_some() {
         methods.push_str(&format!(
             "static void @SET_NEW@({set_type} p, size_t line, size_t column) {{\n    (void)line;\n    (void)column;\n    ncr_map_init_{table_id}(&p->table);\n}}\n"
         ));
     }
     if let Some(policy) = hasher {
-        let factory_name = format!("{}.withHasher", program.classes[class_id].name);
+        let class_name = program.classes[class_id].name.as_str();
         assert!(program.functions.iter().any(|function| {
-            function.name == factory_name && function.native == Some(M::SetWithHasher)
+            function.name.strip_prefix(class_name) == Some(".withHasher") && function.native == Some(M::SetWithHasher)
         }), "custom Set specialization must retain Set.withHasher");
         methods.push_str(&format!(
             "static {set_type} @SET_WITH_HASHER@({} hasher, size_t line, size_t column) {{\n    {set_type} p = ncr_allocate(sizeof(*p), line, column);\n    ncr_map_init_{table_id}(&p->table);\n    p->table.hasher = hasher;\n    return p;\n}}\n",
@@ -58,12 +49,12 @@ pub(super) fn implementation(
     program: &t::Program, class_id: usize, key: Type, hasher: Option<Type>,
 ) -> String {
     let map_class = map_for_set(program, key, hasher);
-    let add = required_method(program, class_id, |method| matches!(method, M::SetAdd));
-    let contains = required_method(program, class_id, |method| matches!(method, M::SetContains));
-    let remove = required_method(program, class_id, |method| matches!(method, M::SetRemove));
-    let map_put = required_method(program, map_class.id, |method| matches!(method, M::MapPut));
-    let map_remove = required_method(program, map_class.id, |method| matches!(method, M::MapTryRemove));
-    let map_contains = required_method(program, map_class.id, |method| matches!(method, M::MapContainsKey));
+    let add = native_method(program, class_id, |method| matches!(method, M::SetAdd));
+    let contains = native_method(program, class_id, |method| matches!(method, M::SetContains));
+    let remove = native_method(program, class_id, |method| matches!(method, M::SetRemove));
+    let map_put = native_method(program, map_class.id, |method| matches!(method, M::MapPut));
+    let map_remove = native_method(program, map_class.id, |method| matches!(method, M::MapTryRemove));
+    let map_contains = native_method(program, map_class.id, |method| matches!(method, M::MapContainsKey));
     assert_eq!(add.params.first().expect("Set.add key").1, map_put.params.first().expect("Map.put key").1);
     assert_eq!(contains.params.first().expect("Set.contains key").1, map_contains.params.first().expect("Map.containsKey key").1);
     assert_eq!(remove.params.first().expect("Set.remove key").1, map_remove.params.first().expect("Map.tryRemove key").1);
@@ -80,7 +71,7 @@ pub(super) fn implementation(
         .replace("@OPTION_TYPE@", &ctype(program, option_type))
         .replace("@SOME_TAG@", &some_tag.to_string())
         .replace("@SET_INITIALIZER_METHODS@", &initializer_methods);
-    if let Some(drain) = native_method(program, class_id, |method| matches!(method, M::CollectionDrain)) {
+    if let Some(drain) = native_method_if(program, class_id, |method| matches!(method, M::CollectionDrain)) {
         let (next_name, drop_name) = iterators::callback_names(drain.id);
         let entry = format!("struct ncr_map_entry_{}", map_class.id);
         let next_body = format!(
