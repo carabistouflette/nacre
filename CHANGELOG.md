@@ -3,6 +3,10 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Build canonical generic-specialization names directly in their final buffer.
+  One argument writer owns separators and nested type spelling, eliminating
+  temporary argument strings, vectors, and joins while preserving names,
+  specialization order, expansion limits, type reports, and generated C.
 - Separate LSP project-file admission into a private source-files module,
   independent of document state and diagnostic publication. Configuration,
   traversal, symlink, exclusion, and size-limit behavior are preserved.

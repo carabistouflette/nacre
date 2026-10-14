@@ -4,6 +4,32 @@ Nacre is experimental pre-1.0. Executed checks are evidence, not a safety certif
 [validation-0.12.0.json](validation-0.12.0.json) records portable local results.
 Historical reports retain their original release labels; they are not current-release proof.
 
+## Canonical generic-name construction
+
+Graphify located the generic-name formatter and its expander caller; live
+cargo-modules output corroborated the local boundary. One argument writer now
+builds canonical names directly in the final buffer, without temporary
+per-argument strings or vectors.
+
+A throwaway allocator probe compiled the production parser, resolver, prelude,
+and generic expander directly. For `examples/language/generic_factories.ncr`,
+100 expansions fell from **1,202,000 to 1,139,100 allocation/reallocation calls**.
+Parsing, resolution, prelude injection, and input cloning were outside the
+counted interval. Specialization names and discovery order were identical.
+This is a focused allocator result, not a throughput claim.
+
+Actual CLI type reports (2,688 bytes) and generated C (234,061 bytes) were
+byte-identical before and after. GCC and Clang ASan/UBSan executions retained
+the exact output, with three native allocations, three frees, and zero live
+allocations.
+
+The actual CLI also accepted a 4,096-byte specialization name and rejected
+4,097 bytes with E4199; the pre-change production expander agreed at both
+boundaries. Both GCC and Clang full locked/offline suites with `fuzzing` passed
+**1,265 tests across 62 suites**, with two ordinarily ignored LLVM tests.
+Strict all-targets Clippy with `fuzzing` and `-D warnings` passed.
+
+
 ## LSP source-admission boundary
 
 Graphify scoped the configuration/discovery helpers inside the LSP server;

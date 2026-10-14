@@ -136,18 +136,34 @@ pub fn expand(mut program: a::Program) -> Result<(a::Program, Vec<String>), Diag
     Ok((program, expander.names))
 }
 
-fn display_type(ty: &Type) -> String {
+fn append_type_name(output: &mut String, ty: &Type) {
     match ty {
-        Type::Byte => "byte".to_owned(), Type::Char => "char".to_owned(),
-        Type::Int => "int".to_owned(), Type::Long => "long".to_owned(),
-        Type::Double => "double".to_owned(), Type::Unit => "Unit".to_owned(),
-        Type::Boolean => "boolean".to_owned(), Type::String => "String".to_owned(),
-        Type::Void => "void".to_owned(),
-        Type::Named(name) => name.clone(),
-        Type::Applied { name, args } => format!("{}<{}>", name, args.iter().map(display_type).collect::<Vec<_>>().join(",")),
-        Type::Borrow { name, args, mutable } => format!("borrow {}{}{}", if *mutable { "mut " } else { "" }, name,
-            if args.is_empty() { String::new() } else { format!("<{}>", args.iter().map(display_type).collect::<Vec<_>>().join(",")) }),
+        Type::Byte => output.push_str("byte"), Type::Char => output.push_str("char"),
+        Type::Int => output.push_str("int"), Type::Long => output.push_str("long"),
+        Type::Double => output.push_str("double"), Type::Unit => output.push_str("Unit"),
+        Type::Boolean => output.push_str("boolean"), Type::String => output.push_str("String"),
+        Type::Void => output.push_str("void"),
+        Type::Named(name) => output.push_str(name),
+        Type::Applied { name, args } => {
+            output.push_str(name);
+            append_type_arguments(output, args);
+        }
+        Type::Borrow { name, args, mutable } => {
+            output.push_str("borrow ");
+            if *mutable { output.push_str("mut "); }
+            output.push_str(name);
+            if !args.is_empty() { append_type_arguments(output, args); }
+        }
     }
+}
+
+fn append_type_arguments(output: &mut String, args: &[Type]) {
+    output.push('<');
+    for (index, arg) in args.iter().enumerate() {
+        if index != 0 { output.push(','); }
+        append_type_name(output, arg);
+    }
+    output.push('>');
 }
 
 impl Expander {
@@ -200,7 +216,8 @@ impl Expander {
                             return Err(Diagnostic::new(span, format!("[E4103] type argument `{n}` is unknown")));
                         }
                 }
-                let key = format!("{}<{}>", name, args.iter().map(display_type).collect::<Vec<_>>().join(","));
+                let mut key = String::from(name);
+                append_type_arguments(&mut key, &args);
                 if key.len() > MAX_TYPE_NAME {
                     return Err(Diagnostic::new(span, "[E4199] specialization name is too long; recursive expansion is likely"));
                 }

@@ -68,6 +68,10 @@ has a canonical key such as `Box<int>`. A deterministic queue discovers nested
 instances; a cache prevents duplicate specialization. Substitution traverses
 fields, signatures, locals, constructions, and method bodies. It does not rewrite
 variable identifiers as type names.
+Canonical names append into the specialization key's buffer. One argument writer
+owns angle brackets and commas; recursive type spelling writes into that same
+buffer instead of creating temporary strings and vectors. Type arguments are
+resolved before key construction, and existing expansion bounds remain unchanged.
 
 Instances become concrete nominal types before checking. Later analyses do not
 resolve type variables. An unused template is not fully checked, but every
