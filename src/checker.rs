@@ -1132,21 +1132,28 @@ impl Checker<'_> {
             let unique = self.variables.len();
             let collection_name = format!("$nacre_for_collection_{unique}");
             let cursor_name = format!("$nacre_for_index_{unique}");
+            let limit_name = format!("$nacre_for_limit_{unique}");
             let collection_id = self.declare(&collection_name, collection_type, span)?;
             let cursor_id = self.declare(&cursor_name, Type::Int, span)?;
-            let mut lowered = vec![
-                t::Stmt::Let { id: collection_id, ty: collection_type, value: Some(frozen_value) },
-                t::Stmt::Let { id: cursor_id, ty: Type::Int,
-                    value: Some(t::Expr { kind: t::ExprKind::Int(0), ty: Type::Int, span }) },
-            ];
+            let limit_id = self.declare(&limit_name, Type::Int, span)?;
 
-            let cursor = synthetic_expr(a::ExprKind::Var(cursor_name.clone()), span);
             let size_receiver = synthetic_expr(a::ExprKind::Var(collection_name.clone()), span);
             let size = synthetic_expr(a::ExprKind::MethodCall {
                 receiver: Box::new(size_receiver), name: "size".to_owned(), args: Vec::new(),
             }, collection.span);
+            let size_expr = self.expression(&size)?;
+
+            let mut lowered = vec![
+                t::Stmt::Let { id: collection_id, ty: collection_type, value: Some(frozen_value) },
+                t::Stmt::Let { id: cursor_id, ty: Type::Int,
+                    value: Some(t::Expr { kind: t::ExprKind::Int(0), ty: Type::Int, span }) },
+                t::Stmt::Let { id: limit_id, ty: Type::Int, value: Some(size_expr) },
+            ];
+
+            let cursor = synthetic_expr(a::ExprKind::Var(cursor_name.clone()), span);
+            let limit_expr = synthetic_expr(a::ExprKind::Var(limit_name), span);
             let condition = synthetic_expr(a::ExprKind::Binary {
-                op: B::Lt, left: Box::new(cursor), right: Box::new(size),
+                op: B::Lt, left: Box::new(cursor), right: Box::new(limit_expr),
             }, span);
             let condition = self.expression(&condition)?;
             self.require(Type::Boolean, condition.ty, condition.span)?;
