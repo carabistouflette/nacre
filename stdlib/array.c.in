@@ -1,6 +1,6 @@
 /* Native fixed Array<@ELEMENT@>. Every slot is initialized before ownership. */
-static void ncr_array_check_@ID@(@ARRAY_TYPE@ p, int32_t index, size_t line, size_t column) {
-    if (index < 0 || index >= p->length) { ncr_fail("Array index out of bounds", line, column); }
+static inline void ncr_array_check_@ID@(@ARRAY_TYPE@ p, int32_t index, size_t line, size_t column) {
+    if (__builtin_expect(index < 0 || index >= p->length, 0)) { ncr_fail("Array index out of bounds", line, column); }
 }
 static void @ARRAY_NEW@(@ARRAY_TYPE@ p, @LIST_TYPE@ values, size_t line, size_t column) {
     (void)line; (void)column;
@@ -11,13 +11,13 @@ static void @ARRAY_NEW@(@ARRAY_TYPE@ p, @LIST_TYPE@ values, size_t line, size_t 
     values->capacity = 0;
     ncr_deallocate(values);
 }
-static int32_t @ARRAY_SIZE@(@ARRAY_TYPE@ p, size_t line, size_t column) {
+static inline int32_t @ARRAY_SIZE@(@ARRAY_TYPE@ p, size_t line, size_t column) {
     (void)line; (void)column; return p->length;
 }
 @ARRAY_GET_METHOD@
 @BORROWED_GETTERS@
 @TRY_GET_METHOD@
-static void @ARRAY_SET@(@ARRAY_TYPE@ p, int32_t index, @ELEMENT@ value, size_t line, size_t column) {
+static inline void @ARRAY_SET@(@ARRAY_TYPE@ p, int32_t index, @ELEMENT@ value, size_t line, size_t column) {
     ncr_array_check_@ID@(p, index, line, column);
     @DROP_AT_INDEX@
     p->items[index] = value;

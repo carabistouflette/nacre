@@ -80,14 +80,57 @@ pub fn compile_c(source: &str) -> Result<NativeProgram, String> {
 pub fn compile_c_with_flags(source: &str, flags: &[&str]) -> Result<NativeProgram, String> {
     compile_c_optimized(source, "-O2", flags)
 }
+fn cache_dir() -> Option<PathBuf> {
+    if env::var_os("NACRE_NO_CACHE").is_some() {
+        return None;
+    }
+    if let Some(dir) = env::var_os("NACRE_CACHE_DIR") {
+        return Some(PathBuf::from(dir));
+    }
+    env::var_os("XDG_CACHE_HOME")
+        .map(PathBuf::from)
+        .or_else(|| env::var_os("HOME").map(|h| PathBuf::from(h).join(".cache")))
+        .map(|p| p.join("nacre"))
+}
+
+fn compute_cache_key(compiler: &std::ffi::OsStr, optimization: &str, flags: &[&str], source: &str) -> String {
+    let mut h: u128 = 0xcbf29ce484222325u64 as u128;
+    let prime: u128 = 0x100000001b3u64 as u128;
+    for b in compiler.as_encoded_bytes() {
+        h = (h ^ (*b as u128)).wrapping_mul(prime);
+    }
+    for b in optimization.as_bytes() {
+        h = (h ^ (*b as u128)).wrapping_mul(prime);
+    }
+    for flag in flags {
+        for b in flag.as_bytes() {
+            h = (h ^ (*b as u128)).wrapping_mul(prime);
+        }
+        h = (h ^ 0xff).wrapping_mul(prime);
+    }
+    for b in source.as_bytes() {
+        h = (h ^ (*b as u128)).wrapping_mul(prime);
+    }
+    format!("{h:032x}")
+}
 
 /// Compile at an explicitly selected level; flags are trusted separate arguments.
 pub fn compile_c_optimized(source: &str, optimization: &str, flags: &[&str]) -> Result<NativeProgram, String> {
     check_optimization(optimization)?;
     let compiler = find_c_compiler()?;
     let directory = TempDir::new()?;
-    let c_path = directory.0.join("program.c");
     let executable = directory.0.join(if cfg!(windows) { "program.exe" } else { "program" });
+
+    let cache = cache_dir();
+    let cache_entry = cache.as_ref().map(|c| c.join(compute_cache_key(&compiler, optimization, flags, source)));
+    if let Some(cached_path) = &cache_entry
+        && cached_path.is_file()
+        && fs::copy(cached_path, &executable).is_ok()
+    {
+        return Ok(NativeProgram { executable, _directory: directory });
+    }
+
+    let c_path = directory.0.join("program.c");
     fs::write(&c_path, source).map_err(|e| format!("failed to write temporary C source: {e}"))?;
     let libraries = NativeLibraries::from_source(source);
     let output = Command::new(&compiler)
@@ -101,6 +144,12 @@ pub fn compile_c_optimized(source: &str, optimization: &str, flags: &[&str]) -> 
         .output().map_err(|e| format!("failed to start {compiler:?}: {e}"))?;
     if !output.status.success() {
         return Err(format!("C compiler {compiler:?} failed:\n{}\nTo inspect the generated code: nacre emit-c source.ncr -o debug.c", String::from_utf8_lossy(&output.stderr)));
+    }
+    if let Some(cached_path) = &cache_entry {
+        if let Some(parent) = cached_path.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        let _ = fs::copy(&executable, cached_path);
     }
     Ok(NativeProgram { executable, _directory: directory })
 }

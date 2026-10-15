@@ -91,17 +91,36 @@ static bool ncr_utf8_valid(const unsigned char *data, size_t length) {
 }
 
 /* Explicit wrapping: do not rely on C signed overflow or out-of-range casts. */
-static int32_t ncr_wrap(int64_t value) {
+static inline int32_t ncr_wrap(int64_t value) {
     uint32_t bits = (uint32_t)value;
-    if (bits <= (uint32_t)INT32_MAX) {
-        return (int32_t)bits;
-    }
-    return -1 - (int32_t)(UINT32_MAX - bits);
+    int32_t res;
+    memcpy(&res, &bits, sizeof(res));
+    return res;
 }
-static int32_t ncr_add(int32_t a, int32_t b) { return ncr_wrap((int64_t)a + (int64_t)b); }
-static int32_t ncr_sub(int32_t a, int32_t b) { return ncr_wrap((int64_t)a - (int64_t)b); }
-static int32_t ncr_mul(int32_t a, int32_t b) { return ncr_wrap((int64_t)a * (int64_t)b); }
-static int32_t ncr_neg(int32_t a) { return ncr_wrap(-(int64_t)a); }
+static inline int32_t ncr_add(int32_t a, int32_t b) {
+    uint32_t sum = (uint32_t)a + (uint32_t)b;
+    int32_t res;
+    memcpy(&res, &sum, sizeof(res));
+    return res;
+}
+static inline int32_t ncr_sub(int32_t a, int32_t b) {
+    uint32_t diff = (uint32_t)a - (uint32_t)b;
+    int32_t res;
+    memcpy(&res, &diff, sizeof(res));
+    return res;
+}
+static inline int32_t ncr_mul(int32_t a, int32_t b) {
+    uint32_t prod = (uint32_t)a * (uint32_t)b;
+    int32_t res;
+    memcpy(&res, &prod, sizeof(res));
+    return res;
+}
+static inline int32_t ncr_neg(int32_t a) {
+    uint32_t neg = 0u - (uint32_t)a;
+    int32_t res;
+    memcpy(&res, &neg, sizeof(res));
+    return res;
+}
 
 static _Noreturn void ncr_fail(const char *message, size_t line, size_t column) {
 #ifdef NACRE_MULTI_SOURCE
@@ -142,21 +161,26 @@ static size_t ncr_utf8_encode_scalar(uint32_t value, unsigned char bytes[4]) {
     bytes[3] = (unsigned char)(0x80u | (value & 0x3fu));
     return 4;
 }
-static int64_t ncr_i64_from_bits(uint64_t bits) {
-    if (bits <= (uint64_t)INT64_MAX) { return (int64_t)bits; }
-    return -1 - (int64_t)(UINT64_MAX - bits);
+static inline int64_t ncr_i64_from_bits(uint64_t bits) {
+    int64_t res;
+    memcpy(&res, &bits, sizeof(res));
+    return res;
 }
-static int32_t ncr_i32_from_bits(uint32_t bits) { return ncr_wrap((int64_t)bits); }
-static int64_t ncr_long_add(int64_t a, int64_t b) {
+static inline int32_t ncr_i32_from_bits(uint32_t bits) {
+    int32_t res;
+    memcpy(&res, &bits, sizeof(res));
+    return res;
+}
+static inline int64_t ncr_long_add(int64_t a, int64_t b) {
     return ncr_i64_from_bits((uint64_t)a + (uint64_t)b);
 }
-static int64_t ncr_long_sub(int64_t a, int64_t b) {
+static inline int64_t ncr_long_sub(int64_t a, int64_t b) {
     return ncr_i64_from_bits((uint64_t)a - (uint64_t)b);
 }
-static int64_t ncr_long_mul(int64_t a, int64_t b) {
+static inline int64_t ncr_long_mul(int64_t a, int64_t b) {
     return ncr_i64_from_bits((uint64_t)a * (uint64_t)b);
 }
-static int64_t ncr_long_neg(int64_t value) {
+static inline int64_t ncr_long_neg(int64_t value) {
     return ncr_i64_from_bits(UINT64_C(0) - (uint64_t)value);
 }
 static int64_t ncr_long_div(int64_t a, int64_t b, size_t line, size_t column) {
@@ -169,14 +193,14 @@ static int64_t ncr_long_rem(int64_t a, int64_t b, size_t line, size_t column) {
     if (a == INT64_MIN && b == -1) { return 0; }
     return a % b;
 }
-static int32_t ncr_i32_and(int32_t a, int32_t b) { return ncr_i32_from_bits((uint32_t)a & (uint32_t)b); }
-static int32_t ncr_i32_or(int32_t a, int32_t b) { return ncr_i32_from_bits((uint32_t)a | (uint32_t)b); }
-static int32_t ncr_i32_xor(int32_t a, int32_t b) { return ncr_i32_from_bits((uint32_t)a ^ (uint32_t)b); }
-static int32_t ncr_i32_not(int32_t value) { return ncr_i32_from_bits(~(uint32_t)value); }
-static int64_t ncr_i64_and(int64_t a, int64_t b) { return ncr_i64_from_bits((uint64_t)a & (uint64_t)b); }
-static int64_t ncr_i64_or(int64_t a, int64_t b) { return ncr_i64_from_bits((uint64_t)a | (uint64_t)b); }
-static int64_t ncr_i64_xor(int64_t a, int64_t b) { return ncr_i64_from_bits((uint64_t)a ^ (uint64_t)b); }
-static int64_t ncr_i64_not(int64_t value) { return ncr_i64_from_bits(~(uint64_t)value); }
+static inline int32_t ncr_i32_and(int32_t a, int32_t b) { return ncr_i32_from_bits((uint32_t)a & (uint32_t)b); }
+static inline int32_t ncr_i32_or(int32_t a, int32_t b) { return ncr_i32_from_bits((uint32_t)a | (uint32_t)b); }
+static inline int32_t ncr_i32_xor(int32_t a, int32_t b) { return ncr_i32_from_bits((uint32_t)a ^ (uint32_t)b); }
+static inline int32_t ncr_i32_not(int32_t value) { return ncr_i32_from_bits(~(uint32_t)value); }
+static inline int64_t ncr_i64_and(int64_t a, int64_t b) { return ncr_i64_from_bits((uint64_t)a & (uint64_t)b); }
+static inline int64_t ncr_i64_or(int64_t a, int64_t b) { return ncr_i64_from_bits((uint64_t)a | (uint64_t)b); }
+static inline int64_t ncr_i64_xor(int64_t a, int64_t b) { return ncr_i64_from_bits((uint64_t)a ^ (uint64_t)b); }
+static inline int64_t ncr_i64_not(int64_t value) { return ncr_i64_from_bits(~(uint64_t)value); }
 static int32_t ncr_i32_shl(int32_t value, int32_t count, size_t line, size_t column) {
     if (count < 0 || count >= 32) { ncr_fail("[E6104] shift count must be within the operand width", line, column); }
     return ncr_i32_from_bits((uint32_t)value << (uint32_t)count);

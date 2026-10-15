@@ -1,4 +1,4 @@
-static @RETURN_TYPE@ @LIST_METHOD@(ncr_obj_@ID@ *p, @INDEX_TYPE@ index, size_t line, size_t column) {
+static inline @RETURN_TYPE@ @LIST_METHOD@(ncr_obj_@ID@ *p, @INDEX_TYPE@ index, size_t line, size_t column) {
     ncr_list_check_@ID@(p, index, line, column);
     return @BORROWED_ELEMENT@;
 }

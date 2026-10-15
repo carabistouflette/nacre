@@ -16,8 +16,8 @@ static void ncr_list_reserve_@ID@(ncr_obj_@ID@ *p, int32_t requested, size_t lin
     p->items = items;
     p->capacity = (int32_t)capacity;
 }
-static void ncr_list_check_@ID@(ncr_obj_@ID@ *p, int32_t index, size_t line, size_t column) {
-    if (index < 0 || index >= p->length) { ncr_fail("List index out of bounds", line, column); }
+static inline void ncr_list_check_@ID@(ncr_obj_@ID@ *p, int32_t index, size_t line, size_t column) {
+    if (__builtin_expect(index < 0 || index >= p->length, 0)) { ncr_fail("List index out of bounds", line, column); }
 }
 static void @LIST_NEW@(ncr_obj_@ID@ *p, size_t line, size_t column) {
     (void)line; (void)column;
@@ -28,19 +28,19 @@ static void @LIST_ADD@(ncr_obj_@ID@ *p, @ELEMENT@ value, size_t line, size_t col
     ncr_list_reserve_@ID@(p, p->length + 1, line, column);
     p->items[p->length++] = value;
 }
-static int32_t @LIST_SIZE@(ncr_obj_@ID@ *p, size_t line, size_t column) {
+static inline int32_t @LIST_SIZE@(ncr_obj_@ID@ *p, size_t line, size_t column) {
     (void)line; (void)column; return p->length;
 }
-static int32_t @LIST_CAPACITY@(ncr_obj_@ID@ *p, size_t line, size_t column) {
+static inline int32_t @LIST_CAPACITY@(ncr_obj_@ID@ *p, size_t line, size_t column) {
     (void)line; (void)column; return p->capacity;
 }
-static bool @LIST_IS_EMPTY@(ncr_obj_@ID@ *p, size_t line, size_t column) {
+static inline bool @LIST_IS_EMPTY@(ncr_obj_@ID@ *p, size_t line, size_t column) {
     (void)line; (void)column; return p->length == 0;
 }
 @GET_METHOD@
 @BORROWED_GETTERS@
 @TRY_GET_METHOD@
-static void @LIST_SET@(ncr_obj_@ID@ *p, int32_t index, @ELEMENT@ value, size_t line, size_t column) {
+static inline void @LIST_SET@(ncr_obj_@ID@ *p, int32_t index, @ELEMENT@ value, size_t line, size_t column) {
     ncr_list_check_@ID@(p, index, line, column);
     @DROP_AT_INDEX@
     p->items[index] = value;
