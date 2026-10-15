@@ -1,0 +1,227 @@
+{
+  "schema_version": 1,
+  "snapshot_commit": "f3073b3c25b90c452882535703d82769359c8843",
+  "host": {
+    "cpu": "Intel Core Ultra 7 258V",
+    "cpu_affinity": 0,
+    "gcc": "16.2.1",
+    "glibc": "2.44"
+  },
+  "events": [
+    "cpu_core/cycles/",
+    "cpu_core/branches/",
+    "cpu_core/branch-misses/"
+  ],
+  "workload_sources": {
+    "stack.ncr": "class Cell {\n    int value;\n    Cell(int value) { this.value = value; }\n    int read() { return this.value; }\n}\nint visit(int value) {\n    Cell cell = new Cell(value);\n    return cell.read();\n}\nvoid main() {\n    int i = 0;\n    long checksum = 0L;\n    while (i < 1000000) {\n        checksum = checksum + (long)visit(i);\n        i = i + 1;\n    }\n    println(checksum);\n}\n",
+    "memchr.c": "#include <inttypes.h>\n#include <stddef.h>\n#include <stdint.h>\n#include <stdio.h>\n#include <string.h>\n\n#define BLOCKS 64u\n#define LENGTH 4096u\n#define ITERATIONS 200000u\n\nstatic unsigned char haystack[BLOCKS][LENGTH];\n\n__attribute__((noinline, optimize(\"no-tree-vectorize\")))\nstatic ptrdiff_t scalar_find(const unsigned char *p, size_t n, unsigned char needle) {\n    for (size_t i = 0; i < n; ++i) {\n        if (p[i] == needle) return (ptrdiff_t)i;\n    }\n    return -1;\n}\n\nint main(void) {\n    for (size_t block = 0; block < BLOCKS; ++block) {\n        memset(haystack[block], 'a', LENGTH);\n        haystack[block][LENGTH - 1] = 0x7f;\n    }\n    uint64_t checksum = 0;\n    for (uint32_t i = 0; i < ITERATIONS; ++i) {\n        size_t block = (i * 17u + 11u) & (BLOCKS - 1u);\n#ifdef SCALAR\n        ptrdiff_t found = scalar_find(haystack[block], LENGTH, 0x7f);\n#else\n        const unsigned char *match = memchr(haystack[block], 0x7f, LENGTH);\n        ptrdiff_t found = match == NULL ? -1 : match - haystack[block];\n#endif\n        if (found != (ptrdiff_t)(LENGTH - 1u)) return 2;\n        checksum += (uint64_t)found + 1u;\n    }\n    printf(\"checksum=%\" PRIu64 \"\\n\", checksum);\n    return 0;\n}\n",
+    "dispatch-long.ncr": "interface Work {\n    int run(int value);\n}\nclass Worker implements Work {\n    public int run(int value) {\n        if ((value % 997) == 0) { return value + 17; }\n        return value + 3;\n    }\n}\nvoid main() {\n    Work worker = new Worker();\n    int i = 0;\n    long checksum = 0L;\n    while (i < 200000000) {\n        checksum = checksum + (long)worker.run(i);\n        i = i + 1;\n    }\n    println(checksum);\n}\n"
+  },
+  "controls_and_commands": [
+    {
+      "language": "sh",
+      "source": "gcc -O2 -std=c11 -fno-builtin-memchr -fno-tree-vectorize -Wall -Wextra -pedantic memchr.c -o memchr-libc\ngcc -O2 -std=c11 -fno-builtin-memchr -fno-tree-vectorize -Wall -Wextra -pedantic -DSCALAR memchr.c -o memchr-scalar\n"
+    },
+    {
+      "language": "sh",
+      "source": "git archive HEAD | tar -x -C /tmp/nacre-opt-evidence/snapshot\ncargo build --release --manifest-path /tmp/nacre-opt-evidence/snapshot/Cargo.toml --bin nacre --target-dir /tmp/nacre-opt-evidence/target-optimized\n"
+    },
+    {
+      "language": "rust",
+      "source": "fn find_stack_promoted(_function: &t::Function, _program: &t::Program) -> HashSet<usize> {\n    HashSet::new()\n}\n"
+    },
+    {
+      "language": "c",
+      "source": "return ncr_thunk_1_0_0(ncr_self.data, ncr_v_0);\n"
+    },
+    {
+      "language": "c",
+      "source": "return ncr_self.vtable->m0(ncr_self.data, ncr_v_0);\n"
+    },
+    {
+      "language": "sh",
+      "source": "-O2 -std=c11 -pthread -g -fno-math-errno \\\n-fno-inline -fno-ipa-cp -fno-ipa-cp-clone -fno-ipa-sra \\\n-Wall -Wextra -pedantic -Wno-unused-function -Wno-unused-variable \\\n-Wno-unused-parameter -Wno-unused-but-set-variable \\\n-ffunction-sections -fdata-sections\n"
+    },
+    {
+      "language": "sh",
+      "source": "flock -x /tmp/nacre-option1-measure.lock bash -c '\nfor i in 1 2 3 4 5; do\n  taskset -c 0 perf stat -e cpu_core/cycles/,cpu_core/branches/,cpu_core/branch-misses/ -- /tmp/nacre-opt-evidence/dispatch-long-direct\n  taskset -c 0 perf stat -e cpu_core/cycles/,cpu_core/branches/,cpu_core/branch-misses/ -- /tmp/nacre-opt-evidence/dispatch-long-virtual\ndone'\n"
+    },
+    {
+      "language": "sh",
+      "source": "-O2 -std=c11 -pthread -g -fno-math-errno \\\n-Wall -Wextra -pedantic -Wno-unused-function -Wno-unused-variable \\\n-Wno-unused-parameter -Wno-unused-but-set-variable \\\n-ffunction-sections -fdata-sections\n"
+    },
+    {
+      "language": "sh",
+      "source": "# baseline\ngcc <native-flags> /tmp/nacre-opt-evidence/dispatch-long-direct.c \\\n  -o /tmp/nacre-opt-evidence/dispatch-long-fixed-base -lm -Wl,--gc-sections\n# instrumented build, same source and eventual output identity\ngcc <native-flags> -fprofile-generate=/tmp/nacre-opt-evidence/pgo-gcc-fixed \\\n  /tmp/nacre-opt-evidence/dispatch-long-direct.c \\\n  -o /tmp/nacre-opt-evidence/dispatch-long-fixed-pgo -lm -Wl,--gc-sections\n# train\n taskset -c 0 /tmp/nacre-opt-evidence/dispatch-long-fixed-pgo\n# use, same source and output identity\ngcc <native-flags> -fprofile-use=/tmp/nacre-opt-evidence/pgo-gcc-fixed -fprofile-correction \\\n  /tmp/nacre-opt-evidence/dispatch-long-direct.c \\\n  -o /tmp/nacre-opt-evidence/dispatch-long-fixed-pgo -lm -Wl,--gc-sections\n"
+    }
+  ],
+  "stack_promotion": {
+    "iterations": 1000000,
+    "checksum": 499999500000,
+    "enabled": {
+      "allocations": 0,
+      "frees": 0,
+      "live": 0
+    },
+    "disabled": {
+      "allocations": 1000000,
+      "frees": 1000000,
+      "live": 0
+    }
+  },
+  "memchr": {
+    "iterations": 200000,
+    "bytes_per_search": 4096,
+    "checksum": 819200000,
+    "runs_per_variant": 7,
+    "libc": {
+      "cycles": 27551502,
+      "branches": 16030191,
+      "branch_misses": 33072,
+      "cycles_run_variation_percent": 0.57,
+      "miss_run_variation_percent": 86.06,
+      "implementation_observed": "__memchr_avx2"
+    },
+    "scalar": {
+      "cycles": 577221906,
+      "branches": 1639030166,
+      "branch_misses": 203108,
+      "cycles_run_variation_percent": 0.04,
+      "miss_run_variation_percent": 0.12
+    },
+    "scope": "C mechanism control for the libc primitive used by Nacre, not an end-to-end language speedup"
+  },
+  "dispatch": {
+    "calls": 200000000,
+    "checksum": 20000000502808428,
+    "pair_columns": [
+      "pair",
+      "direct_cycles",
+      "direct_branches",
+      "direct_misses",
+      "virtual_cycles",
+      "virtual_branches",
+      "virtual_misses"
+    ],
+    "raw_pairs": [
+      [
+        1,
+        1012691534,
+        2400035356,
+        203677,
+        1013085704,
+        2400035341,
+        203757
+      ],
+      [
+        2,
+        1012649884,
+        2400035343,
+        203729,
+        1014367673,
+        2400035341,
+        203972
+      ],
+      [
+        3,
+        1012637327,
+        2400035342,
+        203723,
+        1014010412,
+        2400035339,
+        203951
+      ],
+      [
+        4,
+        1012684975,
+        2400035343,
+        203720,
+        1013901591,
+        2400035338,
+        203879
+      ],
+      [
+        5,
+        1012620914,
+        2400035339,
+        203695,
+        1013490572,
+        2400035344,
+        203815
+      ]
+    ],
+    "interpretation": "Tiny measured difference only in the controlled monomorphic workload; not a broad application gain"
+  },
+  "pgo": {
+    "calls": 200000000,
+    "checksum": 20000000502808428,
+    "pair_columns": [
+      "pair",
+      "base_cycles",
+      "base_branches",
+      "base_misses",
+      "pgo_cycles",
+      "pgo_branches",
+      "pgo_misses"
+    ],
+    "raw_pairs": [
+      [
+        1,
+        539513361,
+        50034770,
+        2881,
+        540191773,
+        50034755,
+        2846
+      ],
+      [
+        2,
+        539519925,
+        50034753,
+        2917,
+        540131548,
+        50034756,
+        2897
+      ],
+      [
+        3,
+        539665164,
+        50034755,
+        2880,
+        540185202,
+        50034751,
+        2887
+      ],
+      [
+        4,
+        539434628,
+        50034756,
+        2912,
+        540217059,
+        50034757,
+        2854
+      ],
+      [
+        5,
+        539539853,
+        50034755,
+        2938,
+        540194752,
+        50034756,
+        2891
+      ]
+    ],
+    "separate_seven_run_summary": {
+      "baseline_cycles": 539720664,
+      "baseline_misses": 3008,
+      "pgo_cycles": 540400927,
+      "pgo_misses": 3030
+    },
+    "interpretation": "Branch-miss sign reverses across batches; no reproducible PGO improvement. Profile consumption confirmed with strace using stable generated C and executable paths."
+  },
+  "cli_pgo": {
+    "original_failure": "Per-build temporary C paths caused profile-use ENOENT for training .gcda files.",
+    "fix_commit": "ab01891",
+    "verification": "Isolated staged CLI regression passed with GCC -Werror=missing-profile and executable-cache enabled; actual training/use executables both printed 49995011. Deleting training data causes profile-use failure rather than cache reuse."
+  }
+}

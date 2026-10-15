@@ -1,0 +1,1302 @@
+{
+  "commands_and_flags": {
+    "cpu_policy": "Nacre generated C and Rust both target the host CPU; no CPU affinity or frequency policy is set.",
+    "measurement_supervisor": [
+      "cc",
+      "-O2",
+      "-std=c11",
+      "-Wall",
+      "-Wextra",
+      "-pedantic",
+      "benchmarks/wait4_supervisor.c",
+      "-o",
+      "<unique-temporary-file>"
+    ],
+    "nacre_benchmark": [
+      "/home/arobin/Downloads/nacre/target/release/nacre",
+      "bench",
+      "benchmarks/suite_nacre.ncr",
+      "--native"
+    ],
+    "nacre_benchmark_native_c": [
+      "-O3",
+      "-DNACRE_MEMORY_STATS",
+      "-march=native"
+    ],
+    "nacre_direct_build": [
+      "/home/arobin/Downloads/nacre/target/release/nacre",
+      "build",
+      "benchmarks/suite_nacre.ncr",
+      "-O3",
+      "-o",
+      "<unique-temporary-file>",
+      "--native"
+    ],
+    "nacre_direct_build_memory_stats_extra": [
+      "--memory-stats"
+    ],
+    "nacre_environment": {
+      "NACRE_NO_CACHE": "1"
+    },
+    "rust_allocation_stats_extra": [
+      "--cfg",
+      "allocation_stats"
+    ],
+    "rust_native_compile": [
+      "rustc",
+      "--edition=2024",
+      "-O",
+      "-C",
+      "target-cpu=native",
+      "benchmarks/suite_rust.rs",
+      "-o",
+      "<unique-temporary-file>"
+    ]
+  },
+  "compile_elapsed_seconds": {
+    "nacre_native": 1.663110344,
+    "nacre_with_memory_stats": 1.662079355,
+    "rust_native": 0.428367966,
+    "rust_with_allocation_stats": 0.440606128
+  },
+  "compile_elapsed_seconds_samples": {
+    "nacre_native": [
+      1.669633911,
+      1.663110344,
+      1.650903749,
+      1.667981928,
+      1.646823573
+    ],
+    "nacre_with_memory_stats": [
+      1.657880258,
+      1.647943584,
+      1.667363214,
+      1.688697705,
+      1.662079355
+    ],
+    "rust_native": [
+      0.428367966,
+      0.433779223,
+      0.420133033,
+      0.413506984,
+      0.485984389
+    ],
+    "rust_with_allocation_stats": [
+      0.435866796,
+      0.437254772,
+      0.516576231,
+      0.444536681,
+      0.440606128
+    ]
+  },
+  "limitations": [
+    "Nacre has no standard-library JSON parser, so JSON uses the same schema-specific parser in Nacre and Rust: three fixed ASCII id/name/active objects, fixed field order, nonnegative 32-bit integer IDs and boolean values, JSON whitespace, and string escapes including \\uXXXX and surrogate pairs. It is not a general JSON implementation; keys are unescaped fixed literals, raw strings are ASCII in the fixture, and numeric syntax is limited to nonnegative integer IDs.",
+    "Nacre Map and Rust's standard randomized HashMap differ in hashing, growth, bucket, and collision policies; these are the normal collection APIs, not identical hash-table implementations.",
+    "Nacre's built-in bench path enables NACRE_MEMORY_STATS for its generated C program; those counters may perturb Nacre timings. Rust timing runs do not enable allocator counters.",
+    "RSS is a per-process high-water mark and includes startup/runtime setup; direct RSS children repeat the kernel enough to target approximately 20 ms based on Nacre's measured per-call time, capped at 20,000 calls.",
+    "Nacre allocation counters cover Nacre ncr_allocate/ncr_deallocate calls, not libc allocations. Rust counters cover Rust global-allocator calls; the reported live-block snapshot may include runtime/argument allocations and is not a leak verdict.",
+    "No filesystem, network, or external data source is used. CPU frequency, scheduling, thermal conditions, and allocator state are not pinned or controlled."
+  ],
+  "measurement": {
+    "allocation_source": "Separate untimed one-call direct children; counters include process setup, argument handling, workload, and result output.",
+    "compile_repeats": 5,
+    "compile_source": "Median wall-clock time across 5 independent compile-and-link commands per build variant with the native executable cache disabled; includes compiler process startup and output I/O, not rebuilding Nacre itself.",
+    "nacre_bench_command_elapsed_seconds_samples": [
+      2.962981911,
+      3.87906774,
+      3.935983048,
+      3.311851414,
+      4.391545777
+    ],
+    "nacre_calibration": "built-in nacre bench grows call count by 10 until one calibration batch reaches 20 ms, then reports the arithmetic mean of five per-call samples",
+    "peak_rss_source": "wait4 ru_maxrss of fresh direct one-workload child processes; platform value converted to bytes by the supervisor.",
+    "repeats": 5,
+    "rss_repeats": 3,
+    "runtime_source": "Nacre and Rust values are each the median of 5 fresh built-in bench/process means. These are per-kernel call times, not process launch times.",
+    "rust_bench_process_samples": [
+      {
+        "peak_rss_bytes": 2293760,
+        "process_elapsed_seconds": 2.43771593
+      },
+      {
+        "peak_rss_bytes": 2371584,
+        "process_elapsed_seconds": 2.452995502
+      },
+      {
+        "peak_rss_bytes": 2240512,
+        "process_elapsed_seconds": 2.467474981
+      },
+      {
+        "peak_rss_bytes": 2412544,
+        "process_elapsed_seconds": 2.604353203
+      },
+      {
+        "peak_rss_bytes": 2383872,
+        "process_elapsed_seconds": 2.864198925
+      }
+    ],
+    "rust_calibration": "Rust runner mirrors three warmups, 20 ms calibration target, factor-10 count growth, and five per-call samples; raw five samples are retained per run",
+    "timed_inner_samples": 5,
+    "warmups": 3
+  },
+  "schema_version": 1,
+  "suite": "Option1 named Nacre/Rust workloads",
+  "toolchains": {
+    "c_compiler_name": "cc",
+    "c_compiler_version": "cc (GCC) 16.2.1 20260810",
+    "machine": "x86_64",
+    "nacre": "nacre 0.12.0",
+    "platform": "Linux-7.2.8-arch1-1-x86_64-with-glibc2.44",
+    "python": "3.14.8",
+    "rust_target": "x86_64-unknown-linux-gnu",
+    "rustc": "rustc 1.99.0 (b940084d7 2026-09-28)"
+  },
+  "validated_checksums": {
+    "nacre": {
+      "binary": 2457183,
+      "game_of_life": 45,
+      "hashmap": 100941824,
+      "json": 73665,
+      "string": 160602,
+      "sudoku": 16605
+    },
+    "rust": {
+      "binary": 2457183,
+      "game_of_life": 45,
+      "hashmap": 100941824,
+      "json": 73665,
+      "string": 160602,
+      "sudoku": 16605
+    }
+  },
+  "workloads": {
+    "binary": {
+      "implementations": {
+        "nacre": {
+          "allocation_stats_untimed_one_call": {
+            "allocations": 21,
+            "frees": 21,
+            "live": 0
+          },
+          "per_process": {
+            "kernel_calls_per_process": 1050,
+            "median_peak_rss_bytes": 2256896,
+            "median_process_elapsed_seconds": 0.03248177,
+            "process_scope": "one fresh direct workload child under wait4; includes startup, arguments, kernel calls, output, and shutdown",
+            "raw_peak_rss_bytes_samples": [
+              2256896,
+              2420736,
+              2088960
+            ],
+            "raw_process_elapsed_seconds_samples": [
+              0.040341287,
+              0.024312289,
+              0.03248177
+            ]
+          },
+          "runtime": {
+            "median_kernel_calls_per_second": 52465,
+            "median_ns_per_call": 19060,
+            "median_work_units_per_second": 214900314,
+            "raw_inner_samples_ns_per_call": null,
+            "raw_run_mean_ns_per_call": [
+              18646,
+              19060,
+              18692,
+              22029,
+              21891
+            ],
+            "raw_sample_scope": "one built-in five-sample arithmetic mean per fresh nacre bench command",
+            "raw_samples_ns_per_call": [
+              18646,
+              19060,
+              18692,
+              22029,
+              21891
+            ],
+            "reported_calls_per_second_each_run": [
+              53630,
+              52465,
+              53498,
+              45394,
+              45680
+            ],
+            "reported_max_deviation_ns_each_run": [
+              181,
+              1703,
+              116,
+              1801,
+              1789
+            ],
+            "work_units_per_call": 4096
+          }
+        },
+        "rust": {
+          "allocation_stats_untimed_one_call": {
+            "alloc": 12,
+            "alloc_bytes": 18344,
+            "allocation_events": 21,
+            "dealloc": 8,
+            "dealloc_bytes": 20788,
+            "live": 4,
+            "realloc": 9,
+            "realloc_bytes": 8176,
+            "zeroed": 0
+          },
+          "per_process": {
+            "kernel_calls_per_process": 1050,
+            "median_peak_rss_bytes": 2400256,
+            "median_process_elapsed_seconds": 0.027910749,
+            "process_scope": "one fresh direct workload child under wait4; includes startup, arguments, kernel calls, output, and shutdown",
+            "raw_peak_rss_bytes_samples": [
+              2441216,
+              2400256,
+              2371584
+            ],
+            "raw_process_elapsed_seconds_samples": [
+              0.039389941,
+              0.027910749,
+              0.027046385
+            ]
+          },
+          "runtime": {
+            "median_kernel_calls_per_second": 67764,
+            "median_ns_per_call": 14757,
+            "median_work_units_per_second": 277563190,
+            "raw_inner_samples_ns_per_call": [
+              [
+                14718,
+                14657,
+                14676,
+                14735,
+                14729
+              ],
+              [
+                14747,
+                14722,
+                14704,
+                14838,
+                14778
+              ],
+              [
+                14742,
+                14593,
+                14578,
+                14721,
+                14621
+              ],
+              [
+                15829,
+                16008,
+                15945,
+                16063,
+                16116
+              ],
+              [
+                17812,
+                17520,
+                17364,
+                17309,
+                17051
+              ]
+            ],
+            "raw_run_mean_ns_per_call": [
+              14703,
+              14757,
+              14651,
+              15992,
+              17411
+            ],
+            "raw_sample_scope": "five Rust timed samples per process; runtime median is the median of five process-level arithmetic means",
+            "raw_samples_ns_per_call": [
+              14718,
+              14657,
+              14676,
+              14735,
+              14729,
+              14747,
+              14722,
+              14704,
+              14838,
+              14778,
+              14742,
+              14593,
+              14578,
+              14721,
+              14621,
+              15829,
+              16008,
+              15945,
+              16063,
+              16116,
+              17812,
+              17520,
+              17364,
+              17309,
+              17051
+            ],
+            "reported_calls_per_second_each_run": [
+              68013,
+              67764,
+              68254,
+              62531,
+              57434
+            ],
+            "reported_max_deviation_ns_each_run": [
+              46,
+              81,
+              91,
+              163,
+              401
+            ],
+            "work_units_per_call": 4096
+          }
+        }
+      },
+      "input": "4096 deterministic bytes; 257-byte in-memory stream chunks; lowercase hex encode/decode.",
+      "unit": "payload bytes streamed and round-tripped",
+      "validated_checksum": 2457183,
+      "work_units_per_call": 4096
+    },
+    "game_of_life": {
+      "implementations": {
+        "nacre": {
+          "allocation_stats_untimed_one_call": {
+            "allocations": 7,
+            "frees": 7,
+            "live": 0
+          },
+          "per_process": {
+            "kernel_calls_per_process": 8,
+            "median_peak_rss_bytes": 2371584,
+            "median_process_elapsed_seconds": 0.025630598,
+            "process_scope": "one fresh direct workload child under wait4; includes startup, arguments, kernel calls, output, and shutdown",
+            "raw_peak_rss_bytes_samples": [
+              2371584,
+              2281472,
+              2420736
+            ],
+            "raw_process_elapsed_seconds_samples": [
+              0.021764508,
+              0.042693534,
+              0.025630598
+            ]
+          },
+          "runtime": {
+            "median_kernel_calls_per_second": 382,
+            "median_ns_per_call": 2613957,
+            "median_work_units_per_second": 382561763,
+            "raw_inner_samples_ns_per_call": null,
+            "raw_run_mean_ns_per_call": [
+              2574166,
+              2613957,
+              2572530,
+              2943275,
+              2970043
+            ],
+            "raw_sample_scope": "one built-in five-sample arithmetic mean per fresh nacre bench command",
+            "raw_samples_ns_per_call": [
+              2574166,
+              2613957,
+              2572530,
+              2943275,
+              2970043
+            ],
+            "reported_calls_per_second_each_run": [
+              388,
+              382,
+              388,
+              339,
+              336
+            ],
+            "reported_max_deviation_ns_each_run": [
+              127516,
+              284344,
+              59865,
+              291098,
+              40999
+            ],
+            "work_units_per_call": 1000000
+          }
+        },
+        "rust": {
+          "allocation_stats_untimed_one_call": {
+            "alloc": 9,
+            "alloc_bytes": 81701,
+            "allocation_events": 9,
+            "dealloc": 5,
+            "dealloc_bytes": 80057,
+            "live": 4,
+            "realloc": 0,
+            "realloc_bytes": 0,
+            "zeroed": 0
+          },
+          "per_process": {
+            "kernel_calls_per_process": 8,
+            "median_peak_rss_bytes": 2392064,
+            "median_process_elapsed_seconds": 0.03255556,
+            "process_scope": "one fresh direct workload child under wait4; includes startup, arguments, kernel calls, output, and shutdown",
+            "raw_peak_rss_bytes_samples": [
+              2367488,
+              2392064,
+              2453504
+            ],
+            "raw_process_elapsed_seconds_samples": [
+              0.033995814,
+              0.025402078,
+              0.03255556
+            ]
+          },
+          "runtime": {
+            "median_kernel_calls_per_second": 409,
+            "median_ns_per_call": 2440981,
+            "median_work_units_per_second": 409671357,
+            "raw_inner_samples_ns_per_call": [
+              [
+                2391898,
+                2395269,
+                2434195,
+                2320972,
+                2431270
+              ],
+              [
+                2309732,
+                2380117,
+                2404917,
+                2350213,
+                2386953
+              ],
+              [
+                2458705,
+                2430178,
+                2435637,
+                2460818,
+                2419570
+              ],
+              [
+                2545959,
+                2551932,
+                2576651,
+                2559897,
+                2567959
+              ],
+              [
+                2647080,
+                2656869,
+                2678418,
+                2661767,
+                2651625
+              ]
+            ],
+            "raw_run_mean_ns_per_call": [
+              2394720,
+              2366386,
+              2440981,
+              2560479,
+              2659151
+            ],
+            "raw_sample_scope": "five Rust timed samples per process; runtime median is the median of five process-level arithmetic means",
+            "raw_samples_ns_per_call": [
+              2391898,
+              2395269,
+              2434195,
+              2320972,
+              2431270,
+              2309732,
+              2380117,
+              2404917,
+              2350213,
+              2386953,
+              2458705,
+              2430178,
+              2435637,
+              2460818,
+              2419570,
+              2545959,
+              2551932,
+              2576651,
+              2559897,
+              2567959,
+              2647080,
+              2656869,
+              2678418,
+              2661767,
+              2651625
+            ],
+            "reported_calls_per_second_each_run": [
+              417,
+              422,
+              409,
+              390,
+              376
+            ],
+            "reported_max_deviation_ns_each_run": [
+              73748,
+              56654,
+              21411,
+              16172,
+              19267
+            ],
+            "work_units_per_call": 1000000
+          }
+        }
+      },
+      "input": "Deterministic 100x100 toroidal grid, 100 B3/S23 generations.",
+      "unit": "cell transitions",
+      "validated_checksum": 45,
+      "work_units_per_call": 1000000
+    },
+    "hashmap": {
+      "implementations": {
+        "nacre": {
+          "allocation_stats_untimed_one_call": {
+            "allocations": 15,
+            "frees": 15,
+            "live": 0
+          },
+          "per_process": {
+            "kernel_calls_per_process": 515,
+            "median_peak_rss_bytes": 2383872,
+            "median_process_elapsed_seconds": 0.03198272,
+            "process_scope": "one fresh direct workload child under wait4; includes startup, arguments, kernel calls, output, and shutdown",
+            "raw_peak_rss_bytes_samples": [
+              2367488,
+              2441216,
+              2383872
+            ],
+            "raw_process_elapsed_seconds_samples": [
+              0.0313133,
+              0.03198272,
+              0.036123879
+            ]
+          },
+          "runtime": {
+            "median_kernel_calls_per_second": 25746,
+            "median_ns_per_call": 38840,
+            "median_work_units_per_second": 263645726,
+            "raw_inner_samples_ns_per_call": null,
+            "raw_run_mean_ns_per_call": [
+              37830,
+              38840,
+              36393,
+              42755,
+              47835
+            ],
+            "raw_sample_scope": "one built-in five-sample arithmetic mean per fresh nacre bench command",
+            "raw_samples_ns_per_call": [
+              37830,
+              38840,
+              36393,
+              42755,
+              47835
+            ],
+            "reported_calls_per_second_each_run": [
+              26434,
+              25746,
+              27477,
+              23389,
+              20905
+            ],
+            "reported_max_deviation_ns_each_run": [
+              4095,
+              3731,
+              1275,
+              3169,
+              12222
+            ],
+            "work_units_per_call": 10240
+          }
+        },
+        "rust": {
+          "allocation_stats_untimed_one_call": {
+            "alloc": 18,
+            "alloc_bytes": 75564,
+            "allocation_events": 18,
+            "dealloc": 14,
+            "dealloc_bytes": 73920,
+            "live": 4,
+            "realloc": 0,
+            "realloc_bytes": 0,
+            "zeroed": 0
+          },
+          "per_process": {
+            "kernel_calls_per_process": 515,
+            "median_peak_rss_bytes": 2371584,
+            "median_process_elapsed_seconds": 0.064312179,
+            "process_scope": "one fresh direct workload child under wait4; includes startup, arguments, kernel calls, output, and shutdown",
+            "raw_peak_rss_bytes_samples": [
+              2252800,
+              2371584,
+              2379776
+            ],
+            "raw_process_elapsed_seconds_samples": [
+              0.060397005,
+              0.0653079,
+              0.064312179
+            ]
+          },
+          "runtime": {
+            "median_kernel_calls_per_second": 11885,
+            "median_ns_per_call": 84137,
+            "median_work_units_per_second": 121706264,
+            "raw_inner_samples_ns_per_call": [
+              [
+                81277,
+                81573,
+                81650,
+                81137,
+                81203
+              ],
+              [
+                82208,
+                81965,
+                82098,
+                82273,
+                82022
+              ],
+              [
+                84072,
+                83753,
+                83757,
+                84776,
+                84327
+              ],
+              [
+                89936,
+                89762,
+                89413,
+                88520,
+                88090
+              ],
+              [
+                96243,
+                96207,
+                96146,
+                96154,
+                96294
+              ]
+            ],
+            "raw_run_mean_ns_per_call": [
+              81368,
+              82113,
+              84137,
+              89144,
+              96208
+            ],
+            "raw_sample_scope": "five Rust timed samples per process; runtime median is the median of five process-level arithmetic means",
+            "raw_samples_ns_per_call": [
+              81277,
+              81573,
+              81650,
+              81137,
+              81203,
+              82208,
+              81965,
+              82098,
+              82273,
+              82022,
+              84072,
+              83753,
+              83757,
+              84776,
+              84327,
+              89936,
+              89762,
+              89413,
+              88520,
+              88090,
+              96243,
+              96207,
+              96146,
+              96154,
+              96294
+            ],
+            "reported_calls_per_second_each_run": [
+              12289,
+              12178,
+              11885,
+              11217,
+              10394
+            ],
+            "reported_max_deviation_ns_each_run": [
+              282,
+              160,
+              639,
+              1054,
+              86
+            ],
+            "work_units_per_call": 10240
+          }
+        }
+      },
+      "input": "2048 i32 keys: insert, lookup, replace, lookup, remove (five operations per entry).",
+      "unit": "map operations",
+      "validated_checksum": 100941824,
+      "work_units_per_call": 10240
+    },
+    "json": {
+      "implementations": {
+        "nacre": {
+          "allocation_stats_untimed_one_call": {
+            "allocations": 10,
+            "frees": 10,
+            "live": 0
+          },
+          "per_process": {
+            "kernel_calls_per_process": 20000,
+            "median_peak_rss_bytes": 2244608,
+            "median_process_elapsed_seconds": 0.00924765,
+            "process_scope": "one fresh direct workload child under wait4; includes startup, arguments, kernel calls, output, and shutdown",
+            "raw_peak_rss_bytes_samples": [
+              2232320,
+              2244608,
+              2330624
+            ],
+            "raw_process_elapsed_seconds_samples": [
+              0.007143329,
+              0.00924765,
+              0.010442253
+            ]
+          },
+          "runtime": {
+            "median_kernel_calls_per_second": 4065040,
+            "median_ns_per_call": 246,
+            "median_work_units_per_second": 12195121,
+            "raw_inner_samples_ns_per_call": null,
+            "raw_run_mean_ns_per_call": [
+              219,
+              246,
+              220,
+              273,
+              250
+            ],
+            "raw_sample_scope": "one built-in five-sample arithmetic mean per fresh nacre bench command",
+            "raw_samples_ns_per_call": [
+              219,
+              246,
+              220,
+              273,
+              250
+            ],
+            "reported_calls_per_second_each_run": [
+              4566210,
+              4065040,
+              4545454,
+              3663003,
+              4000000
+            ],
+            "reported_max_deviation_ns_each_run": [
+              3,
+              83,
+              7,
+              54,
+              8
+            ],
+            "work_units_per_call": 3
+          }
+        },
+        "rust": {
+          "allocation_stats_untimed_one_call": {
+            "alloc": 13,
+            "alloc_bytes": 1887,
+            "allocation_events": 13,
+            "dealloc": 9,
+            "dealloc_bytes": 243,
+            "live": 4,
+            "realloc": 0,
+            "realloc_bytes": 0,
+            "zeroed": 0
+          },
+          "per_process": {
+            "kernel_calls_per_process": 20000,
+            "median_peak_rss_bytes": 2281472,
+            "median_process_elapsed_seconds": 0.005528395,
+            "process_scope": "one fresh direct workload child under wait4; includes startup, arguments, kernel calls, output, and shutdown",
+            "raw_peak_rss_bytes_samples": [
+              2215936,
+              2322432,
+              2281472
+            ],
+            "raw_process_elapsed_seconds_samples": [
+              0.005148757,
+              0.006113917,
+              0.005528395
+            ]
+          },
+          "runtime": {
+            "median_kernel_calls_per_second": 12345679,
+            "median_ns_per_call": 81,
+            "median_work_units_per_second": 37037037,
+            "raw_inner_samples_ns_per_call": [
+              [
+                80,
+                80,
+                81,
+                80,
+                81
+              ],
+              [
+                80,
+                81,
+                81,
+                81,
+                81
+              ],
+              [
+                81,
+                81,
+                81,
+                81,
+                81
+              ],
+              [
+                81,
+                82,
+                82,
+                84,
+                83
+              ],
+              [
+                94,
+                94,
+                93,
+                94,
+                93
+              ]
+            ],
+            "raw_run_mean_ns_per_call": [
+              80,
+              80,
+              81,
+              82,
+              93
+            ],
+            "raw_sample_scope": "five Rust timed samples per process; runtime median is the median of five process-level arithmetic means",
+            "raw_samples_ns_per_call": [
+              80,
+              80,
+              81,
+              80,
+              81,
+              80,
+              81,
+              81,
+              81,
+              81,
+              81,
+              81,
+              81,
+              81,
+              81,
+              81,
+              82,
+              82,
+              84,
+              83,
+              94,
+              94,
+              93,
+              94,
+              93
+            ],
+            "reported_calls_per_second_each_run": [
+              12500000,
+              12500000,
+              12345679,
+              12195121,
+              10752688
+            ],
+            "reported_max_deviation_ns_each_run": [
+              1,
+              1,
+              0,
+              2,
+              1
+            ],
+            "work_units_per_call": 3
+          }
+        }
+      },
+      "input": "Three fixed ASCII objects with id, name, and active fields; varied spaces/tabs/newlines plus escaped quote, newline, and Unicode code point in names; parses array/object structure, ordered keys, integers, and booleans.",
+      "unit": "JSON records parsed",
+      "validated_checksum": 73665,
+      "work_units_per_call": 3
+    },
+    "string": {
+      "implementations": {
+        "nacre": {
+          "allocation_stats_untimed_one_call": {
+            "allocations": 22,
+            "frees": 22,
+            "live": 0
+          },
+          "per_process": {
+            "kernel_calls_per_process": 20000,
+            "median_peak_rss_bytes": 2240512,
+            "median_process_elapsed_seconds": 0.013651522,
+            "process_scope": "one fresh direct workload child under wait4; includes startup, arguments, kernel calls, output, and shutdown",
+            "raw_peak_rss_bytes_samples": [
+              2240512,
+              2244608,
+              2125824
+            ],
+            "raw_process_elapsed_seconds_samples": [
+              0.013651522,
+              0.021446832,
+              0.011355685
+            ]
+          },
+          "runtime": {
+            "median_kernel_calls_per_second": 2314814,
+            "median_ns_per_call": 432,
+            "median_work_units_per_second": 152777777,
+            "raw_inner_samples_ns_per_call": null,
+            "raw_run_mean_ns_per_call": [
+              421,
+              432,
+              420,
+              470,
+              475
+            ],
+            "raw_sample_scope": "one built-in five-sample arithmetic mean per fresh nacre bench command",
+            "raw_samples_ns_per_call": [
+              421,
+              432,
+              420,
+              470,
+              475
+            ],
+            "reported_calls_per_second_each_run": [
+              2375296,
+              2314814,
+              2380952,
+              2127659,
+              2105263
+            ],
+            "reported_max_deviation_ns_each_run": [
+              6,
+              43,
+              7,
+              1,
+              7
+            ],
+            "work_units_per_call": 66
+          }
+        },
+        "rust": {
+          "allocation_stats_untimed_one_call": {
+            "alloc": 22,
+            "alloc_bytes": 1926,
+            "allocation_events": 26,
+            "dealloc": 18,
+            "dealloc_bytes": 434,
+            "live": 4,
+            "realloc": 4,
+            "realloc_bytes": 304,
+            "zeroed": 0
+          },
+          "per_process": {
+            "kernel_calls_per_process": 20000,
+            "median_peak_rss_bytes": 2310144,
+            "median_process_elapsed_seconds": 0.012690962,
+            "process_scope": "one fresh direct workload child under wait4; includes startup, arguments, kernel calls, output, and shutdown",
+            "raw_peak_rss_bytes_samples": [
+              2400256,
+              2244608,
+              2310144
+            ],
+            "raw_process_elapsed_seconds_samples": [
+              0.011359634,
+              0.013310164,
+              0.012690962
+            ]
+          },
+          "runtime": {
+            "median_kernel_calls_per_second": 3021148,
+            "median_ns_per_call": 331,
+            "median_work_units_per_second": 199395770,
+            "raw_inner_samples_ns_per_call": [
+              [
+                325,
+                335,
+                335,
+                328,
+                336
+              ],
+              [
+                323,
+                329,
+                333,
+                329,
+                337
+              ],
+              [
+                331,
+                332,
+                327,
+                333,
+                327
+              ],
+              [
+                338,
+                350,
+                345,
+                345,
+                345
+              ],
+              [
+                398,
+                406,
+                408,
+                404,
+                410
+              ]
+            ],
+            "raw_run_mean_ns_per_call": [
+              331,
+              330,
+              330,
+              344,
+              405
+            ],
+            "raw_sample_scope": "five Rust timed samples per process; runtime median is the median of five process-level arithmetic means",
+            "raw_samples_ns_per_call": [
+              325,
+              335,
+              335,
+              328,
+              336,
+              323,
+              329,
+              333,
+              329,
+              337,
+              331,
+              332,
+              327,
+              333,
+              327,
+              338,
+              350,
+              345,
+              345,
+              345,
+              398,
+              406,
+              408,
+              404,
+              410
+            ],
+            "reported_calls_per_second_each_run": [
+              3021148,
+              3030303,
+              3030303,
+              2906976,
+              2469135
+            ],
+            "reported_max_deviation_ns_each_run": [
+              6,
+              7,
+              3,
+              6,
+              7
+            ],
+            "work_units_per_call": 66
+          }
+        }
+      },
+      "input": "Fixed ASCII string; replace '::' with '|', split, search each field for 'nacre'.",
+      "unit": "input bytes transformed, split, and searched",
+      "validated_checksum": 160602,
+      "work_units_per_call": 66
+    },
+    "sudoku": {
+      "implementations": {
+        "nacre": {
+          "allocation_stats_untimed_one_call": {
+            "allocations": 7,
+            "frees": 7,
+            "live": 0
+          },
+          "per_process": {
+            "kernel_calls_per_process": 116,
+            "median_peak_rss_bytes": 2248704,
+            "median_process_elapsed_seconds": 0.030160936,
+            "process_scope": "one fresh direct workload child under wait4; includes startup, arguments, kernel calls, output, and shutdown",
+            "raw_peak_rss_bytes_samples": [
+              2134016,
+              2289664,
+              2248704
+            ],
+            "raw_process_elapsed_seconds_samples": [
+              0.020175683,
+              0.030160936,
+              0.036931474
+            ]
+          },
+          "runtime": {
+            "median_kernel_calls_per_second": 5768,
+            "median_ns_per_call": 173361,
+            "median_work_units_per_second": 5768,
+            "raw_inner_samples_ns_per_call": null,
+            "raw_run_mean_ns_per_call": [
+              172371,
+              172399,
+              173361,
+              196599,
+              198059
+            ],
+            "raw_sample_scope": "one built-in five-sample arithmetic mean per fresh nacre bench command",
+            "raw_samples_ns_per_call": [
+              172371,
+              172399,
+              173361,
+              196599,
+              198059
+            ],
+            "reported_calls_per_second_each_run": [
+              5801,
+              5800,
+              5768,
+              5086,
+              5049
+            ],
+            "reported_max_deviation_ns_each_run": [
+              3075,
+              1427,
+              3164,
+              25933,
+              2774
+            ],
+            "work_units_per_call": 1
+          }
+        },
+        "rust": {
+          "allocation_stats_untimed_one_call": {
+            "alloc": 8,
+            "alloc_bytes": 2019,
+            "allocation_events": 8,
+            "dealloc": 4,
+            "dealloc_bytes": 375,
+            "live": 4,
+            "realloc": 0,
+            "realloc_bytes": 0,
+            "zeroed": 0
+          },
+          "per_process": {
+            "kernel_calls_per_process": 116,
+            "median_peak_rss_bytes": 2396160,
+            "median_process_elapsed_seconds": 0.035702158,
+            "process_scope": "one fresh direct workload child under wait4; includes startup, arguments, kernel calls, output, and shutdown",
+            "raw_peak_rss_bytes_samples": [
+              2420736,
+              2396160,
+              2383872
+            ],
+            "raw_process_elapsed_seconds_samples": [
+              0.023528361,
+              0.035702158,
+              0.047295001
+            ]
+          },
+          "runtime": {
+            "median_kernel_calls_per_second": 3294,
+            "median_ns_per_call": 303510,
+            "median_work_units_per_second": 3294,
+            "raw_inner_samples_ns_per_call": [
+              [
+                305003,
+                301224,
+                305502,
+                297028,
+                297788
+              ],
+              [
+                294020,
+                297013,
+                298351,
+                296024,
+                301647
+              ],
+              [
+                305188,
+                302743,
+                298675,
+                309113,
+                301832
+              ],
+              [
+                327781,
+                322616,
+                325719,
+                321649,
+                323161
+              ],
+              [
+                346554,
+                342296,
+                342709,
+                342911,
+                337431
+              ]
+            ],
+            "raw_run_mean_ns_per_call": [
+              301309,
+              297411,
+              303510,
+              324185,
+              342380
+            ],
+            "raw_sample_scope": "five Rust timed samples per process; runtime median is the median of five process-level arithmetic means",
+            "raw_samples_ns_per_call": [
+              305003,
+              301224,
+              305502,
+              297028,
+              297788,
+              294020,
+              297013,
+              298351,
+              296024,
+              301647,
+              305188,
+              302743,
+              298675,
+              309113,
+              301832,
+              327781,
+              322616,
+              325719,
+              321649,
+              323161,
+              346554,
+              342296,
+              342709,
+              342911,
+              337431
+            ],
+            "reported_calls_per_second_each_run": [
+              3318,
+              3362,
+              3294,
+              3084,
+              2920
+            ],
+            "reported_max_deviation_ns_each_run": [
+              4281,
+              4236,
+              5603,
+              3596,
+              4949
+            ],
+            "work_units_per_call": 1
+          }
+        }
+      },
+      "input": "Fixed 9x9 puzzle copied from examples/apps/sudoku.ncr; backtracking solver.",
+      "unit": "Sudoku puzzles solved",
+      "validated_checksum": 16605,
+      "work_units_per_call": 1
+    }
+  }
+}

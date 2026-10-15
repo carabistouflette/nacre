@@ -3,6 +3,9 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Record matched JSON, string, binary-streaming, map, Sudoku, and Life benchmarks
+  against Rust, including cache-disabled native build times, RSS/allocation
+  samples, and controlled optimization counters with explicit measurement limits.
 - Fix GCC PGO training/use identity across native temporary directories. Keep
   generated-C source locations and auxiliary profile names stable, and bypass
   executable/bitcode caches for builds with mutable profile inputs.

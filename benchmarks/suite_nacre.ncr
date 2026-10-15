@@ -1,306 +1,723 @@
-long nowNs() {
-    match (Time.monotonicNanos()) {
-        Ok(t) { return t; }
-        Err(e) { return 0L; }
-    }
-}
+// Equivalent named workloads for the Option1 Nacre/Rust benchmark suite.
+// The JSON case is a schema-specific parser over a fixed JSON record array;
+// Nacre's public prelude currently exposes Text/collections but no JSON parser.
 
-// 1. Pure Floating-Point Compute: Mandelbrot escape time calculation
-int mandelbrot(int width, int height, int maxIter) {
-    int totalIterations = 0;
-    int y = 0;
-    while (y < height) {
-        double ci = (double)y * 2.0 / (double)height - 1.0;
-        int x = 0;
-        while (x < width) {
-            double cr = (double)x * 3.0 / (double)width - 2.1;
-            double zr = 0.0;
-            double zi = 0.0;
-            int iter = 0;
-            while (zr * zr + zi * zi <= 4.0 && iter < maxIter) {
-                double temp = zr * zr - zi * zi + cr;
-                zi = 2.0 * zr * zi + ci;
-                zr = temp;
-                iter = iter + 1;
+class JsonParser {
+    private Text input;
+    private int position;
+    private long stringChecksum;
+
+    public JsonParser(Text input) {
+        this.input = input;
+        this.position = 0;
+        this.stringChecksum = 0L;
+    }
+
+    private void skipWhitespace() {
+        while (this.position < this.input.byteLength()) {
+            int value = this.input.byteAt(this.position);
+            if (value != 32 && value != 9 && value != 10 && value != 13) {
+                return;
             }
-            totalIterations = totalIterations + iter;
-            x = x + 1;
-        }
-        y = y + 1;
-    }
-    return totalIterations;
-}
-
-// 2. Discrete Math & Backtracking: N-Queens (N=14)
-class NQueens {
-    public int count = 0;
-
-    public void solve(int row, int ld, int rd, int allMask) {
-        if (row == allMask) {
-            this.count = this.count + 1;
-            return;
-        }
-        int pos = allMask & (~(row | ld | rd));
-        while (pos != 0) {
-            int p = pos & (-pos);
-            pos = pos - p;
-            this.solve(row | p, (ld | p) << 1, (rd | p) >> 1, allMask);
+            this.position = this.position + 1;
         }
     }
-}
 
-// 3. Sorting & Dynamic Memory Access: Quicksort on 200,000 integers
-class Sorter {
-    private static void swap(borrow mut List<int> list, int a, int b) {
-        int temp = list.get(a);
-        list.set(a, list.get(b));
-        list.set(b, temp);
+    private boolean punctuation(int expected) {
+        this.skipWhitespace();
+        if (this.position >= this.input.byteLength() || this.input.byteAt(this.position) != expected) {
+            return false;
+        }
+        this.position = this.position + 1;
+        return true;
     }
 
-    public static void quicksort(borrow mut List<int> list, int low, int high) {
-        if (low < high) {
-            int pivot = list.get(high);
-            int i = low - 1;
-            int j = low;
-            while (j < high) {
-                if (list.get(j) <= pivot) {
-                    i = i + 1;
-                    Sorter.swap(list, i, j);
+    private boolean key(borrow Text expected) {
+        this.skipWhitespace();
+        if (this.position >= this.input.byteLength() || this.input.byteAt(this.position) != 34) {
+            return false;
+        }
+        this.position = this.position + 1;
+        int index = 0;
+        while (index < expected.byteLength()) {
+            if (this.position >= this.input.byteLength()
+                || this.input.byteAt(this.position) != expected.byteAt(index)) {
+                return false;
+            }
+            this.position = this.position + 1;
+            index = index + 1;
+        }
+        if (this.position >= this.input.byteLength() || this.input.byteAt(this.position) != 34) {
+            return false;
+        }
+        this.position = this.position + 1;
+        return true;
+    }
+
+    private int hexUnit() {
+        if (this.position + 4 > this.input.byteLength()) {
+            return -1;
+        }
+        int value = 0;
+        int index = 0;
+        while (index < 4) {
+            int digit = this.input.byteAt(this.position);
+            this.position = this.position + 1;
+            if (digit >= 48 && digit <= 57) {
+                digit = digit - 48;
+            } else if (digit >= 65 && digit <= 70) {
+                digit = digit - 65 + 10;
+            } else if (digit >= 97 && digit <= 102) {
+                digit = digit - 97 + 10;
+            } else {
+                return -1;
+            }
+            value = value * 16 + digit;
+            index = index + 1;
+        }
+        return value;
+    }
+    private long checksumByte(long checksum, int value, int offset) {
+        return checksum + (long)value * ((long)offset + 1L);
+    }
+
+    private long checksumCodePoint(long checksum, int value, int offset) {
+        if (value <= 127) {
+            return this.checksumByte(checksum, value, offset);
+        }
+        if (value <= 2047) {
+            checksum = this.checksumByte(checksum, 192 | (value >> 6), offset);
+            return this.checksumByte(checksum, 128 | (value & 63), offset + 1);
+        }
+        if (value <= 65535) {
+            checksum = this.checksumByte(checksum, 224 | (value >> 12), offset);
+            checksum = this.checksumByte(checksum, 128 | ((value >> 6) & 63), offset + 1);
+            return this.checksumByte(checksum, 128 | (value & 63), offset + 2);
+        }
+        checksum = this.checksumByte(checksum, 240 | (value >> 18), offset);
+        checksum = this.checksumByte(checksum, 128 | ((value >> 12) & 63), offset + 1);
+        checksum = this.checksumByte(checksum, 128 | ((value >> 6) & 63), offset + 2);
+        return this.checksumByte(checksum, 128 | (value & 63), offset + 3);
+    }
+
+    private int codePointByteLength(int value) {
+        if (value <= 127) { return 1; }
+        if (value <= 2047) { return 2; }
+        if (value <= 65535) { return 3; }
+        return 4;
+    }
+
+
+    private int stringLength() {
+        if (!this.punctuation(34)) {
+            return -1;
+        }
+        int decodedBytes = 0;
+        long checksum = 0L;
+        while (this.position < this.input.byteLength()) {
+            int value = this.input.byteAt(this.position);
+            this.position = this.position + 1;
+            if (value == 34) {
+                this.stringChecksum = checksum;
+                return decodedBytes;
+            }
+            if (value < 32) {
+                return -1;
+            }
+            if (value == 92) {
+                if (this.position >= this.input.byteLength()) {
+                    return -1;
                 }
-                j = j + 1;
+                int escape = this.input.byteAt(this.position);
+                this.position = this.position + 1;
+                int decodedValue = 0;
+                if (escape == 34) { decodedValue = 34; }
+                else if (escape == 92) { decodedValue = 92; }
+                else if (escape == 47) { decodedValue = 47; }
+                else if (escape == 98) { decodedValue = 8; }
+                else if (escape == 102) { decodedValue = 12; }
+                else if (escape == 110) { decodedValue = 10; }
+                else if (escape == 114) { decodedValue = 13; }
+                else if (escape == 116) { decodedValue = 9; }
+                if (decodedValue != 0) {
+                    checksum = this.checksumByte(checksum, decodedValue, decodedBytes);
+                    decodedBytes = decodedBytes + 1;
+                } else if (escape == 117) {
+                    int codePoint = this.hexUnit();
+                    if (codePoint < 0) {
+                        return -1;
+                    }
+                    if (codePoint >= 55296 && codePoint <= 56319) {
+                        if (this.position + 2 > this.input.byteLength()
+                            || this.input.byteAt(this.position) != 92
+                            || this.input.byteAt(this.position + 1) != 117) {
+                            return -1;
+                        }
+                        this.position = this.position + 2;
+                        int second = this.hexUnit();
+                        if (second < 56320 || second > 57343) {
+                            return -1;
+                        }
+                        codePoint = 65536 + ((codePoint - 55296) << 10) + (second - 56320);
+                    } else if (codePoint >= 56320 && codePoint <= 57343) {
+                        return -1;
+                    }
+                    checksum = this.checksumCodePoint(checksum, codePoint, decodedBytes);
+                    decodedBytes = decodedBytes + this.codePointByteLength(codePoint);
+                } else {
+                    return -1;
+                }
+            } else {
+                checksum = this.checksumByte(checksum, value, decodedBytes);
+                decodedBytes = decodedBytes + 1;
             }
-            Sorter.swap(list, i + 1, high);
-            int p = i + 1;
-            Sorter.quicksort(list, low, p - 1);
-            Sorter.quicksort(list, p + 1, high);
         }
+        return -1;
+    }
+
+    private int integerValue() {
+        this.skipWhitespace();
+        boolean negative = false;
+        if (this.position < this.input.byteLength() && this.input.byteAt(this.position) == 45) {
+            negative = true;
+            this.position = this.position + 1;
+        }
+        if (this.position >= this.input.byteLength()
+            || this.input.byteAt(this.position) < 48 || this.input.byteAt(this.position) > 57) {
+            return -1;
+        }
+        long magnitude = 0L;
+        if (this.input.byteAt(this.position) == 48) {
+            this.position = this.position + 1;
+            if (this.position < this.input.byteLength()
+                && this.input.byteAt(this.position) >= 48 && this.input.byteAt(this.position) <= 57) {
+                return -1;
+            }
+        } else {
+            while (this.position < this.input.byteLength()
+                && this.input.byteAt(this.position) >= 48 && this.input.byteAt(this.position) <= 57) {
+                int digit = this.input.byteAt(this.position) - 48;
+                magnitude = magnitude * 10L + (long)digit;
+                if (magnitude > 2147483648L) {
+                    return -1;
+                }
+                this.position = this.position + 1;
+            }
+        }
+        if (negative) {
+            if (magnitude > 2147483648L) {
+                return -1;
+            }
+            return (int)(0L - magnitude);
+        }
+        if (magnitude > 2147483647L) {
+            return -1;
+        }
+        return (int)magnitude;
+    }
+
+    private int booleanValue(borrow Text trueToken, borrow Text falseToken) {
+        this.skipWhitespace();
+        if (this.position + trueToken.byteLength() <= this.input.byteLength()) {
+            int index = 0;
+            while (index < trueToken.byteLength()
+                && this.input.byteAt(this.position + index) == trueToken.byteAt(index)) {
+                index = index + 1;
+            }
+            if (index == trueToken.byteLength()) {
+                this.position = this.position + trueToken.byteLength();
+                return 1;
+            }
+        }
+        if (this.position + falseToken.byteLength() <= this.input.byteLength()) {
+            int index = 0;
+            while (index < falseToken.byteLength()
+                && this.input.byteAt(this.position + index) == falseToken.byteAt(index)) {
+                index = index + 1;
+            }
+            if (index == falseToken.byteLength()) {
+                this.position = this.position + falseToken.byteLength();
+                return 0;
+            }
+        }
+        return -1;
+    }
+
+    public long parse() {
+        Text idKey = new Text("id");
+        Text nameKey = new Text("name");
+        Text activeKey = new Text("active");
+        Text trueToken = new Text("true");
+        Text falseToken = new Text("false");
+        if (!this.punctuation(91)) {
+            return -1L;
+        }
+        int records = 0;
+        long checksum = 0L;
+        while (true) {
+            this.skipWhitespace();
+            if (this.position < this.input.byteLength()
+                && this.input.byteAt(this.position) == 93) {
+                this.position = this.position + 1;
+                break;
+            }
+            if (!this.punctuation(123)
+                || !this.key(idKey) || !this.punctuation(58)) {
+                return -1L;
+            }
+            int identifier = this.integerValue();
+            if (identifier < 0 || !this.punctuation(44)
+                || !this.key(nameKey) || !this.punctuation(58)) {
+                return -1L;
+            }
+            int nameBytes = this.stringLength();
+            long nameChecksum = this.stringChecksum;
+            if (nameBytes < 0 || !this.punctuation(44)
+                || !this.key(activeKey) || !this.punctuation(58)) {
+                return -1L;
+            }
+            int active = this.booleanValue(trueToken, falseToken);
+            if (active < 0 || !this.punctuation(125)) {
+                return -1L;
+            }
+            checksum = checksum + (long)identifier * 31L
+                + (long)nameBytes * 17L + (long)active + nameChecksum * 13L;
+            records = records + 1;
+            this.skipWhitespace();
+            if (this.position < this.input.byteLength()
+                && this.input.byteAt(this.position) == 44) {
+                this.position = this.position + 1;
+                this.skipWhitespace();
+                if (this.position >= this.input.byteLength()
+                    || this.input.byteAt(this.position) == 93) {
+                    return -1L;
+                }
+            } else if (this.position < this.input.byteLength()
+                && this.input.byteAt(this.position) == 93) {
+                this.position = this.position + 1;
+                break;
+            } else {
+                return -1L;
+            }
+        }
+        this.skipWhitespace();
+        if (records != 3 || this.position != this.input.byteLength()) {
+            return -1L;
+        }
+        return checksum;
     }
 }
 
-// 4. Cellular Automaton Simulation: Game of Life (100x100 grid, 200 generations)
+long jsonKernel() {
+    Text input = new Text(" [\n { \"id\" : 7 , \"name\" : \"oak\\\"wood\" , \"active\" : true } ,\t{ \"id\" : 19 , \"name\" : \"pine\\n\" , \"active\" : false } ,\n { \"id\" : 42 , \"name\" : \"elm\\u0021\" , \"active\" : true } ] ");
+    JsonParser parser = new JsonParser(input);
+    return parser.parse();
+}
+
+long stringKernel() {
+    Text input = new Text("nacre::memory::benchmarks::string::search::stream::nacre::compiler");
+    Text separator = new Text("::");
+    Text replacement = new Text("|");
+    Text delimiter = new Text("|");
+    Text needle = new Text("nacre");
+    Text rewritten = input.replace(separator, replacement);
+    List<Text> fields = rewritten.split(delimiter);
+    long checksum = 0L;
+    int matches = 0;
+    for (borrow Text field : fields) {
+        int found = field.indexOf(needle);
+        if (found >= 0) {
+            matches = matches + 1;
+        }
+        checksum = checksum + (long)field.byteLength() * 31L + (long)found;
+    }
+    return checksum * 100L + (long)matches;
+}
+
+class MemorySource implements ByteSource {
+    private ByteBuffer bytes;
+    private long position;
+
+    public MemorySource(ByteBuffer input) {
+        this.bytes = input;
+        this.position = 0L;
+    }
+
+    public Result<long, Text> read(borrow mut ByteBuffer destination, long maxBytes) {
+        long amount = maxBytes;
+        long remaining = this.bytes.length() - this.position;
+        if (amount > remaining) {
+            amount = remaining;
+        }
+        long copied = 0L;
+        while (copied < amount) {
+            destination.append(this.bytes.get(this.position));
+            this.position = this.position + 1L;
+            copied = copied + 1L;
+        }
+        return new Result<long, Text>.Ok(copied);
+    }
+}
+
+class MemorySink implements ByteSink {
+    private ByteBuffer bytes;
+
+    public MemorySink(ByteBuffer output) {
+        this.bytes = output;
+    }
+
+    public Result<long, Text> write(borrow ByteBuffer source, long offset, long maxBytes) {
+        if (offset < 0L || maxBytes < 0L || offset + maxBytes > source.length()) {
+            return new Result<long, Text>.Err(new Text("invalid memory sink range"));
+        }
+        long copied = 0L;
+        while (copied < maxBytes) {
+            this.bytes.append(source.get(offset + copied));
+            copied = copied + 1L;
+        }
+        return new Result<long, Text>.Ok(copied);
+    }
+
+    public Result<Unit, Text> flush() {
+        return new Result<Unit, Text>.Ok(());
+    }
+
+    public readonly borrow ByteBuffer output() {
+        return this.bytes;
+    }
+}
+
+long byteChecksum(borrow ByteBuffer bytes) {
+    long checksum = 0L;
+    long index = 0L;
+    while (index < bytes.length()) {
+        checksum = checksum + (long)bytes.get(index) * (index % 17L + 1L);
+        index = index + 1L;
+    }
+    return checksum;
+}
+
+long binaryKernel() {
+    ByteBuffer input;
+    match (ByteBuffer.withCapacity(4096L)) {
+        Err(error) { return -1L; }
+        Ok(value) { input = value; }
+    }
+    int index = 0;
+    while (index < 4096) {
+        input.append((byte)((index * 37 + 19) % 127));
+        index = index + 1;
+    }
+    ByteBuffer output;
+    match (ByteBuffer.withCapacity(0L)) {
+        Err(error) { return -1L; }
+        Ok(value) { output = value; }
+    }
+    MemorySource source = new MemorySource(input);
+    MemorySink sink = new MemorySink(output);
+    long copied = 0L;
+    match (Streams.copy(source, sink, 4096L, 257L)) {
+        Err(error) { return -1L; }
+        Ok(value) { copied = value; }
+    }
+    borrow ByteBuffer streamed = sink.output();
+    Text encoded = Encoding.hexEncode(streamed);
+    ByteBuffer decoded;
+    match (Encoding.hexDecode(encoded)) {
+        Err(error) { return -1L; }
+        Ok(value) { decoded = value; }
+    }
+    if (copied != 4096L || decoded.length() != 4096L) {
+        return -1L;
+    }
+    return byteChecksum(decoded) + copied * 31L + (long)encoded.byteLength();
+}
+
+long hashmapKernel() {
+    int count = 2048;
+    Map<int, int> values = new Map<int, int>();
+    int index = 0;
+    while (index < count) {
+        values.put(index, index * 3 + 7);
+        index = index + 1;
+    }
+    long queried = 0L;
+    index = 0;
+    while (index < count) {
+        match (values.tryGet(index)) {
+            None { return -1L; }
+            Some(value) { queried = queried + (long)value; }
+        }
+        index = index + 1;
+    }
+    long replaced = 0L;
+    index = 0;
+    while (index < count) {
+        match (values.put(index, index * 3 + 11)) {
+            None { return -1L; }
+            Some(previous) { replaced = replaced + (long)previous; }
+        }
+        index = index + 1;
+    }
+    long finalSum = 0L;
+    index = 0;
+    while (index < count) {
+        match (values.tryGet(index)) {
+            None { return -1L; }
+            Some(value) { finalSum = finalSum + (long)value; }
+        }
+        index = index + 1;
+    }
+    long removed = 0L;
+    index = 0;
+    while (index < count) {
+        match (values.tryRemove(index)) {
+            None { return -1L; }
+            Some(value) { removed = removed + (long)value; }
+        }
+        index = index + 1;
+    }
+    return queried + replaced * 3L + finalSum * 5L + removed * 7L + (long)values.size();
+}
+
+class SudokuSolver {
+    private List<int> cells = new List<int>();
+
+    public SudokuSolver(String puzzle) {
+        Text digits = new Text(puzzle);
+        this.cells.reserve(81);
+        int index = 0;
+        while (index < digits.byteLength()) {
+            this.cells.add(digits.byteAt(index) - 48);
+            index = index + 1;
+        }
+    }
+
+    private readonly boolean canPlace(borrow List<int> board, int index, int value) {
+        int row = index / 9;
+        int column = index % 9;
+        int offset = 0;
+        while (offset < 9) {
+            int rowCell = row * 9 + offset;
+            int columnCell = offset * 9 + column;
+            int boxCell = (row / 3 * 3 + offset / 3) * 9 + column / 3 * 3 + offset % 3;
+            if (rowCell != index && board.get(rowCell) == value) {
+                return false;
+            }
+            if (columnCell != index && board.get(columnCell) == value) {
+                return false;
+            }
+            if (boxCell != index && board.get(boxCell) == value) {
+                return false;
+            }
+            offset = offset + 1;
+        }
+        return true;
+    }
+
+    private boolean search(int start) {
+        int index = start;
+        while (index < 81) {
+            if (this.cells.get(index) == 0) {
+                int value = 1;
+                while (value <= 9) {
+                    if (this.canPlace(this.cells, index, value)) {
+                        this.cells.set(index, value);
+                        if (this.search(index + 1)) {
+                            return true;
+                        }
+                        this.cells.set(index, 0);
+                    }
+                    value = value + 1;
+                }
+                return false;
+            }
+            index = index + 1;
+        }
+        return true;
+    }
+
+    public boolean solve() {
+        return this.search(0);
+    }
+
+    public readonly long checksum() {
+        long value = 0L;
+        int index = 0;
+        while (index < 81) {
+            value = value + (long)this.cells.get(index) * (long)(index + 1);
+            index = index + 1;
+        }
+        return value;
+    }
+}
+
+long sudokuKernel() {
+    SudokuSolver solver = new SudokuSolver("530070000600195000098000060800060003400803001700020006060000280000419005000080079");
+    if (!solver.solve()) {
+        return -1L;
+    }
+    return solver.checksum();
+}
+
 class LifeSim {
-    private int rows = 100;
-    private int cols = 100;
     private List<int> grid = new List<int>();
     private List<int> next = new List<int>();
 
     LifeSim() {
-        int total = 100 * 100;
-        this.grid.reserve(total);
-        this.next.reserve(total);
-        int i = 0;
-        while (i < total) {
-            // Seed pattern
-            int val = 0;
-            if ((i * 17 + 11) % 7 == 0 || (i * 31 + 5) % 11 == 0) {
-                val = 1;
+        this.grid.reserve(10000);
+        this.next.reserve(10000);
+        int index = 0;
+        while (index < 10000) {
+            int alive = 0;
+            if ((index * 17 + 11) % 7 == 0 || (index * 31 + 5) % 11 == 0) {
+                alive = 1;
             }
-            this.grid.add(val);
+            this.grid.add(alive);
             this.next.add(0);
-            i = i + 1;
+            index = index + 1;
         }
     }
 
-    private static int countNeighbors(borrow List<int> grid, int r, int c) {
-        int rUp = (r + 99) % 100;
-        int rDown = (r + 101) % 100;
-        int cLeft = (c + 99) % 100;
-        int cRight = (c + 101) % 100;
-        return grid.get(rUp * 100 + cLeft)
-            + grid.get(rUp * 100 + c)
-            + grid.get(rUp * 100 + cRight)
-            + grid.get(r * 100 + cLeft)
-            + grid.get(r * 100 + cRight)
-            + grid.get(rDown * 100 + cLeft)
-            + grid.get(rDown * 100 + c)
-            + grid.get(rDown * 100 + cRight);
+    private readonly int neighbors(int row, int column) {
+        int up = (row + 99) % 100;
+        int down = (row + 101) % 100;
+        int left = (column + 99) % 100;
+        int right = (column + 101) % 100;
+        return this.grid.get(up * 100 + left)
+            + this.grid.get(up * 100 + column)
+            + this.grid.get(up * 100 + right)
+            + this.grid.get(row * 100 + left)
+            + this.grid.get(row * 100 + right)
+            + this.grid.get(down * 100 + left)
+            + this.grid.get(down * 100 + column)
+            + this.grid.get(down * 100 + right);
     }
 
     public void step() {
-        int r = 0;
-        while (r < 100) {
-            int c = 0;
-            while (c < 100) {
-                int idx = r * 100 + c;
-                int current = this.grid.get(idx);
-                int neighbors = LifeSim.countNeighbors(this.grid, r, c);
-                int nextVal = 0;
+        int row = 0;
+        while (row < 100) {
+            int column = 0;
+            while (column < 100) {
+                int index = row * 100 + column;
+                int current = this.grid.get(index);
+                int adjacent = this.neighbors(row, column);
+                int nextValue = 0;
                 if (current != 0) {
-                    if (neighbors == 2 || neighbors == 3) {
-                        nextVal = 1;
+                    if (adjacent == 2 || adjacent == 3) {
+                        nextValue = 1;
                     }
-                } else {
-                    if (neighbors == 3) {
-                        nextVal = 1;
-                    }
+                } else if (adjacent == 3) {
+                    nextValue = 1;
                 }
-                this.next.set(idx, nextVal);
-                c = c + 1;
+                this.next.set(index, nextValue);
+                column = column + 1;
             }
-            r = r + 1;
+            row = row + 1;
         }
-        int i = 0;
-        while (i < 10000) {
-            this.grid.set(i, this.next.get(i));
-            i = i + 1;
+        int index = 0;
+        while (index < 10000) {
+            this.grid.set(index, this.next.get(index));
+            index = index + 1;
         }
     }
 
     public readonly int liveCount() {
         int count = 0;
-        int i = 0;
-        while (i < 10000) {
-            if (this.grid.get(i) != 0) {
+        int index = 0;
+        while (index < 10000) {
+            if (this.grid.get(index) != 0) {
                 count = count + 1;
             }
-            i = i + 1;
+            index = index + 1;
         }
         return count;
     }
 }
 
-// 5. Text & Hash Table Churn: 50,000 words mapped, modified, and queried
-int benchTextMap(int count) {
-    Map<Text, int> map = new Map<Text, int>();
-    int i = 0;
-    while (i < count) {
-        Text k = new Text("key-prefix-segment-");
-        k.appendInt(i % 10000);
-        map.put(k, i);
-        i = i + 1;
+long lifeKernel() {
+    LifeSim simulation = new LifeSim();
+    int generation = 0;
+    while (generation < 100) {
+        simulation.step();
+        generation = generation + 1;
     }
-    int sum = 0;
-    i = 0;
-    while (i < count) {
-        Text q = new Text("key-prefix-segment-");
-        q.appendInt(i % 10000);
-        match (map.tryGet(q)) {
-            Some(v) { sum = sum + (v & 1); }
-            None {}
-        }
-        i = i + 1;
-    }
-    return sum;
+    return (long)simulation.liveCount();
 }
 
-// 6. Tree / Recursive Data Structures: Binary Tree sum and size
-class Node {
-    public int value;
-    private List<Node> children = new List<Node>();
+long runKernel(borrow Text name) {
+    if (name.equalsString("json")) { return jsonKernel(); }
+    if (name.equalsString("string")) { return stringKernel(); }
+    if (name.equalsString("binary")) { return binaryKernel(); }
+    if (name.equalsString("hashmap")) { return hashmapKernel(); }
+    if (name.equalsString("sudoku")) { return sudokuKernel(); }
+    if (name.equalsString("game_of_life")) { return lifeKernel(); }
+    return -1L;
+}
 
-    Node(int val) {
-        this.value = val;
+void retainResult(long value) {
+    if (value == -1L) {
+        println("BENCHMARK_FAILURE");
     }
+}
 
-    public void addChild(Node child) {
-        this.children.add(child);
-    }
+void bench_json() { retainResult(jsonKernel()); }
+void bench_string() { retainResult(stringKernel()); }
+void bench_binary() { retainResult(binaryKernel()); }
+void bench_hashmap() { retainResult(hashmapKernel()); }
+void bench_sudoku() { retainResult(sudokuKernel()); }
+void bench_game_of_life() { retainResult(lifeKernel()); }
 
-    public static Node build(int depth, int val) {
-        Node node = new Node(val);
-        if (depth > 0) {
-            node.addChild(Node.build(depth - 1, val * 2));
-            node.addChild(Node.build(depth - 1, val * 2 + 1));
-        }
-        return node;
+void printResult(borrow Text name, int repetitions) {
+    long checksum = 0L;
+    int iteration = 0;
+    while (iteration < repetitions) {
+        checksum = checksum + runKernel(name);
+        iteration = iteration + 1;
     }
-
-    public readonly int sum() {
-        int total = this.value;
-        for (borrow Node child : this.children) {
-            total = total + child.sum();
-        }
-        return total;
-    }
+    Text output = new Text("RESULT ");
+    output.appendText(name);
+    output.append(" ");
+    output.appendLong(checksum);
+    output.print();
 }
 
 void main() {
-    // Warmup / Header
-    println("BENCHMARK_SUITE_START");
-
-    // 1. Mandelbrot (700x700, 200 iter)
-    long t0 = nowNs();
-    int mandelRes = mandelbrot(700, 700, 200);
-    long mandelMs = (nowNs() - t0) / 1000000L;
-    Text out1 = new Text("RESULT mandelbrot: ");
-    out1.appendLong(mandelMs);
-    out1.append(" ms (checksum: ");
-    out1.appendInt(mandelRes);
-    out1.append(")");
-    out1.print();
-
-    // 2. N-Queens (N=14)
-    t0 = nowNs();
-    NQueens nq = new NQueens();
-    nq.solve(0, 0, 0, (1 << 14) - 1);
-    long nqMs = (nowNs() - t0) / 1000000L;
-    Text out2 = new Text("RESULT n_queens: ");
-    out2.appendLong(nqMs);
-    out2.append(" ms (solutions: ");
-    out2.appendInt(nq.count);
-    out2.append(")");
-    out2.print();
-
-    // 3. Quicksort (100,000 pseudo-random numbers)
-    List<int> numbers = new List<int>();
-    numbers.reserve(100000);
-    int seed = 1234567;
-    int i = 0;
-    while (i < 100000) {
-        seed = (seed * 1103515245 + 12345) & 2147483647;
-        numbers.add(seed % 1000000);
-        i = i + 1;
+    if (Args.count() == 0) {
+        Text jsonName = new Text("json");
+        Text stringName = new Text("string");
+        Text binaryName = new Text("binary");
+        Text hashmapName = new Text("hashmap");
+        Text sudokuName = new Text("sudoku");
+        Text lifeName = new Text("game_of_life");
+        printResult(jsonName, 1);
+        printResult(stringName, 1);
+        printResult(binaryName, 1);
+        printResult(hashmapName, 1);
+        printResult(sudokuName, 1);
+        printResult(lifeName, 1);
+        return;
     }
-    int totalNumbers = numbers.size();
-    t0 = nowNs();
-    Sorter.quicksort(numbers, 0, totalNumbers - 1);
-    long sortMs = (nowNs() - t0) / 1000000L;
-    Text out3 = new Text("RESULT quicksort: ");
-    out3.appendLong(sortMs);
-    out3.append(" ms (min: ");
-    out3.appendInt(numbers.get(0));
-    out3.append(", max: ");
-    out3.appendInt(numbers.get(totalNumbers - 1));
-    out3.append(")");
-    out3.print();
-
-    // 4. Game of Life (100x100 grid, 100 generations)
-    LifeSim sim = new LifeSim();
-    t0 = nowNs();
-    int gen = 0;
-    while (gen < 100) {
-        sim.step();
-        gen = gen + 1;
+    Text name;
+    match (Args.get(0)) {
+        Err(error) { println("INVALID_ARGUMENTS"); return; }
+        Ok(value) { name = value; }
     }
-    long lifeMs = (nowNs() - t0) / 1000000L;
-    Text out4 = new Text("RESULT game_of_life: ");
-    out4.appendLong(lifeMs);
-    out4.append(" ms (live cells: ");
-    out4.appendInt(sim.liveCount());
-    out4.append(")");
-    out4.print();
-
-    // 5. Text & Hash Map churn (50,000 operations)
-    t0 = nowNs();
-    int textMapRes = benchTextMap(50000);
-    long mapMs = (nowNs() - t0) / 1000000L;
-    Text out5 = new Text("RESULT text_map: ");
-    out5.appendLong(mapMs);
-    out5.append(" ms (checksum: ");
-    out5.appendInt(textMapRes);
-    out5.append(")");
-    out5.print();
-
-    // 6. Binary Tree recursion (depth=18, 2^19 - 1 = 524,287 nodes)
-    t0 = nowNs();
-    Node tree = Node.build(18, 1);
-    int treeSum = tree.sum();
-    long treeMs = (nowNs() - t0) / 1000000L;
-    Text out6 = new Text("RESULT binary_tree: ");
-    out6.appendLong(treeMs);
-    out6.append(" ms (tree sum: ");
-    out6.appendInt(treeSum);
-    out6.append(")");
-    out6.print();
-    println("BENCHMARK_SUITE_END");
+    int repetitions = 1;
+    if (Args.count() > 1) {
+        match (Args.get(1)) {
+            Err(error) { println("INVALID_ARGUMENTS"); return; }
+            Ok(value) {
+                match (value.parseInt()) {
+                    Err(error) { println("INVALID_ARGUMENTS"); return; }
+                    Ok(count) { repetitions = count; }
+                }
+            }
+        }
+    }
+    if (repetitions < 1 || repetitions > 20000) {
+        println("INVALID_ARGUMENTS");
+        return;
+    }
+    printResult(name, repetitions);
 }
