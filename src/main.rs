@@ -11,8 +11,8 @@ const HELP: &str = "Nacre — experimental native compiler written in Rust
 
 Usage:
   nacre check  source.ncr ... | directory
-  nacre run    source.ncr [--memory-stats] [--native] [--lto] [-O0|-O1|-O2|-O3|-Os] [-- arguments...]
-  nacre build  source.ncr [-o executable] [--memory-stats] [--native] [--lto] [-O0|-O1|-O2|-O3|-Os]
+  nacre run    source.ncr [--memory-stats] [--native] [--lto] [--jemalloc] [-O0|-O1|-O2|-O3|-Os] [-- arguments...]
+  nacre build  source.ncr [-o executable] [--memory-stats] [--native] [--lto] [--jemalloc] [-O0|-O1|-O2|-O3|-Os]
   nacre emit-c source.ncr [-o output.c] [--memory-stats]
   nacre emit-flow source.ncr [-o output.flow]
   nacre emit-borrows source.ncr [-o output.borrows]
@@ -35,6 +35,7 @@ Source files may declare modules and import public names; all requested inputs a
 --sanitize (run/build): AddressSanitizer + UndefinedBehaviorSanitizer.
 --native (run/build): enable host CPU native instructions (-march=native).
 --lto (run/build): enable link-time optimization (-flto).
+--jemalloc (run/build): link high-performance jemalloc allocator (-ljemalloc).
 init: create a new project; refuse an existing path.
 doctor: compile and run an end-to-end test with List and Text.
 build: default output is out/<source-name>.
@@ -86,6 +87,7 @@ fn execute(args: Vec<OsString>) -> Result<i32, String> {
     let mut sanitize = false;
     let mut native_arch = false;
     let mut lto = false;
+    let mut jemalloc = false;
     let mut optimization = None;
     let mut program_args = &args[args.len()..];
     let mut i = 1;
@@ -110,6 +112,8 @@ fn execute(args: Vec<OsString>) -> Result<i32, String> {
             native_arch = true; i += 1;
         } else if args[i] == "--lto" && matches!(command, "run" | "build") && !lto {
             lto = true; i += 1;
+        } else if args[i] == "--jemalloc" && matches!(command, "run" | "build") && !jemalloc {
+            jemalloc = true; i += 1;
         } else if !args[i].to_string_lossy().starts_with('-') {
             sources.push(PathBuf::from(&args[i])); i += 1;
         } else { return Err(format!("invalid arguments for {command}\n\n{HELP}")); }
@@ -151,6 +155,7 @@ fn execute(args: Vec<OsString>) -> Result<i32, String> {
     }
     if native_arch { flags.push("-march=native"); }
     if lto { flags.push("-flto"); }
+    if jemalloc { flags.push("-ljemalloc"); }
     let program = native::compile_c_optimized(&c_source, optimization.unwrap_or("-O2"), &flags)?;
     if command == "run" { return Ok(program.run(program_args)?.code().unwrap_or(1)); }
     let path = output.unwrap_or_else(|| {
