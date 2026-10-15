@@ -706,3 +706,36 @@ void main() {
     let prog = native::compile_c(&c).unwrap();
     assert!(prog.output().unwrap().status.success());
 }
+
+#[test]
+fn iterator_chaining_and_adapter_composition() {
+    let source = r#"
+class Square implements Mapper<int, int> {
+    public int apply(int n) { return n * n; }
+}
+class LessThan50 implements Predicate<int> {
+    public readonly boolean test(int n) { return n < 50; }
+}
+void main() {
+    List<int> numbers = new List<int>();
+    int i = 1;
+    while (i <= 10) {
+        numbers.add(i);
+        i = i + 1;
+    }
+    Iterator<int> it = numbers.drain();
+    MapIterator<int, int> mapped = new MapIterator<int, int>(it, new Square());
+    FilterIterator<int> filtered = new FilterIterator<int>(mapped, new LessThan50());
+    Iterator<int> taken = Iterators<int>.take(filtered, 3L);
+    List<int> result = List<int>.collect(taken);
+
+    assert(result.size() == 3);
+    assert(result.get(0) == 1);
+    assert(result.get(1) == 4);
+    assert(result.get(2) == 9);
+}
+"#;
+    let c = compile_to_c(source).unwrap();
+    let prog = native::compile_c(&c).unwrap();
+    assert!(prog.output().unwrap().status.success());
+}
