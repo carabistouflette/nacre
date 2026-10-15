@@ -289,12 +289,17 @@ static size_t ncr_text_find_bytes_@ID@(
     if (start > length) { return SIZE_MAX; }
     if (needle_length == 0) { return start; }
     if (needle_length > length - start) { return SIZE_MAX; }
-    size_t last = length - needle_length;
-    for (size_t index = start; index <= last; ++index) {
-        if (bytes[index] == needle[0]
-            && memcmp(bytes + index, needle, needle_length) == 0) {
-            return index;
+    size_t remaining = length - start;
+    const unsigned char *cursor = bytes + start;
+    while (remaining >= needle_length) {
+        const unsigned char *candidate = (const unsigned char *)memchr(cursor, needle[0], remaining - needle_length + 1);
+        if (candidate == NULL) { return SIZE_MAX; }
+        if (needle_length == 1 || memcmp(candidate, needle, needle_length) == 0) {
+            return (size_t)(candidate - bytes);
         }
+        size_t advanced = (size_t)(candidate - cursor) + 1;
+        cursor += advanced;
+        remaining -= advanced;
     }
     return SIZE_MAX;
 }

@@ -681,3 +681,28 @@ void main() {
     let prog_poly = native::compile_c(&c_poly).unwrap();
     assert!(prog_poly.output().unwrap().status.success());
 }
+
+#[test]
+fn vectorized_memchr_text_search_and_substring_operations() {
+    let source = r#"
+void main() {
+    Text t = new Text("the quick brown fox jumps over the lazy dog");
+    Text needle1 = new Text("quick");
+    Text needle2 = new Text("lazy");
+    Text needle3 = new Text("cat");
+    Text single = new Text("o");
+
+    assert(t.indexOf(needle1) == 4);
+    assert(t.indexOf(needle2) == 35);
+    assert(t.indexOf(needle3) == -1);
+    assert(t.indexOf(single) == 12);
+
+    Text swift = new Text("swift");
+    Text rep = t.replace(needle1, swift);
+    assert(rep.indexOf(swift) == 4);
+}
+"#;
+    let c = compile_to_c(source).unwrap();
+    let prog = native::compile_c(&c).unwrap();
+    assert!(prog.output().unwrap().status.success());
+}

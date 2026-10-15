@@ -56,7 +56,7 @@
     "tests/text_map_keys.rs": 10,
     "tests/text_regex.rs": 12,
     "tests/tls_websocket.rs": 2,
-    "tests/tooling.rs": 18,
+    "tests/tooling.rs": 19,
     "tests/unicode_native.rs": 9,
     "tests/uri_dns.rs": 3,
     "tests/uuid.rs": 6,
@@ -70,5 +70,5 @@
     "src/ownership.rs": 4,
     "src/project.rs": 1
   },
-  "total": 1285
+  "total": 1286
 }
