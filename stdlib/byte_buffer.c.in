@@ -71,7 +71,9 @@ static void @BYTE_BUFFER_APPEND@(@BUFFER_TYPE@ p, uint8_t ncr_v_@APPEND_VALUE_ID
         ncr_fail("ByteBuffer is full", line, column);
     }
     size_t required_size = p->length + 1;
-    ncr_byte_buffer_reserve_@ID@(p, required_size, line, column);
+    if (required_size > p->capacity) {
+        ncr_byte_buffer_reserve_@ID@(p, required_size, line, column);
+    }
     p->bytes[p->length] = ncr_v_@APPEND_VALUE_ID@;
     p->length = required_size;
 }

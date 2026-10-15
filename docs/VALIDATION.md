@@ -4,6 +4,39 @@ Nacre is experimental pre-1.0. Executed checks are evidence, not a safety certif
 [validation-0.12.0.json](validation-0.12.0.json) records portable local results.
 Historical reports retain their original release labels; they are not current-release proof.
 
+## User-thunk qualifier boundary and binary append hot path
+
+The user-thunk change erases only slot-address qualifiers at the `void *` ABI
+boundary. A permanent interface regression covers owned Text, a shared Text
+borrow that remains live after dispatch, and owned `Result<Text, Text>` returns.
+The ByteBuffer change skips reserve calls within existing capacity; it leaves
+overflow checks and the growth/allocation policy intact.
+
+| Executed check | Observed result |
+| --- | --- |
+| Strict interface regression before/after the slot cast | Failed before with Clang qualifier errors; passed afterward with `-Werror=incompatible-pointer-types-discards-qualifiers` |
+| Release direct CLI interface consumer, `-O3 --native --memory-stats` under the same strict warning | Output `1`, `go!`, `!`; 3 allocations / 3 frees / live 0 |
+| Release direct CLI full workload consumer under the strict warning | Built successfully; binary checksum `2457183`; 21 allocations / 21 frees / live 0 |
+| Release C and direct LLVM buffer boundary consumers, `-O3` | Both passed zero/preallocated capacity, fill-to-capacity, one-byte growth, preserved payload, clear, and refill checks; 5 allocations / 5 frees / live 0 |
+| Full C suite with `--offline --locked --features fuzzing -- --include-ignored --test-threads=4` | 1,349 passed across 68 suites |
+| Final LLVM full suite, cache disabled, explicit Clang 22, no concurrent build jobs | 1,349 passed across 68 suites |
+| Final six-workload C/direct comparison | All 60 timed samples and calibration/allocation runs matched Rust checksums; allocation counts unchanged and live 0 for both backends |
+| All-target Clippy with `--features fuzzing -- -D warnings` | Passed without lint suppressions |
+
+The first concurrent full LLVM run reported three ZIP failures. The isolated
+six-test ZIP suite subsequently passed both as a direct test executable and
+through Cargo; the empty-archive release CLI consumer also passed with both the
+unchanged and final compilers at `-O2` and `-O3`, resolving libarchive 3.8.10.
+The cause of that initial failure has not been established.
+The final full LLVM run passed all 1,349 tests without concurrent build jobs,
+with executable/runtime caches disabled and Clang selected explicitly for C
+fixtures as well as direct compilation. This successful run does not explain
+the earlier intermittent ZIP result.
+
+
+CPU profiles, the isolated capacity-guard experiment, and executable footprint
+are recorded in [the binary optimization report](BENCHMARKS.md#binary-append-hot-path-optimization).
+
 ## JSON native-adapter optimization
 
 The JSON investigation reused `2e4e1ad`'s existing runtime report as the
@@ -26,16 +59,16 @@ underlying standard-library functions. UTF-8 checks and runtime optimization
 flags remain in place. The runtime cache already hashes generated C, so changed
 adapter attributes invalidate old runtime bitcode without a separate cache shim.
 
-### Separately observed generated-C warning debt
+### Generated-C qualifier warning debt: resolved
 
-Manual replay of the captured baseline runtime C emitted 21 existing Clang
-`-Wincompatible-pointer-types-discards-qualifiers` warnings. In
-`src/codegen.rs::direct_user_adapters`, addresses of `restrict`-qualified pointer
-locals are passed to erased `void *` slots. Targeted follow-up: explicitly erase
-slot-address qualifiers at that ABI boundary while preserving payload
-qualifiers, then compile affected interface consumers with the warning promoted
-to an error. This is separate from native-adapter performance; no warning
-suppression was introduced.
+Manual replay of the earlier runtime C exposed 21 Clang
+`-Wincompatible-pointer-types-discards-qualifiers` warnings. The follow-up in
+`src/codegen.rs::direct_user_adapters` explicitly casts argument-slot addresses
+to `void *`; owned/borrowed payload qualifiers remain unchanged. No warning
+suppression or new optimization attribute was added. The strict interface
+regression failed before the fix and passed afterward; an actual release build
+of the full workload consumer also passed with this warning promoted to an
+error. Current verification is recorded in the user-thunk/binary section above.
 
 
 ## Runtime backend comparison and private LLVM linkage

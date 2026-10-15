@@ -188,6 +188,46 @@ void main() {
 }
 
 #[test]
+fn direct_user_thunks_preserve_owned_and_borrowed_pointer_arguments_under_strict_c_checks() {
+    let source = r#"
+interface Transformer {
+    Result<Text, Text> transform(Text value, borrow Text suffix);
+    readonly int length(borrow Text value);
+}
+class Appender implements Transformer {
+    public Appender() { }
+    public Result<Text, Text> transform(Text value, borrow Text suffix) {
+        value.appendText(suffix);
+        return new Result<Text, Text>.Ok(value);
+    }
+    public readonly int length(borrow Text value) { return value.byteLength(); }
+}
+void main() {
+    Transformer appender = new Appender();
+    Text suffix = new Text("!");
+    println(appender.length(suffix));
+    match (appender.transform(new Text("go"), suffix)) {
+        Ok(value) { value.print(); }
+        Err(error) { error.print(); }
+    }
+    suffix.print();
+}
+"#;
+    let c = compile_c(source, &["-DNACRE_MEMORY_STATS"]).output().unwrap();
+    assert!(c.status.success(), "{}", String::from_utf8_lossy(&c.stderr));
+    assert_eq!(c.stdout, b"1\ngo!\n!\n");
+    assert_balanced_memory(&c);
+
+    let direct = compile_llvm_direct_with_flags(source, &[
+        "-DNACRE_MEMORY_STATS",
+        "-Werror=incompatible-pointer-types-discards-qualifiers",
+    ]).unwrap().output().unwrap();
+    assert!(direct.status.success(), "{}", String::from_utf8_lossy(&direct.stderr));
+    assert_eq!(direct.stdout, c.stdout);
+    assert_balanced_memory(&direct);
+}
+
+#[test]
 fn direct_runtime_links_gmp_and_preserves_big_integer_results() {
     let source = r#"
 void main() {

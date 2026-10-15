@@ -42,6 +42,12 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   User functions and underlying standard-library functions keep their existing
   attributes; runtime optimization flags are unchanged. Preserve dynamic UTF-8
   validation, Unicode/NUL behavior, allocation balance, and source debugging.
+- Explicitly erase argument-slot addresses at the direct user-thunk ABI boundary
+  without weakening owned or borrowed payload qualifiers. Verify interface
+  dispatch under strict Clang qualifier checks.
+- Avoid calling the ByteBuffer reserve helper for single-byte appends within
+  existing capacity. Preserve overflow checks and growth policy; record binary
+  CPU profiles, matched six-workload measurements, and executable footprint.
 - Add optional `nacre doctor --direct` and `--zip` checks. Report selected LLVM
   tool versions and reject incompatible majors before compiling bitcode; verify
   native allocation balance and real binary/empty ZIP archive round-trips.

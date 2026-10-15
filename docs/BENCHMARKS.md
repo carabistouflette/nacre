@@ -415,3 +415,94 @@ python3 benchmarks/run_suite.py --compare-backends --repeats 5 \
   --output /tmp/nacre-json-runtime.json
 ```
 
+## Binary append hot-path optimization
+
+This follow-up uses `e4fcb7b`'s
+[json-runtime-optimized.json](../benchmarks/json-runtime-optimized.json) as the
+unchanged six-workload baseline. The binary kernel still generates 4,096 bytes,
+copies through `MemorySource`/`MemorySink` in 257-byte chunks, hex-encodes and
+decodes, then checksums the result. No workload algorithm or input changed.
+
+### Profile and controlled change
+
+Separate CPU-0 `perf` recordings at 999 Hz each ran 100,000 binary calls and
+returned checksum `245718300000`. The C recording collected 3,417 samples;
+direct LLVM collected 4,564. Self-time sampled cycles were:
+
+| Role | C % | Direct LLVM % |
+| --- | ---: | ---: |
+| Dispatcher with inlined kernel work | 59.24 | 53.41 |
+| `ncr_byte_buffer_reserve_26` | 27.26 | 33.00 |
+| Sink interface write implementation/thunk | 12.70 | 12.97 |
+
+Single-byte append unconditionally called the reserve helper, including when
+capacity was sufficient. The retained change guards that call with
+`required_size > p->capacity`. Overflow checks still precede the addition;
+the existing reserve, validation, allocation, and geometric-growth paths remain
+unchanged. ByteBuffer's private representation and factories maintain
+`length <= capacity` and capacity within the supported integer limits.
+Bulk append and allocator policy are unchanged.
+
+For causal isolation, only this guard was added to the captured C and runtime
+sources; the direct experiment relinked the exact original user LLVM module.
+Three rotating 10,000-call samples per executable all returned checksum
+`24571830000`. Median microseconds per call changed from 34.195 to 22.065 for C
+and from 45.347 to 28.293 for direct LLVM. This improves both backends rather
+than attributing a shared runtime bottleneck solely to LLVM. LLVM remains about
+28% slower than C in this controlled binary experiment; parity is not claimed.
+No new inlining attributes or runtime optimization flags were introduced.
+
+A follow-up direct recording of 100,000 calls returned the same checksum:
+reserve fell to 0.14% of sampled cycles, while the inlined kernel dispatcher
+accounted for 77.63% and `MemorySink.write` for 21.18%. This localizes remaining
+work; it does not establish a safe further compiler change.
+
+### Matched six-workload recheck
+
+[binary-runtime-optimized.json](../benchmarks/binary-runtime-optimized.json)
+records five alternating fresh-process samples per backend/workload, with the
+same source hashes, Clang 22.1.8, `llvm-link` 22.1.0, CPU 0 affinity, and
+`-O3 --native` methodology as the baseline. All 60 timed samples, calibration
+runs, and separate allocation runs matched the Rust checksum preflight.
+Microseconds per kernel call, including amortized process overhead:
+
+| Workload | C before | LLVM before | C after | LLVM after |
+| --- | ---: | ---: | ---: | ---: |
+| JSON | 0.186 | 0.234 | 0.189 | 0.236 |
+| String | 0.469 | 0.463 | 0.483 | 0.484 |
+| Binary | 34.577 | 45.623 | 22.003 | 28.284 |
+| Hash map | 62.823 | 53.894 | 63.600 | 53.882 |
+| Sudoku | 411.022 | 464.815 | 409.434 | 494.336 |
+| Game of Life | 6,224.098 | 4,217.976 | 5,975.303 | 4,015.705 |
+
+Binary time decreased by 36.4% for C and 38.0% for LLVM against the retained
+baseline; the isolated experiment supports attribution to the capacity guard.
+LLVM remains 28.5% slower than C for binary. Movements in other workloads,
+including the slower LLVM Sudoku result, are cross-run observations rather than
+demonstrated effects of this change. String is near parity; map and Life favor
+LLVM, while JSON, binary, and Sudoku favor C in the final run.
+
+Tracked allocation/free counts were identical to the baseline for every
+workload and both backends, with zero live allocations. RSS raw samples are
+retained in the report; their small differences are not evidence of a memory
+improvement. Reproduce with matching LLVM tools and dependency paths:
+
+```sh
+python3 benchmarks/run_suite.py --compare-backends --repeats 5 \
+  --output /tmp/nacre-binary-runtime.json
+```
+
+### Executable footprint
+
+GNU `size` on the actual uninstrumented `-O3 --native` suite executables:
+
+| Backend/build | Text-category bytes | Data bytes | BSS bytes |
+| --- | ---: | ---: | ---: |
+| C before | 38,917 | 720 | 16 |
+| C after | 38,805 | 720 | 16 |
+| Direct LLVM before | 40,946 | 712 | 16 |
+| Direct LLVM after | 40,962 | 712 | 16 |
+
+The text category includes read-only sections, not just `.text`. This consumer's
+small footprint changes do not establish a general code-size improvement.
+

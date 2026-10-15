@@ -345,7 +345,8 @@ fn direct_user_adapters(program: &t::Program) -> String {
                 "ncr_self".to_owned()
             });
         }
-        call_args.extend(function.params.iter().map(|(id, _)| format!("&ncr_v_{id}")));
+        // Erase the address of each ABI slot, not its qualified pointer payload.
+        call_args.extend(function.params.iter().map(|(id, _)| format!("(void *)&ncr_v_{id}")));
         let params = c_params_signature(program, function);
         let return_type = ctype(program, function.return_type);
         if function.return_type == Type::Void {
