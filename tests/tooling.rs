@@ -114,8 +114,7 @@ void bench_simple_math() {
 }
 
 #[test]
-fn from_test_paths_enforces_boundaries() {
-    use nacre::project::SourceBundle;
+fn from_test_paths_enforces_boundaries_and_parses_ast() {
     let temp_dir = std::env::temp_dir().join(format!("ncr_boundary_test_{}", std::process::id()));
     let _ = fs::create_dir_all(&temp_dir);
 
@@ -127,8 +126,14 @@ fn from_test_paths_enforces_boundaries() {
         paths.push(p);
     }
     // 64 files with synthetic main -> 65 files -> exceeds MAX_FILES (64)
-    let err = SourceBundle::from_test_paths(&paths).unwrap_err();
+    let err = nacre::test_runner::run_tests(&paths, None, false, false, false).unwrap_err();
     assert!(err.contains("source file limit is 64"), "{err}");
+
+    // 2. Verify that comments containing "void main()" do NOT suppress synthetic main
+    let comment_file = temp_dir.join("comment_main.ncr");
+    fs::write(&comment_file, "// void main() is inside this comment\nvoid test_comment() { assert(1 == 1); }\n").unwrap();
+    let exit = nacre::test_runner::run_tests(&[comment_file], None, false, false, false).unwrap();
+    assert_eq!(exit, 0);
 
     let _ = fs::remove_dir_all(&temp_dir);
 }

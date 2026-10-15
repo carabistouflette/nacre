@@ -31,23 +31,11 @@ impl SourceBundle {
     /// Recursively collect .ncr files, sorted within each requested directory.
     /// Symlinks are rejected; hidden directories, target and out are excluded.
     pub fn from_paths(paths: &[PathBuf]) -> Result<Self, String> {
-        Self::collect_and_build(paths, false)
-    }
-
-    /// Loads source units from paths, injecting a synthetic `void main() {}` if no entry point exists.
-    /// All boundary limits (`MAX_SOURCE_BYTES`, `MAX_FILES`) are strictly verified across all units.
-    pub fn from_test_paths(paths: &[PathBuf]) -> Result<Self, String> {
-        Self::collect_and_build(paths, true)
-    }
-
-    fn collect_and_build(paths: &[PathBuf], is_test: bool) -> Result<Self, String> {
         let mut files = Vec::new();
         for path in paths { collect(path, 0, &mut files)?; }
         let mut seen = HashSet::new();
         let mut remaining = MAX_SOURCE_BYTES;
-        let mut explicit_main = false;
-        let mut units = Vec::new();
-        for path in files {
+        Self::from_units(files.into_iter().map(|path| {
             let canonical = path.canonicalize().map_err(|e| format!("{}: {e}", path.display()))?;
             if !seen.insert(canonical) { return Err(format!("duplicate source: {}", path.display())); }
             let mut data = Vec::new();
@@ -57,15 +45,36 @@ impl SourceBundle {
             if data.len() >= remaining { return Err("combined source exceeds the 1 MiB limit".to_owned()); }
             remaining -= data.len() + 1;
             let text = String::from_utf8(data).map_err(|e| format!("{}: expected UTF-8 ({e})", path.display()))?;
-            if text.contains("void main()") {
-                explicit_main = true;
+            Ok((path, text))
+        }))
+    }
+
+    /// Loads source units for test harnesses, verifying if `main` exists at AST level.
+    /// If no entry point exists, injects a synthetic `void main() {}` while strictly enforcing limits.
+    pub(crate) fn from_test_paths(paths: &[PathBuf]) -> Result<Self, String> {
+        let mut bundle = Self::from_paths(paths)?;
+        let parsed = bundle.parse().map_err(|d| bundle.render(&d))?;
+        let has_main = parsed.functions.iter().any(|f| f.name == "main")
+            || parsed.classes.iter().any(|c| c.methods.iter().any(|m| m.is_static && m.name == "main"));
+        if !has_main {
+            if bundle.units.len() >= MAX_FILES {
+                return Err("source file limit is 64".to_owned());
             }
-            units.push(Ok((path, text)));
+            let dummy = "void main() {}\n";
+            if bundle.text.len().saturating_add(dummy.len()) > MAX_SOURCE_BYTES {
+                return Err("combined source exceeds the 1 MiB limit".to_owned());
+            }
+            let start = bundle.text.len();
+            bundle.text.push_str(dummy);
+            let end = bundle.text.len();
+            bundle.units.push(Unit {
+                path: PathBuf::from("__ncr_synthetic_main.ncr"),
+                start,
+                end,
+                first_line: bundle.text.bytes().filter(|&b| b == b'\n').count() + 1,
+            });
         }
-        if is_test && !explicit_main {
-            units.push(Ok((PathBuf::from("__ncr_synthetic_main.ncr"), "void main() {}\n".to_owned())));
-        }
-        Self::from_units(units.into_iter())
+        Ok(bundle)
     }
 
     fn from_units(
