@@ -736,6 +736,10 @@ void main() {
 }
 "#;
     let c = compile_to_c(source).unwrap();
-    let prog = native::compile_c(&c).unwrap();
-    assert!(prog.output().unwrap().status.success());
+    assert!(c.contains("ncr_thunk_"), "expected devirtualized dispatch for mapper/predicate: {c}");
+    let prog = native::compile_c_with_flags(&c, &["-DNACRE_MEMORY_STATS"]).unwrap();
+    let output = prog.output().unwrap();
+    assert!(output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("live=0"), "expected memory balanced: {stderr}");
 }
