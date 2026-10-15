@@ -93,7 +93,7 @@ static inline @OPTION_TYPE@ ncr_map_put_@ID@(struct ncr_hash_table_@ID@ *table, 
     ++table->length;
 }
 
-static @OPTION_TYPE@ ncr_map_remove_@ID@(struct ncr_hash_table_@ID@ *table, @QUERY_TYPE@ key) {
+static inline @OPTION_TYPE@ ncr_map_remove_@ID@(struct ncr_hash_table_@ID@ *table, @QUERY_TYPE@ key) {
     int32_t index = ncr_map_query_@ID@(table, key);
     if (index < 0) { return (@OPTION_TYPE@){ .tag = @NONE_TAG@ }; }
     @ELEMENT@ value = table->entries[index].value;

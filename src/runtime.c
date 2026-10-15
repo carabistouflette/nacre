@@ -316,6 +316,18 @@ static void *ncr_allocate(size_t size, size_t line, size_t column) {
 #endif
     return p;
 }
+static void *ncr_allocate_raw(size_t size, size_t line, size_t column) {
+    if (size == 0) { return NULL; }
+    void *p = malloc(size);
+    if (p == NULL) {
+        fprintf(stderr, "runtime error [%zu:%zu]: allocation failed\n", line, column);
+        exit(70);
+    }
+#ifdef NACRE_MEMORY_STATS
+    atomic_fetch_add_explicit(&ncr_allocations, 1, memory_order_relaxed);
+#endif
+    return p;
+}
 static void ncr_deallocate(void *p) {
     if (p == NULL) { return; }
 #ifdef NACRE_MEMORY_STATS

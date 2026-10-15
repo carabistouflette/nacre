@@ -9,7 +9,7 @@ static void ncr_list_reserve_@ID@(ncr_obj_@ID@ *p, int32_t requested, size_t lin
     if ((uint64_t)capacity > SIZE_MAX / sizeof(@ELEMENT@)) {
         ncr_fail("List capacity is too large", line, column);
     }
-    @ELEMENT@ *items = ncr_allocate((size_t)capacity * sizeof(@ELEMENT@), line, column);
+    @ELEMENT@ *items = ncr_allocate_raw((size_t)capacity * sizeof(@ELEMENT@), line, column);
     if (p->length > 0) { memcpy(items, p->items, (size_t)p->length * sizeof(@ELEMENT@)); }
     /* Raw relocation transfers ownership; do NOT destroy the old slots. */
     ncr_deallocate(p->items);
@@ -23,9 +23,11 @@ static void @LIST_NEW@(ncr_obj_@ID@ *p, size_t line, size_t column) {
     (void)line; (void)column;
     p->items = NULL; p->length = 0; p->capacity = 0;
 }
-static void @LIST_ADD@(ncr_obj_@ID@ *p, @ELEMENT@ value, size_t line, size_t column) {
-    if (p->length == INT32_MAX) { ncr_fail("List is full", line, column); }
-    ncr_list_reserve_@ID@(p, p->length + 1, line, column);
+static inline void @LIST_ADD@(ncr_obj_@ID@ *p, @ELEMENT@ value, size_t line, size_t column) {
+    if (__builtin_expect(p->length >= p->capacity, 0)) {
+        if (__builtin_expect(p->length == INT32_MAX, 0)) { ncr_fail("List is full", line, column); }
+        ncr_list_reserve_@ID@(p, p->length + 1, line, column);
+    }
     p->items[p->length++] = value;
 }
 static inline int32_t @LIST_SIZE@(ncr_obj_@ID@ *p, size_t line, size_t column) {
