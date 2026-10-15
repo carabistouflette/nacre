@@ -1073,7 +1073,7 @@ impl Checker<'_> {
                 let variants = self.tables.classes[class].variants.clone()
                     .ok_or_else(|| Diagnostic::new(stmt.span, format!("match requires an enum, not `{}`", self.tables.classes[class].name)))?;
                 let mut seen = vec![false; variants.len()];
-                let mut variant_stops = vec![false; variants.len()];
+                let mut all_arms_stop = true;
                 let mut checked_arms = Vec::with_capacity(arms.len());
                 for arm in arms {
                     let variant = variants.iter().position(|v| v.name == arm.variant)
@@ -1096,8 +1096,14 @@ impl Checker<'_> {
                             (Type::Object(class), Some(mutable)) => Type::Borrow { class, mutable },
                             _ => *ty,
                         };
-                        let id = self.declare(name, binding_type, arm.span)?;
-                        bindings.push(id);
+                        if name == "_" {
+                            let id = self.variables.len();
+                            self.variables.push(t::Local { ty: binding_type, name: format!("$nacre_discard_{id}"), span: arm.span });
+                            bindings.push(id);
+                        } else {
+                            let id = self.declare(name, binding_type, arm.span)?;
+                            bindings.push(id);
+                        }
                     }
                     let guard = if let Some(g) = &arm.guard {
                         let expr = self.expected_expression(Type::Boolean, g)?;
@@ -1107,12 +1113,10 @@ impl Checker<'_> {
                     };
                     let (body, stops) = self.block(&arm.body)?;
                     self.scopes.pop();
-                    if arm.guard.is_none() && stops {
-                        variant_stops[variant] = true;
-                    }
+                    all_arms_stop &= stops;
                     checked_arms.push(t::MatchArm { variant, bindings, guard, body });
                 }
-                let all_stop = variant_stops.iter().all(|s| *s);
+                let all_stop = all_arms_stop;
                 let missing: Vec<_> = variants.iter().enumerate().filter(|(id, _)| !seen[*id])
                     .map(|(_, variant)| variant.name.as_str()).collect();
                 if !missing.is_empty() {

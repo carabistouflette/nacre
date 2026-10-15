@@ -787,4 +787,51 @@ void main() {
 }
 "#;
     assert!(validate(repeated_unguarded).is_err());
+
+    // Verify rejection when a guarded arm does not stop and the function has no trailing return
+    let non_stopping_guard = r#"
+enum Number { Val(int); None; }
+int check(Number n) {
+    match (n) {
+        Val(x) if x > 10 { int dummy = x + 1; }
+        Val(x) { return 1; }
+        None { return 0; }
+    }
+}
+void main() {}
+"#;
+    let err = validate(non_stopping_guard).unwrap_err();
+    assert!(err.message.contains("must return int on every path"), "{err}");
+}
+
+#[test]
+fn pattern_matching_tuple_destructuring_and_wildcard_patterns() {
+    let source = r#"
+enum Tuple {
+    Pair(int, int);
+    Triple(int, int, int);
+    Single(int);
+}
+
+int inspect(Tuple t) {
+    match (t) {
+        Triple(a, _, c) if a + c > 100 { return a + c; }
+        Triple(_, b, _) { return b; }
+        Pair(x, _) if x > 50 { return x; }
+        Pair(_, y) { return y; }
+        Single(_) { return 0; }
+    }
+}
+
+void main() {
+    assert(inspect(new Tuple.Triple(60, 20, 50)) == 110);
+    assert(inspect(new Tuple.Triple(10, 99, 10)) == 99);
+    assert(inspect(new Tuple.Pair(75, 10)) == 75);
+    assert(inspect(new Tuple.Pair(20, 33)) == 33);
+    assert(inspect(new Tuple.Single(42)) == 0);
+}
+"#;
+    let c = compile_to_c(source).unwrap();
+    let prog = native::compile_c(&c).unwrap();
+    assert!(prog.output().unwrap().status.success());
 }
