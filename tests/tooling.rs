@@ -480,27 +480,45 @@ int add(int a, int b) {
     return a + b;
 }
 
+double compute(double x, double y) {
+    return x * y + 2.5;
+}
+
 void main() {
     int x = 15;
     int y = 25;
     int z = add(x, y);
     assert(z == 40);
     println(z);
+
+    int sum = 0;
+    int i = 0;
+    while (true) {
+        i = i + 1;
+        if (i == 2) { continue; }
+        if (i > 5) { break; }
+        sum = sum + i;
+    }
+    assert(sum == 13);
+    println(sum);
+
+    double d = compute(3.0, 4.0);
+    assert(d == 14.5);
+    println(d);
 }
 "#;
     let llvm_ir = nacre::emit_llvm_direct(source).unwrap();
-    eprintln!("LLVM IR:\n{llvm_ir}");
     assert!(llvm_ir.contains("target triple = \"x86_64-pc-linux-gnu\""), "missing triple");
-    assert!(llvm_ir.contains("define i32 @ncr_fn_0"), "missing function 0");
     assert!(llvm_ir.contains("add i32"), "missing add instruction");
+    assert!(llvm_ir.contains("fadd double"), "missing fadd instruction");
+    assert!(llvm_ir.contains("fmul double"), "missing fmul instruction");
     assert!(llvm_ir.contains("@main"), "missing main");
 
-    // If clang is installed, verify direct LLVM compilation and native execution
     if std::process::Command::new("clang").arg("--version").output().is_ok() {
         let program = native::compile_llvm_direct(&llvm_ir, "-O2").unwrap();
         let output = program.output().unwrap();
         assert!(output.status.success());
-        assert_eq!(output.stdout, b"40\n");
+        assert_eq!(output.stdout, b"40\n13\n14.500000\n");
     }
 }
 

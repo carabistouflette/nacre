@@ -12,6 +12,7 @@ pub fn generate_direct_llvm(program: &t::Program, _source: &str) -> Result<Strin
         temp_id: 0,
         label_id: 0,
         strings: Vec::new(),
+        loops: Vec::new(),
     };
     emitter.emit()?;
     Ok(emitter.out)
@@ -23,6 +24,7 @@ struct LlvmEmitter<'a> {
     temp_id: usize,
     label_id: usize,
     strings: Vec<String>,
+    loops: Vec<(String, String)>,
 }
 
 impl LlvmEmitter<'_> {
@@ -77,7 +79,8 @@ impl LlvmEmitter<'_> {
         self.out.push_str("@.ncr_fmt_long = private unnamed_addr constant [5 x i8] c\"%ld\\0A\\00\", align 1\n");
         self.out.push_str("@.ncr_fmt_str = private unnamed_addr constant [4 x i8] c\"%s\\0A\\00\", align 1\n");
         self.out.push_str("@.ncr_fmt_bool_true = private unnamed_addr constant [6 x i8] c\"true\\0A\\00\", align 1\n");
-        self.out.push_str("@.ncr_fmt_bool_false = private unnamed_addr constant [7 x i8] c\"false\\0A\\00\", align 1\n\n");
+        self.out.push_str("@.ncr_fmt_bool_false = private unnamed_addr constant [7 x i8] c\"false\\0A\\00\", align 1\n");
+        self.out.push_str("@.ncr_fmt_double = private unnamed_addr constant [6 x i8] c\"%.6f\\0A\\00\", align 1\n\n");
 
         for s in &self.strings {
             self.out.push_str(s);
@@ -272,9 +275,10 @@ impl LlvmEmitter<'_> {
                 self.out.push_str(&format!("    br i1 {cond_reg}, label %{label_body}, label %{label_exit}\n"));
 
                 self.out.push_str(&format!("{label_body}:\n"));
+                self.loops.push((label_cond.clone(), label_exit.clone()));
                 self.emit_block(body, function)?;
+                self.loops.pop();
                 self.out.push_str(&format!("    br label %{label_cond}\n"));
-
                 self.out.push_str(&format!("{label_exit}:\n"));
             }
             t::Stmt::Return(opt_expr) => {
@@ -287,8 +291,20 @@ impl LlvmEmitter<'_> {
                     self.out.push_str("    ret void\n");
                 }
             }
-            t::Stmt::Break => {}
-            t::Stmt::Continue => {}
+            t::Stmt::Break => {
+                if let Some((_, exit)) = self.loops.last() {
+                    self.out.push_str(&format!("    br label %{exit}\n"));
+                    let dead = self.fresh_label("dead_break");
+                    self.out.push_str(&format!("{dead}:\n"));
+                }
+            }
+            t::Stmt::Continue => {
+                if let Some((header, _)) = self.loops.last() {
+                    self.out.push_str(&format!("    br label %{header}\n"));
+                    let dead = self.fresh_label("dead_cont");
+                    self.out.push_str(&format!("{dead}:\n"));
+                }
+            }
             t::Stmt::Block(inner) => {
                 self.emit_block(inner, function)?;
             }
@@ -438,6 +454,11 @@ impl LlvmEmitter<'_> {
                                     self.out.push_str(&format!("{label_f}:\n    call i32 (ptr, ...) @printf(ptr @.ncr_fmt_bool_false)\n    br label %{label_end}\n"));
                                     self.out.push_str(&format!("{label_end}:\n"));
                                 }
+                                Type::Double => {
+                                    self.out.push_str(&format!(
+                                        "    call i32 (ptr, ...) @printf(ptr @.ncr_fmt_double, double {arg_reg})\n"
+                                    ));
+                                }
                                 _ => {}
                             }
                         }
@@ -462,21 +483,37 @@ impl LlvmEmitter<'_> {
                 let ty_str = llvm_type(left.ty);
                 let reg = self.fresh_reg();
                 use crate::ast::BinaryOp as B;
-                match op {
-                    B::Add => { self.out.push_str(&format!("    {reg} = add {ty_str} {l}, {r}\n")); }
-                    B::Sub => { self.out.push_str(&format!("    {reg} = sub {ty_str} {l}, {r}\n")); }
-                    B::Mul => { self.out.push_str(&format!("    {reg} = mul {ty_str} {l}, {r}\n")); }
-                    B::Div => { self.out.push_str(&format!("    {reg} = sdiv {ty_str} {l}, {r}\n")); }
-                    B::Rem => { self.out.push_str(&format!("    {reg} = srem {ty_str} {l}, {r}\n")); }
-                    B::Eq => { self.out.push_str(&format!("    {reg} = icmp eq {ty_str} {l}, {r}\n")); }
-                    B::Ne => { self.out.push_str(&format!("    {reg} = icmp ne {ty_str} {l}, {r}\n")); }
-                    B::Lt => { self.out.push_str(&format!("    {reg} = icmp slt {ty_str} {l}, {r}\n")); }
-                    B::Le => { self.out.push_str(&format!("    {reg} = icmp sle {ty_str} {l}, {r}\n")); }
-                    B::Gt => { self.out.push_str(&format!("    {reg} = icmp sgt {ty_str} {l}, {r}\n")); }
-                    B::Ge => { self.out.push_str(&format!("    {reg} = icmp sge {ty_str} {l}, {r}\n")); }
-                    B::And => { self.out.push_str(&format!("    {reg} = and {ty_str} {l}, {r}\n")); }
-                    B::Or => { self.out.push_str(&format!("    {reg} = or {ty_str} {l}, {r}\n")); }
-                    _ => return Err(format!("unsupported binary operator in direct LLVM backend: {op:?}")),
+                if left.ty == Type::Double {
+                    match op {
+                        B::Add => { self.out.push_str(&format!("    {reg} = fadd double {l}, {r}\n")); }
+                        B::Sub => { self.out.push_str(&format!("    {reg} = fsub double {l}, {r}\n")); }
+                        B::Mul => { self.out.push_str(&format!("    {reg} = fmul double {l}, {r}\n")); }
+                        B::Div => { self.out.push_str(&format!("    {reg} = fdiv double {l}, {r}\n")); }
+                        B::Eq => { self.out.push_str(&format!("    {reg} = fcmp oeq double {l}, {r}\n")); }
+                        B::Ne => { self.out.push_str(&format!("    {reg} = fcmp one double {l}, {r}\n")); }
+                        B::Lt => { self.out.push_str(&format!("    {reg} = fcmp olt double {l}, {r}\n")); }
+                        B::Le => { self.out.push_str(&format!("    {reg} = fcmp ole double {l}, {r}\n")); }
+                        B::Gt => { self.out.push_str(&format!("    {reg} = fcmp ogt double {l}, {r}\n")); }
+                        B::Ge => { self.out.push_str(&format!("    {reg} = fcmp oge double {l}, {r}\n")); }
+                        _ => return Err(format!("unsupported binary operator for double in direct LLVM backend: {op:?}")),
+                    }
+                } else {
+                    match op {
+                        B::Add => { self.out.push_str(&format!("    {reg} = add {ty_str} {l}, {r}\n")); }
+                        B::Sub => { self.out.push_str(&format!("    {reg} = sub {ty_str} {l}, {r}\n")); }
+                        B::Mul => { self.out.push_str(&format!("    {reg} = mul {ty_str} {l}, {r}\n")); }
+                        B::Div => { self.out.push_str(&format!("    {reg} = sdiv {ty_str} {l}, {r}\n")); }
+                        B::Rem => { self.out.push_str(&format!("    {reg} = srem {ty_str} {l}, {r}\n")); }
+                        B::Eq => { self.out.push_str(&format!("    {reg} = icmp eq {ty_str} {l}, {r}\n")); }
+                        B::Ne => { self.out.push_str(&format!("    {reg} = icmp ne {ty_str} {l}, {r}\n")); }
+                        B::Lt => { self.out.push_str(&format!("    {reg} = icmp slt {ty_str} {l}, {r}\n")); }
+                        B::Le => { self.out.push_str(&format!("    {reg} = icmp sle {ty_str} {l}, {r}\n")); }
+                        B::Gt => { self.out.push_str(&format!("    {reg} = icmp sgt {ty_str} {l}, {r}\n")); }
+                        B::Ge => { self.out.push_str(&format!("    {reg} = icmp sge {ty_str} {l}, {r}\n")); }
+                        B::And => { self.out.push_str(&format!("    {reg} = and {ty_str} {l}, {r}\n")); }
+                        B::Or => { self.out.push_str(&format!("    {reg} = or {ty_str} {l}, {r}\n")); }
+                        _ => return Err(format!("unsupported binary operator in direct LLVM backend: {op:?}")),
+                    }
                 }
                 Ok(reg)
             }
@@ -487,6 +524,7 @@ impl LlvmEmitter<'_> {
                 use crate::ast::UnaryOp as U;
                 match op {
                     U::Not => { self.out.push_str(&format!("    {reg} = xor i1 {val}, true\n")); }
+                    U::Neg if inner.ty == Type::Double => { self.out.push_str(&format!("    {reg} = fneg double {val}\n")); }
                     U::Neg => { self.out.push_str(&format!("    {reg} = sub {ty_str} 0, {val}\n")); }
                     _ => return Err(format!("unsupported unary operator in direct LLVM backend: {op:?}")),
                 }
