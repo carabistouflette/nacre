@@ -39,6 +39,21 @@ fn assert_instance(function: &t::Function, class: usize) {
     assert_eq!(function.receiver, Some(class), "Uuid value methods have a Uuid receiver");
 }
 
+pub(super) const UUID_METHODS: &[M] = &[
+    M::UuidParse, M::UuidFromBytes, M::UuidFromLongs, M::UuidRandom,
+    M::UuidNameMd5, M::UuidNameSha1, M::UuidClone, M::UuidToText,
+    M::UuidToBytes, M::UuidMostSignificantBits, M::UuidLeastSignificantBits,
+    M::UuidVersion, M::UuidVariant, M::UuidEquals, M::UuidCompareTo,
+];
+
+pub(super) fn is_uuid_method(method: M) -> bool {
+    UUID_METHODS.contains(&method)
+}
+
+pub(super) fn is_used(program: &t::Program) -> bool {
+    super::native_usage::any(program, is_uuid_method)
+}
+
 fn assert_borrow(function: &t::Function, index: usize, expected: usize) {
     assert!(matches!(function.params.get(index),
         Some((_, Type::Borrow { class, mutable: false })) if *class == expected),
@@ -61,6 +76,7 @@ fn result(
 }
 
 pub(super) fn implementation(program: &t::Program, class: usize) -> String {
+    if !is_used(program) { return String::new(); }
     assert!(matches!(program.classes[class].native, Some(C::Uuid)),
         "Uuid implementation belongs to its native class");
     let text = text_class(program).expect("Uuid requires Text");
@@ -125,8 +141,54 @@ pub(super) fn implementation(program: &t::Program, class: usize) -> String {
     assert_eq!(capacity.params.iter().map(|(_, ty)| *ty).collect::<Vec<_>>(), vec![Type::Long],
         "ByteBuffer.withCapacity accepts long");
 
+    let uses_crypto = super::native_usage::any(program, |method| {
+        matches!(method, M::UuidRandom | M::UuidNameMd5 | M::UuidNameSha1)
+    });
+    let (crypto_headers, crypto_digest_helper, random_body, name_md5_body, name_sha1_body) = if uses_crypto {
+        (
+            "/* nacre-link: crypto */\n#include <openssl/evp.h>\n#include <openssl/rand.h>\n".to_owned(),
+            format!(
+                "static bool ncr_uuid_digest_{class}(\n    const EVP_MD *algorithm, size_t expected_length,\n    const ncr_obj_{class} *namespace_uuid, const ncr_obj_{buffer} *name,\n    unsigned char digest[EVP_MAX_MD_SIZE]\n) {{\n    EVP_MD_CTX *context = EVP_MD_CTX_new();\n    if (context == NULL) {{ return false; }}\n    const int algorithm_length = EVP_MD_get_size(algorithm);\n    bool success = algorithm_length > 0\n        && (size_t)algorithm_length == expected_length\n        && expected_length <= (size_t)EVP_MAX_MD_SIZE;\n    if (success) {{ success = EVP_DigestInit_ex(context, algorithm, NULL) == 1; }}\n    if (success) {{ success = EVP_DigestUpdate(context, namespace_uuid->bytes, 16) == 1; }}\n    size_t offset = 0;\n    while (success && offset < name->length) {{\n        const size_t remaining = name->length - offset;\n        const size_t chunk = remaining < (size_t)65536 ? remaining : (size_t)65536;\n        success = EVP_DigestUpdate(context, name->bytes + offset, chunk) == 1;\n        if (success) {{ offset += chunk; }}\n    }}\n    unsigned int digest_length = 0;\n    if (success) {{ success = EVP_DigestFinal_ex(context, digest, &digest_length) == 1; }}\n    EVP_MD_CTX_free(context);\n    return success && (size_t)digest_length == expected_length;\n}}\n"
+            ),
+            format!(
+                "    unsigned char bytes[16];\n    if (RAND_bytes(bytes, (int)sizeof(bytes)) != 1) {{\n        static const char message[] = \"Uuid.random: OpenSSL secure random generation failed\";\n        return ncr_result_error_{uuid_result}(message, sizeof(message) - 1, ncr_line, ncr_column);\n    }}\n    ncr_uuid_version_variant_{class}(bytes, 4);\n    ncr_obj_{class} *uuid = ncr_uuid_new_{class}(bytes, ncr_line, ncr_column);\n    return (ncr_obj_{uuid_result}){{ .tag = {uuid_ok}, .data.v{uuid_ok}.f0 = uuid }};\n"
+            ),
+            format!(
+                "    unsigned char digest[EVP_MAX_MD_SIZE];\n    if (!ncr_uuid_digest_{class}(EVP_md5(), 16, {ns_md5}, {name_md5_p}, digest)) {{\n        static const char message[] = \"Uuid.nameMd5: OpenSSL MD5 operation failed\";\n        return ncr_result_error_{uuid_result}(message, sizeof(message) - 1, ncr_line, ncr_column);\n    }}\n    ncr_uuid_version_variant_{class}(digest, 3);\n    ncr_obj_{class} *uuid = ncr_uuid_new_{class}(digest, ncr_line, ncr_column);\n    return (ncr_obj_{uuid_result}){{ .tag = {uuid_ok}, .data.v{uuid_ok}.f0 = uuid }};\n",
+                ns_md5 = parameter(name_md5, 0),
+                name_md5_p = parameter(name_md5, 1),
+            ),
+            format!(
+                "    unsigned char digest[EVP_MAX_MD_SIZE];\n    if (!ncr_uuid_digest_{class}(EVP_sha1(), 20, {ns_sha1}, {name_sha1_p}, digest)) {{\n        static const char message[] = \"Uuid.nameSha1: OpenSSL SHA-1 operation failed\";\n        return ncr_result_error_{uuid_result}(message, sizeof(message) - 1, ncr_line, ncr_column);\n    }}\n    ncr_uuid_version_variant_{class}(digest, 5);\n    ncr_obj_{class} *uuid = ncr_uuid_new_{class}(digest, ncr_line, ncr_column);\n    return (ncr_obj_{uuid_result}){{ .tag = {uuid_ok}, .data.v{uuid_ok}.f0 = uuid }};\n",
+                ns_sha1 = parameter(name_sha1, 0),
+                name_sha1_p = parameter(name_sha1, 1),
+            ),
+        )
+    } else {
+        (
+            String::new(),
+            String::new(),
+            "    (void)ncr_line; (void)ncr_column;\n    ncr_fail(\"Uuid.random requires OpenSSL\", ncr_line, ncr_column);\n".to_owned(),
+            format!(
+                "    (void){ns}; (void){name}; (void)ncr_line; (void)ncr_column;\n    ncr_fail(\"Uuid.nameMd5 requires OpenSSL\", ncr_line, ncr_column);\n",
+                ns = parameter(name_md5, 0),
+                name = parameter(name_md5, 1),
+            ),
+            format!(
+                "    (void){ns}; (void){name}; (void)ncr_line; (void)ncr_column;\n    ncr_fail(\"Uuid.nameSha1 requires OpenSSL\", ncr_line, ncr_column);\n",
+                ns = parameter(name_sha1, 0),
+                name = parameter(name_sha1, 1),
+            ),
+        )
+    };
+
     let template = include_str!("../../stdlib/uuid.c.in");
     replace_placeholders(template.to_owned(), &[
+        ("@UUID_CRYPTO_HEADERS@", crypto_headers),
+        ("@UUID_CRYPTO_DIGEST_HELPER@", crypto_digest_helper),
+        ("@UUID_RANDOM_BODY@", random_body),
+        ("@UUID_NAME_MD5_BODY@", name_md5_body),
+        ("@UUID_NAME_SHA1_BODY@", name_sha1_body),
         ("@UUID_PARSE_SIGNATURE@", signature(program, M::UuidParse)),
         ("@UUID_FROM_BYTES_SIGNATURE@", signature(program, M::UuidFromBytes)),
         ("@UUID_FROM_LONGS_SIGNATURE@", signature(program, M::UuidFromLongs)),

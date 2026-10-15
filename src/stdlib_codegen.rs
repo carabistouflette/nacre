@@ -58,7 +58,8 @@ pub(crate) fn preamble(program: &t::Program) -> String {
     preamble
 }
 pub(crate) fn should_emit_prototype(program: &t::Program, function: &t::Function) -> bool {
-    !function.native.is_some_and(big_numbers::is_numeric_method) || big_numbers::is_used(program)
+    (!function.native.is_some_and(big_numbers::is_numeric_method) || big_numbers::is_used(program))
+        && (!function.native.is_some_and(uuid::is_uuid_method) || uuid::is_used(program))
 }
 
 pub fn fields(program: &t::Program, class: C, class_id: usize) -> String {

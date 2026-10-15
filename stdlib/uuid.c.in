@@ -1,6 +1,4 @@
-/* nacre-link: crypto */
-#include <openssl/evp.h>
-#include <openssl/rand.h>
+@UUID_CRYPTO_HEADERS@
 
 static ncr_obj_@ID@ *ncr_uuid_new_@ID@(
     const unsigned char bytes[16], size_t line, size_t column
@@ -41,33 +39,7 @@ static void ncr_uuid_version_variant_@ID@(unsigned char bytes[16], unsigned int 
     bytes[8] = (unsigned char)((bytes[8] & 0x3fu) | 0x80u);
 }
 
-static bool ncr_uuid_digest_@ID@(
-    const EVP_MD *algorithm, size_t expected_length,
-    const ncr_obj_@ID@ *namespace_uuid, const ncr_obj_@BUFFER_ID@ *name,
-    unsigned char digest[EVP_MAX_MD_SIZE]
-) {
-    EVP_MD_CTX *context = EVP_MD_CTX_new();
-    if (context == NULL) { return false; }
-    const int algorithm_length = EVP_MD_get_size(algorithm);
-    bool success = algorithm_length > 0
-        && (size_t)algorithm_length == expected_length
-        && expected_length <= (size_t)EVP_MAX_MD_SIZE;
-    if (success) { success = EVP_DigestInit_ex(context, algorithm, NULL) == 1; }
-    if (success) { success = EVP_DigestUpdate(context, namespace_uuid->bytes, 16) == 1; }
-
-    size_t offset = 0;
-    while (success && offset < name->length) {
-        const size_t remaining = name->length - offset;
-        const size_t chunk = remaining < (size_t)65536 ? remaining : (size_t)65536;
-        success = EVP_DigestUpdate(context, name->bytes + offset, chunk) == 1;
-        if (success) { offset += chunk; }
-    }
-
-    unsigned int digest_length = 0;
-    if (success) { success = EVP_DigestFinal_ex(context, digest, &digest_length) == 1; }
-    EVP_MD_CTX_free(context);
-    return success && (size_t)digest_length == expected_length;
-}
+@UUID_CRYPTO_DIGEST_HELPER@
 
 @UUID_PARSE_SIGNATURE@ {
     const unsigned char *input = @UUID_PARSE_TEXT@->bytes;
@@ -131,38 +103,15 @@ static bool ncr_uuid_digest_@ID@(
 }
 
 @UUID_RANDOM_SIGNATURE@ {
-    unsigned char bytes[16];
-    if (RAND_bytes(bytes, (int)sizeof(bytes)) != 1) {
-        static const char message[] = "Uuid.random: OpenSSL secure random generation failed";
-        return @UUID_RESULT_ERROR@(message, sizeof(message) - 1, ncr_line, ncr_column);
-    }
-    ncr_uuid_version_variant_@ID@(bytes, 4);
-    ncr_obj_@ID@ *uuid = ncr_uuid_new_@ID@(bytes, ncr_line, ncr_column);
-    return (ncr_obj_@UUID_RESULT_ID@){ .tag = @UUID_OK_TAG@, .data.v@UUID_OK_TAG@.f0 = uuid };
+@UUID_RANDOM_BODY@
 }
 
 @UUID_NAME_MD5_SIGNATURE@ {
-    unsigned char digest[EVP_MAX_MD_SIZE];
-    if (!ncr_uuid_digest_@ID@(EVP_md5(), 16, @UUID_NAME_MD5_NAMESPACE@,
-            @UUID_NAME_MD5_NAME@, digest)) {
-        static const char message[] = "Uuid.nameMd5: OpenSSL MD5 operation failed";
-        return @UUID_RESULT_ERROR@(message, sizeof(message) - 1, ncr_line, ncr_column);
-    }
-    ncr_uuid_version_variant_@ID@(digest, 3);
-    ncr_obj_@ID@ *uuid = ncr_uuid_new_@ID@(digest, ncr_line, ncr_column);
-    return (ncr_obj_@UUID_RESULT_ID@){ .tag = @UUID_OK_TAG@, .data.v@UUID_OK_TAG@.f0 = uuid };
+@UUID_NAME_MD5_BODY@
 }
 
 @UUID_NAME_SHA1_SIGNATURE@ {
-    unsigned char digest[EVP_MAX_MD_SIZE];
-    if (!ncr_uuid_digest_@ID@(EVP_sha1(), 20, @UUID_NAME_SHA1_NAMESPACE@,
-            @UUID_NAME_SHA1_NAME@, digest)) {
-        static const char message[] = "Uuid.nameSha1: OpenSSL SHA-1 operation failed";
-        return @UUID_RESULT_ERROR@(message, sizeof(message) - 1, ncr_line, ncr_column);
-    }
-    ncr_uuid_version_variant_@ID@(digest, 5);
-    ncr_obj_@ID@ *uuid = ncr_uuid_new_@ID@(digest, ncr_line, ncr_column);
-    return (ncr_obj_@UUID_RESULT_ID@){ .tag = @UUID_OK_TAG@, .data.v@UUID_OK_TAG@.f0 = uuid };
+@UUID_NAME_SHA1_BODY@
 }
 
 @UUID_CLONE_SIGNATURE@ {
