@@ -76,21 +76,31 @@ pub fn resolve(program: &mut a::Program) -> Result<(), Diagnostic> {
             .or_else(|| trait_map.get(&(String::new(), imp.trait_name.clone())))
             .copied();
         if tr.is_none() {
+            let mut matches = Vec::new();
             for import in &program.units[imp.unit].imports {
                 if import.wildcard {
                     if let Some(found) = trait_map.get(&(import.path.clone(), imp.trait_name.clone())) {
-                        tr = Some(*found);
-                        break;
+                        if !matches.iter().any(|m: &&a::Trait| m.qualified_name == found.qualified_name) {
+                            matches.push(*found);
+                        }
                     }
                 } else if let Some((mod_path, name)) = import.path.rsplit_once('.') {
                     if name == imp.trait_name {
                         if let Some(found) = trait_map.get(&(mod_path.to_string(), imp.trait_name.clone())) {
-                            tr = Some(*found);
-                            break;
+                            if !matches.iter().any(|m: &&a::Trait| m.qualified_name == found.qualified_name) {
+                                matches.push(*found);
+                            }
                         }
                     }
                 }
             }
+            if matches.len() > 1 {
+                return Err(Diagnostic::new(
+                    imp.span,
+                    format!("ambiguous trait `{}`: found multiple matching traits in imported modules", imp.trait_name),
+                ));
+            }
+            tr = matches.first().copied();
         }
         let tr = tr.ok_or_else(|| {
             Diagnostic::new(imp.span, format!("unknown trait `{}`", imp.trait_name))

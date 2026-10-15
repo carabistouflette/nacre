@@ -350,6 +350,30 @@ public void main() {
 }
 
 #[test]
+fn ambiguous_imported_traits_are_rejected() {
+    let source_a = "module mod_a;\npublic trait SharedTrait { void run(); }\n";
+    let source_b = "module mod_b;\npublic trait SharedTrait { void run(); }\n";
+    let source_c = r#"
+module main_mod;
+import mod_a.*;
+import mod_b.*;
+
+public class Worker {}
+impl SharedTrait for Worker {
+    void run() {}
+}
+public void main() {}
+"#;
+    let bundle = nacre::project::SourceBundle::from_sources(vec![
+        ("a.ncr".to_owned(), source_a.to_owned()),
+        ("b.ncr".to_owned(), source_b.to_owned()),
+        ("c.ncr".to_owned(), source_c.to_owned()),
+    ]).unwrap();
+    let err = bundle.validate().unwrap_err();
+    assert!(err.message.contains("ambiguous trait `SharedTrait`"), "{err}");
+}
+
+#[test]
 fn async_await_syntax_and_execution() {
     let source = "async int fetch() { return 42; }\nvoid main() {\n    int x = await fetch();\n    assert(x == 42);\n    int y = fetch().await;\n    assert(y == 42);\n}\n";
     let c = compile_to_c(source).unwrap();
