@@ -58,11 +58,11 @@ static void ncr_map_grow_@ID@(struct ncr_hash_table_@ID@ *table, size_t line, si
         if (table->entries[index].hash == 0) { continue; }
         @ENTRY_TYPE@ *old = &table->entries[index];
         uint32_t target = ncr_map_bucket_@ID@(old->hash) & mask;
+#pragma GCC unroll 4
         while (entries[target].hash != 0) {
             target = (target + UINT32_C(1)) & mask;
         }
         entries[target] = *old;
-        old->hash = 0;
     }
     ncr_deallocate(table->entries);
     table->entries = entries;

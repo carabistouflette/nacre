@@ -104,7 +104,7 @@ fn signature(program: &t::Program, function: &t::Function) -> String {
     for (id, ty) in &function.params { params.push(format!("{} ncr_v_{id}", ctype_param(program, *ty))); }
     if function.native.is_some() { params.extend(["size_t ncr_line".to_owned(), "size_t ncr_column".to_owned()]); }
     let params = if params.is_empty() { "void".to_owned() } else { params.join(", ") };
-    format!("static {} ncr_fn_{}({params})", ctype(program, function.return_type), function.id)
+    format!("static inline {} ncr_fn_{}({params})", ctype(program, function.return_type), function.id)
 }
 fn enum_order(program: &t::Program) -> Vec<usize> {
     fn visit(id: usize, program: &t::Program, states: &mut [u8], order: &mut Vec<usize>) {
