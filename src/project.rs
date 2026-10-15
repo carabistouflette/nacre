@@ -140,8 +140,14 @@ impl SourceBundle {
     }
     pub fn emit_llvm_direct(&self) -> Result<String, Diagnostic> {
         let typed = self.typed()?;
-        crate::llvm_codegen::generate_direct_llvm(&typed, &self.text)
-            .map_err(|e| Diagnostic::new(Span::default(), e))
+        crate::llvm_codegen::emit_llvm_direct_artifact_with_sources(
+            &typed,
+            &self.text,
+            self.direct_debug_sources(),
+            false,
+        )
+        .map(|artifact| artifact.ir)
+        .map_err(|e| Diagnostic::new(Span::default(), e))
     }
     /// Compile this complete source bundle through the direct LLVM backend.
     pub fn compile_llvm_direct(&self) -> Result<crate::native::NativeProgram, String> {
@@ -158,8 +164,13 @@ impl SourceBundle {
         flags: &[&str],
     ) -> Result<crate::native::NativeProgram, String> {
         let typed = self.typed().map_err(|diagnostic| self.render(&diagnostic))?;
-        let mut artifact = crate::llvm_codegen::emit_llvm_direct_artifact(&typed, &self.text)
-            .map_err(|error| self.render(&Diagnostic::new(Span::default(), error)))?;
+        let mut artifact = crate::llvm_codegen::emit_llvm_direct_artifact_with_sources(
+            &typed,
+            &self.text,
+            self.direct_debug_sources(),
+            optimization != "-O0",
+        )
+        .map_err(|error| self.render(&Diagnostic::new(Span::default(), error)))?;
         if self.units.len() > 1 {
             artifact.runtime_c.insert_str(0, &self.runtime_source_map());
         }
@@ -212,6 +223,15 @@ impl SourceBundle {
                 span.end.saturating_sub(unit.start),
             ),
         }
+    }
+    fn direct_debug_sources<'a>(
+        &'a self,
+    ) -> impl Iterator<Item = crate::llvm_codegen::DirectDebugSource<'a>> + 'a {
+        self.units.iter().map(|unit| crate::llvm_codegen::DirectDebugSource {
+            path: &unit.path,
+            source: &self.text[unit.start..unit.end],
+            start: unit.start,
+        })
     }
     /// A small source table in generated C keeps runtime errors file-local too.
     fn runtime_source_map(&self) -> String {

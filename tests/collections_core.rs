@@ -1,10 +1,10 @@
-use nacre::{compile_to_c, native, validate};
+use nacre::validate;
+mod support;
 
 fn assert_native(source: &str, stdout: &[u8]) {
-    let c = compile_to_c(source)
-        .unwrap_or_else(|error| panic!("{}", error.render("collections_alpha.ncr", source)));
-    let output = native::compile_c_with_flags(&c, &["-DNACRE_MEMORY_STATS"])
-        .unwrap().output().unwrap();
+    let output = support::compile(source, &["-DNACRE_MEMORY_STATS"])
+        .unwrap_or_else(|error| panic!("native compile failed: {error}"))
+        .output().unwrap();
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     assert_eq!(output.stdout, stdout);
     let mut fields = std::str::from_utf8(&output.stderr).unwrap().split_whitespace();
@@ -17,9 +17,9 @@ fn assert_native(source: &str, stdout: &[u8]) {
 }
 
 fn assert_native_failure(source: &str) {
-    let c = compile_to_c(source)
-        .unwrap_or_else(|error| panic!("{}", error.render("collections_alpha_failure.ncr", source)));
-    let output = native::compile_c_with_flags(&c, &[]).unwrap().output().unwrap();
+    let output = support::compile(source, &[])
+        .unwrap_or_else(|error| panic!("native compile failed: {error}"))
+        .output().unwrap();
     assert_eq!(output.status.code(), Some(70), "{}", String::from_utf8_lossy(&output.stderr));
 }
 
@@ -330,12 +330,12 @@ void main() {
     Box query = new Box(2); values.binarySearchBy(new BoxOrder(), query);
 }
 "#;
-    let c = compile_to_c(source)
-        .unwrap_or_else(|error| panic!("{}", error.render("collections_sanitizers.ncr", source)));
-    let output = native::compile_c_with_flags(
-        &c,
+    let output = support::compile(
+        source,
         &["-fsanitize=address,undefined", "-fno-omit-frame-pointer"],
-    ).unwrap().output().unwrap();
+    )
+    .unwrap_or_else(|error| panic!("native compile failed: {error}"))
+    .output().unwrap();
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(!stderr.contains("AddressSanitizer"), "{stderr}");

@@ -1,6 +1,7 @@
 #![cfg(target_os = "linux")]
+mod support;
 
-use nacre::{compile_to_c, native};
+use nacre::native;
 use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::os::unix::ffi::OsStringExt;
@@ -46,9 +47,7 @@ fn source_path(path: &Path) -> String {
 }
 
 fn compile_program(source: &str, flags: &[&str]) -> native::NativeProgram {
-    let c = compile_to_c(source)
-        .unwrap_or_else(|error| panic!("{}", error.render("process_alpha.ncr", source)));
-    native::compile_c_with_flags(&c, flags)
+    support::compile(source, flags)
         .unwrap_or_else(|error| panic!("native process test compilation failed:\n{error}"))
 }
 
@@ -956,12 +955,11 @@ void main() {{
 "#,
         helper_command = helper_command(&helper, "large", "command"),
     );
-    let c = compile_to_c(&source)
-        .unwrap_or_else(|error| panic!("{}", error.render("process_alpha.ncr", &source)));
-    let program = native::compile_c_with_flags(
-        &c,
+    let program = support::compile(
+        &source,
         &["-DNACRE_MEMORY_STATS", "-fsanitize=address,undefined", "-fno-omit-frame-pointer"],
-    ).unwrap_or_else(|error| panic!("sanitized native consumer compilation failed:\n{error}"));
+    )
+    .unwrap_or_else(|error| panic!("sanitized native consumer compilation failed:\n{error}"));
     let output = execute(&program, directory.path(), &[]);
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("sanitized concurrent process capture complete\n"), "{stdout}");
@@ -976,10 +974,12 @@ fn standalone_process_types_compile_without_command_dependencies() {
         "boolean expired(borrow ProcessOutput output) { return output.timedOut(); }\nvoid main() { println(42); }\n",
         "Result<Option<ExitStatus>, Text> pollChild(borrow mut Process process) { return process.waitFor(1L); }\nvoid main() { println(42); }\n",
     ] {
-        let c = compile_to_c(source)
-            .unwrap_or_else(|error| panic!("{}", error.render("standalone_process.ncr", source)));
-        let program = native::compile_c_optimized(&c, "-O0", &["-DNACRE_MEMORY_STATS"])
-            .unwrap_or_else(|error| panic!("standalone native type failed to compile:\n{error}"));
+        let program = support::compile_optimized(
+            source,
+            "-O0",
+            &["-DNACRE_MEMORY_STATS"],
+        )
+        .unwrap_or_else(|error| panic!("standalone native type failed to compile:\n{error}"));
         assert_eq!(execute(&program, directory.path(), &[]).stdout, b"42\n");
     }
 }

@@ -1,4 +1,6 @@
-use nacre::{compile_to_c, native};
+mod support;
+
+use nacre::native;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -28,12 +30,9 @@ impl Drop for Scratch {
 }
 
 fn compile(source: &str) -> native::NativeProgram {
-    let c = compile_to_c(source)
-        .unwrap_or_else(|error| panic!("{}", error.render("zip_native.ncr", source)));
-    native::compile_c_with_flags(&c, &["-DNACRE_MEMORY_STATS"])
+    support::compile(source, &["-DNACRE_MEMORY_STATS"])
         .unwrap_or_else(|error| panic!("{error}"))
 }
-
 fn assert_live_zero(output: &Output) {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(

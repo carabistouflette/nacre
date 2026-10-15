@@ -1,0 +1,4297 @@
+{
+  "label": "a81f2fc-release",
+  "platform": "Linux-7.2.8-arch1-1-x86_64-with-glibc2.44",
+  "cpu_affinity": 0,
+  "compiler_sha256": "d8c53f2f89428b67d485c56a6db42af3c34f3a8856f70922f2f0257d0a527563",
+  "compiler": "/tmp/nacre-hardening-idl6vn3r/baseline/target/release/nacre",
+  "repeats": 3,
+  "clang": "clang version 22.1.8\nTarget: x86_64-pc-linux-gnu\nThread model: posix\nInstalledDir: /home/arobin/Downloads/nacre/target/native-deps/llvm22/usr/bin\n",
+  "llvm_link": "LLVM (http://llvm.org/):\n  LLVM version 22.1.0\n  Optimized build.\n",
+  "methodology": "Sequential pinned release compiler; Clang -O2 both backends; new executable source literal each build; cold isolated cache; warm runtime cache; wrappers add startup overhead; native_link nested inside clang_native.",
+  "rows": [
+    {
+      "consumer": "counter",
+      "backend": "c",
+      "cache": "cold",
+      "instrumented": false,
+      "sample": 0,
+      "build_seconds": 0.166619912,
+      "frontend_codegen_seconds": 0.010580445,
+      "stdout": "43\n",
+      "memory": "NACRE_MEMORY allocations=0 frees=0 live=0\n",
+      "events": []
+    },
+    {
+      "consumer": "counter",
+      "backend": "c",
+      "cache": "warm_changed_source",
+      "instrumented": false,
+      "sample": 0,
+      "build_seconds": 0.165609425,
+      "frontend_codegen_seconds": 0.009267692,
+      "stdout": "44\n",
+      "memory": "NACRE_MEMORY allocations=0 frees=0 live=0\n",
+      "events": []
+    },
+    {
+      "consumer": "counter",
+      "backend": "c",
+      "cache": "cold",
+      "instrumented": false,
+      "sample": 1,
+      "build_seconds": 0.166099534,
+      "frontend_codegen_seconds": 0.00962997,
+      "stdout": "45\n",
+      "memory": "NACRE_MEMORY allocations=0 frees=0 live=0\n",
+      "events": []
+    },
+    {
+      "consumer": "counter",
+      "backend": "c",
+      "cache": "warm_changed_source",
+      "instrumented": false,
+      "sample": 1,
+      "build_seconds": 0.165423622,
+      "frontend_codegen_seconds": 0.009377531,
+      "stdout": "46\n",
+      "memory": "NACRE_MEMORY allocations=0 frees=0 live=0\n",
+      "events": []
+    },
+    {
+      "consumer": "counter",
+      "backend": "c",
+      "cache": "cold",
+      "instrumented": false,
+      "sample": 2,
+      "build_seconds": 0.166928737,
+      "frontend_codegen_seconds": 0.00915531,
+      "stdout": "47\n",
+      "memory": "NACRE_MEMORY allocations=0 frees=0 live=0\n",
+      "events": []
+    },
+    {
+      "consumer": "counter",
+      "backend": "c",
+      "cache": "warm_changed_source",
+      "instrumented": false,
+      "sample": 2,
+      "build_seconds": 0.165818707,
+      "frontend_codegen_seconds": 0.009273201,
+      "stdout": "48\n",
+      "memory": "NACRE_MEMORY allocations=0 frees=0 live=0\n",
+      "events": []
+    },
+    {
+      "consumer": "counter",
+      "backend": "llvm",
+      "cache": "cold",
+      "instrumented": false,
+      "sample": 0,
+      "build_seconds": 0.786813313,
+      "frontend_codegen_seconds": 0.011229737,
+      "stdout": "49\n",
+      "memory": "NACRE_MEMORY allocations=0 frees=0 live=0\n",
+      "events": []
+    },
+    {
+      "consumer": "counter",
+      "backend": "llvm",
+      "cache": "warm_changed_source",
+      "instrumented": false,
+      "sample": 0,
+      "build_seconds": 0.409746721,
+      "frontend_codegen_seconds": 0.010025129,
+      "stdout": "50\n",
+      "memory": "NACRE_MEMORY allocations=0 frees=0 live=0\n",
+      "events": []
+    },
+    {
+      "consumer": "counter",
+      "backend": "llvm",
+      "cache": "cold",
+      "instrumented": false,
+      "sample": 1,
+      "build_seconds": 0.790915956,
+      "frontend_codegen_seconds": 0.009874976,
+      "stdout": "51\n",
+      "memory": "NACRE_MEMORY allocations=0 frees=0 live=0\n",
+      "events": []
+    },
+    {
+      "consumer": "counter",
+      "backend": "llvm",
+      "cache": "warm_changed_source",
+      "instrumented": false,
+      "sample": 1,
+      "build_seconds": 0.413918392,
+      "frontend_codegen_seconds": 0.010040701,
+      "stdout": "52\n",
+      "memory": "NACRE_MEMORY allocations=0 frees=0 live=0\n",
+      "events": []
+    },
+    {
+      "consumer": "counter",
+      "backend": "llvm",
+      "cache": "cold",
+      "instrumented": false,
+      "sample": 2,
+      "build_seconds": 0.792520707,
+      "frontend_codegen_seconds": 0.009823617,
+      "stdout": "53\n",
+      "memory": "NACRE_MEMORY allocations=0 frees=0 live=0\n",
+      "events": []
+    },
+    {
+      "consumer": "counter",
+      "backend": "llvm",
+      "cache": "warm_changed_source",
+      "instrumented": false,
+      "sample": 2,
+      "build_seconds": 0.414945097,
+      "frontend_codegen_seconds": 0.009880109,
+      "stdout": "54\n",
+      "memory": "NACRE_MEMORY allocations=0 frees=0 live=0\n",
+      "events": []
+    },
+    {
+      "consumer": "inventory",
+      "backend": "c",
+      "cache": "cold",
+      "instrumented": false,
+      "sample": 0,
+      "build_seconds": 0.320903683,
+      "frontend_codegen_seconds": 0.010349768,
+      "stdout": "true\ntrue\n25\n33\n2\n",
+      "memory": "NACRE_MEMORY allocations=10 frees=10 live=0\n",
+      "events": []
+    },
+    {
+      "consumer": "inventory",
+      "backend": "c",
+      "cache": "warm_changed_source",
+      "instrumented": false,
+      "sample": 0,
+      "build_seconds": 0.321525319,
+      "frontend_codegen_seconds": 0.010122361,
+      "stdout": "true\ntrue\n26\n34\n2\n",
+      "memory": "NACRE_MEMORY allocations=10 frees=10 live=0\n",
+      "events": []
+    },
+    {
+      "consumer": "inventory",
+      "backend": "c",
+      "cache": "cold",
+      "instrumented": false,
+      "sample": 1,
+      "build_seconds": 0.32225036,
+      "frontend_codegen_seconds": 0.01001534,
+      "stdout": "true\ntrue\n27\n35\n2\n",
+      "memory": "NACRE_MEMORY allocations=10 frees=10 live=0\n",
+      "events": []
+    },
+    {
+      "consumer": "inventory",
+      "backend": "c",
+      "cache": "warm_changed_source",
+      "instrumented": false,
+      "sample": 1,
+      "build_seconds": 0.323650062,
+      "frontend_codegen_seconds": 0.009990433,
+      "stdout": "true\ntrue\n28\n36\n2\n",
+      "memory": "NACRE_MEMORY allocations=10 frees=10 live=0\n",
+      "events": []
+    },
+    {
+      "consumer": "inventory",
+      "backend": "c",
+      "cache": "cold",
+      "instrumented": false,
+      "sample": 2,
+      "build_seconds": 0.322821981,
+      "frontend_codegen_seconds": 0.009879918,
+      "stdout": "true\ntrue\n29\n37\n2\n",
+      "memory": "NACRE_MEMORY allocations=10 frees=10 live=0\n",
+      "events": []
+    },
+    {
+      "consumer": "inventory",
+      "backend": "c",
+      "cache": "warm_changed_source",
+      "instrumented": false,
+      "sample": 2,
+      "build_seconds": 0.320580128,
+      "frontend_codegen_seconds": 0.010074047,
+      "stdout": "true\ntrue\n30\n38\n2\n",
+      "memory": "NACRE_MEMORY allocations=10 frees=10 live=0\n",
+      "events": []
+    },
+    {
+      "consumer": "inventory",
+      "backend": "llvm",
+      "cache": "cold",
+      "instrumented": false,
+      "sample": 0,
+      "build_seconds": 1.005711102,
+      "frontend_codegen_seconds": 0.010419858,
+      "stdout": "true\ntrue\n31\n39\n2\n",
+      "memory": "NACRE_MEMORY allocations=10 frees=10 live=0\n",
+      "events": []
+    },
+    {
+      "consumer": "inventory",
+      "backend": "llvm",
+      "cache": "warm_changed_source",
+      "instrumented": false,
+      "sample": 0,
+      "build_seconds": 0.5505725,
+      "frontend_codegen_seconds": 0.010494375,
+      "stdout": "true\ntrue\n32\n40\n2\n",
+      "memory": "NACRE_MEMORY allocations=10 frees=10 live=0\n",
+      "events": []
+    },
+    {
+      "consumer": "inventory",
+      "backend": "llvm",
+      "cache": "cold",
+      "instrumented": false,
+      "sample": 1,
+      "build_seconds": 1.006956164,
+      "frontend_codegen_seconds": 0.010815272,
+      "stdout": "true\ntrue\n33\n41\n2\n",
+      "memory": "NACRE_MEMORY allocations=10 frees=10 live=0\n",
+      "events": []
+    },
+    {
+      "consumer": "inventory",
+      "backend": "llvm",
+      "cache": "warm_changed_source",
+      "instrumented": false,
+      "sample": 1,
+      "build_seconds": 0.552042776,
+      "frontend_codegen_seconds": 0.010583341,
+      "stdout": "true\ntrue\n34\n42\n2\n",
+      "memory": "NACRE_MEMORY allocations=10 frees=10 live=0\n",
+      "events": []
+    },
+    {
+      "consumer": "inventory",
+      "backend": "llvm",
+      "cache": "cold",
+      "instrumented": false,
+      "sample": 2,
+      "build_seconds": 1.012151275,
+      "frontend_codegen_seconds": 0.010759675,
+      "stdout": "true\ntrue\n35\n43\n2\n",
+      "memory": "NACRE_MEMORY allocations=10 frees=10 live=0\n",
+      "events": []
+    },
+    {
+      "consumer": "inventory",
+      "backend": "llvm",
+      "cache": "warm_changed_source",
+      "instrumented": false,
+      "sample": 2,
+      "build_seconds": 0.550971104,
+      "frontend_codegen_seconds": 0.010697662,
+      "stdout": "true\ntrue\n36\n44\n2\n",
+      "memory": "NACRE_MEMORY allocations=10 frees=10 live=0\n",
+      "events": []
+    },
+    {
+      "consumer": "packages",
+      "backend": "c",
+      "cache": "cold",
+      "instrumented": false,
+      "sample": 0,
+      "build_seconds": 0.163048481,
+      "frontend_codegen_seconds": 0.009282766,
+      "stdout": "67\n",
+      "memory": "NACRE_MEMORY allocations=0 frees=0 live=0\n",
+      "events": []
+    },
+    {
+      "consumer": "packages",
+      "backend": "c",
+      "cache": "warm_changed_source",
+      "instrumented": false,
+      "sample": 0,
+      "build_seconds": 0.164438459,
+      "frontend_codegen_seconds": 0.009541774,
+      "stdout": "68\n",
+      "memory": "NACRE_MEMORY allocations=0 frees=0 live=0\n",
+      "events": []
+    },
+    {
+      "consumer": "packages",
+      "backend": "c",
+      "cache": "cold",
+      "instrumented": false,
+      "sample": 1,
+      "build_seconds": 0.164519827,
+      "frontend_codegen_seconds": 0.009529015,
+      "stdout": "69\n",
+      "memory": "NACRE_MEMORY allocations=0 frees=0 live=0\n",
+      "events": []
+    },
+    {
+      "consumer": "packages",
+      "backend": "c",
+      "cache": "warm_changed_source",
+      "instrumented": false,
+      "sample": 1,
+      "build_seconds": 0.163611481,
+      "frontend_codegen_seconds": 0.009355834,
+      "stdout": "70\n",
+      "memory": "NACRE_MEMORY allocations=0 frees=0 live=0\n",
+      "events": []
+    },
+    {
+      "consumer": "packages",
+      "backend": "c",
+      "cache": "cold",
+      "instrumented": false,
+      "sample": 2,
+      "build_seconds": 0.164398826,
+      "frontend_codegen_seconds": 0.009491153,
+      "stdout": "71\n",
+      "memory": "NACRE_MEMORY allocations=0 frees=0 live=0\n",
+      "events": []
+    },
+    {
+      "consumer": "packages",
+      "backend": "c",
+      "cache": "warm_changed_source",
+      "instrumented": false,
+      "sample": 2,
+      "build_seconds": 0.164779882,
+      "frontend_codegen_seconds": 0.009478635,
+      "stdout": "72\n",
+      "memory": "NACRE_MEMORY allocations=0 frees=0 live=0\n",
+      "events": []
+    },
+    {
+      "consumer": "packages",
+      "backend": "llvm",
+      "cache": "cold",
+      "instrumented": false,
+      "sample": 0,
+      "build_seconds": 0.785831475,
+      "frontend_codegen_seconds": 0.009825334,
+      "stdout": "73\n",
+      "memory": "NACRE_MEMORY allocations=0 frees=0 live=0\n",
+      "events": []
+    },
+    {
+      "consumer": "packages",
+      "backend": "llvm",
+      "cache": "warm_changed_source",
+      "instrumented": false,
+      "sample": 0,
+      "build_seconds": 0.412990842,
+      "frontend_codegen_seconds": 0.00994201,
+      "stdout": "74\n",
+      "memory": "NACRE_MEMORY allocations=0 frees=0 live=0\n",
+      "events": []
+    },
+    {
+      "consumer": "packages",
+      "backend": "llvm",
+      "cache": "cold",
+      "instrumented": false,
+      "sample": 1,
+      "build_seconds": 0.78846793,
+      "frontend_codegen_seconds": 0.009947293,
+      "stdout": "75\n",
+      "memory": "NACRE_MEMORY allocations=0 frees=0 live=0\n",
+      "events": []
+    },
+    {
+      "consumer": "packages",
+      "backend": "llvm",
+      "cache": "warm_changed_source",
+      "instrumented": false,
+      "sample": 1,
+      "build_seconds": 0.413837858,
+      "frontend_codegen_seconds": 0.0100398,
+      "stdout": "76\n",
+      "memory": "NACRE_MEMORY allocations=0 frees=0 live=0\n",
+      "events": []
+    },
+    {
+      "consumer": "packages",
+      "backend": "llvm",
+      "cache": "cold",
+      "instrumented": false,
+      "sample": 2,
+      "build_seconds": 0.788889187,
+      "frontend_codegen_seconds": 0.009815738,
+      "stdout": "77\n",
+      "memory": "NACRE_MEMORY allocations=0 frees=0 live=0\n",
+      "events": []
+    },
+    {
+      "consumer": "packages",
+      "backend": "llvm",
+      "cache": "warm_changed_source",
+      "instrumented": false,
+      "sample": 2,
+      "build_seconds": 0.411194665,
+      "frontend_codegen_seconds": 0.009905482,
+      "stdout": "78\n",
+      "memory": "NACRE_MEMORY allocations=0 frees=0 live=0\n",
+      "events": []
+    },
+    {
+      "consumer": "counter",
+      "backend": "c",
+      "cache": "cold",
+      "instrumented": true,
+      "sample": 0,
+      "build_seconds": 0.323681112,
+      "frontend_codegen_seconds": 0.009248222,
+      "stdout": "79\n",
+      "memory": "NACRE_MEMORY allocations=0 frees=0 live=0\n",
+      "events": [
+        {
+          "stage": "tool_probe",
+          "seconds": 0.017416258,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "clang_native",
+          "seconds": 0.19150093,
+          "arguments": [
+            "-O2",
+            "-std=c11",
+            "-pthread",
+            "-g",
+            "-fno-math-errno",
+            "-Wall",
+            "-Wextra",
+            "-pedantic",
+            "-Wno-unused-function",
+            "-Wno-unused-variable",
+            "-Wno-unused-parameter",
+            "-Wno-unused-but-set-variable",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "/tmp/nacre-4040706-1792092701797377666-0/program.c",
+            "-o",
+            "/tmp/nacre-4040706-1792092701797377666-0/program",
+            "-lm",
+            "-Wl,--gc-sections",
+            "-fuse-ld=/tmp/nacre-profile-3gdoxlkr/ld"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "native_link",
+          "seconds": 0.017793596,
+          "arguments": [
+            "--hash-style=gnu",
+            "--build-id",
+            "--eh-frame-hdr",
+            "-m",
+            "elf_x86_64",
+            "-pie",
+            "-dynamic-linker",
+            "/lib64/ld-linux-x86-64.so.2",
+            "-o",
+            "/tmp/nacre-4040706-1792092701797377666-0/program",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/Scrt1.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crti.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtbeginS.o",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64",
+            "-L/lib/../lib64",
+            "-L/usr/lib64",
+            "-L/lib",
+            "-L/usr/lib",
+            "/tmp/program-ace2c1.o",
+            "-lm",
+            "--gc-sections",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "-lpthread",
+            "-lc",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtendS.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crtn.o"
+          ],
+          "returncode": 0
+        }
+      ]
+    },
+    {
+      "consumer": "counter",
+      "backend": "c",
+      "cache": "warm_changed_source",
+      "instrumented": true,
+      "sample": 0,
+      "build_seconds": 0.324232867,
+      "frontend_codegen_seconds": 0.009255935,
+      "stdout": "80\n",
+      "memory": "NACRE_MEMORY allocations=0 frees=0 live=0\n",
+      "events": [
+        {
+          "stage": "tool_probe",
+          "seconds": 0.017261743,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "clang_native",
+          "seconds": 0.192118782,
+          "arguments": [
+            "-O2",
+            "-std=c11",
+            "-pthread",
+            "-g",
+            "-fno-math-errno",
+            "-Wall",
+            "-Wextra",
+            "-pedantic",
+            "-Wno-unused-function",
+            "-Wno-unused-variable",
+            "-Wno-unused-parameter",
+            "-Wno-unused-but-set-variable",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "/tmp/nacre-4040799-1792092702131793556-0/program.c",
+            "-o",
+            "/tmp/nacre-4040799-1792092702131793556-0/program",
+            "-lm",
+            "-Wl,--gc-sections",
+            "-fuse-ld=/tmp/nacre-profile-3gdoxlkr/ld"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "native_link",
+          "seconds": 0.017900251,
+          "arguments": [
+            "--hash-style=gnu",
+            "--build-id",
+            "--eh-frame-hdr",
+            "-m",
+            "elf_x86_64",
+            "-pie",
+            "-dynamic-linker",
+            "/lib64/ld-linux-x86-64.so.2",
+            "-o",
+            "/tmp/nacre-4040799-1792092702131793556-0/program",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/Scrt1.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crti.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtbeginS.o",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64",
+            "-L/lib/../lib64",
+            "-L/usr/lib64",
+            "-L/lib",
+            "-L/usr/lib",
+            "/tmp/program-e9fe75.o",
+            "-lm",
+            "--gc-sections",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "-lpthread",
+            "-lc",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtendS.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crtn.o"
+          ],
+          "returncode": 0
+        }
+      ]
+    },
+    {
+      "consumer": "counter",
+      "backend": "c",
+      "cache": "cold",
+      "instrumented": true,
+      "sample": 1,
+      "build_seconds": 0.322600676,
+      "frontend_codegen_seconds": 0.009320724,
+      "stdout": "81\n",
+      "memory": "NACRE_MEMORY allocations=0 frees=0 live=0\n",
+      "events": [
+        {
+          "stage": "tool_probe",
+          "seconds": 0.01724587,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "clang_native",
+          "seconds": 0.190437967,
+          "arguments": [
+            "-O2",
+            "-std=c11",
+            "-pthread",
+            "-g",
+            "-fno-math-errno",
+            "-Wall",
+            "-Wextra",
+            "-pedantic",
+            "-Wno-unused-function",
+            "-Wno-unused-variable",
+            "-Wno-unused-parameter",
+            "-Wno-unused-but-set-variable",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "/tmp/nacre-4040886-1792092702468286742-0/program.c",
+            "-o",
+            "/tmp/nacre-4040886-1792092702468286742-0/program",
+            "-lm",
+            "-Wl,--gc-sections",
+            "-fuse-ld=/tmp/nacre-profile-3gdoxlkr/ld"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "native_link",
+          "seconds": 0.017664425,
+          "arguments": [
+            "--hash-style=gnu",
+            "--build-id",
+            "--eh-frame-hdr",
+            "-m",
+            "elf_x86_64",
+            "-pie",
+            "-dynamic-linker",
+            "/lib64/ld-linux-x86-64.so.2",
+            "-o",
+            "/tmp/nacre-4040886-1792092702468286742-0/program",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/Scrt1.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crti.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtbeginS.o",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64",
+            "-L/lib/../lib64",
+            "-L/usr/lib64",
+            "-L/lib",
+            "-L/usr/lib",
+            "/tmp/program-1e9719.o",
+            "-lm",
+            "--gc-sections",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "-lpthread",
+            "-lc",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtendS.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crtn.o"
+          ],
+          "returncode": 0
+        }
+      ]
+    },
+    {
+      "consumer": "counter",
+      "backend": "c",
+      "cache": "warm_changed_source",
+      "instrumented": true,
+      "sample": 1,
+      "build_seconds": 0.323991765,
+      "frontend_codegen_seconds": 0.009446801,
+      "stdout": "82\n",
+      "memory": "NACRE_MEMORY allocations=0 frees=0 live=0\n",
+      "events": [
+        {
+          "stage": "tool_probe",
+          "seconds": 0.017278334,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "clang_native",
+          "seconds": 0.191398304,
+          "arguments": [
+            "-O2",
+            "-std=c11",
+            "-pthread",
+            "-g",
+            "-fno-math-errno",
+            "-Wall",
+            "-Wextra",
+            "-pedantic",
+            "-Wno-unused-function",
+            "-Wno-unused-variable",
+            "-Wno-unused-parameter",
+            "-Wno-unused-but-set-variable",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "/tmp/nacre-4040974-1792092702802165813-0/program.c",
+            "-o",
+            "/tmp/nacre-4040974-1792092702802165813-0/program",
+            "-lm",
+            "-Wl,--gc-sections",
+            "-fuse-ld=/tmp/nacre-profile-3gdoxlkr/ld"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "native_link",
+          "seconds": 0.018311439,
+          "arguments": [
+            "--hash-style=gnu",
+            "--build-id",
+            "--eh-frame-hdr",
+            "-m",
+            "elf_x86_64",
+            "-pie",
+            "-dynamic-linker",
+            "/lib64/ld-linux-x86-64.so.2",
+            "-o",
+            "/tmp/nacre-4040974-1792092702802165813-0/program",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/Scrt1.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crti.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtbeginS.o",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64",
+            "-L/lib/../lib64",
+            "-L/usr/lib64",
+            "-L/lib",
+            "-L/usr/lib",
+            "/tmp/program-d71425.o",
+            "-lm",
+            "--gc-sections",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "-lpthread",
+            "-lc",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtendS.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crtn.o"
+          ],
+          "returncode": 0
+        }
+      ]
+    },
+    {
+      "consumer": "counter",
+      "backend": "c",
+      "cache": "cold",
+      "instrumented": true,
+      "sample": 2,
+      "build_seconds": 0.322602404,
+      "frontend_codegen_seconds": 0.009184504,
+      "stdout": "83\n",
+      "memory": "NACRE_MEMORY allocations=0 frees=0 live=0\n",
+      "events": [
+        {
+          "stage": "tool_probe",
+          "seconds": 0.017228753,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "clang_native",
+          "seconds": 0.191189396,
+          "arguments": [
+            "-O2",
+            "-std=c11",
+            "-pthread",
+            "-g",
+            "-fno-math-errno",
+            "-Wall",
+            "-Wextra",
+            "-pedantic",
+            "-Wno-unused-function",
+            "-Wno-unused-variable",
+            "-Wno-unused-parameter",
+            "-Wno-unused-but-set-variable",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "/tmp/nacre-4041070-1792092703137685714-0/program.c",
+            "-o",
+            "/tmp/nacre-4041070-1792092703137685714-0/program",
+            "-lm",
+            "-Wl,--gc-sections",
+            "-fuse-ld=/tmp/nacre-profile-3gdoxlkr/ld"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "native_link",
+          "seconds": 0.018229058,
+          "arguments": [
+            "--hash-style=gnu",
+            "--build-id",
+            "--eh-frame-hdr",
+            "-m",
+            "elf_x86_64",
+            "-pie",
+            "-dynamic-linker",
+            "/lib64/ld-linux-x86-64.so.2",
+            "-o",
+            "/tmp/nacre-4041070-1792092703137685714-0/program",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/Scrt1.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crti.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtbeginS.o",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64",
+            "-L/lib/../lib64",
+            "-L/usr/lib64",
+            "-L/lib",
+            "-L/usr/lib",
+            "/tmp/program-c8ab75.o",
+            "-lm",
+            "--gc-sections",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "-lpthread",
+            "-lc",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtendS.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crtn.o"
+          ],
+          "returncode": 0
+        }
+      ]
+    },
+    {
+      "consumer": "counter",
+      "backend": "c",
+      "cache": "warm_changed_source",
+      "instrumented": true,
+      "sample": 2,
+      "build_seconds": 0.321978536,
+      "frontend_codegen_seconds": 0.009347046,
+      "stdout": "84\n",
+      "memory": "NACRE_MEMORY allocations=0 frees=0 live=0\n",
+      "events": [
+        {
+          "stage": "tool_probe",
+          "seconds": 0.017392842,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "clang_native",
+          "seconds": 0.190227224,
+          "arguments": [
+            "-O2",
+            "-std=c11",
+            "-pthread",
+            "-g",
+            "-fno-math-errno",
+            "-Wall",
+            "-Wextra",
+            "-pedantic",
+            "-Wno-unused-function",
+            "-Wno-unused-variable",
+            "-Wno-unused-parameter",
+            "-Wno-unused-but-set-variable",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "/tmp/nacre-4041167-1792092703473764025-0/program.c",
+            "-o",
+            "/tmp/nacre-4041167-1792092703473764025-0/program",
+            "-lm",
+            "-Wl,--gc-sections",
+            "-fuse-ld=/tmp/nacre-profile-3gdoxlkr/ld"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "native_link",
+          "seconds": 0.017590344,
+          "arguments": [
+            "--hash-style=gnu",
+            "--build-id",
+            "--eh-frame-hdr",
+            "-m",
+            "elf_x86_64",
+            "-pie",
+            "-dynamic-linker",
+            "/lib64/ld-linux-x86-64.so.2",
+            "-o",
+            "/tmp/nacre-4041167-1792092703473764025-0/program",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/Scrt1.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crti.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtbeginS.o",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64",
+            "-L/lib/../lib64",
+            "-L/usr/lib64",
+            "-L/lib",
+            "-L/usr/lib",
+            "/tmp/program-10bfdd.o",
+            "-lm",
+            "--gc-sections",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "-lpthread",
+            "-lc",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtendS.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crtn.o"
+          ],
+          "returncode": 0
+        }
+      ]
+    },
+    {
+      "consumer": "counter",
+      "backend": "llvm",
+      "cache": "cold",
+      "instrumented": true,
+      "sample": 0,
+      "build_seconds": 1.156874882,
+      "frontend_codegen_seconds": 0.012147817,
+      "stdout": "85\n",
+      "memory": "NACRE_MEMORY allocations=0 frees=0 live=0\n",
+      "events": [
+        {
+          "stage": "tool_probe",
+          "seconds": 0.017365832,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "tool_probe",
+          "seconds": 0.001845712,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "tool_probe",
+          "seconds": 0.017237477,
+          "arguments": [
+            "-print-target-triple"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "runtime_bitcode",
+          "seconds": 0.378352234,
+          "arguments": [
+            "-O2",
+            "-std=c11",
+            "-pthread",
+            "-g",
+            "-fdebug-compilation-dir=.",
+            "-fno-math-errno",
+            "-Wall",
+            "-Wextra",
+            "-pedantic",
+            "-Wno-unused-function",
+            "-Wno-unused-variable",
+            "-Wno-unused-parameter",
+            "-Wno-unused-but-set-variable",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "-DNACRE_MEMORY_STATS",
+            "-emit-llvm",
+            "-c",
+            "/tmp/nacre-4041255-1792092703932689099-0/runtime.c",
+            "-o",
+            "/tmp/nacre-4041255-1792092703932689099-0/runtime.bc"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "llvm_link",
+          "seconds": 0.028932555,
+          "arguments": [
+            "--only-needed",
+            "--internalize",
+            "/tmp/nacre-4041255-1792092703932689099-0/program.ll",
+            "/tmp/nacre-4041255-1792092703932689099-0/runtime.bc",
+            "-o",
+            "/tmp/nacre-4041255-1792092703932689099-0/linked.bc"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "clang_native",
+          "seconds": 0.389802718,
+          "arguments": [
+            "-O2",
+            "-pthread",
+            "-g",
+            "-fno-math-errno",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "-DNACRE_MEMORY_STATS",
+            "/tmp/nacre-4041255-1792092703932689099-0/linked.bc",
+            "-lm",
+            "-Wl,--gc-sections",
+            "-o",
+            "/tmp/nacre-4041255-1792092703932689099-0/program",
+            "-fuse-ld=/tmp/nacre-profile-3gdoxlkr/ld"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "native_link",
+          "seconds": 0.018180728,
+          "arguments": [
+            "--hash-style=gnu",
+            "--build-id",
+            "--eh-frame-hdr",
+            "-m",
+            "elf_x86_64",
+            "-pie",
+            "-dynamic-linker",
+            "/lib64/ld-linux-x86-64.so.2",
+            "-o",
+            "/tmp/nacre-4041255-1792092703932689099-0/program",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/Scrt1.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crti.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtbeginS.o",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64",
+            "-L/lib/../lib64",
+            "-L/usr/lib64",
+            "-L/lib",
+            "-L/usr/lib",
+            "/tmp/linked-786181.o",
+            "-lm",
+            "--gc-sections",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "-lpthread",
+            "-lc",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtendS.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crtn.o"
+          ],
+          "returncode": 0
+        }
+      ]
+    },
+    {
+      "consumer": "counter",
+      "backend": "llvm",
+      "cache": "warm_changed_source",
+      "instrumented": true,
+      "sample": 0,
+      "build_seconds": 0.730535569,
+      "frontend_codegen_seconds": 0.009908866,
+      "stdout": "86\n",
+      "memory": "NACRE_MEMORY allocations=0 frees=0 live=0\n",
+      "events": [
+        {
+          "stage": "tool_probe",
+          "seconds": 0.017243257,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "tool_probe",
+          "seconds": 0.00192318,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "tool_probe",
+          "seconds": 0.017164099,
+          "arguments": [
+            "-print-target-triple"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "llvm_link",
+          "seconds": 0.029014389,
+          "arguments": [
+            "--only-needed",
+            "--internalize",
+            "/tmp/nacre-4041569-1792092705102897354-0/program.ll",
+            "/tmp/nacre-profile-3gdoxlkr/cache-True-counter-llvm/llvm-runtime-75db8d6167d88772e60be4283f5d2b1c.bc",
+            "-o",
+            "/tmp/nacre-4041569-1792092705102897354-0/linked.bc"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "clang_native",
+          "seconds": 0.390251191,
+          "arguments": [
+            "-O2",
+            "-pthread",
+            "-g",
+            "-fno-math-errno",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "-DNACRE_MEMORY_STATS",
+            "/tmp/nacre-4041569-1792092705102897354-0/linked.bc",
+            "-lm",
+            "-Wl,--gc-sections",
+            "-o",
+            "/tmp/nacre-4041569-1792092705102897354-0/program",
+            "-fuse-ld=/tmp/nacre-profile-3gdoxlkr/ld"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "native_link",
+          "seconds": 0.018288902,
+          "arguments": [
+            "--hash-style=gnu",
+            "--build-id",
+            "--eh-frame-hdr",
+            "-m",
+            "elf_x86_64",
+            "-pie",
+            "-dynamic-linker",
+            "/lib64/ld-linux-x86-64.so.2",
+            "-o",
+            "/tmp/nacre-4041569-1792092705102897354-0/program",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/Scrt1.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crti.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtbeginS.o",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64",
+            "-L/lib/../lib64",
+            "-L/usr/lib64",
+            "-L/lib",
+            "-L/usr/lib",
+            "/tmp/linked-493327.o",
+            "-lm",
+            "--gc-sections",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "-lpthread",
+            "-lc",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtendS.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crtn.o"
+          ],
+          "returncode": 0
+        }
+      ]
+    },
+    {
+      "consumer": "counter",
+      "backend": "llvm",
+      "cache": "cold",
+      "instrumented": true,
+      "sample": 1,
+      "build_seconds": 1.1560624,
+      "frontend_codegen_seconds": 0.009662598,
+      "stdout": "87\n",
+      "memory": "NACRE_MEMORY allocations=0 frees=0 live=0\n",
+      "events": [
+        {
+          "stage": "tool_probe",
+          "seconds": 0.017343547,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "tool_probe",
+          "seconds": 0.001786631,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "tool_probe",
+          "seconds": 0.017178462,
+          "arguments": [
+            "-print-target-triple"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "runtime_bitcode",
+          "seconds": 0.377673904,
+          "arguments": [
+            "-O2",
+            "-std=c11",
+            "-pthread",
+            "-g",
+            "-fdebug-compilation-dir=.",
+            "-fno-math-errno",
+            "-Wall",
+            "-Wextra",
+            "-pedantic",
+            "-Wno-unused-function",
+            "-Wno-unused-variable",
+            "-Wno-unused-parameter",
+            "-Wno-unused-but-set-variable",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "-DNACRE_MEMORY_STATS",
+            "-emit-llvm",
+            "-c",
+            "/tmp/nacre-4041776-1792092705846071392-0/runtime.c",
+            "-o",
+            "/tmp/nacre-4041776-1792092705846071392-0/runtime.bc"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "llvm_link",
+          "seconds": 0.029189763,
+          "arguments": [
+            "--only-needed",
+            "--internalize",
+            "/tmp/nacre-4041776-1792092705846071392-0/program.ll",
+            "/tmp/nacre-4041776-1792092705846071392-0/runtime.bc",
+            "-o",
+            "/tmp/nacre-4041776-1792092705846071392-0/linked.bc"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "clang_native",
+          "seconds": 0.390433956,
+          "arguments": [
+            "-O2",
+            "-pthread",
+            "-g",
+            "-fno-math-errno",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "-DNACRE_MEMORY_STATS",
+            "/tmp/nacre-4041776-1792092705846071392-0/linked.bc",
+            "-lm",
+            "-Wl,--gc-sections",
+            "-o",
+            "/tmp/nacre-4041776-1792092705846071392-0/program",
+            "-fuse-ld=/tmp/nacre-profile-3gdoxlkr/ld"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "native_link",
+          "seconds": 0.018165998,
+          "arguments": [
+            "--hash-style=gnu",
+            "--build-id",
+            "--eh-frame-hdr",
+            "-m",
+            "elf_x86_64",
+            "-pie",
+            "-dynamic-linker",
+            "/lib64/ld-linux-x86-64.so.2",
+            "-o",
+            "/tmp/nacre-4041776-1792092705846071392-0/program",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/Scrt1.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crti.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtbeginS.o",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64",
+            "-L/lib/../lib64",
+            "-L/usr/lib64",
+            "-L/lib",
+            "-L/usr/lib",
+            "/tmp/linked-55ee72.o",
+            "-lm",
+            "--gc-sections",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "-lpthread",
+            "-lc",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtendS.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crtn.o"
+          ],
+          "returncode": 0
+        }
+      ]
+    },
+    {
+      "consumer": "counter",
+      "backend": "llvm",
+      "cache": "warm_changed_source",
+      "instrumented": true,
+      "sample": 1,
+      "build_seconds": 0.722705668,
+      "frontend_codegen_seconds": 0.010014983,
+      "stdout": "88\n",
+      "memory": "NACRE_MEMORY allocations=0 frees=0 live=0\n",
+      "events": [
+        {
+          "stage": "tool_probe",
+          "seconds": 0.017327278,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "tool_probe",
+          "seconds": 0.001854022,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "tool_probe",
+          "seconds": 0.017394087,
+          "arguments": [
+            "-print-target-triple"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "llvm_link",
+          "seconds": 0.028630238,
+          "arguments": [
+            "--only-needed",
+            "--internalize",
+            "/tmp/nacre-4042073-1792092707014404507-0/program.ll",
+            "/tmp/nacre-profile-3gdoxlkr/cache-True-counter-llvm/llvm-runtime-75db8d6167d88772e60be4283f5d2b1c.bc",
+            "-o",
+            "/tmp/nacre-4042073-1792092707014404507-0/linked.bc"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "clang_native",
+          "seconds": 0.387837696,
+          "arguments": [
+            "-O2",
+            "-pthread",
+            "-g",
+            "-fno-math-errno",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "-DNACRE_MEMORY_STATS",
+            "/tmp/nacre-4042073-1792092707014404507-0/linked.bc",
+            "-lm",
+            "-Wl,--gc-sections",
+            "-o",
+            "/tmp/nacre-4042073-1792092707014404507-0/program",
+            "-fuse-ld=/tmp/nacre-profile-3gdoxlkr/ld"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "native_link",
+          "seconds": 0.018241684,
+          "arguments": [
+            "--hash-style=gnu",
+            "--build-id",
+            "--eh-frame-hdr",
+            "-m",
+            "elf_x86_64",
+            "-pie",
+            "-dynamic-linker",
+            "/lib64/ld-linux-x86-64.so.2",
+            "-o",
+            "/tmp/nacre-4042073-1792092707014404507-0/program",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/Scrt1.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crti.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtbeginS.o",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64",
+            "-L/lib/../lib64",
+            "-L/usr/lib64",
+            "-L/lib",
+            "-L/usr/lib",
+            "/tmp/linked-8c6cd6.o",
+            "-lm",
+            "--gc-sections",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "-lpthread",
+            "-lc",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtendS.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crtn.o"
+          ],
+          "returncode": 0
+        }
+      ]
+    },
+    {
+      "consumer": "counter",
+      "backend": "llvm",
+      "cache": "cold",
+      "instrumented": true,
+      "sample": 2,
+      "build_seconds": 1.153837938,
+      "frontend_codegen_seconds": 0.009946835,
+      "stdout": "89\n",
+      "memory": "NACRE_MEMORY allocations=0 frees=0 live=0\n",
+      "events": [
+        {
+          "stage": "tool_probe",
+          "seconds": 0.017325636,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "tool_probe",
+          "seconds": 0.001843321,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "tool_probe",
+          "seconds": 0.017176693,
+          "arguments": [
+            "-print-target-triple"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "runtime_bitcode",
+          "seconds": 0.377666321,
+          "arguments": [
+            "-O2",
+            "-std=c11",
+            "-pthread",
+            "-g",
+            "-fdebug-compilation-dir=.",
+            "-fno-math-errno",
+            "-Wall",
+            "-Wextra",
+            "-pedantic",
+            "-Wno-unused-function",
+            "-Wno-unused-variable",
+            "-Wno-unused-parameter",
+            "-Wno-unused-but-set-variable",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "-DNACRE_MEMORY_STATS",
+            "-emit-llvm",
+            "-c",
+            "/tmp/nacre-4042278-1792092707747656264-0/runtime.c",
+            "-o",
+            "/tmp/nacre-4042278-1792092707747656264-0/runtime.bc"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "llvm_link",
+          "seconds": 0.028991445,
+          "arguments": [
+            "--only-needed",
+            "--internalize",
+            "/tmp/nacre-4042278-1792092707747656264-0/program.ll",
+            "/tmp/nacre-4042278-1792092707747656264-0/runtime.bc",
+            "-o",
+            "/tmp/nacre-4042278-1792092707747656264-0/linked.bc"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "clang_native",
+          "seconds": 0.389136762,
+          "arguments": [
+            "-O2",
+            "-pthread",
+            "-g",
+            "-fno-math-errno",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "-DNACRE_MEMORY_STATS",
+            "/tmp/nacre-4042278-1792092707747656264-0/linked.bc",
+            "-lm",
+            "-Wl,--gc-sections",
+            "-o",
+            "/tmp/nacre-4042278-1792092707747656264-0/program",
+            "-fuse-ld=/tmp/nacre-profile-3gdoxlkr/ld"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "native_link",
+          "seconds": 0.018045735,
+          "arguments": [
+            "--hash-style=gnu",
+            "--build-id",
+            "--eh-frame-hdr",
+            "-m",
+            "elf_x86_64",
+            "-pie",
+            "-dynamic-linker",
+            "/lib64/ld-linux-x86-64.so.2",
+            "-o",
+            "/tmp/nacre-4042278-1792092707747656264-0/program",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/Scrt1.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crti.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtbeginS.o",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64",
+            "-L/lib/../lib64",
+            "-L/usr/lib64",
+            "-L/lib",
+            "-L/usr/lib",
+            "/tmp/linked-2d9bbe.o",
+            "-lm",
+            "--gc-sections",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "-lpthread",
+            "-lc",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtendS.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crtn.o"
+          ],
+          "returncode": 0
+        }
+      ]
+    },
+    {
+      "consumer": "counter",
+      "backend": "llvm",
+      "cache": "warm_changed_source",
+      "instrumented": true,
+      "sample": 2,
+      "build_seconds": 0.72514578,
+      "frontend_codegen_seconds": 0.009991991,
+      "stdout": "90\n",
+      "memory": "NACRE_MEMORY allocations=0 frees=0 live=0\n",
+      "events": [
+        {
+          "stage": "tool_probe",
+          "seconds": 0.017127486,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "tool_probe",
+          "seconds": 0.001857608,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "tool_probe",
+          "seconds": 0.017648614,
+          "arguments": [
+            "-print-target-triple"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "llvm_link",
+          "seconds": 0.02887518,
+          "arguments": [
+            "--only-needed",
+            "--internalize",
+            "/tmp/nacre-4042585-1792092708916471921-0/program.ll",
+            "/tmp/nacre-profile-3gdoxlkr/cache-True-counter-llvm/llvm-runtime-75db8d6167d88772e60be4283f5d2b1c.bc",
+            "-o",
+            "/tmp/nacre-4042585-1792092708916471921-0/linked.bc"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "clang_native",
+          "seconds": 0.389303993,
+          "arguments": [
+            "-O2",
+            "-pthread",
+            "-g",
+            "-fno-math-errno",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "-DNACRE_MEMORY_STATS",
+            "/tmp/nacre-4042585-1792092708916471921-0/linked.bc",
+            "-lm",
+            "-Wl,--gc-sections",
+            "-o",
+            "/tmp/nacre-4042585-1792092708916471921-0/program",
+            "-fuse-ld=/tmp/nacre-profile-3gdoxlkr/ld"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "native_link",
+          "seconds": 0.018572555,
+          "arguments": [
+            "--hash-style=gnu",
+            "--build-id",
+            "--eh-frame-hdr",
+            "-m",
+            "elf_x86_64",
+            "-pie",
+            "-dynamic-linker",
+            "/lib64/ld-linux-x86-64.so.2",
+            "-o",
+            "/tmp/nacre-4042585-1792092708916471921-0/program",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/Scrt1.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crti.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtbeginS.o",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64",
+            "-L/lib/../lib64",
+            "-L/usr/lib64",
+            "-L/lib",
+            "-L/usr/lib",
+            "/tmp/linked-82d433.o",
+            "-lm",
+            "--gc-sections",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "-lpthread",
+            "-lc",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtendS.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crtn.o"
+          ],
+          "returncode": 0
+        }
+      ]
+    },
+    {
+      "consumer": "inventory",
+      "backend": "c",
+      "cache": "cold",
+      "instrumented": true,
+      "sample": 0,
+      "build_seconds": 0.478593366,
+      "frontend_codegen_seconds": 0.009959193,
+      "stdout": "true\ntrue\n61\n69\n2\n",
+      "memory": "NACRE_MEMORY allocations=10 frees=10 live=0\n",
+      "events": [
+        {
+          "stage": "tool_probe",
+          "seconds": 0.017172015,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "clang_native",
+          "seconds": 0.347179226,
+          "arguments": [
+            "-O2",
+            "-std=c11",
+            "-pthread",
+            "-g",
+            "-fno-math-errno",
+            "-Wall",
+            "-Wextra",
+            "-pedantic",
+            "-Wno-unused-function",
+            "-Wno-unused-variable",
+            "-Wno-unused-parameter",
+            "-Wno-unused-but-set-variable",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "/tmp/nacre-4042781-1792092709528522825-0/program.c",
+            "-o",
+            "/tmp/nacre-4042781-1792092709528522825-0/program",
+            "-lm",
+            "-Wl,--gc-sections",
+            "-fuse-ld=/tmp/nacre-profile-3gdoxlkr/ld"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "native_link",
+          "seconds": 0.018229759,
+          "arguments": [
+            "--hash-style=gnu",
+            "--build-id",
+            "--eh-frame-hdr",
+            "-m",
+            "elf_x86_64",
+            "-pie",
+            "-dynamic-linker",
+            "/lib64/ld-linux-x86-64.so.2",
+            "-o",
+            "/tmp/nacre-4042781-1792092709528522825-0/program",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/Scrt1.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crti.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtbeginS.o",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64",
+            "-L/lib/../lib64",
+            "-L/usr/lib64",
+            "-L/lib",
+            "-L/usr/lib",
+            "/tmp/program-ca3c9a.o",
+            "-lm",
+            "--gc-sections",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "-lpthread",
+            "-lc",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtendS.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crtn.o"
+          ],
+          "returncode": 0
+        }
+      ]
+    },
+    {
+      "consumer": "inventory",
+      "backend": "c",
+      "cache": "warm_changed_source",
+      "instrumented": true,
+      "sample": 0,
+      "build_seconds": 0.477902365,
+      "frontend_codegen_seconds": 0.0101594,
+      "stdout": "true\ntrue\n62\n70\n2\n",
+      "memory": "NACRE_MEMORY allocations=10 frees=10 live=0\n",
+      "events": [
+        {
+          "stage": "tool_probe",
+          "seconds": 0.017446828,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "clang_native",
+          "seconds": 0.345305187,
+          "arguments": [
+            "-O2",
+            "-std=c11",
+            "-pthread",
+            "-g",
+            "-fno-math-errno",
+            "-Wall",
+            "-Wextra",
+            "-pedantic",
+            "-Wno-unused-function",
+            "-Wno-unused-variable",
+            "-Wno-unused-parameter",
+            "-Wno-unused-but-set-variable",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "/tmp/nacre-4042913-1792092710019886176-0/program.c",
+            "-o",
+            "/tmp/nacre-4042913-1792092710019886176-0/program",
+            "-lm",
+            "-Wl,--gc-sections",
+            "-fuse-ld=/tmp/nacre-profile-3gdoxlkr/ld"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "native_link",
+          "seconds": 0.017807911,
+          "arguments": [
+            "--hash-style=gnu",
+            "--build-id",
+            "--eh-frame-hdr",
+            "-m",
+            "elf_x86_64",
+            "-pie",
+            "-dynamic-linker",
+            "/lib64/ld-linux-x86-64.so.2",
+            "-o",
+            "/tmp/nacre-4042913-1792092710019886176-0/program",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/Scrt1.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crti.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtbeginS.o",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64",
+            "-L/lib/../lib64",
+            "-L/usr/lib64",
+            "-L/lib",
+            "-L/usr/lib",
+            "/tmp/program-783fc3.o",
+            "-lm",
+            "--gc-sections",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "-lpthread",
+            "-lc",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtendS.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crtn.o"
+          ],
+          "returncode": 0
+        }
+      ]
+    },
+    {
+      "consumer": "inventory",
+      "backend": "c",
+      "cache": "cold",
+      "instrumented": true,
+      "sample": 1,
+      "build_seconds": 0.477217321,
+      "frontend_codegen_seconds": 0.009923048,
+      "stdout": "true\ntrue\n63\n71\n2\n",
+      "memory": "NACRE_MEMORY allocations=10 frees=10 live=0\n",
+      "events": [
+        {
+          "stage": "tool_probe",
+          "seconds": 0.017281131,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "clang_native",
+          "seconds": 0.345527985,
+          "arguments": [
+            "-O2",
+            "-std=c11",
+            "-pthread",
+            "-g",
+            "-fno-math-errno",
+            "-Wall",
+            "-Wextra",
+            "-pedantic",
+            "-Wno-unused-function",
+            "-Wno-unused-variable",
+            "-Wno-unused-parameter",
+            "-Wno-unused-but-set-variable",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "/tmp/nacre-4043046-1792092710510023752-0/program.c",
+            "-o",
+            "/tmp/nacre-4043046-1792092710510023752-0/program",
+            "-lm",
+            "-Wl,--gc-sections",
+            "-fuse-ld=/tmp/nacre-profile-3gdoxlkr/ld"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "native_link",
+          "seconds": 0.018405385,
+          "arguments": [
+            "--hash-style=gnu",
+            "--build-id",
+            "--eh-frame-hdr",
+            "-m",
+            "elf_x86_64",
+            "-pie",
+            "-dynamic-linker",
+            "/lib64/ld-linux-x86-64.so.2",
+            "-o",
+            "/tmp/nacre-4043046-1792092710510023752-0/program",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/Scrt1.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crti.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtbeginS.o",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64",
+            "-L/lib/../lib64",
+            "-L/usr/lib64",
+            "-L/lib",
+            "-L/usr/lib",
+            "/tmp/program-47437a.o",
+            "-lm",
+            "--gc-sections",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "-lpthread",
+            "-lc",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtendS.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crtn.o"
+          ],
+          "returncode": 0
+        }
+      ]
+    },
+    {
+      "consumer": "inventory",
+      "backend": "c",
+      "cache": "warm_changed_source",
+      "instrumented": true,
+      "sample": 1,
+      "build_seconds": 0.479374081,
+      "frontend_codegen_seconds": 0.009976908,
+      "stdout": "true\ntrue\n64\n72\n2\n",
+      "memory": "NACRE_MEMORY allocations=10 frees=10 live=0\n",
+      "events": [
+        {
+          "stage": "tool_probe",
+          "seconds": 0.017529755,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "clang_native",
+          "seconds": 0.34714877,
+          "arguments": [
+            "-O2",
+            "-std=c11",
+            "-pthread",
+            "-g",
+            "-fno-math-errno",
+            "-Wall",
+            "-Wextra",
+            "-pedantic",
+            "-Wno-unused-function",
+            "-Wno-unused-variable",
+            "-Wno-unused-parameter",
+            "-Wno-unused-but-set-variable",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "/tmp/nacre-4043184-1792092711000768246-0/program.c",
+            "-o",
+            "/tmp/nacre-4043184-1792092711000768246-0/program",
+            "-lm",
+            "-Wl,--gc-sections",
+            "-fuse-ld=/tmp/nacre-profile-3gdoxlkr/ld"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "native_link",
+          "seconds": 0.018080668,
+          "arguments": [
+            "--hash-style=gnu",
+            "--build-id",
+            "--eh-frame-hdr",
+            "-m",
+            "elf_x86_64",
+            "-pie",
+            "-dynamic-linker",
+            "/lib64/ld-linux-x86-64.so.2",
+            "-o",
+            "/tmp/nacre-4043184-1792092711000768246-0/program",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/Scrt1.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crti.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtbeginS.o",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64",
+            "-L/lib/../lib64",
+            "-L/usr/lib64",
+            "-L/lib",
+            "-L/usr/lib",
+            "/tmp/program-783b97.o",
+            "-lm",
+            "--gc-sections",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "-lpthread",
+            "-lc",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtendS.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crtn.o"
+          ],
+          "returncode": 0
+        }
+      ]
+    },
+    {
+      "consumer": "inventory",
+      "backend": "c",
+      "cache": "cold",
+      "instrumented": true,
+      "sample": 2,
+      "build_seconds": 0.478028162,
+      "frontend_codegen_seconds": 0.009831557,
+      "stdout": "true\ntrue\n65\n73\n2\n",
+      "memory": "NACRE_MEMORY allocations=10 frees=10 live=0\n",
+      "events": [
+        {
+          "stage": "tool_probe",
+          "seconds": 0.017346444,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "clang_native",
+          "seconds": 0.34539638,
+          "arguments": [
+            "-O2",
+            "-std=c11",
+            "-pthread",
+            "-g",
+            "-fno-math-errno",
+            "-Wall",
+            "-Wextra",
+            "-pedantic",
+            "-Wno-unused-function",
+            "-Wno-unused-variable",
+            "-Wno-unused-parameter",
+            "-Wno-unused-but-set-variable",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "/tmp/nacre-4043302-1792092711493494312-0/program.c",
+            "-o",
+            "/tmp/nacre-4043302-1792092711493494312-0/program",
+            "-lm",
+            "-Wl,--gc-sections",
+            "-fuse-ld=/tmp/nacre-profile-3gdoxlkr/ld"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "native_link",
+          "seconds": 0.017232037,
+          "arguments": [
+            "--hash-style=gnu",
+            "--build-id",
+            "--eh-frame-hdr",
+            "-m",
+            "elf_x86_64",
+            "-pie",
+            "-dynamic-linker",
+            "/lib64/ld-linux-x86-64.so.2",
+            "-o",
+            "/tmp/nacre-4043302-1792092711493494312-0/program",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/Scrt1.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crti.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtbeginS.o",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64",
+            "-L/lib/../lib64",
+            "-L/usr/lib64",
+            "-L/lib",
+            "-L/usr/lib",
+            "/tmp/program-8568b8.o",
+            "-lm",
+            "--gc-sections",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "-lpthread",
+            "-lc",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtendS.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crtn.o"
+          ],
+          "returncode": 0
+        }
+      ]
+    },
+    {
+      "consumer": "inventory",
+      "backend": "c",
+      "cache": "warm_changed_source",
+      "instrumented": true,
+      "sample": 2,
+      "build_seconds": 0.479376044,
+      "frontend_codegen_seconds": 0.010054786,
+      "stdout": "true\ntrue\n66\n74\n2\n",
+      "memory": "NACRE_MEMORY allocations=10 frees=10 live=0\n",
+      "events": [
+        {
+          "stage": "tool_probe",
+          "seconds": 0.017269491,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "clang_native",
+          "seconds": 0.346673392,
+          "arguments": [
+            "-O2",
+            "-std=c11",
+            "-pthread",
+            "-g",
+            "-fno-math-errno",
+            "-Wall",
+            "-Wextra",
+            "-pedantic",
+            "-Wno-unused-function",
+            "-Wno-unused-variable",
+            "-Wno-unused-parameter",
+            "-Wno-unused-but-set-variable",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "/tmp/nacre-4043425-1792092711983139130-0/program.c",
+            "-o",
+            "/tmp/nacre-4043425-1792092711983139130-0/program",
+            "-lm",
+            "-Wl,--gc-sections",
+            "-fuse-ld=/tmp/nacre-profile-3gdoxlkr/ld"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "native_link",
+          "seconds": 0.017736559,
+          "arguments": [
+            "--hash-style=gnu",
+            "--build-id",
+            "--eh-frame-hdr",
+            "-m",
+            "elf_x86_64",
+            "-pie",
+            "-dynamic-linker",
+            "/lib64/ld-linux-x86-64.so.2",
+            "-o",
+            "/tmp/nacre-4043425-1792092711983139130-0/program",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/Scrt1.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crti.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtbeginS.o",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64",
+            "-L/lib/../lib64",
+            "-L/usr/lib64",
+            "-L/lib",
+            "-L/usr/lib",
+            "/tmp/program-c8d016.o",
+            "-lm",
+            "--gc-sections",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "-lpthread",
+            "-lc",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtendS.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crtn.o"
+          ],
+          "returncode": 0
+        }
+      ]
+    },
+    {
+      "consumer": "inventory",
+      "backend": "llvm",
+      "cache": "cold",
+      "instrumented": true,
+      "sample": 0,
+      "build_seconds": 1.376046758,
+      "frontend_codegen_seconds": 0.010428983,
+      "stdout": "true\ntrue\n67\n75\n2\n",
+      "memory": "NACRE_MEMORY allocations=10 frees=10 live=0\n",
+      "events": [
+        {
+          "stage": "tool_probe",
+          "seconds": 0.01702511,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "tool_probe",
+          "seconds": 0.001807745,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "tool_probe",
+          "seconds": 0.017238833,
+          "arguments": [
+            "-print-target-triple"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "runtime_bitcode",
+          "seconds": 0.46000011,
+          "arguments": [
+            "-O2",
+            "-std=c11",
+            "-pthread",
+            "-g",
+            "-fdebug-compilation-dir=.",
+            "-fno-math-errno",
+            "-Wall",
+            "-Wextra",
+            "-pedantic",
+            "-Wno-unused-function",
+            "-Wno-unused-variable",
+            "-Wno-unused-parameter",
+            "-Wno-unused-but-set-variable",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "-DNACRE_MEMORY_STATS",
+            "-emit-llvm",
+            "-c",
+            "/tmp/nacre-4043538-1792092712598802462-0/runtime.c",
+            "-o",
+            "/tmp/nacre-4043538-1792092712598802462-0/runtime.bc"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "llvm_link",
+          "seconds": 0.035528962,
+          "arguments": [
+            "--only-needed",
+            "--internalize",
+            "/tmp/nacre-4043538-1792092712598802462-0/program.ll",
+            "/tmp/nacre-4043538-1792092712598802462-0/runtime.bc",
+            "-o",
+            "/tmp/nacre-4043538-1792092712598802462-0/linked.bc"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "clang_native",
+          "seconds": 0.52035514,
+          "arguments": [
+            "-O2",
+            "-pthread",
+            "-g",
+            "-fno-math-errno",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "-DNACRE_MEMORY_STATS",
+            "/tmp/nacre-4043538-1792092712598802462-0/linked.bc",
+            "-lm",
+            "-Wl,--gc-sections",
+            "-o",
+            "/tmp/nacre-4043538-1792092712598802462-0/program",
+            "-fuse-ld=/tmp/nacre-profile-3gdoxlkr/ld"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "native_link",
+          "seconds": 0.018262476,
+          "arguments": [
+            "--hash-style=gnu",
+            "--build-id",
+            "--eh-frame-hdr",
+            "-m",
+            "elf_x86_64",
+            "-pie",
+            "-dynamic-linker",
+            "/lib64/ld-linux-x86-64.so.2",
+            "-o",
+            "/tmp/nacre-4043538-1792092712598802462-0/program",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/Scrt1.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crti.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtbeginS.o",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64",
+            "-L/lib/../lib64",
+            "-L/usr/lib64",
+            "-L/lib",
+            "-L/usr/lib",
+            "/tmp/linked-29e6c6.o",
+            "-lm",
+            "--gc-sections",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "-lpthread",
+            "-lc",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtendS.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crtn.o"
+          ],
+          "returncode": 0
+        }
+      ]
+    },
+    {
+      "consumer": "inventory",
+      "backend": "llvm",
+      "cache": "warm_changed_source",
+      "instrumented": true,
+      "sample": 0,
+      "build_seconds": 0.863941978,
+      "frontend_codegen_seconds": 0.010214484,
+      "stdout": "true\ntrue\n68\n76\n2\n",
+      "memory": "NACRE_MEMORY allocations=10 frees=10 live=0\n",
+      "events": [
+        {
+          "stage": "tool_probe",
+          "seconds": 0.017221861,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "tool_probe",
+          "seconds": 0.001952763,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "tool_probe",
+          "seconds": 0.017304206,
+          "arguments": [
+            "-print-target-triple"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "llvm_link",
+          "seconds": 0.03484343,
+          "arguments": [
+            "--only-needed",
+            "--internalize",
+            "/tmp/nacre-4043854-1792092713989008138-0/program.ll",
+            "/tmp/nacre-profile-3gdoxlkr/cache-True-inventory-llvm/llvm-runtime-1847c5b7b0c20396b9d553712efd3feb.bc",
+            "-o",
+            "/tmp/nacre-4043854-1792092713989008138-0/linked.bc"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "clang_native",
+          "seconds": 0.521559642,
+          "arguments": [
+            "-O2",
+            "-pthread",
+            "-g",
+            "-fno-math-errno",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "-DNACRE_MEMORY_STATS",
+            "/tmp/nacre-4043854-1792092713989008138-0/linked.bc",
+            "-lm",
+            "-Wl,--gc-sections",
+            "-o",
+            "/tmp/nacre-4043854-1792092713989008138-0/program",
+            "-fuse-ld=/tmp/nacre-profile-3gdoxlkr/ld"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "native_link",
+          "seconds": 0.018254491,
+          "arguments": [
+            "--hash-style=gnu",
+            "--build-id",
+            "--eh-frame-hdr",
+            "-m",
+            "elf_x86_64",
+            "-pie",
+            "-dynamic-linker",
+            "/lib64/ld-linux-x86-64.so.2",
+            "-o",
+            "/tmp/nacre-4043854-1792092713989008138-0/program",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/Scrt1.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crti.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtbeginS.o",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64",
+            "-L/lib/../lib64",
+            "-L/usr/lib64",
+            "-L/lib",
+            "-L/usr/lib",
+            "/tmp/linked-c4fbf4.o",
+            "-lm",
+            "--gc-sections",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "-lpthread",
+            "-lc",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtendS.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crtn.o"
+          ],
+          "returncode": 0
+        }
+      ]
+    },
+    {
+      "consumer": "inventory",
+      "backend": "llvm",
+      "cache": "cold",
+      "instrumented": true,
+      "sample": 1,
+      "build_seconds": 1.373548171,
+      "frontend_codegen_seconds": 0.010402115,
+      "stdout": "true\ntrue\n69\n77\n2\n",
+      "memory": "NACRE_MEMORY allocations=10 frees=10 live=0\n",
+      "events": [
+        {
+          "stage": "tool_probe",
+          "seconds": 0.017145648,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "tool_probe",
+          "seconds": 0.001821795,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "tool_probe",
+          "seconds": 0.017345292,
+          "arguments": [
+            "-print-target-triple"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "runtime_bitcode",
+          "seconds": 0.457119492,
+          "arguments": [
+            "-O2",
+            "-std=c11",
+            "-pthread",
+            "-g",
+            "-fdebug-compilation-dir=.",
+            "-fno-math-errno",
+            "-Wall",
+            "-Wextra",
+            "-pedantic",
+            "-Wno-unused-function",
+            "-Wno-unused-variable",
+            "-Wno-unused-parameter",
+            "-Wno-unused-but-set-variable",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "-DNACRE_MEMORY_STATS",
+            "-emit-llvm",
+            "-c",
+            "/tmp/nacre-4044053-1792092714862923465-0/runtime.c",
+            "-o",
+            "/tmp/nacre-4044053-1792092714862923465-0/runtime.bc"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "llvm_link",
+          "seconds": 0.035353304,
+          "arguments": [
+            "--only-needed",
+            "--internalize",
+            "/tmp/nacre-4044053-1792092714862923465-0/program.ll",
+            "/tmp/nacre-4044053-1792092714862923465-0/runtime.bc",
+            "-o",
+            "/tmp/nacre-4044053-1792092714862923465-0/linked.bc"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "clang_native",
+          "seconds": 0.522010102,
+          "arguments": [
+            "-O2",
+            "-pthread",
+            "-g",
+            "-fno-math-errno",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "-DNACRE_MEMORY_STATS",
+            "/tmp/nacre-4044053-1792092714862923465-0/linked.bc",
+            "-lm",
+            "-Wl,--gc-sections",
+            "-o",
+            "/tmp/nacre-4044053-1792092714862923465-0/program",
+            "-fuse-ld=/tmp/nacre-profile-3gdoxlkr/ld"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "native_link",
+          "seconds": 0.01821751,
+          "arguments": [
+            "--hash-style=gnu",
+            "--build-id",
+            "--eh-frame-hdr",
+            "-m",
+            "elf_x86_64",
+            "-pie",
+            "-dynamic-linker",
+            "/lib64/ld-linux-x86-64.so.2",
+            "-o",
+            "/tmp/nacre-4044053-1792092714862923465-0/program",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/Scrt1.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crti.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtbeginS.o",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64",
+            "-L/lib/../lib64",
+            "-L/usr/lib64",
+            "-L/lib",
+            "-L/usr/lib",
+            "/tmp/linked-ed05bc.o",
+            "-lm",
+            "--gc-sections",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "-lpthread",
+            "-lc",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtendS.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crtn.o"
+          ],
+          "returncode": 0
+        }
+      ]
+    },
+    {
+      "consumer": "inventory",
+      "backend": "llvm",
+      "cache": "warm_changed_source",
+      "instrumented": true,
+      "sample": 1,
+      "build_seconds": 0.864801296,
+      "frontend_codegen_seconds": 0.010390506,
+      "stdout": "true\ntrue\n70\n78\n2\n",
+      "memory": "NACRE_MEMORY allocations=10 frees=10 live=0\n",
+      "events": [
+        {
+          "stage": "tool_probe",
+          "seconds": 0.017431219,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "tool_probe",
+          "seconds": 0.001826124,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "tool_probe",
+          "seconds": 0.017454274,
+          "arguments": [
+            "-print-target-triple"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "llvm_link",
+          "seconds": 0.035740188,
+          "arguments": [
+            "--only-needed",
+            "--internalize",
+            "/tmp/nacre-4044380-1792092716252280160-0/program.ll",
+            "/tmp/nacre-profile-3gdoxlkr/cache-True-inventory-llvm/llvm-runtime-1847c5b7b0c20396b9d553712efd3feb.bc",
+            "-o",
+            "/tmp/nacre-4044380-1792092716252280160-0/linked.bc"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "clang_native",
+          "seconds": 0.522845657,
+          "arguments": [
+            "-O2",
+            "-pthread",
+            "-g",
+            "-fno-math-errno",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "-DNACRE_MEMORY_STATS",
+            "/tmp/nacre-4044380-1792092716252280160-0/linked.bc",
+            "-lm",
+            "-Wl,--gc-sections",
+            "-o",
+            "/tmp/nacre-4044380-1792092716252280160-0/program",
+            "-fuse-ld=/tmp/nacre-profile-3gdoxlkr/ld"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "native_link",
+          "seconds": 0.018390145,
+          "arguments": [
+            "--hash-style=gnu",
+            "--build-id",
+            "--eh-frame-hdr",
+            "-m",
+            "elf_x86_64",
+            "-pie",
+            "-dynamic-linker",
+            "/lib64/ld-linux-x86-64.so.2",
+            "-o",
+            "/tmp/nacre-4044380-1792092716252280160-0/program",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/Scrt1.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crti.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtbeginS.o",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64",
+            "-L/lib/../lib64",
+            "-L/usr/lib64",
+            "-L/lib",
+            "-L/usr/lib",
+            "/tmp/linked-051eea.o",
+            "-lm",
+            "--gc-sections",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "-lpthread",
+            "-lc",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtendS.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crtn.o"
+          ],
+          "returncode": 0
+        }
+      ]
+    },
+    {
+      "consumer": "inventory",
+      "backend": "llvm",
+      "cache": "cold",
+      "instrumented": true,
+      "sample": 2,
+      "build_seconds": 1.375824336,
+      "frontend_codegen_seconds": 0.010567655,
+      "stdout": "true\ntrue\n71\n79\n2\n",
+      "memory": "NACRE_MEMORY allocations=10 frees=10 live=0\n",
+      "events": [
+        {
+          "stage": "tool_probe",
+          "seconds": 0.017378242,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "tool_probe",
+          "seconds": 0.001825866,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "tool_probe",
+          "seconds": 0.01708353,
+          "arguments": [
+            "-print-target-triple"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "runtime_bitcode",
+          "seconds": 0.455798004,
+          "arguments": [
+            "-O2",
+            "-std=c11",
+            "-pthread",
+            "-g",
+            "-fdebug-compilation-dir=.",
+            "-fno-math-errno",
+            "-Wall",
+            "-Wextra",
+            "-pedantic",
+            "-Wno-unused-function",
+            "-Wno-unused-variable",
+            "-Wno-unused-parameter",
+            "-Wno-unused-but-set-variable",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "-DNACRE_MEMORY_STATS",
+            "-emit-llvm",
+            "-c",
+            "/tmp/nacre-4044583-1792092717130190476-0/runtime.c",
+            "-o",
+            "/tmp/nacre-4044583-1792092717130190476-0/runtime.bc"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "llvm_link",
+          "seconds": 0.035028535,
+          "arguments": [
+            "--only-needed",
+            "--internalize",
+            "/tmp/nacre-4044583-1792092717130190476-0/program.ll",
+            "/tmp/nacre-4044583-1792092717130190476-0/runtime.bc",
+            "-o",
+            "/tmp/nacre-4044583-1792092717130190476-0/linked.bc"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "clang_native",
+          "seconds": 0.523390715,
+          "arguments": [
+            "-O2",
+            "-pthread",
+            "-g",
+            "-fno-math-errno",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "-DNACRE_MEMORY_STATS",
+            "/tmp/nacre-4044583-1792092717130190476-0/linked.bc",
+            "-lm",
+            "-Wl,--gc-sections",
+            "-o",
+            "/tmp/nacre-4044583-1792092717130190476-0/program",
+            "-fuse-ld=/tmp/nacre-profile-3gdoxlkr/ld"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "native_link",
+          "seconds": 0.018267487,
+          "arguments": [
+            "--hash-style=gnu",
+            "--build-id",
+            "--eh-frame-hdr",
+            "-m",
+            "elf_x86_64",
+            "-pie",
+            "-dynamic-linker",
+            "/lib64/ld-linux-x86-64.so.2",
+            "-o",
+            "/tmp/nacre-4044583-1792092717130190476-0/program",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/Scrt1.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crti.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtbeginS.o",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64",
+            "-L/lib/../lib64",
+            "-L/usr/lib64",
+            "-L/lib",
+            "-L/usr/lib",
+            "/tmp/linked-73bb49.o",
+            "-lm",
+            "--gc-sections",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "-lpthread",
+            "-lc",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtendS.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crtn.o"
+          ],
+          "returncode": 0
+        }
+      ]
+    },
+    {
+      "consumer": "inventory",
+      "backend": "llvm",
+      "cache": "warm_changed_source",
+      "instrumented": true,
+      "sample": 2,
+      "build_seconds": 0.866198066,
+      "frontend_codegen_seconds": 0.010296602,
+      "stdout": "true\ntrue\n72\n80\n2\n",
+      "memory": "NACRE_MEMORY allocations=10 frees=10 live=0\n",
+      "events": [
+        {
+          "stage": "tool_probe",
+          "seconds": 0.017165345,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "tool_probe",
+          "seconds": 0.001784576,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "tool_probe",
+          "seconds": 0.017329932,
+          "arguments": [
+            "-print-target-triple"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "llvm_link",
+          "seconds": 0.035164975,
+          "arguments": [
+            "--only-needed",
+            "--internalize",
+            "/tmp/nacre-4044884-1792092718519762261-0/program.ll",
+            "/tmp/nacre-profile-3gdoxlkr/cache-True-inventory-llvm/llvm-runtime-1847c5b7b0c20396b9d553712efd3feb.bc",
+            "-o",
+            "/tmp/nacre-4044884-1792092718519762261-0/linked.bc"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "clang_native",
+          "seconds": 0.524045045,
+          "arguments": [
+            "-O2",
+            "-pthread",
+            "-g",
+            "-fno-math-errno",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "-DNACRE_MEMORY_STATS",
+            "/tmp/nacre-4044884-1792092718519762261-0/linked.bc",
+            "-lm",
+            "-Wl,--gc-sections",
+            "-o",
+            "/tmp/nacre-4044884-1792092718519762261-0/program",
+            "-fuse-ld=/tmp/nacre-profile-3gdoxlkr/ld"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "native_link",
+          "seconds": 0.018265476,
+          "arguments": [
+            "--hash-style=gnu",
+            "--build-id",
+            "--eh-frame-hdr",
+            "-m",
+            "elf_x86_64",
+            "-pie",
+            "-dynamic-linker",
+            "/lib64/ld-linux-x86-64.so.2",
+            "-o",
+            "/tmp/nacre-4044884-1792092718519762261-0/program",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/Scrt1.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crti.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtbeginS.o",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64",
+            "-L/lib/../lib64",
+            "-L/usr/lib64",
+            "-L/lib",
+            "-L/usr/lib",
+            "/tmp/linked-ac34fe.o",
+            "-lm",
+            "--gc-sections",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "-lpthread",
+            "-lc",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtendS.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crtn.o"
+          ],
+          "returncode": 0
+        }
+      ]
+    },
+    {
+      "consumer": "packages",
+      "backend": "c",
+      "cache": "cold",
+      "instrumented": true,
+      "sample": 0,
+      "build_seconds": 0.320340129,
+      "frontend_codegen_seconds": 0.009404976,
+      "stdout": "103\n",
+      "memory": "NACRE_MEMORY allocations=0 frees=0 live=0\n",
+      "events": [
+        {
+          "stage": "tool_probe",
+          "seconds": 0.017363788,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "clang_native",
+          "seconds": 0.187863857,
+          "arguments": [
+            "-O2",
+            "-std=c11",
+            "-pthread",
+            "-g",
+            "-fno-math-errno",
+            "-Wall",
+            "-Wextra",
+            "-pedantic",
+            "-Wno-unused-function",
+            "-Wno-unused-variable",
+            "-Wno-unused-parameter",
+            "-Wno-unused-but-set-variable",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "/tmp/nacre-4045082-1792092719273711997-0/program.c",
+            "-o",
+            "/tmp/nacre-4045082-1792092719273711997-0/program",
+            "-lm",
+            "-Wl,--gc-sections",
+            "-fuse-ld=/tmp/nacre-profile-3gdoxlkr/ld"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "native_link",
+          "seconds": 0.017052971,
+          "arguments": [
+            "--hash-style=gnu",
+            "--build-id",
+            "--eh-frame-hdr",
+            "-m",
+            "elf_x86_64",
+            "-pie",
+            "-dynamic-linker",
+            "/lib64/ld-linux-x86-64.so.2",
+            "-o",
+            "/tmp/nacre-4045082-1792092719273711997-0/program",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/Scrt1.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crti.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtbeginS.o",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64",
+            "-L/lib/../lib64",
+            "-L/usr/lib64",
+            "-L/lib",
+            "-L/usr/lib",
+            "/tmp/program-e79774.o",
+            "-lm",
+            "--gc-sections",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "-lpthread",
+            "-lc",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtendS.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crtn.o"
+          ],
+          "returncode": 0
+        }
+      ]
+    },
+    {
+      "consumer": "packages",
+      "backend": "c",
+      "cache": "warm_changed_source",
+      "instrumented": true,
+      "sample": 0,
+      "build_seconds": 0.322528778,
+      "frontend_codegen_seconds": 0.009282256,
+      "stdout": "104\n",
+      "memory": "NACRE_MEMORY allocations=0 frees=0 live=0\n",
+      "events": [
+        {
+          "stage": "tool_probe",
+          "seconds": 0.017097359,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "clang_native",
+          "seconds": 0.189825921,
+          "arguments": [
+            "-O2",
+            "-std=c11",
+            "-pthread",
+            "-g",
+            "-fno-math-errno",
+            "-Wall",
+            "-Wextra",
+            "-pedantic",
+            "-Wno-unused-function",
+            "-Wno-unused-variable",
+            "-Wno-unused-parameter",
+            "-Wno-unused-but-set-variable",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "/tmp/nacre-4045165-1792092719605850159-0/program.c",
+            "-o",
+            "/tmp/nacre-4045165-1792092719605850159-0/program",
+            "-lm",
+            "-Wl,--gc-sections",
+            "-fuse-ld=/tmp/nacre-profile-3gdoxlkr/ld"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "native_link",
+          "seconds": 0.0178637,
+          "arguments": [
+            "--hash-style=gnu",
+            "--build-id",
+            "--eh-frame-hdr",
+            "-m",
+            "elf_x86_64",
+            "-pie",
+            "-dynamic-linker",
+            "/lib64/ld-linux-x86-64.so.2",
+            "-o",
+            "/tmp/nacre-4045165-1792092719605850159-0/program",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/Scrt1.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crti.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtbeginS.o",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64",
+            "-L/lib/../lib64",
+            "-L/usr/lib64",
+            "-L/lib",
+            "-L/usr/lib",
+            "/tmp/program-614996.o",
+            "-lm",
+            "--gc-sections",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "-lpthread",
+            "-lc",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtendS.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crtn.o"
+          ],
+          "returncode": 0
+        }
+      ]
+    },
+    {
+      "consumer": "packages",
+      "backend": "c",
+      "cache": "cold",
+      "instrumented": true,
+      "sample": 1,
+      "build_seconds": 0.322339294,
+      "frontend_codegen_seconds": 0.009362216,
+      "stdout": "105\n",
+      "memory": "NACRE_MEMORY allocations=0 frees=0 live=0\n",
+      "events": [
+        {
+          "stage": "tool_probe",
+          "seconds": 0.01710193,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "clang_native",
+          "seconds": 0.190550789,
+          "arguments": [
+            "-O2",
+            "-std=c11",
+            "-pthread",
+            "-g",
+            "-fno-math-errno",
+            "-Wall",
+            "-Wextra",
+            "-pedantic",
+            "-Wno-unused-function",
+            "-Wno-unused-variable",
+            "-Wno-unused-parameter",
+            "-Wno-unused-but-set-variable",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "/tmp/nacre-4045242-1792092719939737992-0/program.c",
+            "-o",
+            "/tmp/nacre-4045242-1792092719939737992-0/program",
+            "-lm",
+            "-Wl,--gc-sections",
+            "-fuse-ld=/tmp/nacre-profile-3gdoxlkr/ld"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "native_link",
+          "seconds": 0.017987338,
+          "arguments": [
+            "--hash-style=gnu",
+            "--build-id",
+            "--eh-frame-hdr",
+            "-m",
+            "elf_x86_64",
+            "-pie",
+            "-dynamic-linker",
+            "/lib64/ld-linux-x86-64.so.2",
+            "-o",
+            "/tmp/nacre-4045242-1792092719939737992-0/program",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/Scrt1.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crti.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtbeginS.o",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64",
+            "-L/lib/../lib64",
+            "-L/usr/lib64",
+            "-L/lib",
+            "-L/usr/lib",
+            "/tmp/program-d9c822.o",
+            "-lm",
+            "--gc-sections",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "-lpthread",
+            "-lc",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtendS.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crtn.o"
+          ],
+          "returncode": 0
+        }
+      ]
+    },
+    {
+      "consumer": "packages",
+      "backend": "c",
+      "cache": "warm_changed_source",
+      "instrumented": true,
+      "sample": 1,
+      "build_seconds": 0.322081632,
+      "frontend_codegen_seconds": 0.009216991,
+      "stdout": "106\n",
+      "memory": "NACRE_MEMORY allocations=0 frees=0 live=0\n",
+      "events": [
+        {
+          "stage": "tool_probe",
+          "seconds": 0.017205368,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "clang_native",
+          "seconds": 0.189697473,
+          "arguments": [
+            "-O2",
+            "-std=c11",
+            "-pthread",
+            "-g",
+            "-fno-math-errno",
+            "-Wall",
+            "-Wextra",
+            "-pedantic",
+            "-Wno-unused-function",
+            "-Wno-unused-variable",
+            "-Wno-unused-parameter",
+            "-Wno-unused-but-set-variable",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "/tmp/nacre-4045320-1792092720273673668-0/program.c",
+            "-o",
+            "/tmp/nacre-4045320-1792092720273673668-0/program",
+            "-lm",
+            "-Wl,--gc-sections",
+            "-fuse-ld=/tmp/nacre-profile-3gdoxlkr/ld"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "native_link",
+          "seconds": 0.017949093,
+          "arguments": [
+            "--hash-style=gnu",
+            "--build-id",
+            "--eh-frame-hdr",
+            "-m",
+            "elf_x86_64",
+            "-pie",
+            "-dynamic-linker",
+            "/lib64/ld-linux-x86-64.so.2",
+            "-o",
+            "/tmp/nacre-4045320-1792092720273673668-0/program",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/Scrt1.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crti.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtbeginS.o",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64",
+            "-L/lib/../lib64",
+            "-L/usr/lib64",
+            "-L/lib",
+            "-L/usr/lib",
+            "/tmp/program-d3b8f4.o",
+            "-lm",
+            "--gc-sections",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "-lpthread",
+            "-lc",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtendS.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crtn.o"
+          ],
+          "returncode": 0
+        }
+      ]
+    },
+    {
+      "consumer": "packages",
+      "backend": "c",
+      "cache": "cold",
+      "instrumented": true,
+      "sample": 2,
+      "build_seconds": 0.321332425,
+      "frontend_codegen_seconds": 0.009366213,
+      "stdout": "107\n",
+      "memory": "NACRE_MEMORY allocations=0 frees=0 live=0\n",
+      "events": [
+        {
+          "stage": "tool_probe",
+          "seconds": 0.017427656,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "clang_native",
+          "seconds": 0.190005935,
+          "arguments": [
+            "-O2",
+            "-std=c11",
+            "-pthread",
+            "-g",
+            "-fno-math-errno",
+            "-Wall",
+            "-Wextra",
+            "-pedantic",
+            "-Wno-unused-function",
+            "-Wno-unused-variable",
+            "-Wno-unused-parameter",
+            "-Wno-unused-but-set-variable",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "/tmp/nacre-4045410-1792092720606936034-0/program.c",
+            "-o",
+            "/tmp/nacre-4045410-1792092720606936034-0/program",
+            "-lm",
+            "-Wl,--gc-sections",
+            "-fuse-ld=/tmp/nacre-profile-3gdoxlkr/ld"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "native_link",
+          "seconds": 0.017960999,
+          "arguments": [
+            "--hash-style=gnu",
+            "--build-id",
+            "--eh-frame-hdr",
+            "-m",
+            "elf_x86_64",
+            "-pie",
+            "-dynamic-linker",
+            "/lib64/ld-linux-x86-64.so.2",
+            "-o",
+            "/tmp/nacre-4045410-1792092720606936034-0/program",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/Scrt1.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crti.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtbeginS.o",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64",
+            "-L/lib/../lib64",
+            "-L/usr/lib64",
+            "-L/lib",
+            "-L/usr/lib",
+            "/tmp/program-8ce869.o",
+            "-lm",
+            "--gc-sections",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "-lpthread",
+            "-lc",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtendS.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crtn.o"
+          ],
+          "returncode": 0
+        }
+      ]
+    },
+    {
+      "consumer": "packages",
+      "backend": "c",
+      "cache": "warm_changed_source",
+      "instrumented": true,
+      "sample": 2,
+      "build_seconds": 0.322784225,
+      "frontend_codegen_seconds": 0.009154231,
+      "stdout": "108\n",
+      "memory": "NACRE_MEMORY allocations=0 frees=0 live=0\n",
+      "events": [
+        {
+          "stage": "tool_probe",
+          "seconds": 0.017453485,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "clang_native",
+          "seconds": 0.18964549,
+          "arguments": [
+            "-O2",
+            "-std=c11",
+            "-pthread",
+            "-g",
+            "-fno-math-errno",
+            "-Wall",
+            "-Wextra",
+            "-pedantic",
+            "-Wno-unused-function",
+            "-Wno-unused-variable",
+            "-Wno-unused-parameter",
+            "-Wno-unused-but-set-variable",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "/tmp/nacre-4045486-1792092720941675039-0/program.c",
+            "-o",
+            "/tmp/nacre-4045486-1792092720941675039-0/program",
+            "-lm",
+            "-Wl,--gc-sections",
+            "-fuse-ld=/tmp/nacre-profile-3gdoxlkr/ld"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "native_link",
+          "seconds": 0.017433307,
+          "arguments": [
+            "--hash-style=gnu",
+            "--build-id",
+            "--eh-frame-hdr",
+            "-m",
+            "elf_x86_64",
+            "-pie",
+            "-dynamic-linker",
+            "/lib64/ld-linux-x86-64.so.2",
+            "-o",
+            "/tmp/nacre-4045486-1792092720941675039-0/program",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/Scrt1.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crti.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtbeginS.o",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64",
+            "-L/lib/../lib64",
+            "-L/usr/lib64",
+            "-L/lib",
+            "-L/usr/lib",
+            "/tmp/program-06353a.o",
+            "-lm",
+            "--gc-sections",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "-lpthread",
+            "-lc",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtendS.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crtn.o"
+          ],
+          "returncode": 0
+        }
+      ]
+    },
+    {
+      "consumer": "packages",
+      "backend": "llvm",
+      "cache": "cold",
+      "instrumented": true,
+      "sample": 0,
+      "build_seconds": 1.150307088,
+      "frontend_codegen_seconds": 0.011458486,
+      "stdout": "109\n",
+      "memory": "NACRE_MEMORY allocations=0 frees=0 live=0\n",
+      "events": [
+        {
+          "stage": "tool_probe",
+          "seconds": 0.017249047,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "tool_probe",
+          "seconds": 0.001816737,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "tool_probe",
+          "seconds": 0.017075728,
+          "arguments": [
+            "-print-target-triple"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "runtime_bitcode",
+          "seconds": 0.372880114,
+          "arguments": [
+            "-O2",
+            "-std=c11",
+            "-pthread",
+            "-g",
+            "-fdebug-compilation-dir=.",
+            "-fno-math-errno",
+            "-Wall",
+            "-Wextra",
+            "-pedantic",
+            "-Wno-unused-function",
+            "-Wno-unused-variable",
+            "-Wno-unused-parameter",
+            "-Wno-unused-but-set-variable",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "-DNACRE_MEMORY_STATS",
+            "-emit-llvm",
+            "-c",
+            "/tmp/nacre-4045561-1792092721398928662-0/runtime.c",
+            "-o",
+            "/tmp/nacre-4045561-1792092721398928662-0/runtime.bc"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "llvm_link",
+          "seconds": 0.02853749,
+          "arguments": [
+            "--only-needed",
+            "--internalize",
+            "/tmp/nacre-4045561-1792092721398928662-0/program.ll",
+            "/tmp/nacre-4045561-1792092721398928662-0/runtime.bc",
+            "-o",
+            "/tmp/nacre-4045561-1792092721398928662-0/linked.bc"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "clang_native",
+          "seconds": 0.390794203,
+          "arguments": [
+            "-O2",
+            "-pthread",
+            "-g",
+            "-fno-math-errno",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "-DNACRE_MEMORY_STATS",
+            "/tmp/nacre-4045561-1792092721398928662-0/linked.bc",
+            "-lm",
+            "-Wl,--gc-sections",
+            "-o",
+            "/tmp/nacre-4045561-1792092721398928662-0/program",
+            "-fuse-ld=/tmp/nacre-profile-3gdoxlkr/ld"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "native_link",
+          "seconds": 0.018178261,
+          "arguments": [
+            "--hash-style=gnu",
+            "--build-id",
+            "--eh-frame-hdr",
+            "-m",
+            "elf_x86_64",
+            "-pie",
+            "-dynamic-linker",
+            "/lib64/ld-linux-x86-64.so.2",
+            "-o",
+            "/tmp/nacre-4045561-1792092721398928662-0/program",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/Scrt1.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crti.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtbeginS.o",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64",
+            "-L/lib/../lib64",
+            "-L/usr/lib64",
+            "-L/lib",
+            "-L/usr/lib",
+            "/tmp/linked-3b0004.o",
+            "-lm",
+            "--gc-sections",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "-lpthread",
+            "-lc",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtendS.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crtn.o"
+          ],
+          "returncode": 0
+        }
+      ]
+    },
+    {
+      "consumer": "packages",
+      "backend": "llvm",
+      "cache": "warm_changed_source",
+      "instrumented": true,
+      "sample": 0,
+      "build_seconds": 0.724157391,
+      "frontend_codegen_seconds": 0.011248427,
+      "stdout": "110\n",
+      "memory": "NACRE_MEMORY allocations=0 frees=0 live=0\n",
+      "events": [
+        {
+          "stage": "tool_probe",
+          "seconds": 0.017277726,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "tool_probe",
+          "seconds": 0.001790741,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "tool_probe",
+          "seconds": 0.016953642,
+          "arguments": [
+            "-print-target-triple"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "llvm_link",
+          "seconds": 0.02844458,
+          "arguments": [
+            "--only-needed",
+            "--internalize",
+            "/tmp/nacre-4045825-1792092722561535119-0/program.ll",
+            "/tmp/nacre-profile-3gdoxlkr/cache-True-packages-llvm/llvm-runtime-4496e72a512a43d053b6b6c0d4a0524d.bc",
+            "-o",
+            "/tmp/nacre-4045825-1792092722561535119-0/linked.bc"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "clang_native",
+          "seconds": 0.389908972,
+          "arguments": [
+            "-O2",
+            "-pthread",
+            "-g",
+            "-fno-math-errno",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "-DNACRE_MEMORY_STATS",
+            "/tmp/nacre-4045825-1792092722561535119-0/linked.bc",
+            "-lm",
+            "-Wl,--gc-sections",
+            "-o",
+            "/tmp/nacre-4045825-1792092722561535119-0/program",
+            "-fuse-ld=/tmp/nacre-profile-3gdoxlkr/ld"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "native_link",
+          "seconds": 0.018382774,
+          "arguments": [
+            "--hash-style=gnu",
+            "--build-id",
+            "--eh-frame-hdr",
+            "-m",
+            "elf_x86_64",
+            "-pie",
+            "-dynamic-linker",
+            "/lib64/ld-linux-x86-64.so.2",
+            "-o",
+            "/tmp/nacre-4045825-1792092722561535119-0/program",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/Scrt1.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crti.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtbeginS.o",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64",
+            "-L/lib/../lib64",
+            "-L/usr/lib64",
+            "-L/lib",
+            "-L/usr/lib",
+            "/tmp/linked-c25e1e.o",
+            "-lm",
+            "--gc-sections",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "-lpthread",
+            "-lc",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtendS.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crtn.o"
+          ],
+          "returncode": 0
+        }
+      ]
+    },
+    {
+      "consumer": "packages",
+      "backend": "llvm",
+      "cache": "cold",
+      "instrumented": true,
+      "sample": 1,
+      "build_seconds": 1.153979591,
+      "frontend_codegen_seconds": 0.009984657,
+      "stdout": "111\n",
+      "memory": "NACRE_MEMORY allocations=0 frees=0 live=0\n",
+      "events": [
+        {
+          "stage": "tool_probe",
+          "seconds": 0.017491669,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "tool_probe",
+          "seconds": 0.001755932,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "tool_probe",
+          "seconds": 0.017249466,
+          "arguments": [
+            "-print-target-triple"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "runtime_bitcode",
+          "seconds": 0.375683523,
+          "arguments": [
+            "-O2",
+            "-std=c11",
+            "-pthread",
+            "-g",
+            "-fdebug-compilation-dir=.",
+            "-fno-math-errno",
+            "-Wall",
+            "-Wextra",
+            "-pedantic",
+            "-Wno-unused-function",
+            "-Wno-unused-variable",
+            "-Wno-unused-parameter",
+            "-Wno-unused-but-set-variable",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "-DNACRE_MEMORY_STATS",
+            "-emit-llvm",
+            "-c",
+            "/tmp/nacre-4046004-1792092723300945464-0/runtime.c",
+            "-o",
+            "/tmp/nacre-4046004-1792092723300945464-0/runtime.bc"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "llvm_link",
+          "seconds": 0.028996669,
+          "arguments": [
+            "--only-needed",
+            "--internalize",
+            "/tmp/nacre-4046004-1792092723300945464-0/program.ll",
+            "/tmp/nacre-4046004-1792092723300945464-0/runtime.bc",
+            "-o",
+            "/tmp/nacre-4046004-1792092723300945464-0/linked.bc"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "clang_native",
+          "seconds": 0.389775055,
+          "arguments": [
+            "-O2",
+            "-pthread",
+            "-g",
+            "-fno-math-errno",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "-DNACRE_MEMORY_STATS",
+            "/tmp/nacre-4046004-1792092723300945464-0/linked.bc",
+            "-lm",
+            "-Wl,--gc-sections",
+            "-o",
+            "/tmp/nacre-4046004-1792092723300945464-0/program",
+            "-fuse-ld=/tmp/nacre-profile-3gdoxlkr/ld"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "native_link",
+          "seconds": 0.018554183,
+          "arguments": [
+            "--hash-style=gnu",
+            "--build-id",
+            "--eh-frame-hdr",
+            "-m",
+            "elf_x86_64",
+            "-pie",
+            "-dynamic-linker",
+            "/lib64/ld-linux-x86-64.so.2",
+            "-o",
+            "/tmp/nacre-4046004-1792092723300945464-0/program",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/Scrt1.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crti.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtbeginS.o",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64",
+            "-L/lib/../lib64",
+            "-L/usr/lib64",
+            "-L/lib",
+            "-L/usr/lib",
+            "/tmp/linked-d00294.o",
+            "-lm",
+            "--gc-sections",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "-lpthread",
+            "-lc",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtendS.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crtn.o"
+          ],
+          "returncode": 0
+        }
+      ]
+    },
+    {
+      "consumer": "packages",
+      "backend": "llvm",
+      "cache": "warm_changed_source",
+      "instrumented": true,
+      "sample": 1,
+      "build_seconds": 0.723540737,
+      "frontend_codegen_seconds": 0.009870926,
+      "stdout": "112\n",
+      "memory": "NACRE_MEMORY allocations=0 frees=0 live=0\n",
+      "events": [
+        {
+          "stage": "tool_probe",
+          "seconds": 0.016987963,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "tool_probe",
+          "seconds": 0.001860169,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "tool_probe",
+          "seconds": 0.017395044,
+          "arguments": [
+            "-print-target-triple"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "llvm_link",
+          "seconds": 0.028782774,
+          "arguments": [
+            "--only-needed",
+            "--internalize",
+            "/tmp/nacre-4046259-1792092724466372135-0/program.ll",
+            "/tmp/nacre-profile-3gdoxlkr/cache-True-packages-llvm/llvm-runtime-4496e72a512a43d053b6b6c0d4a0524d.bc",
+            "-o",
+            "/tmp/nacre-4046259-1792092724466372135-0/linked.bc"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "clang_native",
+          "seconds": 0.39055929,
+          "arguments": [
+            "-O2",
+            "-pthread",
+            "-g",
+            "-fno-math-errno",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "-DNACRE_MEMORY_STATS",
+            "/tmp/nacre-4046259-1792092724466372135-0/linked.bc",
+            "-lm",
+            "-Wl,--gc-sections",
+            "-o",
+            "/tmp/nacre-4046259-1792092724466372135-0/program",
+            "-fuse-ld=/tmp/nacre-profile-3gdoxlkr/ld"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "native_link",
+          "seconds": 0.018530249,
+          "arguments": [
+            "--hash-style=gnu",
+            "--build-id",
+            "--eh-frame-hdr",
+            "-m",
+            "elf_x86_64",
+            "-pie",
+            "-dynamic-linker",
+            "/lib64/ld-linux-x86-64.so.2",
+            "-o",
+            "/tmp/nacre-4046259-1792092724466372135-0/program",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/Scrt1.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crti.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtbeginS.o",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64",
+            "-L/lib/../lib64",
+            "-L/usr/lib64",
+            "-L/lib",
+            "-L/usr/lib",
+            "/tmp/linked-220f26.o",
+            "-lm",
+            "--gc-sections",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "-lpthread",
+            "-lc",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtendS.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crtn.o"
+          ],
+          "returncode": 0
+        }
+      ]
+    },
+    {
+      "consumer": "packages",
+      "backend": "llvm",
+      "cache": "cold",
+      "instrumented": true,
+      "sample": 2,
+      "build_seconds": 1.151686992,
+      "frontend_codegen_seconds": 0.009883353,
+      "stdout": "113\n",
+      "memory": "NACRE_MEMORY allocations=0 frees=0 live=0\n",
+      "events": [
+        {
+          "stage": "tool_probe",
+          "seconds": 0.017175503,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "tool_probe",
+          "seconds": 0.001794984,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "tool_probe",
+          "seconds": 0.017087595,
+          "arguments": [
+            "-print-target-triple"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "runtime_bitcode",
+          "seconds": 0.375086767,
+          "arguments": [
+            "-O2",
+            "-std=c11",
+            "-pthread",
+            "-g",
+            "-fdebug-compilation-dir=.",
+            "-fno-math-errno",
+            "-Wall",
+            "-Wextra",
+            "-pedantic",
+            "-Wno-unused-function",
+            "-Wno-unused-variable",
+            "-Wno-unused-parameter",
+            "-Wno-unused-but-set-variable",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "-DNACRE_MEMORY_STATS",
+            "-emit-llvm",
+            "-c",
+            "/tmp/nacre-4046424-1792092725202315011-0/runtime.c",
+            "-o",
+            "/tmp/nacre-4046424-1792092725202315011-0/runtime.bc"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "llvm_link",
+          "seconds": 0.028522014,
+          "arguments": [
+            "--only-needed",
+            "--internalize",
+            "/tmp/nacre-4046424-1792092725202315011-0/program.ll",
+            "/tmp/nacre-4046424-1792092725202315011-0/runtime.bc",
+            "-o",
+            "/tmp/nacre-4046424-1792092725202315011-0/linked.bc"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "clang_native",
+          "seconds": 0.390297719,
+          "arguments": [
+            "-O2",
+            "-pthread",
+            "-g",
+            "-fno-math-errno",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "-DNACRE_MEMORY_STATS",
+            "/tmp/nacre-4046424-1792092725202315011-0/linked.bc",
+            "-lm",
+            "-Wl,--gc-sections",
+            "-o",
+            "/tmp/nacre-4046424-1792092725202315011-0/program",
+            "-fuse-ld=/tmp/nacre-profile-3gdoxlkr/ld"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "native_link",
+          "seconds": 0.018242098,
+          "arguments": [
+            "--hash-style=gnu",
+            "--build-id",
+            "--eh-frame-hdr",
+            "-m",
+            "elf_x86_64",
+            "-pie",
+            "-dynamic-linker",
+            "/lib64/ld-linux-x86-64.so.2",
+            "-o",
+            "/tmp/nacre-4046424-1792092725202315011-0/program",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/Scrt1.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crti.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtbeginS.o",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64",
+            "-L/lib/../lib64",
+            "-L/usr/lib64",
+            "-L/lib",
+            "-L/usr/lib",
+            "/tmp/linked-1b8bd9.o",
+            "-lm",
+            "--gc-sections",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "-lpthread",
+            "-lc",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtendS.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crtn.o"
+          ],
+          "returncode": 0
+        }
+      ]
+    },
+    {
+      "consumer": "packages",
+      "backend": "llvm",
+      "cache": "warm_changed_source",
+      "instrumented": true,
+      "sample": 2,
+      "build_seconds": 0.72491294,
+      "frontend_codegen_seconds": 0.00981156,
+      "stdout": "114\n",
+      "memory": "NACRE_MEMORY allocations=0 frees=0 live=0\n",
+      "events": [
+        {
+          "stage": "tool_probe",
+          "seconds": 0.017094188,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "tool_probe",
+          "seconds": 0.001761964,
+          "arguments": [
+            "--version"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "tool_probe",
+          "seconds": 0.017098034,
+          "arguments": [
+            "-print-target-triple"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "llvm_link",
+          "seconds": 0.029177439,
+          "arguments": [
+            "--only-needed",
+            "--internalize",
+            "/tmp/nacre-4046702-1792092726366053022-0/program.ll",
+            "/tmp/nacre-profile-3gdoxlkr/cache-True-packages-llvm/llvm-runtime-4496e72a512a43d053b6b6c0d4a0524d.bc",
+            "-o",
+            "/tmp/nacre-4046702-1792092726366053022-0/linked.bc"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "clang_native",
+          "seconds": 0.391006637,
+          "arguments": [
+            "-O2",
+            "-pthread",
+            "-g",
+            "-fno-math-errno",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "-DNACRE_MEMORY_STATS",
+            "/tmp/nacre-4046702-1792092726366053022-0/linked.bc",
+            "-lm",
+            "-Wl,--gc-sections",
+            "-o",
+            "/tmp/nacre-4046702-1792092726366053022-0/program",
+            "-fuse-ld=/tmp/nacre-profile-3gdoxlkr/ld"
+          ],
+          "returncode": 0
+        },
+        {
+          "stage": "native_link",
+          "seconds": 0.018457388,
+          "arguments": [
+            "--hash-style=gnu",
+            "--build-id",
+            "--eh-frame-hdr",
+            "-m",
+            "elf_x86_64",
+            "-pie",
+            "-dynamic-linker",
+            "/lib64/ld-linux-x86-64.so.2",
+            "-o",
+            "/tmp/nacre-4046702-1792092726366053022-0/program",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/Scrt1.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crti.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtbeginS.o",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16",
+            "-L/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64",
+            "-L/lib/../lib64",
+            "-L/usr/lib64",
+            "-L/lib",
+            "-L/usr/lib",
+            "/tmp/linked-fd2c5a.o",
+            "-lm",
+            "--gc-sections",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "-lpthread",
+            "-lc",
+            "-lgcc",
+            "--as-needed",
+            "-lgcc_s",
+            "--no-as-needed",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/crtendS.o",
+            "/usr/lib64/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/crtn.o"
+          ],
+          "returncode": 0
+        }
+      ]
+    }
+  ]
+}

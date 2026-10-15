@@ -1,3 +1,5 @@
+mod support;
+
 use nacre::{compile_to_c, native, validate};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::process::{Child, ChildStdin, Command, Output, Stdio};
@@ -6,9 +8,7 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 fn execute(source: &str, flags: &[&str]) -> Output {
-    let c = compile_to_c(source)
-        .unwrap_or_else(|error| panic!("{}", error.render("concurrency_alpha.ncr", source)));
-    native::compile_c_with_flags(&c, flags)
+    support::compile(source, flags)
         .unwrap_or_else(|error| panic!("native compile failed: {error}"))
         .output()
         .unwrap_or_else(|error| panic!("native execution failed: {error}"))

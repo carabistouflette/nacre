@@ -1,4 +1,5 @@
-use nacre::{compile_to_c, native, validate};
+use nacre::validate;
+mod support;
 use std::process::Output;
 
 const ARRAY_EXAMPLE: &str = include_str!("../examples/collections/arrays.ncr");
@@ -7,9 +8,7 @@ const ARRAY_OUTPUT: &[u8] = b"5\n9\nnone\n0\n0\n0\n0\n0\nfalse\n()\n4\n20\n21\n3
 const BUFFER_OUTPUT: &[u8] = b"negative capacity rejected\n0\n0\n40\n64\n0\n0\n39\n()\n255\n0\n65\n41\n255\ninvalid truncate\n0\ntrue\n";
 
 fn execute(source: &str, flags: &[&str]) -> Output {
-    let c = compile_to_c(source)
-        .unwrap_or_else(|error| panic!("{}", error.render("arrays_buffers.ncr", source)));
-    native::compile_c_with_flags(&c, flags)
+    support::compile(source, flags)
         .unwrap_or_else(|error| panic!("native compile failed: {error}"))
         .output()
         .unwrap_or_else(|error| panic!("native execution failed: {error}"))

@@ -31,8 +31,12 @@ and `.python-version` (3.15.0). Nightly is used only for sanitizer-backed fuzzin
 
 The full Rust test suite also exercises direct LLVM and requires matching-major
 Clang and `llvm-link`, even when `NACRE_CC=gcc`. Set `NACRE_CLANG` and
-`NACRE_LLVM_LINK` to tools from the same LLVM installation. CI selects both
-from the directory reported by `/usr/bin/llvm-config --bindir`.
+`NACRE_LLVM_LINK` to compatible tools. CI selects both from the directory
+reported by `/usr/bin/llvm-config --bindir` and runs GCC/C, Clang/C, and
+Clang/direct-LLVM jobs. `NACRE_TEST_BACKEND=c|llvm` selects the shared compiler
+helper for ordinary native behavior suites without changing their Nacre source
+or expectations. Injected-C fixtures and standalone C helpers remain C-specific;
+explicit dual-backend tests continue to exercise both paths.
 
 Optional native library APIs require their development headers and libraries:
 OpenSSL 3 for `Crypto`, zlib for `Compression`/`Checksums`, GMP for arbitrary
@@ -73,6 +77,11 @@ cargo run --offline --locked -- run examples/io/contact_book.ncr --memory-stats
 
 `doctor` executes a real generated native program using List/Text and checks its
 output and allocation balance. It is a smoke check, not a general safety proof.
+`doctor --direct` reports the selected tool paths, LLVM versions, and target,
+rejects incompatible LLVM majors before compilation, and runs the same checks
+through direct LLVM. `doctor --zip` verifies a binary ZIP round-trip and empty
+archive ownership with the corrected libarchive dependency above. The flags
+compose: `nacre doctor --direct --zip` exercises both optional checks.
 
 ## Interactive applications
 
@@ -305,7 +314,7 @@ nacre emit-llvm sources [-o output.ll] [--direct] [--memory-stats] [-O0|-O1|-O2|
 nacre new new-project-directory
 nacre init new-project-directory
 nacre add <path> [--manifest-path <file>]
-nacre doctor
+nacre doctor [--direct] [--zip]
 nacre lsp
 ```
 Commands accept multiple sources or recursively collected directories, resolving
@@ -345,6 +354,16 @@ selects Clang for default C-frontend LLVM emission and direct native builds;
 LLVM major versions: Clang 23 with `llvm-link` 22 failed, while a matching 22
 pair succeeded. Flow/borrow/type inspection and `emit-llvm --direct` do not
 require a C compiler. See [PROJECTS.md](docs/PROJECTS.md).
+
+For source debugging, build with `nacre build sources --direct -O0 -o out/debug`
+and open the executable in GDB. Direct LLVM preserves original bundle filenames,
+line locations, scalar arguments and locals, and lexical match/block scopes.
+Byte, char, int, long, double, and boolean values have scalar debug types
+(`char` uses UTF-32 `char32_t`); aggregate and borrowed values are not yet
+described as inspectable debug types.
+Generated C support omits source-level debug information so stepping follows
+Nacre source rather than deleted temporary runtime files. Optimized builds retain
+source metadata, but optimization can remove or relocate variables and statements.
 
 ## VS Code and Zed
 

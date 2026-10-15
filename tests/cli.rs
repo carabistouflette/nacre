@@ -18,6 +18,73 @@ impl Drop for TestDir { fn drop(&mut self) { let _ = fs::remove_dir_all(&self.0)
 fn path_str(path: &Path) -> &str { path.to_str().unwrap() }
 
 #[test]
+fn doctor_help_and_invalid_flags_are_coherent() {
+    let help = nacre(&["--help"]);
+    assert!(help.status.success());
+    assert!(String::from_utf8_lossy(&help.stdout).contains("nacre doctor [--direct] [--zip]"));
+
+    let invalid = nacre(&["doctor", "--unknown"]);
+    assert!(!invalid.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&invalid.stderr).trim(),
+        "usage: nacre doctor [--direct] [--zip]",
+    );
+}
+
+#[test]
+fn doctor_direct_reports_missing_clang_actionably() {
+    let temp = TestDir::new();
+    let missing = temp.path("missing-clang");
+    let out = Command::new(env!("CARGO_BIN_EXE_nacre"))
+        .args(["doctor", "--direct"])
+        .env("NACRE_CLANG", &missing)
+        .env("NACRE_LLVM_LINK", temp.path("missing-llvm-link"))
+        .output()
+        .unwrap();
+    assert!(!out.status.success());
+    let message = String::from_utf8_lossy(&out.stderr);
+    assert!(message.contains("NACRE_CLANG"), "{message}");
+    assert!(message.contains("set NACRE_CLANG to its executable path"), "{message}");
+}
+
+#[cfg(unix)]
+fn write_executable(path: &Path, script: &str) {
+    use std::os::unix::fs::PermissionsExt;
+    fs::write(path, script).unwrap();
+    let mut permissions = fs::metadata(path).unwrap().permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(path, permissions).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn doctor_direct_rejects_mismatched_llvm_before_compilation() {
+    let temp = TestDir::new();
+    let clang = temp.path("clang-23");
+    let linker = temp.path("llvm-link-22");
+    write_executable(&clang, "#!/bin/sh\ncase \"$1\" in\n  --version) echo 'clang version 23.1.0' ;;\n  -print-target-triple) echo x86_64-unknown-linux-gnu ;;\n  *) echo UNEXPECTED_CLANG_COMPILATION >&2; exit 97 ;;\nesac\n");
+    write_executable(&linker, "#!/bin/sh\ncase \"$1\" in\n  --version) echo 'LLVM version 22.1.0' ;;\n  *) echo UNEXPECTED_LLVM_LINK >&2; exit 98 ;;\nesac\n");
+    let out = Command::new(env!("CARGO_BIN_EXE_nacre"))
+        .args(["doctor", "--direct"])
+        .env("NACRE_CLANG", &clang)
+        .env("NACRE_LLVM_LINK", &linker)
+        .env("NACRE_CC", temp.path("missing-c-compiler"))
+        .output()
+        .unwrap();
+    assert!(!out.status.success());
+    let message = String::from_utf8_lossy(&out.stderr);
+    let report = String::from_utf8_lossy(&out.stdout);
+    assert!(report.contains("Clang ") && report.contains("clang version 23.1.0"), "{report}");
+    assert!(report.contains("llvm-link ") && report.contains("LLVM version 22.1.0"), "{report}");
+    assert!(report.contains("target x86_64-unknown-linux-gnu"), "{report}");
+    assert!(message.contains("direct LLVM toolchain mismatch"), "{message}");
+    assert!(message.contains("Clang LLVM 23"), "{message}");
+    assert!(message.contains("llvm-link LLVM 22"), "{message}");
+    assert!(!message.contains("UNEXPECTED_CLANG_COMPILATION"), "{message}");
+    assert!(!message.contains("UNEXPECTED_LLVM_LINK"), "{message}");
+}
+
+#[test]
 fn unknown_command() { assert!(!nacre(&["wat"]).status.success()); }
 #[test]
 fn missing_filename() { assert!(!nacre(&["run"]).status.success()); }

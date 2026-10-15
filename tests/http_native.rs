@@ -1,5 +1,7 @@
 //! Native end-to-end tests for bounded HTTP requests, response ownership, and TLS verification.
-use nacre::{compile_to_c, native};
+mod support;
+
+use nacre::native;
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::process::{Child, Command, Output, Stdio};
@@ -7,9 +9,7 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 fn compile(source: &str) -> native::NativeProgram {
-    let c = compile_to_c(source)
-        .unwrap_or_else(|error| panic!("{}", error.render("http_native.ncr", source)));
-    native::compile_c_with_flags(&c, &["-pthread", "-DNACRE_MEMORY_STATS"])
+    support::compile(source, &["-pthread", "-DNACRE_MEMORY_STATS"])
         .unwrap_or_else(|error| panic!("{error}"))
 }
 

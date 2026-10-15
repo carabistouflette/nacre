@@ -1,4 +1,5 @@
 use nacre::{compile_to_c, native};
+mod support;
 use std::ffi::OsString;
 use std::process::{Command, Output};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -6,10 +7,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 static NEXT_FILE: AtomicUsize = AtomicUsize::new(0);
 
 fn compile_native(source: &str) -> native::NativeProgram {
-    let c = compile_to_c(source)
-        .unwrap_or_else(|error| panic!("{}", error.render("text_regex.ncr", source)));
-    native::compile_c_with_flags(
-        &c,
+    support::compile(
+        source,
         &["-DNACRE_MEMORY_STATS", "-fsanitize=address,undefined", "-fno-omit-frame-pointer"],
     ).unwrap_or_else(|error| panic!("native compile failed: {error}"))
 }
@@ -674,9 +673,7 @@ void main() {
 #[test]
 fn text_scalar_index_is_checked_and_opaque_regex_has_no_constructor() {
     let source = "void main() { Text value = new Text(\"é\"); println(value.charAt(1)); }";
-    let c = compile_to_c(source)
-        .unwrap_or_else(|error| panic!("{}", error.render("text_regex.ncr", source)));
-    let program = native::compile_c(&c).unwrap();
+    let program = support::compile(source, &[]).unwrap();
     let output = run(&program, &[]);
     assert_eq!(output.status.code(), Some(70), "{}", String::from_utf8_lossy(&output.stderr));
 

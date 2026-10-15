@@ -161,3 +161,74 @@ The runtime cache removes repeated C frontend work, but this consumer does
 unpinned batches measure one small pipeline program, not universal compiler
 throughput or an isolated causal optimization delta.
 
+## Release compiler build-stage profile
+
+The 2026-10-15 profile compares release compiler baseline `a81f2fc` with the
+backend-hardening changes, on Linux x86-64, pinned to CPU 0. Both backends use
+Clang 22.1.8 at `-O2`; direct LLVM uses `llvm-link` 22.1.0. Compiler SHA-256
+identities, tool output, individual samples, stdout, and allocation counters are
+retained in [the baseline report](../benchmarks/build-profile-baseline.json)
+and [the optimized report](../benchmarks/build-profile-optimized.json).
+
+`benchmarks/profile_builds.py` exercises `examples/language/counter.ncr`,
+`examples/collections/text_map_inventory.ncr`, and a generated three-package
+transitive dependency chain. Each build changes a literal, avoiding executable
+cache hits. Cold samples use independent caches; warm samples reuse runtime
+bitcode with changed source. Each revision has 72 compiled-and-executed samples:
+three repetitions per consumer/backend/cache state, separately with and without
+tool instrumentation. All outputs and zero-live-allocation counters passed.
+
+### Uninstrumented build wall time
+
+Values are three-sample medians in milliseconds. These exclude the Python tool
+wrappers used for the separate stage profile.
+
+| Consumer | Backend | Baseline cold | Optimized cold | Baseline warm | Optimized warm |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Counter | C | 166.620 | 166.736 | 165.609 | 164.650 |
+| Counter | Direct LLVM | 790.916 | 594.596 | 413.918 | 270.303 |
+| Text/map inventory | C | 322.250 | 321.156 | 321.525 | 320.376 |
+| Text/map inventory | Direct LLVM | 1,006.956 | 782.376 | 550.971 | 389.397 |
+| Three packages | C | 164.399 | 165.102 | 164.438 | 164.457 |
+| Three packages | Direct LLVM | 788.468 | 593.726 | 412.991 | 271.750 |
+
+### Direct LLVM stage observations
+
+Values are median milliseconds. The emit CLI column separately measures actual
+`emit-llvm --direct` execution, including frontend and user-IR generation. Other
+columns measure child-tool durations during cold instrumented native builds.
+Version/target probes are grouped; runtime compilation is grouped per build.
+
+| Consumer | Revision | Emit CLI | Tool probes | Runtime bitcode | llvm-link | Clang native driver | Native linker, nested |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Counter | Baseline | 9.953 | 36.346 | 377.674 | 28.991 | 389.803 | 18.166 |
+| Counter | Optimized | 10.128 | 36.293 | 325.631 | 15.638 | 262.092 | 17.987 |
+| Text/map inventory | Baseline | 10.641 | 36.288 | 457.119 | 35.353 | 522.010 | 18.262 |
+| Text/map inventory | Optimized | 10.803 | 36.343 | 393.497 | 19.511 | 375.720 | 18.078 |
+| Three packages | Baseline | 9.924 | 36.142 | 375.087 | 28.537 | 390.298 | 18.242 |
+| Three packages | Optimized | 10.085 | 36.512 | 323.836 | 15.785 | 262.547 | 18.021 |
+
+Runtime bitcode compilation and the final Clang invocation dominate cold direct
+builds, not Nacre frontend work. The emitted user functions previously stayed
+externally live, including unused prelude specializations. `linkonce_odr` makes
+unused functions discardable; concrete interface implementations retain strong
+symbols because imported C vtable thunks reference them. Direct-runtime C now
+uses `-g0`, also avoiding debug information for temporary, deleted C sources.
+
+The Clang-driver column includes optimization, code generation, native linking,
+and startup of its nested linker wrapper; it is **not** isolated LLVM optimizer
+time. The linker column is already nested in that duration. Wrapper startup also
+adds substantial traced wall time, so stage columns must not be summed into the
+uninstrumented wall measurements. This is a local sequential before/after
+comparison, not an isolated causal delta for either individual code change.
+Direct LLVM improved against its baseline but remains slower than C for all
+three consumers; no universal throughput or total-build speedup over C is claimed.
+
+To reproduce with matching LLVM tools and native dependency paths configured:
+
+```sh
+cargo build --offline --locked --release --bin nacre
+python3 benchmarks/profile_builds.py --compiler target/release/nacre \
+  --label local-release --repeats 3 --output /tmp/nacre-build-profile.json
+```
+

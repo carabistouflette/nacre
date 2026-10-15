@@ -1,3 +1,4 @@
+mod support;
 use nacre::{native, project::SourceBundle};
 use std::io::Write;
 use std::path::PathBuf;
@@ -34,10 +35,8 @@ impl Drop for Workspace {
 
 fn program() -> native::NativeProgram {
     let bundle = SourceBundle::from_paths(&[PathBuf::from("examples/apps/lending_desk")]).unwrap();
-    let c = bundle
-        .compile_to_c()
-        .unwrap_or_else(|diagnostic| panic!("{}", bundle.render(&diagnostic)));
-    native::compile_c_with_flags(&c, &["-DNACRE_MEMORY_STATS"]).unwrap()
+    support::compile(&bundle, &["-DNACRE_MEMORY_STATS"])
+        .unwrap_or_else(|error| panic!("{error}"))
 }
 
 fn execute(program: &native::NativeProgram, input: &str, args: &[PathBuf]) -> Output {

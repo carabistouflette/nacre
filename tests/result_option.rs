@@ -1,8 +1,8 @@
-use nacre::{compile_to_c, native, validate};
+use nacre::validate;
+mod support;
 
 fn run(source: &str) -> std::process::Output {
-    let c = compile_to_c(source).unwrap_or_else(|error| panic!("{}", error.render("sums.ncr", source)));
-    native::compile_c_with_flags(&c, &["-DNACRE_MEMORY_STATS"])
+    support::compile(source, &["-DNACRE_MEMORY_STATS"])
         .unwrap_or_else(|error| panic!("{error}"))
         .output()
         .unwrap()

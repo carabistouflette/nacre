@@ -4,7 +4,48 @@ Nacre is experimental pre-1.0. Executed checks are evidence, not a safety certif
 [validation-0.12.0.json](validation-0.12.0.json) records portable local results.
 Historical reports retain their original release labels; they are not current-release proof.
 
-## Iterator, pattern, LLVM, and package integration
+## Native backend parity, diagnostics, and source debugging
+
+The 2026-10-15 run used Clang 22.1.8, `llvm-link` 22.1.0, and the corrected
+libarchive 3.8.10 dependency. Ordinary native behavior tests now select C or
+direct LLVM through `tests/support/mod.rs`, without a generated-C/source lookup.
+Injected-C fault fixtures and standalone C helpers remain explicitly C-specific.
+
+| Executed check | Observed result |
+| --- | --- |
+| `NACRE_TEST_BACKEND=c cargo test --offline --locked --features fuzzing -- --include-ignored --test-threads=4` | 1,348 passed across 68 suites |
+| `NACRE_TEST_BACKEND=llvm cargo test --offline --locked --features fuzzing -- --include-ignored --test-threads=4` | 1,348 passed across 68 suites |
+| `cargo clippy --offline --locked --all-targets --features fuzzing -- -D warnings` | Passed without lint suppressions |
+| Actual release CLI `doctor`, `doctor --direct`, `doctor --zip`, and `doctor --direct --zip` | All exited 0; native output and allocation balance checked; ZIP modes verified a binary round-trip and empty archive ownership |
+| Actual release CLI with missing Clang, missing `llvm-link`, and Clang 23 / `llvm-link` 22 | Each exited 1 with the selected path or incompatible majors and actionable environment-variable guidance; no premature compatibility-success banner |
+| GDB 18.1, two-file direct build at `-O0` | Original-file breakpoints verified; step-in and next followed Nacre source; integer arguments, initialized locals, recursive frames, and match-arm bindings inspected |
+| GDB 18.1, direct scalar-width build at `-O0` | All six arguments and their initialized local copies retained exact values, including a non-BMP Unicode scalar and a full-width signed `long`; executable exited 0 |
+| Release build-stage profile, baseline and final compiler | 72 compiled-and-executed samples per revision passed output and allocation checks; [cold/warm timings and stage limits](BENCHMARKS.md#release-compiler-build-stage-profile) recorded for counter, text/map, and transitive-package consumers |
+
+The debugger run observed `input=4`, then `changed=6`; a guarded success arm
+exposed only its `value=6` and the enclosing `observed=0`, not inactive arms'
+duplicate or uninitialized bindings. Recursive frames in a second `.ncr` file
+retained distinct `n=0`, `n=1`, and `n=2` values; the middle frame retained
+`adjusted=2`. After `?` propagated the base-case error, the caller's initialized
+`error` binding was `9`. The executable printed `15` and exited 0.
+
+The scalar run inspected byte `255`, character U+1F600 (`128512`), integer `-7`,
+long `9223372036854770000`, double `1.25`, and boolean `true`, both as arguments
+and as locals after all six initializations. Incoming ABI addresses now remain
+available when argument registers are reused at `-O0`. The Unicode scalar uses
+the standard UTF-32 `char32_t` debug representation: calling a 32-bit UTF type
+`char` caused GDB's character printer to crash, while `char32_t` rendered the
+same code point correctly.
+
+These checks exposed and fixed missing implicit callsite locations, runtime
+helpers diverting source-level stepping into deleted C files, function-wide
+pattern-local visibility, and LLVM's 16-bit debug-column limit on a 250,000-digit
+numeric input. Unrepresentable columns use LLVM's unknown-column value, not a
+fabricated source column. Aggregate and borrowed debug types remain unavailable;
+optimized source metadata does not guarantee variable availability.
+
+
+## Earlier iterator, pattern, LLVM, and package integration
 
 The integration run used matching LLVM 22 tools (Clang 22.1.8 and `llvm-link`
 22.1.0), plus the corrected libarchive 3.8.10 built by

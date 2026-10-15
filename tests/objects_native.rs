@@ -1,11 +1,10 @@
 //! Tests of actual generated native executables. Requires GCC or Clang.
 //! Missing tools are failures, never silent test skips.
-use nacre::{compile_to_c, native};
+mod support;
 
 fn run(source: &str, stdout: &str, allocations: usize) {
-    let c = compile_to_c(source).unwrap_or_else(|e| panic!("{}", e.render("test.ncr", source)));
-    let program = native::compile_c_with_flags(&c, &["-DNACRE_MEMORY_STATS"]).unwrap();
-    let output = program.output().unwrap();
+    let output = support::compile(source, &["-DNACRE_MEMORY_STATS"]).unwrap()
+        .output().unwrap();
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     assert_eq!(String::from_utf8(output.stdout).unwrap(), stdout);
     assert_eq!(String::from_utf8(output.stderr).unwrap(),

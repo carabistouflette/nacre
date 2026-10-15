@@ -9,14 +9,14 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 mod dependencies;
+pub mod toolchain;
 use dependencies::NativeLibraries;
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(0);
 const RUNTIME_C_FLAGS: &[&str] = &[
     "-std=c11",
     "-pthread",
-    "-g",
-    "-fdebug-compilation-dir=.",
+    "-g0",
     "-fno-math-errno",
     "-Wall",
     "-Wextra",
@@ -250,11 +250,13 @@ pub(crate) fn compile_llvm_direct_with_runtime(
     flags: &[&str],
 ) -> Result<NativeProgram, String> {
     check_optimization(optimization)?;
-    let compiler = env::var_os("NACRE_CLANG").unwrap_or_else(|| OsString::from("clang"));
-    let linker = env::var_os("NACRE_LLVM_LINK").unwrap_or_else(|| OsString::from("llvm-link"));
-    let compiler_version = tool_output(&compiler, &["--version"], "Clang")?;
-    let linker_version = tool_output(&linker, &["--version"], "llvm-link")?;
-    let target = tool_output(&compiler, &["-print-target-triple"], "Clang")?;
+    let tools = toolchain::Toolchain::resolve()?;
+    tools.ensure_compatible()?;
+    let compiler = tools.compiler();
+    let linker = tools.linker();
+    let compiler_version = tools.compiler_version();
+    let linker_version = tools.linker_version();
+    let target = tools.target();
     let libraries = NativeLibraries::from_source(runtime_c);
     let section_flags: &[&str] = if cfg!(target_os = "linux") { LINUX_SECTION_FLAGS } else { &[] };
     let cache_entry = cache_dir().filter(|_| pgo_directory(flags).is_none()).map(|cache| {
@@ -287,7 +289,7 @@ pub(crate) fn compile_llvm_direct_with_runtime(
     } else {
         let runtime_path = directory.0.join("runtime.c");
         fs::write(&runtime_path, runtime_c).map_err(|e| format!("failed to write temporary LLVM runtime C source: {e}"))?;
-        let mut command = Command::new(&compiler);
+        let mut command = Command::new(compiler);
         command
             .arg(optimization)
             .args(RUNTIME_C_FLAGS)
@@ -311,7 +313,7 @@ pub(crate) fn compile_llvm_direct_with_runtime(
         runtime_bitcode.as_path()
     };
 
-    let output = Command::new(&linker)
+    let output = Command::new(linker)
         .args(["--only-needed", "--internalize"])
         .arg(&user_path)
         .arg(runtime_bitcode_input)
@@ -326,7 +328,7 @@ pub(crate) fn compile_llvm_direct_with_runtime(
         ));
     }
 
-    let output = Command::new(&compiler)
+    let output = Command::new(compiler)
         .arg(optimization)
         .args(USER_IR_FLAGS)
         .args(section_flags)
@@ -346,23 +348,6 @@ pub(crate) fn compile_llvm_direct_with_runtime(
         ));
     }
     Ok(NativeProgram { executable, _directory: directory })
-}
-
-fn tool_output(tool: &std::ffi::OsStr, args: &[&str], name: &str) -> Result<String, String> {
-    let output = Command::new(tool)
-        .args(args)
-        .output()
-        .map_err(|e| format!("direct LLVM compilation requires {name} ({tool:?}): {e}"))?;
-    if !output.status.success() {
-        return Err(format!(
-            "{name} {tool:?} failed for {}:\n{}",
-            args.join(" "),
-            String::from_utf8_lossy(&output.stderr),
-        ));
-    }
-    let mut result = String::from_utf8_lossy(&output.stdout).into_owned();
-    result.push_str(&String::from_utf8_lossy(&output.stderr));
-    Ok(result)
 }
 
 fn is_link_only_flag(flag: &str) -> bool {

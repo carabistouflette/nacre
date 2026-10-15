@@ -1,16 +1,15 @@
 use nacre::{compile_to_c, fmt, native, validate};
+mod support;
 use std::fs;
 #[test]
 fn assert_builtin_succeeds_and_fails_with_code_70() {
     let passing_source = "void main() { assert(1 + 1 == 2, \"truth\"); }";
-    let c = compile_to_c(passing_source).unwrap();
-    let program = native::compile_c(&c).unwrap();
+    let program = support::compile(passing_source, &[]).unwrap();
     let output = program.output().unwrap();
     assert!(output.status.success());
 
     let failing_source = "void main() { assert(1 + 1 == 3, \"math broke\"); }";
-    let c = compile_to_c(failing_source).unwrap();
-    let program = native::compile_c(&c).unwrap();
+    let program = support::compile(failing_source, &[]).unwrap();
     let output = program.output().unwrap();
     assert_eq!(output.status.code(), Some(70));
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -240,8 +239,7 @@ void main() {
     assert(v.magnitude() == 7);
 }
 "#;
-    let c = compile_to_c(valid_source).unwrap();
-    let program = native::compile_c(&c).unwrap();
+    let program = support::compile(valid_source, &[]).unwrap();
     assert!(program.output().unwrap().status.success());
 
     // Verify rejection of missing method
@@ -289,8 +287,7 @@ void main() {
     assert(m.getMagnitude() == 30);
 }
 "#;
-    let c = compile_to_c(generic_trait_source).unwrap();
-    let program = native::compile_c(&c).unwrap();
+    let program = support::compile(generic_trait_source, &[]).unwrap();
     assert!(program.output().unwrap().status.success());
 
     // Verify rejection when type does not satisfy trait bound
@@ -344,8 +341,7 @@ public void main() {
         ("traits.ncr".to_owned(), source_a.to_owned()),
         ("shapes.ncr".to_owned(), source_b.to_owned()),
     ]).unwrap();
-    let c = bundle.compile_to_c().unwrap();
-    let program = native::compile_c(&c).unwrap();
+    let program = support::compile(&bundle, &[]).unwrap();
     assert!(program.output().unwrap().status.success());
 }
 
@@ -376,8 +372,7 @@ public void main() {}
 #[test]
 fn async_await_syntax_and_execution() {
     let source = "async int fetch() { return 42; }\nvoid main() {\n    int x = await fetch();\n    assert(x == 42);\n    int y = fetch().await;\n    assert(y == 42);\n}\n";
-    let c = compile_to_c(source).unwrap();
-    let program = native::compile_c(&c).unwrap();
+    let program = support::compile(source, &[]).unwrap();
     assert!(program.output().unwrap().status.success());
 }
 
@@ -408,8 +403,7 @@ void main() {
     }
 }
 "#;
-    let c = compile_to_c(source).unwrap();
-    let program = native::compile_c(&c).unwrap();
+    let program = support::compile(source, &[]).unwrap();
     let output = program.output().unwrap();
     assert!(output.status.success());
 }
@@ -467,8 +461,7 @@ void main() {
     }
 }
 "#;
-    let c = compile_to_c(source).unwrap();
-    let program = native::compile_c(&c).unwrap();
+    let program = support::compile(source, &[]).unwrap();
     let output = program.output().unwrap();
     assert!(output.status.success());
 }
@@ -537,8 +530,7 @@ void main() {
     assert(p.sum() == 30);
 }
 "#;
-    let c = compile_to_c(non_escaping_source).unwrap();
-    let program = native::compile_c_with_flags(&c, &["-DNACRE_MEMORY_STATS"]).unwrap();
+    let program = support::compile(non_escaping_source, &["-DNACRE_MEMORY_STATS"]).unwrap();
     let output = program.output().unwrap();
     assert!(output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -568,8 +560,7 @@ void main() {
     assert(h.getValue() == 42);
 }
 "#;
-    let c2 = compile_to_c(escaping_source).unwrap();
-    let program2 = native::compile_c_with_flags(&c2, &["-DNACRE_MEMORY_STATS"]).unwrap();
+    let program2 = support::compile(escaping_source, &["-DNACRE_MEMORY_STATS"]).unwrap();
     let output2 = program2.output().unwrap();
     assert!(output2.status.success());
     let stderr2 = String::from_utf8_lossy(&output2.stderr);
@@ -609,8 +600,7 @@ void main() {
     }
 }
 "#;
-    let c3 = compile_to_c(try_escape_source).unwrap();
-    let program3 = native::compile_c_with_flags(&c3, &["-DNACRE_MEMORY_STATS"]).unwrap();
+    let program3 = support::compile(try_escape_source, &["-DNACRE_MEMORY_STATS"]).unwrap();
     let output3 = program3.output().unwrap();
     assert!(output3.status.success());
     let stderr3 = String::from_utf8_lossy(&output3.stderr);
@@ -627,8 +617,7 @@ void main() {
     assert(t.equalsString("12345678901234567890123"));
 }
 "#;
-    let c = compile_to_c(source_inline).unwrap();
-    let program = native::compile_c_with_flags(&c, &["-DNACRE_MEMORY_STATS"]).unwrap();
+    let program = support::compile(source_inline, &["-DNACRE_MEMORY_STATS"]).unwrap();
     let output = program.output().unwrap();
     assert!(output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -642,8 +631,7 @@ void main() {
     assert(t.equalsString("123456789012345678901234"));
 }
 "#;
-    let c2 = compile_to_c(source_heap).unwrap();
-    let program2 = native::compile_c_with_flags(&c2, &["-DNACRE_MEMORY_STATS"]).unwrap();
+    let program2 = support::compile(source_heap, &["-DNACRE_MEMORY_STATS"]).unwrap();
     let output2 = program2.output().unwrap();
     assert!(output2.status.success());
     let stderr2 = String::from_utf8_lossy(&output2.stderr);
@@ -651,8 +639,8 @@ void main() {
 }
 
 #[test]
-fn monomorphic_interface_devirtualization_and_polymorphic_fallback() {
-    // Single implementation: devirtualized to direct static thunk call
+fn monomorphic_and_polymorphic_interface_dispatch_behaves_correctly() {
+    // A single implementation dispatches to the matching method.
     let monomorphic = r#"
 interface Greeter {
     int greet();
@@ -665,12 +653,10 @@ void main() {
     assert(g.greet() == 100);
 }
 "#;
-    let c_mono = compile_to_c(monomorphic).unwrap();
-    assert!(c_mono.contains("ncr_thunk_"), "expected direct static thunk dispatch: {c_mono}");
-    let prog_mono = native::compile_c(&c_mono).unwrap();
+    let prog_mono = support::compile(monomorphic, &[]).unwrap();
     assert!(prog_mono.output().unwrap().status.success());
 
-    // Multiple implementations: polymorphic fallback to vtable dispatch
+    // Multiple implementations select each matching method dynamically.
     let polymorphic = r#"
 interface Calculator {
     int compute();
@@ -688,9 +674,7 @@ void main() {
     assert(c2.compute() == 2);
 }
 "#;
-    let c_poly = compile_to_c(polymorphic).unwrap();
-    assert!(c_poly.contains("vtable->m0"), "expected dynamic vtable dispatch for polymorphic interface: {c_poly}");
-    let prog_poly = native::compile_c(&c_poly).unwrap();
+    let prog_poly = support::compile(polymorphic, &[]).unwrap();
     assert!(prog_poly.output().unwrap().status.success());
 }
 
@@ -714,8 +698,7 @@ void main() {
     assert(rep.indexOf(swift) == 4);
 }
 "#;
-    let c = compile_to_c(source).unwrap();
-    let prog = native::compile_c(&c).unwrap();
+    let prog = support::compile(source, &[]).unwrap();
     assert!(prog.output().unwrap().status.success());
 }
 
@@ -747,8 +730,7 @@ void main() {
     assert(result.get(2) == 9);
 }
 "#;
-    let c = compile_to_c(source).unwrap();
-    let prog = native::compile_c_with_flags(&c, &["-DNACRE_MEMORY_STATS"]).unwrap();
+    let prog = support::compile(source, &["-DNACRE_MEMORY_STATS"]).unwrap();
     let output = prog.output().unwrap();
     assert!(output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -781,8 +763,7 @@ void main() {
     assert(categorize(new Number.None()) == -1);
 }
 "#;
-    let c = compile_to_c(source).unwrap();
-    let prog = native::compile_c(&c).unwrap();
+    let prog = support::compile(source, &[]).unwrap();
     assert!(prog.output().unwrap().status.success());
 
     // Verify rejection of repeated variant after an unguarded arm
@@ -842,7 +823,6 @@ void main() {
     assert(inspect(new Tuple.Single(42)) == 0);
 }
 "#;
-    let c = compile_to_c(source).unwrap();
-    let prog = native::compile_c(&c).unwrap();
+    let prog = support::compile(source, &[]).unwrap();
     assert!(prog.output().unwrap().status.success());
 }

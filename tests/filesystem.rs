@@ -1,3 +1,5 @@
+mod support;
+
 use nacre::{compile_to_c, native};
 use std::ffi::OsString;
 use std::fs;
@@ -29,9 +31,7 @@ impl Drop for Scratch {
 }
 
 fn compile_with_flags(source: &str, flags: &[&str]) -> native::NativeProgram {
-    let c = compile_to_c(source)
-        .unwrap_or_else(|error| panic!("{}", error.render("filesystem_alpha.ncr", source)));
-    native::compile_c_with_flags(&c, flags).unwrap()
+    support::compile(source, flags).unwrap_or_else(|error| panic!("{error}"))
 }
 
 fn compile(source: &str) -> native::NativeProgram {

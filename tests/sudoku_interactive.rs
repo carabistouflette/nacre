@@ -1,5 +1,6 @@
 //! Native tests for the interactive Sudoku game and its save format.
-use nacre::{compile_to_c, native};
+mod support;
+use nacre::native;
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
@@ -34,8 +35,7 @@ impl Drop for Scratch {
 }
 
 fn program() -> native::NativeProgram {
-    let c = compile_to_c(EXAMPLE).unwrap_or_else(|e| panic!("{}", e.render("apps/sudoku.ncr", EXAMPLE)));
-    native::compile_c(&c).unwrap()
+    support::compile(EXAMPLE, &[]).unwrap_or_else(|error| panic!("{error}"))
 }
 
 fn run(program: &native::NativeProgram, input: &str, args: &[PathBuf]) -> Output {

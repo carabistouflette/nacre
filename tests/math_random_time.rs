@@ -1,12 +1,11 @@
 use nacre::{compile_to_c, native};
+mod support;
 use std::process::Output;
 
 const EXAMPLE: &str = include_str!("../examples/language/math_random_time.ncr");
 
 fn execute(source: &str, flags: &[&str]) -> Output {
-    let c = compile_to_c(source)
-        .unwrap_or_else(|error| panic!("{}", error.render("math_random_time.ncr", source)));
-    native::compile_c_with_flags(&c, flags)
+    support::compile(source, flags)
         .unwrap_or_else(|error| panic!("native compile failed: {error}"))
         .output()
         .unwrap_or_else(|error| panic!("native execution failed: {error}"))

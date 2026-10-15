@@ -2,10 +2,17 @@ name: Nacre
 on: [push, pull_request, workflow_dispatch]
 jobs:
   test:
+    name: Native ${{ matrix.backend }} / ${{ matrix.cc }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        cc: [gcc, clang]
+        include:
+          - cc: gcc
+            backend: c
+          - cc: clang
+            backend: c
+          - cc: clang
+            backend: llvm
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-python@v7.0.0
@@ -39,12 +46,18 @@ jobs:
       - run: cargo test --locked --offline
         env:
           NACRE_CC: ${{ matrix.cc }}
-      - run: python3 scripts/test_runtime.py --cc ${{ matrix.cc }}
-      - run: python3 scripts/test_borrow_support.py --cc ${{ matrix.cc }}
-      - run: python3 scripts/test_interface_support.py --cc ${{ matrix.cc }}
-      - run: python3 scripts/test_stdlib_support.py --cc ${{ matrix.cc }}
-      - run: python3 scripts/validate.py --cc ${{ matrix.cc }} --sanitizers --report docs/ci-validation.json
-      - if: matrix.cc == 'clang'
+          NACRE_TEST_BACKEND: ${{ matrix.backend }}
+      - if: matrix.backend == 'c'
+        run: python3 scripts/test_runtime.py --cc ${{ matrix.cc }}
+      - if: matrix.backend == 'c'
+        run: python3 scripts/test_borrow_support.py --cc ${{ matrix.cc }}
+      - if: matrix.backend == 'c'
+        run: python3 scripts/test_interface_support.py --cc ${{ matrix.cc }}
+      - if: matrix.backend == 'c'
+        run: python3 scripts/test_stdlib_support.py --cc ${{ matrix.cc }}
+      - if: matrix.backend == 'c'
+        run: python3 scripts/validate.py --cc ${{ matrix.cc }} --sanitizers --report docs/ci-validation.json
+      - if: matrix.cc == 'clang' && matrix.backend == 'c'
         run: cargo test --locked --offline --test interfaces_generics_tools -- --ignored
   editors:
     runs-on: ubuntu-latest

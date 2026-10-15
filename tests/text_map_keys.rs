@@ -1,9 +1,8 @@
-use nacre::{compile_to_c, native, validate};
+use nacre::validate;
+mod support;
 
 fn execute_native(source: &str) -> (std::process::Output, usize) {
-    let c = compile_to_c(source)
-        .unwrap_or_else(|error| panic!("{}", error.render("text_map_keys.ncr", source)));
-    let output = native::compile_c_with_flags(&c, &["-DNACRE_MEMORY_STATS"])
+    let output = support::compile(source, &["-DNACRE_MEMORY_STATS"])
         .unwrap()
         .output()
         .unwrap();

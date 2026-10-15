@@ -23,6 +23,20 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   `--direct` selects this path for LLVM emission and native builds.
   Both backends share nonescaping-object stack-promotion eligibility and preserve
   fields-only destruction for promoted owners.
+- Run ordinary native behavior suites through a shared C/direct-LLVM backend
+  selector. CI covers GCC/C, Clang/C, and Clang/LLVM; injected-C fault fixtures
+  and standalone C helpers remain explicitly backend-specific.
+- Profile release-compiler builds on scalar, collection, and transitive-package
+  consumers. Allow unused direct-LLVM functions to be discarded before native
+  optimization, retaining strong symbols for concrete interface implementations
+  referenced by C vtables. Record cold and changed-source warm measurements.
+- Add optional `nacre doctor --direct` and `--zip` checks. Report selected LLVM
+  tool versions and reject incompatible majors before compiling bitcode; verify
+  native allocation balance and real binary/empty ZIP archive round-trips.
+- Emit original-file direct-LLVM source locations, lexical scopes, and scalar
+  argument/local debug types. Preserve unoptimized argument locations and UTF-32
+  character values; avoid inactive match-arm locals and stepping into deleted
+  runtime C sources. Aggregate and borrowed debug types remain unavailable.
 - Keep large iterator plans out of ordinary IR expression storage so long
   expression trees retain bounded per-frame frontend stack usage.
 - Add `Nacre.toml` packages with validated metadata, source roots, entry files,

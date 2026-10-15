@@ -1,10 +1,10 @@
-use nacre::{compile_to_c, native, validate};
+use nacre::validate;
+mod support;
 
 fn assert_native(source: &str, stdout: &[u8]) {
-    let c = compile_to_c(source)
-        .unwrap_or_else(|error| panic!("{}", error.render("v9_maps.ncr", source)));
-    let output = native::compile_c_with_flags(&c, &["-DNACRE_MEMORY_STATS"])
-        .unwrap().output().unwrap();
+    let output = support::compile(source, &["-DNACRE_MEMORY_STATS"])
+        .unwrap_or_else(|error| panic!("native compile failed: {error}"))
+        .output().unwrap();
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     assert_eq!(output.stdout, stdout);
 
@@ -23,10 +23,9 @@ fn assert_rejected(source: &str) {
 }
 
 fn memory_allocation_count(source: &str) -> usize {
-    let c = compile_to_c(source)
-        .unwrap_or_else(|error| panic!("{}", error.render("v9_maps.ncr", source)));
-    let output = native::compile_c_with_flags(&c, &["-DNACRE_MEMORY_STATS"])
-        .unwrap().output().unwrap();
+    let output = support::compile(source, &["-DNACRE_MEMORY_STATS"])
+        .unwrap_or_else(|error| panic!("native compile failed: {error}"))
+        .output().unwrap();
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     let stderr = String::from_utf8_lossy(&output.stderr);
     let mut fields = stderr.split_whitespace();
@@ -374,8 +373,9 @@ fn nested_collections_transfer_and_cleanup() {
 #[test]
 fn missing_borrowed_key_fails_with_call_location() {
     let source = r#"class Box {} void main() { Map<int, Box> values = new Map<int, Box>(); borrow Box missing = values.getRef(-9); }"#;
-    let c = compile_to_c(source).unwrap_or_else(|error| panic!("{}", error.render("v9_maps.ncr", source)));
-    let output = native::compile_c_with_flags(&c, &[]).unwrap().output().unwrap();
+    let output = support::compile(source, &[])
+        .unwrap_or_else(|error| panic!("native compile failed: {error}"))
+        .output().unwrap();
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("[1:"), "{stderr}");

@@ -4,6 +4,9 @@ use std::ffi::OsString;
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
 use nacre::{compile_to_c, native};
 use nacre::project::{self, SourceBundle};
 
@@ -25,7 +28,7 @@ Usage:
   nacre new new-project-directory
   nacre init new-project-directory
   nacre add <path> [--manifest-path <file>]
-  nacre doctor
+  nacre doctor [--direct] [--zip]
   nacre lsp
   nacre --help
   nacre --version
@@ -48,7 +51,9 @@ Source files may declare modules and import public names; all requested inputs a
 --pgo-use (run/build): compile using collected PGO profile data (-fprofile-use).
 new / init: create a new project; refuse an existing path.
 add: add a local path dependency to Nacre.toml (defaults to ./Nacre.toml).
-doctor: compile and run an end-to-end test with List and Text.
+doctor: compile and run end-to-end checks with List and Text; optionally verify the direct LLVM backend and ZIP runtime.
+doctor --direct: resolve matching Clang and llvm-link versions, then run a direct-backend program.
+doctor --zip: write/read temporary ZIP archives, including an empty archive; requires the corrected libarchive build.
 build: default output is out/<package-name> for a manifest package, otherwise out/<source-name>.
 emit-c / emit-flow / emit-borrows / emit-types / emit-llvm: write to stdout when -o is omitted.
 emit-llvm: default emits LLVM via Clang's C frontend; --direct emits user IR from the typed Nacre backend without C translation.
@@ -111,8 +116,19 @@ fn execute(args: Vec<OsString>) -> Result<i32, String> {
         return Ok(0);
     }
     if command == "doctor" {
-        if args.len() != 1 { return Err("usage: nacre doctor".to_owned()); }
-        return doctor();
+        let usage = "usage: nacre doctor [--direct] [--zip]";
+        let mut direct = false;
+        let mut zip = false;
+        for flag in &args[1..] {
+            if flag == "--direct" && !direct {
+                direct = true;
+            } else if flag == "--zip" && !zip {
+                zip = true;
+            } else {
+                return Err(usage.to_owned());
+            }
+        }
+        return doctor(direct, zip);
     }
     if !matches!(command, "check" | "run" | "build" | "emit-c" | "emit-flow" | "emit-borrows" | "emit-types" | "emit-llvm" | "test" | "bench" | "fmt" | "doc") {
         return Err(format!("unknown command: {command}\n\n{HELP}"));
@@ -383,28 +399,174 @@ fn protect_source_and_manifests(source: &Path, output: &Path) -> Result<(), Stri
 }
 
 
-fn doctor() -> Result<i32, String> {
+static NEXT_DOCTOR_TEMP: AtomicU64 = AtomicU64::new(0);
+
+struct DoctorTempDir(PathBuf);
+
+impl DoctorTempDir {
+    fn new() -> Result<Self, String> {
+        let base = env::temp_dir();
+        let stamp = SystemTime::now().duration_since(UNIX_EPOCH)
+            .map_err(|error| format!("failed to create a doctor temporary directory: {error}"))?
+            .as_nanos();
+        for _ in 0..32 {
+            let serial = NEXT_DOCTOR_TEMP.fetch_add(1, Ordering::Relaxed);
+            let path = base.join(format!("nacre-doctor-{}-{stamp}-{serial}", std::process::id()));
+            match fs::create_dir(&path) {
+                Ok(()) => return Ok(Self(path)),
+                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
+                Err(error) => return Err(format!("failed to create doctor temporary directory {}: {error}", path.display())),
+            }
+        }
+        Err("failed to reserve a unique doctor temporary directory".to_owned())
+    }
+}
+
+impl Drop for DoctorTempDir {
+    fn drop(&mut self) { let _ = fs::remove_dir_all(&self.0); }
+}
+
+fn doctor(direct: bool, zip: bool) -> Result<i32, String> {
+    if direct {
+        let tools = native::toolchain::Toolchain::resolve()?;
+        println!("Direct LLVM toolchain:");
+        println!("  Clang {:?} ({})", tools.compiler(), tools.compiler_version().lines().next().unwrap_or_default().trim());
+        println!("  llvm-link {:?} ({})", tools.linker(), tools.linker_version().lines().find(|line| line.contains("version")).unwrap_or(tools.linker_version()).trim());
+        println!("  target {}", tools.target().trim());
+        tools.ensure_compatible()?;
+        println!("OK: matching LLVM major versions");
+    }
+
     let source = "void main() { List<int> xs = new List<int>(); xs.add(42); Text text = new Text(\"test=\"); text.appendInt(xs.pop()); text.print(); }";
-    let mut generated = compile_to_c(source).map_err(|d| d.render("<doctor>", source))?;
-    println!("OK: frontend, types, ownership, and borrowing");
-    generated.insert_str(0, "#define NACRE_MEMORY_STATS 1\n");
-    let program = native::compile_c(&generated)?;
+    let program = if direct {
+        let program = nacre::compile_llvm_direct_optimized_with_flags(source, "-O2", &["-DNACRE_MEMORY_STATS"])?;
+        println!("OK: frontend, types, ownership, and borrowing");
+        program
+    } else {
+        let mut generated = compile_to_c(source).map_err(|d| d.render("<doctor>", source))?;
+        println!("OK: frontend, types, ownership, and borrowing");
+        generated.insert_str(0, "#define NACRE_MEMORY_STATS 1\n");
+        native::compile_c(&generated)?
+    };
     let result = program.output()?;
     let memory_report = String::from_utf8_lossy(&result.stderr);
-    let mut fields = memory_report.split_whitespace();
-    let memory_balanced = fields.next() == Some("NACRE_MEMORY") && {
+    if !result.status.success() || result.stdout != b"test=42\n" || !memory_counters_balanced(&memory_report) {
+        return Err(format!("native test failed: {:?}\n{}\n{}", result.status,
+            String::from_utf8_lossy(&result.stdout), memory_report));
+    }
+    println!("OK: compilation and native execution");
+    println!("OK: List/Text, allocations balanced, live=0");
+
+    if zip { doctor_zip(direct)?; }
+    Ok(0)
+}
+
+fn memory_counters_balanced(report: &str) -> bool {
+    let mut fields = report.split_whitespace();
+    fields.next() == Some("NACRE_MEMORY") && {
         let allocations = fields.next().and_then(|field| field.strip_prefix("allocations="));
         let frees = fields.next().and_then(|field| field.strip_prefix("frees="));
         allocations.is_some()
             && allocations == frees
             && fields.next() == Some("live=0")
             && fields.next().is_none()
-    };
-    if !result.status.success() || result.stdout != b"test=42\n" || !memory_balanced {
-        return Err(format!("native test failed: {:?}\n{}\n{}", result.status,
-            String::from_utf8_lossy(&result.stdout), memory_report));
     }
-    println!("OK: compilation and native execution");
-    println!("OK: List/Text, allocations balanced, live=0");
-    Ok(0)
+}
+
+const ZIP_DOCTOR_SOURCE: &str = r#"
+Result<Unit, Text> require(boolean condition, String message) {
+    if (!condition) { return new Result<Unit, Text>.Err(new Text(message)); }
+    return new Result<Unit, Text>.Ok(());
+}
+Result<Path, Text> argumentPath(int index) {
+    Text text = Args.get(index)?;
+    return Path.fromText(text);
+}
+Result<Unit, Text> zipExercise() {
+    Path roundTrip = argumentPath(0)?;
+    Path empty = argumentPath(1)?;
+
+    ZipWriter emptyWriter = ZipWriter.create(empty, 0)?;
+    emptyWriter.close()?;
+    ZipReader emptyReader = ZipReader.open(empty)?;
+    match (emptyReader.next()?) {
+        None {}
+        Some(entry) { return new Result<Unit, Text>.Err(new Text("empty archive contained an entry")); }
+    }
+    emptyReader.close()?;
+
+    ZipWriter writer = ZipWriter.create(roundTrip, 0)?;
+    ByteBuffer payload = ByteBuffer.withCapacity(0L)?;
+    payload.append((byte)65);
+    payload.append((byte)0);
+    payload.append((byte)255);
+    payload.append((byte)66);
+    Text filename = new Text("doctor.bin");
+    writer.add(filename, payload)?;
+    writer.close()?;
+
+    ZipReader reader = ZipReader.open(roundTrip)?;
+    match (reader.next()?) {
+        None { return new Result<Unit, Text>.Err(new Text("round-trip archive was empty")); }
+        Some(entry) {
+            borrow Text name = entry.name();
+            require(name.equalsString("doctor.bin") && entry.size() == 4L && !entry.isDirectory(), "round-trip entry metadata")?;
+            ByteBuffer bytes = reader.readEntry(4L)?;
+            require(bytes.length() == 4L && bytes.get(0L) == (byte)65 && bytes.get(1L) == (byte)0
+                && bytes.get(2L) == (byte)255 && bytes.get(3L) == (byte)66, "round-trip entry payload")?;
+        }
+    }
+    match (reader.next()?) {
+        None {}
+        Some(entry) { return new Result<Unit, Text>.Err(new Text("round-trip archive contained an unexpected entry")); }
+    }
+    reader.close()?;
+    return new Result<Unit, Text>.Ok(());
+}
+void main() {
+    match (zipExercise()) {
+        Ok(unit) { println("ZIP round-trip and empty archive OK"); }
+        Err(error) { Console.printText(error); Console.print("\n"); }
+    }
+}
+"#;
+
+const ZIP_GUIDANCE: &str = r#"ZIP diagnostics require Nacre's corrected libarchive build. Run `python3 scripts/build_libarchive.py --prefix "$PWD/target/native-deps"`, then export `CPATH="$PWD/target/native-deps/include${CPATH:+:$CPATH}"`, `LIBRARY_PATH="$PWD/target/native-deps/lib${LIBRARY_PATH:+:$LIBRARY_PATH}"`, and `LD_LIBRARY_PATH="$PWD/target/native-deps/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"`."#;
+
+fn doctor_zip(direct: bool) -> Result<(), String> {
+    let program = if direct {
+        nacre::compile_llvm_direct_optimized_with_flags(
+            ZIP_DOCTOR_SOURCE,
+            "-O2",
+            &["-DNACRE_MEMORY_STATS"],
+        )
+    } else {
+        let mut generated = compile_to_c(ZIP_DOCTOR_SOURCE)
+            .map_err(|diagnostic| diagnostic.render("<doctor ZIP>", ZIP_DOCTOR_SOURCE))?;
+        generated.insert_str(0, "#define NACRE_MEMORY_STATS 1\n");
+        native::compile_c(&generated)
+    }
+    .map_err(|error| format!("{error}\n{ZIP_GUIDANCE}"))?;
+
+    let directory = DoctorTempDir::new()?;
+    let output = Command::new(program.path())
+        .args(["round-trip.zip", "empty.zip"])
+        .current_dir(&directory.0)
+        .output()
+        .map_err(|error| format!("failed to run ZIP doctor program: {error}\n{ZIP_GUIDANCE}"))?;
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if !output.status.success()
+        || output.stdout != b"ZIP round-trip and empty archive OK\n"
+        || !memory_counters_balanced(&stderr)
+    {
+        return Err(format!(
+            "ZIP native diagnostic failed: {:?}\n{}\n{}\n{}",
+            output.status,
+            String::from_utf8_lossy(&output.stdout),
+            stderr,
+            ZIP_GUIDANCE,
+        ));
+    }
+    println!("OK: ZIP writer/reader round-trip, empty archive ownership, allocations balanced, live=0");
+    Ok(())
 }

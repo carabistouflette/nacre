@@ -1,13 +1,12 @@
-use nacre::{compile_to_c, native, validate};
+use nacre::validate;
+mod support;
 use std::process::{Command, Output};
 
 const EXAMPLE: &str = include_str!("../examples/language/error_propagation.ncr");
 
 fn execute(source: &str) -> Output {
-    let c = compile_to_c(source)
-        .unwrap_or_else(|error| panic!("{}", error.render("error_propagation.ncr", source)));
-    let program = native::compile_c_with_flags(
-        &c,
+    let program = support::compile(
+        source,
         &[
             "-DNACRE_MEMORY_STATS",
             "-fsanitize=address,undefined",

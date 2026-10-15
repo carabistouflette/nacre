@@ -1,12 +1,11 @@
 //! Integration tests that compile actual native executables. Requires cc/clang/gcc.
 //! A missing C compiler is a failure, never a silent skip.
-use nacre::{compile_to_c, native};
+use nacre::native;
+mod support;
 use std::process::Output;
 
 fn execute(source: &str) -> Output {
-    let c = compile_to_c(source).unwrap_or_else(|e| panic!("{}", e.render("test.ncr", source)));
-    let program = native::compile_c(&c).unwrap();
-    program.output().unwrap()
+    support::compile(source, &[]).unwrap().output().unwrap()
 }
 fn assert_stdout(source: &str, expected: &str) {
     let output = execute(source);
@@ -113,8 +112,7 @@ fn modulo_by_zero_is_controlled() {
 }
 #[test]
 fn generated_file_is_removed_on_drop() {
-    let c = compile_to_c("void main() {}").unwrap();
-    let program = native::compile_c(&c).unwrap();
+    let program = support::compile("void main() {}", &[]).unwrap();
     let path = program.path().to_path_buf();
     assert!(path.exists());
     drop(program);

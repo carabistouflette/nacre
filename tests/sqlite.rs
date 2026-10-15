@@ -1,4 +1,6 @@
-use nacre::{compile_to_c, native};
+mod support;
+
+use nacre::native;
 use std::fs;
 use std::path::PathBuf;
 use std::process::{Command, Output};
@@ -26,12 +28,9 @@ impl Drop for TemporaryDatabase {
 }
 
 fn compile(source: &str) -> native::NativeProgram {
-    let c = compile_to_c(source)
-        .unwrap_or_else(|error| panic!("{}", error.render("sqlite.ncr", source)));
-    native::compile_c_with_flags(&c, &["-DNACRE_MEMORY_STATS"])
+    support::compile(source, &["-DNACRE_MEMORY_STATS"])
         .unwrap_or_else(|error| panic!("native SQLite compile failed: {error}"))
 }
-
 fn assert_memory_balanced(output: &Output) {
     let stderr = String::from_utf8_lossy(&output.stderr);
     let line = stderr.lines().find(|line| line.starts_with("NACRE_MEMORY "))

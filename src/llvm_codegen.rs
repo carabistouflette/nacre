@@ -7,8 +7,15 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
 
 use crate::ast::{BinaryOp as B, UnaryOp as U};
-use crate::diagnostic::line_column;
+use crate::diagnostic::{line_column, Span};
 use crate::ir::{self as t, Place, PlaceKind, Type};
+use std::path::Path;
+
+pub(crate) struct DirectDebugSource<'a> {
+    pub(crate) path: &'a Path,
+    pub(crate) source: &'a str,
+    pub(crate) start: usize,
+}
 
 pub(crate) struct DirectLlvm {
     pub(crate) ir: String,
@@ -23,11 +30,333 @@ pub(crate) fn emit_llvm_direct_artifact(
     program: &t::Program,
     source: &str,
 ) -> Result<DirectLlvm, String> {
+    emit_llvm_direct_artifact_with_optimization(program, source, false)
+}
+
+pub(crate) fn emit_llvm_direct_artifact_with_optimization(
+    program: &t::Program,
+    source: &str,
+    optimized: bool,
+) -> Result<DirectLlvm, String> {
+    let debug_source = DirectDebugSource {
+        path: Path::new("<source>"),
+        source,
+        start: 0,
+    };
+    emit_llvm_direct_artifact_with_sources(
+        program,
+        source,
+        std::iter::once(debug_source),
+        optimized,
+    )
+}
+
+pub(crate) fn emit_llvm_direct_artifact_with_sources<'a>(
+    program: &'a t::Program,
+    source: &'a str,
+    debug_sources: impl IntoIterator<Item = DirectDebugSource<'a>>,
+    optimized: bool,
+) -> Result<DirectLlvm, String> {
     let runtime_c = crate::codegen::generate_direct_runtime(program);
-    let mut emitter = LlvmEmitter::new(program, source);
+    let mut emitter = LlvmEmitter::new(program, source, debug_sources, optimized);
     let ir = emitter.emit()?;
     Ok(DirectLlvm { ir, runtime_c })
 }
+
+#[derive(Clone, Copy)]
+struct DebugSourceLocation {
+    file_index: usize,
+    line: usize,
+    column: usize,
+}
+
+struct DebugSourceUnit<'a> {
+    source: &'a str,
+    start: usize,
+    end: usize,
+    file_id: usize,
+}
+
+struct DebugInfo<'a> {
+    units: Vec<DebugSourceUnit<'a>>,
+    nodes: String,
+    next_node: usize,
+    compile_unit: usize,
+    byte_type: usize,
+    char_type: usize,
+    int_type: usize,
+    long_type: usize,
+    double_type: usize,
+    boolean_type: usize,
+    locations: HashMap<(usize, usize, usize, usize), usize>,
+    dwarf_version_flag: usize,
+    debug_info_version_flag: usize,
+    ident: usize,
+}
+
+impl<'a> DebugInfo<'a> {
+    fn new(
+        source: &'a str,
+        sources: impl IntoIterator<Item = DirectDebugSource<'a>>,
+        optimized: bool,
+    ) -> Self {
+        let mut debug = Self {
+            units: Vec::new(),
+            nodes: String::new(),
+            next_node: 0,
+            compile_unit: 0,
+            byte_type: 0,
+            char_type: 0,
+            int_type: 0,
+            long_type: 0,
+            double_type: 0,
+            boolean_type: 0,
+            locations: HashMap::new(),
+            dwarf_version_flag: 0,
+            debug_info_version_flag: 0,
+            ident: 0,
+        };
+        let mut sources = sources.into_iter().collect::<Vec<_>>();
+        if sources.is_empty() {
+            sources.push(DirectDebugSource {
+                path: Path::new("<source>"),
+                source,
+                start: 0,
+            });
+        }
+        for source_unit in sources {
+            let filename = source_unit.path.file_name()
+                .unwrap_or(source_unit.path.as_os_str()).to_string_lossy();
+            let directory = source_unit.path.parent()
+                .map(|path| path.to_string_lossy())
+                .unwrap_or_default();
+            let file_id = debug.add_node(format!(
+                "!DIFile(filename: {}, directory: {})",
+                llvm_metadata_string(&filename),
+                llvm_metadata_string(&directory),
+            ));
+            debug.units.push(DebugSourceUnit {
+                source: source_unit.source,
+                start: source_unit.start,
+                end: source_unit.start.saturating_add(source_unit.source.len()),
+                file_id,
+            });
+        }
+
+        let primary_file = debug.units[0].file_id;
+        debug.compile_unit = debug.add_node(format!(
+            "distinct !DICompileUnit(language: DW_LANG_C, file: !{primary_file}, producer: {}, isOptimized: {optimized}, runtimeVersion: 0, emissionKind: FullDebug)",
+            llvm_metadata_string(concat!("Nacre ", env!("CARGO_PKG_VERSION"))),
+        ));
+        debug.byte_type = debug.add_node(
+            "!DIBasicType(name: \"byte\", size: 8, encoding: DW_ATE_unsigned_char)",
+        );
+        debug.char_type = debug.add_node(
+            "!DIBasicType(name: \"char32_t\", size: 32, encoding: DW_ATE_UTF)",
+        );
+        debug.int_type = debug.add_node(
+            "!DIBasicType(name: \"int\", size: 32, encoding: DW_ATE_signed)",
+        );
+        debug.long_type = debug.add_node(
+            "!DIBasicType(name: \"long\", size: 64, encoding: DW_ATE_signed)",
+        );
+        debug.double_type = debug.add_node(
+            "!DIBasicType(name: \"double\", size: 64, encoding: DW_ATE_float)",
+        );
+        debug.boolean_type = debug.add_node(
+            "!DIBasicType(name: \"boolean\", size: 8, encoding: DW_ATE_boolean)",
+        );
+        debug.dwarf_version_flag =
+            debug.add_node("!{i32 2, !\"Dwarf Version\", i32 5}");
+        debug.debug_info_version_flag =
+            debug.add_node("!{i32 2, !\"Debug Info Version\", i32 3}");
+        debug.ident = debug.add_node(format!(
+            "!{{!{}}}",
+            llvm_metadata_string(concat!("Nacre ", env!("CARGO_PKG_VERSION"))),
+        ));
+        debug
+    }
+
+    fn add_node(&mut self, definition: impl std::fmt::Display) -> usize {
+        let id = self.next_node;
+        self.next_node += 1;
+        writeln!(self.nodes, "!{id} = {definition}").unwrap();
+        id
+    }
+
+    fn render(&self) -> String {
+        format!(
+            "\n!llvm.dbg.cu = !{{!{}}}\n!llvm.module.flags = !{{!{}, !{}}}\n!llvm.ident = !{{!{}}}\n{}",
+            self.compile_unit,
+            self.dwarf_version_flag,
+            self.debug_info_version_flag,
+            self.ident,
+            self.nodes,
+        )
+    }
+
+    fn source_location(&self, span: Span) -> Option<DebugSourceLocation> {
+        if span.start >= span.end {
+            return None;
+        }
+        self.units.iter().enumerate().find_map(|(file_index, unit)| {
+            if span.start < unit.start || span.end > unit.end {
+                return None;
+            }
+            let offset = span.start.checked_sub(unit.start)?;
+            (offset <= unit.source.len()).then(|| {
+                let (line, column) = line_column(unit.source, offset);
+                // LLVM stores columns in 16 bits; zero means an unknown column.
+                let column = u16::try_from(column).map_or(0, usize::from);
+                DebugSourceLocation { file_index, line, column }
+            })
+        })
+    }
+
+    fn type_id(&self, ty: Type) -> Option<usize> {
+        Some(match ty {
+            Type::Byte => self.byte_type,
+            Type::Char => self.char_type,
+            Type::Int => self.int_type,
+            Type::Long => self.long_type,
+            Type::Double => self.double_type,
+            Type::Boolean => self.boolean_type,
+            Type::Unit | Type::Void | Type::String | Type::Object(_) | Type::Borrow { .. } => {
+                return None;
+            }
+        })
+    }
+
+    fn subprogram(&mut self, function: &t::Function, location: DebugSourceLocation) -> usize {
+        let mut signature_types = String::from("!{");
+        signature_types.push_str(&self.type_id(function.return_type)
+            .map_or_else(|| "null".to_owned(), |id| format!("!{id}")));
+        for (_, ty) in &function.params {
+            signature_types.push_str(", ");
+            signature_types.push_str(&self.type_id(*ty)
+                .map_or_else(|| "null".to_owned(), |id| format!("!{id}")));
+        }
+        signature_types.push('}');
+        let signature = self.add_node(format!(
+            "!DISubroutineType(types: {signature_types})",
+        ));
+        let file_id = self.units[location.file_index].file_id;
+        self.add_node(format!(
+            "distinct !DISubprogram(name: {}, linkageName: {}, scope: !{file_id}, file: !{file_id}, line: {}, type: !{signature}, scopeLine: {}, spFlags: DISPFlagDefinition, unit: !{})",
+            llvm_metadata_string(&function.name),
+            llvm_metadata_string(&direct_function_symbol(function.id)),
+            location.line,
+            location.line,
+            self.compile_unit,
+        ))
+    }
+
+    fn local_variable(
+        &mut self,
+        local: &t::Local,
+        scope: usize,
+        location: DebugSourceLocation,
+        argument: Option<usize>,
+    ) -> Option<usize> {
+        let type_id = self.type_id(local.ty)?;
+        let file_id = self.units[location.file_index].file_id;
+        let argument = argument.map_or_else(String::new, |index| format!(", arg: {index}"));
+        Some(self.add_node(format!(
+            "!DILocalVariable(name: {}, scope: !{scope}, file: !{file_id}, line: {}, type: !{type_id}{argument})",
+            llvm_metadata_string(&local.name),
+            location.line,
+        )))
+    }
+
+    fn location(
+        &mut self,
+        scope: usize,
+        source_location: DebugSourceLocation,
+    ) -> usize {
+        let key = (
+            scope,
+            source_location.file_index,
+            source_location.line,
+            source_location.column,
+        );
+        if let Some(&id) = self.locations.get(&key) {
+            return id;
+        }
+        let id = self.add_node(format!(
+            "!DILocation(line: {}, column: {}, scope: !{scope})",
+            source_location.line,
+            source_location.column,
+        ));
+        self.locations.insert(key, id);
+        id
+    }
+    fn lexical_scope(&mut self, parent: usize, location: DebugSourceLocation) -> usize {
+        let file = self.units[location.file_index].file_id;
+        self.add_node(format!(
+            "distinct !DILexicalBlock(scope: !{parent}, file: !{file}, line: {}, column: {})",
+            location.line, location.column,
+        ))
+    }
+
+    fn implicit_location(&mut self, scope: usize) -> usize {
+        self.add_node(format!(
+            "!DILocation(line: 0, column: 0, scope: !{scope}, isImplicitCode: true)"
+        ))
+    }
+}
+
+fn llvm_metadata_string(value: &str) -> String {
+    let mut encoded = String::with_capacity(value.len() + 2);
+    encoded.push('"');
+    for &byte in value.as_bytes() {
+        match byte {
+            b'"' | b'\\' | 0x00..=0x1f | 0x7f..=0xff => {
+                write!(encoded, "\\{byte:02X}").unwrap();
+            }
+            _ => encoded.push(byte as char),
+        }
+    }
+    encoded.push('"');
+    encoded
+}
+
+fn function_source_span(function: &t::Function) -> Option<Span> {
+    function.locals.iter().map(|local| local.span)
+        .filter(|span| span.end > span.start)
+        .min_by_key(|span| span.start)
+        .or_else(|| block_source_span(&function.body))
+}
+
+fn block_source_span(block: &t::Block) -> Option<Span> {
+    block.iter().find_map(|statement| {
+        statement_source_span(statement).filter(|span| span.end > span.start)
+    })
+}
+
+fn statement_source_span(statement: &t::Stmt) -> Option<Span> {
+    match statement {
+        t::Stmt::Let { value: Some(value), .. } => Some(value.span),
+        t::Stmt::Let { .. } => None,
+        t::Stmt::Assign { value, .. } | t::Stmt::Expr(value) => Some(value.span),
+        t::Stmt::If { condition, .. } | t::Stmt::While { condition, .. } => {
+            Some(condition.span)
+        }
+        t::Stmt::Match { value, .. } => Some(value.span),
+        t::Stmt::Return(value) => value.as_ref().map(|value| value.span),
+        t::Stmt::Block(block) => block_source_span(block),
+        t::Stmt::Break | t::Stmt::Continue => None,
+    }
+}
+fn statement_debug_span(statement: &t::Stmt, function: &t::Function) -> Option<Span> {
+    match statement {
+        t::Stmt::Let { id, .. } => Some(function.locals[*id].span)
+            .filter(|span| span.end > span.start)
+            .or_else(|| statement_source_span(statement)),
+        _ => statement_source_span(statement),
+    }.filter(|span| span.end > span.start)
+}
+
+
 
 #[derive(Clone)]
 struct LoopLabels {
@@ -108,6 +437,9 @@ struct PreparedIteratorPlan {
 struct LlvmEmitter<'a> {
     program: &'a t::Program,
     source: &'a str,
+    debug: DebugInfo<'a>,
+    current_debug_scope: Option<usize>,
+    current_debug_location: Option<usize>,
     output: String,
     body: String,
     allocas: String,
@@ -127,10 +459,18 @@ struct LlvmEmitter<'a> {
 }
 
 impl<'a> LlvmEmitter<'a> {
-    fn new(program: &'a t::Program, source: &'a str) -> Self {
+    fn new(
+        program: &'a t::Program,
+        source: &'a str,
+        debug_sources: impl IntoIterator<Item = DirectDebugSource<'a>>,
+        optimized: bool,
+    ) -> Self {
         Self {
             program,
             source,
+            debug: DebugInfo::new(source, debug_sources, optimized),
+            current_debug_scope: None,
+            current_debug_location: None,
             output: String::with_capacity(32768),
             body: String::new(),
             allocas: String::new(),
@@ -149,6 +489,7 @@ impl<'a> LlvmEmitter<'a> {
             current_receiver: None,
         }
     }
+
 
     fn emit(&mut self) -> Result<String, String> {
         let program = self.program;
@@ -169,12 +510,14 @@ impl<'a> LlvmEmitter<'a> {
             "define i32 @main(i32 %argc, ptr %argv) {{\nentry:\n    call void @ncr_llvm_set_arguments(i32 %argc, ptr %argv)\n    call void @{}(ptr null)\n    call void @ncr_llvm_memory_report()\n    ret i32 0\n}}",
             direct_function_symbol(program.main),
         ).unwrap();
+        module.push_str(&self.debug.render());
         Ok(module)
     }
 
     fn runtime_declarations(&self) -> String {
         let mut out = String::from(
-            "declare void @ncr_llvm_set_arguments(i32, ptr)\n\
+            "declare void @llvm.dbg.declare(metadata, metadata, metadata)\n\
+             declare void @ncr_llvm_set_arguments(i32, ptr)\n\
              declare i64 @ncr_llvm_sizeof_string()\n\
              declare void @ncr_llvm_copy_string(ptr, ptr)\n\
              declare void @ncr_llvm_zero_string(ptr)\n\
@@ -312,6 +655,21 @@ impl<'a> LlvmEmitter<'a> {
         }
         self.owners.push(root_owners);
 
+        let function_span = function_source_span(function);
+        let subprogram = function_span.and_then(|span| {
+            let location = self.debug.source_location(span)?;
+            Some(self.debug.subprogram(function, location))
+        });
+        let implicit_location = subprogram.map(|scope| self.debug.implicit_location(scope));
+        self.current_debug_scope = subprogram;
+        self.current_debug_location = None;
+        if let Some(span) = function_span {
+            self.mark_debug_location(span);
+        }
+        for (index, (id, _)) in function.params.iter().enumerate() {
+            self.declare_debug_local(function, *id, Some(index + 1));
+        }
+
         self.emit_block(&function.body, function)?;
         if !self.terminated {
             self.cleanup_temporaries();
@@ -326,12 +684,119 @@ impl<'a> LlvmEmitter<'a> {
         let mut params = vec!["ptr %ncr_result".to_owned()];
         if function.receiver.is_some() { params.push("ptr %ncr_self".to_owned()); }
         params.extend(function.params.iter().map(|(id, _)| format!("ptr %ncr_arg_{id}")));
+        let allocas = Self::materialize_debug_body(&self.allocas, implicit_location);
+        let body = Self::materialize_debug_body(&self.body, implicit_location);
+        let debug_scope = subprogram.map_or_else(String::new, |id| format!(" !dbg !{id}"));
+        // Runtime vtable thunks can introduce references after this module is
+        // linked. Keep their concrete implementations available to llvm-link.
+        let linkage = if function.receiver.is_some_and(|class| {
+            self.program.classes[class].implementations.iter()
+                .any(|(_, methods)| methods.contains(&function.id))
+        }) { "" } else { "linkonce_odr " };
         writeln!(self.output,
-            "define void @{}({}) {{\nentry:\n{}{}}}\n",
-            direct_function_symbol(function.id), params.join(", "), self.allocas, self.body,
+            "define {linkage}void @{}({}){} {{\nentry:\n{}{}}}\n",
+            direct_function_symbol(function.id),
+            params.join(", "),
+            debug_scope,
+            allocas,
+            body,
         ).unwrap();
         self.current_receiver = None;
+        self.current_debug_scope = None;
+        self.current_debug_location = None;
         Ok(())
+    }
+
+    fn declare_debug_local(&mut self, function: &t::Function, id: usize, argument: Option<usize>) {
+        let Some(scope) = self.current_debug_scope else { return; };
+        let local = &function.locals[id];
+        if local.name.starts_with("$nacre_") { return; }
+        let Some(location) = self.debug.source_location(local.span) else { return; };
+        let Some(variable) = self.debug.local_variable(local, scope, location, argument) else { return; };
+        let debug_location = self.debug.location(scope, location);
+        // Incoming ABI pointers otherwise lose their debug location when their
+        // machine registers are reused, even at -O0. Optimizers can elide this
+        // address spill; unoptimized debugging retains it for the whole frame.
+        let argument_address = argument.map(|_| format!("%ncr_debug_arg_{id}"));
+        let (address, expression) = if let Some(address) = argument_address.as_deref() {
+            writeln!(self.allocas, "    {address} = alloca ptr, align 8").unwrap();
+            writeln!(self.body, "    store ptr {}, ptr {address}", self.local_slots[id]).unwrap();
+            (address, "DW_OP_deref")
+        } else {
+            (self.local_slots[id].as_str(), "")
+        };
+        writeln!(
+            self.body,
+            "    call void @llvm.dbg.declare(metadata ptr {address}, metadata !{variable}, metadata !DIExpression({expression})), !dbg !{debug_location}",
+        ).unwrap();
+    }
+
+    fn enter_debug_scope(&mut self, span: Option<Span>) -> Option<usize> {
+        let parent = self.current_debug_scope;
+        if let Some(parent) = parent
+            && let Some(location) = span.and_then(|span| self.debug.source_location(span)) {
+                self.current_debug_scope = Some(self.debug.lexical_scope(parent, location));
+            }
+        self.clear_debug_location();
+        parent
+    }
+
+    fn mark_debug_location(&mut self, span: Span) {
+        if span.end <= span.start {
+            self.clear_debug_location();
+            return;
+        }
+        let Some(scope) = self.current_debug_scope else {
+            self.clear_debug_location();
+            return;
+        };
+        let Some(source_location) = self.debug.source_location(span) else {
+            self.clear_debug_location();
+            return;
+        };
+        let location = self.debug.location(scope, source_location);
+        if self.current_debug_location != Some(location) {
+            writeln!(self.body, "\0ncr.dbg.loc:{location}").unwrap();
+            self.current_debug_location = Some(location);
+        }
+    }
+
+    fn clear_debug_location(&mut self) {
+        if self.current_debug_location.take().is_some() {
+            self.body.push_str("\0ncr.dbg.loc:none\n");
+        }
+    }
+
+    fn materialize_debug_body(body: &str, implicit_location: Option<usize>) -> String {
+        let mut output = String::with_capacity(body.len().saturating_add(body.len() / 32));
+        let mut current_location = implicit_location;
+        for line in body.split_inclusive('\n') {
+            let content = line.strip_suffix('\n').unwrap_or(line);
+            if let Some(location) = content.strip_prefix("\0ncr.dbg.loc:") {
+                if location == "none" {
+                    current_location = implicit_location;
+                    continue;
+                }
+                if let Ok(location) = location.parse::<usize>() {
+                    current_location = Some(location);
+                    continue;
+                }
+            }
+            let trimmed = content.trim();
+            if trimmed.is_empty() || trimmed.starts_with(';') || trimmed.ends_with(':') {
+                output.push_str(line);
+                continue;
+            }
+            output.push_str(content);
+            if let Some(location) = current_location
+                && !trimmed.contains(", !dbg !") {
+                    write!(output, ", !dbg !{location}").unwrap();
+                }
+            if line.ends_with('\n') {
+                output.push('\n');
+            }
+        }
+        output
     }
 
     fn alloc_slot(&mut self, ty: Type) -> String {
@@ -419,16 +884,26 @@ impl<'a> LlvmEmitter<'a> {
     }
 
     fn emit_block(&mut self, block: &t::Block, function: &t::Function) -> Result<(), String> {
+        let span = block.iter().find_map(|statement| statement_debug_span(statement, function));
+        let parent_scope = self.enter_debug_scope(span);
         self.owners.push(Vec::new());
         for statement in block {
             if !self.terminated { self.emit_statement(statement, function)?; }
         }
         if !self.terminated { self.cleanup_scope(self.owners.len() - 1); }
         self.owners.pop();
+        self.current_debug_scope = parent_scope;
+        self.clear_debug_location();
         Ok(())
     }
 
     fn emit_statement(&mut self, statement: &t::Stmt, function: &t::Function) -> Result<(), String> {
+        let source_span = statement_debug_span(statement, function);
+        if let Some(span) = source_span {
+            self.mark_debug_location(span);
+        } else {
+            self.clear_debug_location();
+        }
         match statement {
             t::Stmt::Let { id, ty, value } => {
                 let target = self.local_slots[*id].clone();
@@ -451,6 +926,7 @@ impl<'a> LlvmEmitter<'a> {
                     let mut arg_slots = Vec::with_capacity(args.len());
                     for arg in args { arg_slots.push(self.emit_expression(arg)?); }
                     let (line, column) = line_column(self.source, span.start);
+                    self.mark_debug_location(*span);
                     self.emit_constructor_call(*constructor, &object, &arg_slots, line, column);
                     for (arg, slot) in args.iter().zip(&arg_slots) {
                         self.consume_temporary(arg.ty, slot);
@@ -462,6 +938,7 @@ impl<'a> LlvmEmitter<'a> {
                 } else {
                     self.zero_value(*ty, &target)?;
                 }
+                self.declare_debug_local(function, *id, None);
                 if let Type::Object(class) = ty {
                     self.owners.last_mut().expect("lexical scope").push((*id, *class));
                 }
@@ -596,6 +1073,7 @@ impl<'a> LlvmEmitter<'a> {
             self.branch(&arm_label);
             self.body.push_str(&format!("{arm_label}:\n"));
             self.terminated = false;
+            let parent_scope = self.enter_debug_scope(Some(arm.pattern.span));
             self.owners.push(Vec::new());
             self.emit_pattern_guard_aliases(&arm.pattern, value.ty, &match_value, function)?;
 
@@ -623,6 +1101,8 @@ impl<'a> LlvmEmitter<'a> {
                 has_normal_arm = true;
             }
             self.owners.pop();
+            self.current_debug_scope = parent_scope;
+            self.clear_debug_location();
             test_label = next_label;
         }
         self.body.push_str(&format!("{test_label}:\n"));
@@ -651,6 +1131,7 @@ impl<'a> LlvmEmitter<'a> {
         value_slot: &str,
         failure: &str,
     ) -> Result<(), String> {
+        self.mark_debug_location(pattern.span);
         match &pattern.kind {
             t::PatternKind::Binding { .. } | t::PatternKind::Wildcard => Ok(()),
             t::PatternKind::Variant { class, variant, fields } => {
@@ -707,6 +1188,7 @@ impl<'a> LlvmEmitter<'a> {
         value_slot: &str,
         function: &t::Function,
     ) -> Result<(), String> {
+        self.mark_debug_location(pattern.span);
         match &pattern.kind {
             t::PatternKind::Binding { guard_id: Some(id), .. } => {
                 let destination_type = function.locals[*id].ty;
@@ -755,6 +1237,7 @@ impl<'a> LlvmEmitter<'a> {
         can_move: bool,
         function: &t::Function,
     ) -> Result<(), String> {
+        self.mark_debug_location(pattern.span);
         match &pattern.kind {
             t::PatternKind::Binding { id, .. } => {
                 let destination_type = function.locals[*id].ty;
@@ -770,6 +1253,7 @@ impl<'a> LlvmEmitter<'a> {
                 } else if destination_type.is_object() && value_type.is_object() {
                     return Err("pattern would duplicate an owned object binding".to_owned());
                 }
+                self.declare_debug_local(function, *id, None);
                 Ok(())
             }
             t::PatternKind::Wildcard => Ok(()),
@@ -839,6 +1323,7 @@ impl<'a> LlvmEmitter<'a> {
     }
 
     fn emit_expression(&mut self, expression: &t::Expr) -> Result<String, String> {
+        self.mark_debug_location(expression.span);
         use t::ExprKind as E;
         let output = match &expression.kind {
             E::Int(value) => {
@@ -967,6 +1452,7 @@ impl<'a> LlvmEmitter<'a> {
                 self.body.push_str(&format!(
                     "    {object} = call ptr @ncr_llvm_allocate_class_{class}(i64 {line}, i64 {column})\n"));
                 self.body.push_str(&format!("    store ptr {object}, ptr {slot}\n"));
+                self.mark_debug_location(expression.span);
                 self.emit_constructor_call(*constructor, &object, &arg_slots, line, column);
                 for (arg, arg_slot) in args.iter().zip(&arg_slots) {
                     self.consume_temporary(arg.ty, arg_slot);
@@ -977,6 +1463,7 @@ impl<'a> LlvmEmitter<'a> {
                 let mut arg_slots = Vec::with_capacity(args.len());
                 for arg in args { arg_slots.push(self.emit_expression(arg)?); }
                 let slot = self.new_owned_temp(expression.ty);
+                self.mark_debug_location(expression.span);
                 let mut call_args = vec![format!("ptr {slot}")];
                 call_args.extend(arg_slots.iter().map(|arg| format!("ptr {arg}")));
                 self.body.push_str(&format!(
@@ -1013,6 +1500,7 @@ impl<'a> LlvmEmitter<'a> {
         } else { None };
         let mut arg_slots = Vec::with_capacity(args.len());
         for arg in args { arg_slots.push(self.emit_expression(arg)?); }
+        self.mark_debug_location(expression.span);
         match target {
             t::CallTarget::Function(id) => {
                 let (has_receiver, is_native, is_virtual) = {
@@ -1721,6 +2209,7 @@ impl<'a> LlvmEmitter<'a> {
         let target_layout = self.program.classes[return_result].result
             .ok_or_else(|| "try return class has no Result layout".to_owned())?;
         let carrier = self.emit_expression(value)?;
+        self.mark_debug_location(expression.span);
         let result = self.new_owned_temp(expression.ty);
         self.zero_value(expression.ty, &result)?;
         let tag = self.fresh_reg();
@@ -1772,6 +2261,7 @@ impl<'a> LlvmEmitter<'a> {
 
     fn emit_unary(&mut self, expression: &t::Expr, op: U, inner: &t::Expr) -> Result<String, String> {
         let source = self.emit_expression(inner)?;
+        self.mark_debug_location(expression.span);
         let result = self.expression_slot(expression.ty);
         let input = self.load_as(expression.ty, inner.ty, &source);
         if matches!(op, U::Plus) {
@@ -1800,6 +2290,7 @@ impl<'a> LlvmEmitter<'a> {
         right: &t::Expr,
     ) -> Result<String, String> {
         let left_slot = self.emit_expression(left)?;
+        self.mark_debug_location(expression.span);
         if matches!(op, B::And | B::Or) {
             let result = self.expression_slot(Type::Boolean);
             self.copy_value(Type::Boolean, &result, &left_slot)?;
@@ -1819,6 +2310,7 @@ impl<'a> LlvmEmitter<'a> {
             self.body.push_str(&format!("{rhs_label}:\n"));
             self.terminated = false;
             let right_slot = self.emit_expression(right)?;
+            self.mark_debug_location(expression.span);
             self.copy_value(Type::Boolean, &result, &right_slot)?;
             self.branch(&merge_label);
             self.body.push_str(&format!("{merge_label}:\n"));
@@ -1827,6 +2319,7 @@ impl<'a> LlvmEmitter<'a> {
         }
 
         let right_slot = self.emit_expression(right)?;
+        self.mark_debug_location(expression.span);
         let result = self.expression_slot(expression.ty);
         let (line, column) = line_column(self.source, expression.span.start);
 
@@ -1903,6 +2396,7 @@ impl<'a> LlvmEmitter<'a> {
 
     fn emit_cast(&mut self, expression: &t::Expr, value: &t::Expr) -> Result<String, String> {
         let source = self.emit_expression(value)?;
+        self.mark_debug_location(expression.span);
         let result = self.expression_slot(expression.ty);
         let (line, column) = line_column(self.source, expression.span.start);
         if let Some(helper) = crate::codegen::direct_cast_symbol(expression.ty, value.ty) {

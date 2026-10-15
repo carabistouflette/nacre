@@ -1,5 +1,7 @@
 //! Native end-to-end tests for TCP, UDP, address resolution, deadlines, and descriptor ownership.
-use nacre::{compile_to_c, native};
+mod support;
+
+use nacre::native;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::process::{Child, ChildStdin, Command, ExitStatus, Output, Stdio};
 use std::sync::mpsc::{self, Receiver};
@@ -7,13 +9,11 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 fn compile(source: &str) -> native::NativeProgram {
-    let c = compile_to_c(source)
-        .unwrap_or_else(|error| panic!("{}", error.render("network_alpha.ncr", source)));
     let mut flags = vec!["-DNACRE_MEMORY_STATS", "-pthread"];
     if std::env::var_os("NACRE_NETWORK_SANITIZERS").is_some() {
         flags.extend(["-fsanitize=address,undefined", "-fno-omit-frame-pointer"]);
     }
-    native::compile_c_with_flags(&c, &flags)
+    support::compile(source, &flags)
         .unwrap_or_else(|error| panic!("{error}"))
 }
 

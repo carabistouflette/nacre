@@ -1,4 +1,4 @@
-use nacre::{compile_to_c, native};
+mod support;
 use std::ffi::OsString;
 use std::io::Write;
 use std::process::{Command, Output, Stdio};
@@ -7,8 +7,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 static NEXT_PATH: AtomicUsize = AtomicUsize::new(0);
 
 fn execute(source: &str, input: &[u8], args: &[OsString]) -> Output {
-    let c = compile_to_c(source).unwrap_or_else(|error| panic!("{}", error.render("io_v6.ncr", source)));
-    let program = native::compile_c_with_flags(&c, &["-DNACRE_MEMORY_STATS"]).unwrap();
+    let program = support::compile(source, &["-DNACRE_MEMORY_STATS"]).unwrap();
     let mut child = Command::new(program.path())
         .args(args)
         .stdin(Stdio::piped())

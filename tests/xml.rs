@@ -1,10 +1,10 @@
-use nacre::{compile_to_c, native};
+mod support;
+
+use nacre::native;
 use std::process::Output;
 
 fn execute(source: &str) -> Output {
-    let c = compile_to_c(source)
-        .unwrap_or_else(|error| panic!("{}", error.render("xml.ncr", source)));
-    native::compile_c_with_flags(&c, &["-DNACRE_MEMORY_STATS"])
+    support::compile(source, &["-DNACRE_MEMORY_STATS"])
         .unwrap_or_else(|error| panic!("native compile failed: {error}"))
         .output()
         .unwrap_or_else(|error| panic!("native execution failed: {error}"))
@@ -801,8 +801,7 @@ void main() {
     }
 }
 "#;
-    let c = compile_to_c(source).unwrap_or_else(|error| panic!("{}", error.render("xml.ncr", source)));
-    let output = native::compile_c_with_flags(&c, &[
+    let output = support::compile(source, &[
         "-DNACRE_MEMORY_STATS", "-fsanitize=address,undefined",
         "-fno-omit-frame-pointer", "-fno-pie", "-no-pie",
     ]).unwrap_or_else(|error| panic!("native compile failed: {error}"))
@@ -834,8 +833,7 @@ void main() {
     }
 }
 "#;
-    let c = compile_to_c(source).unwrap_or_else(|error| panic!("{}", error.render("xml.ncr", source)));
-    let program = native::compile_c_with_flags(&c, &["-DNACRE_MEMORY_STATS"])
+    let program = support::compile(source, &["-DNACRE_MEMORY_STATS"])
         .expect("native availability consumer");
     let directory = program.path().parent().expect("private native directory");
     let plugin_directory = directory.join("plugins");

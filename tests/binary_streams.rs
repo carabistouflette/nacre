@@ -1,3 +1,5 @@
+mod support;
+
 use nacre::{compile_to_c, native};
 use std::ffi::OsStr;
 use std::fs;
@@ -28,9 +30,8 @@ impl Drop for Scratch {
 }
 
 fn compile(source: &str) -> native::NativeProgram {
-    let c = compile_to_c(source)
-        .unwrap_or_else(|error| panic!("{}", error.render("binary_streams.ncr", source)));
-    native::compile_c_with_flags(&c, &["-DNACRE_MEMORY_STATS"]).unwrap()
+    support::compile(source, &["-DNACRE_MEMORY_STATS"])
+        .unwrap_or_else(|error| panic!("{error}"))
 }
 
 fn run(program: &native::NativeProgram, args: &[&OsStr]) -> Output {

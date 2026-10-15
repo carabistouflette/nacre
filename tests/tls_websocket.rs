@@ -1,4 +1,6 @@
-use nacre::{compile_to_c, native};
+mod support;
+
+use nacre::native;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::process::{Child, Command, ExitStatus, Stdio};
@@ -11,9 +13,7 @@ const KEY: &str = include_str!("fixtures/tls_loopback_key.pem");
 const INTERMEDIATE: &str = include_str!("fixtures/crypto_intermediate.pem");
 
 fn compile(source: &str) -> native::NativeProgram {
-    let c = compile_to_c(source)
-        .unwrap_or_else(|error| panic!("{}", error.render("tls_websocket.ncr", source)));
-    native::compile_c_with_flags(&c, &["-DNACRE_MEMORY_STATS", "-pthread"])
+    support::compile(source, &["-DNACRE_MEMORY_STATS", "-pthread"])
         .unwrap_or_else(|error| panic!("native compile failed: {error}"))
 }
 

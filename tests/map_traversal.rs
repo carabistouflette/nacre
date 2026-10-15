@@ -1,10 +1,10 @@
-use nacre::{compile_to_c, native, validate};
+use nacre::validate;
+mod support;
 
 fn execute_native(source: &str) -> (std::process::Output, usize) {
-    let c = compile_to_c(source)
-        .unwrap_or_else(|error| panic!("{}", error.render("map_traversal.ncr", source)));
-    let output = native::compile_c_with_flags(&c, &["-DNACRE_MEMORY_STATS"])
-        .unwrap().output().unwrap();
+    let output = support::compile(source, &["-DNACRE_MEMORY_STATS"])
+        .unwrap_or_else(|error| panic!("native compile failed: {error}"))
+        .output().unwrap();
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     let stderr = String::from_utf8_lossy(&output.stderr);
     let mut fields = stderr.split_whitespace();

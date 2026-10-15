@@ -1,11 +1,10 @@
-use nacre::{compile_to_c, native};
+mod support;
+
 use std::process::Output;
 
 fn execute(source: &str) -> Output {
-    let c = compile_to_c(source)
-        .unwrap_or_else(|error| panic!("{}", error.render("date_time.ncr", source)));
-    native::compile_c_with_flags(
-        &c,
+    support::compile(
+        source,
         &["-DNACRE_MEMORY_STATS", "-fsanitize=address,undefined", "-fno-omit-frame-pointer"],
     )
     .unwrap_or_else(|error| panic!("native compile failed: {error}"))

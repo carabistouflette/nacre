@@ -1,4 +1,4 @@
-use nacre::{compile_to_c, native};
+mod support;
 use std::io::Write;
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -20,8 +20,8 @@ impl Drop for Workspace {
 
 fn execute(input: &str) -> String {
     let source = include_str!("../examples/io/contact_book.ncr");
-    let c = compile_to_c(source).unwrap_or_else(|error| panic!("{}", error.render("io/contact_book.ncr", source)));
-    let program = native::compile_c_with_flags(&c, &["-DNACRE_MEMORY_STATS"]).unwrap();
+    let program = support::compile(source, &["-DNACRE_MEMORY_STATS"])
+        .unwrap_or_else(|error| panic!("{error}"));
     let mut child = Command::new(program.path())
         .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped())
         .spawn().unwrap();

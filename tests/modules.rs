@@ -1,9 +1,10 @@
 //! Module visibility, namespace resolution, and project execution coverage.
+mod support;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::sync::atomic::{AtomicU64, Ordering};
-use nacre::{native, project::SourceBundle};
+use nacre::project::SourceBundle;
 
 static NEXT: AtomicU64 = AtomicU64::new(0);
 
@@ -72,8 +73,7 @@ fn qualified_global_static_and_object_field_calls_remain_distinct() {
         ("model.ncr", "module library.model; public class Box<T> { private T value; Box(T value) { this.value = value; } public readonly T get() { return this.value; } } public class Leaf { public readonly int get() { return 5; } } public class Holder { private Leaf child; Holder(Leaf child) { this.child = child; } public readonly int read() { return this.child.get(); } }"),
         ("main.ncr", "module client.main; import library.model.Holder; import library.model.Leaf; void main() { library.model.Box<int> box = new library.model.Box<int>(library.math.compute(3)); println(library.math.Tools.adjust(box.get())); Holder holder = new Holder(new Leaf()); println(holder.read()); }"),
     ]);
-    let c_source = source.compile_to_c().unwrap_or_else(|diagnostic| panic!("{}", source.render(&diagnostic)));
-    let output = native::compile_c(&c_source).unwrap().output().unwrap();
+    let output = support::compile(&source, &[]).unwrap().output().unwrap();
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     assert_eq!(output.stdout, b"8\n5\n");
 }
@@ -183,8 +183,7 @@ fn qualified_enum_constructor_resolves_owned_type_arguments_once() {
         ("model.ncr", "module library.model; public class Payload { public readonly int value() { return 42; } } public enum Choice<T> { Item(T); }"),
         ("main.ncr", "module client.main; import library.model.Payload; import library.model.Choice; void main() { Choice<Payload> item = new library.model.Choice.Item<Payload>(new Payload()); match (item) { Item(value) { println(value.value()); } } }"),
     ]);
-    let c_source = source.compile_to_c().unwrap_or_else(|diagnostic| panic!("{}", source.render(&diagnostic)));
-    let output = native::compile_c(&c_source).unwrap().output().unwrap();
+    let output = support::compile(&source, &[]).unwrap().output().unwrap();
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     assert_eq!(output.stdout, b"42\n");
 }
@@ -195,8 +194,7 @@ fn numeric_casts_resolve_imported_calls_and_nested_generic_closers() {
         ("numbers.ncr", "module library.numbers; public long answer() { return 42L; }"),
         ("main.ncr", "module client.main; import library.numbers.answer; void main() { List<List<long>> nested = new List<List<long>>(); List<long> row = new List<long>(); row.add(answer()); nested.add(row); { borrow List<long> first = nested.getRef(0); println((int)first.get(0)); } println((int)library.numbers.answer()); println(8L >> 1); }"),
     ]);
-    let c_source = source.compile_to_c().unwrap_or_else(|diagnostic| panic!("{}", source.render(&diagnostic)));
-    let output = native::compile_c(&c_source).unwrap().output().unwrap();
+    let output = support::compile(&source, &[]).unwrap().output().unwrap();
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     assert_eq!(output.stdout, b"42\n42\n4\n");
 }
@@ -207,8 +205,7 @@ fn generic_static_factories_resolve_types_transfer_owners_and_preserve_shift_loo
         ("factory.ncr", "module library.factory; public class Factory<T> { public static T identity(T value) { return value; } }"),
         ("main.ncr", "module client.main; import library.factory.Factory; void main() { long value = Factory<long>.identity(42L); println(value); Text text = library.factory.Factory<Text>.identity(new Text(\"owned\")); text.print(); List<int> values = Factory<List<int>>.identity(new List<int>()); values.add((int)value); println(values.get(0)); int upper = 8; int shift = 1; println(value < upper >> shift); }"),
     ]);
-    let c_source = source.compile_to_c().unwrap_or_else(|diagnostic| panic!("{}", source.render(&diagnostic)));
-    let output = native::compile_c(&c_source).unwrap().output().unwrap();
+    let output = support::compile(&source, &[]).unwrap().output().unwrap();
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     assert_eq!(output.stdout, b"42\nowned\n42\nfalse\n");
 }

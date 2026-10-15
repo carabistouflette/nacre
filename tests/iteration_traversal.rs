@@ -1,9 +1,10 @@
-use nacre::{compile_to_c, native, validate};
+use nacre::validate;
+mod support;
 
 fn assert_native(source: &str, stdout: &[u8]) {
-    let c = compile_to_c(source).unwrap_or_else(|error| panic!("{}", error.render("v8-traversal.ncr", source)));
-    let output = native::compile_c_with_flags(&c, &["-DNACRE_MEMORY_STATS"])
-        .unwrap().output().unwrap();
+    let output = support::compile(source, &["-DNACRE_MEMORY_STATS"])
+        .unwrap_or_else(|error| panic!("native compile failed: {error}"))
+        .output().unwrap();
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     assert_eq!(output.stdout, stdout);
     let mut fields = std::str::from_utf8(&output.stderr).unwrap().split_whitespace();
@@ -16,8 +17,9 @@ fn assert_native(source: &str, stdout: &[u8]) {
 }
 
 fn assert_output(source: &str, stdout: &[u8]) {
-    let c = compile_to_c(source).unwrap_or_else(|error| panic!("{}", error.render("v8-traversal.ncr", source)));
-    let output = native::compile_c_with_flags(&c, &[]).unwrap().output().unwrap();
+    let output = support::compile(source, &[])
+        .unwrap_or_else(|error| panic!("native compile failed: {error}"))
+        .output().unwrap();
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     assert_eq!(output.stdout, stdout);
 }

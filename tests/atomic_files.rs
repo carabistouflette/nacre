@@ -1,5 +1,7 @@
 //! Native tests for atomic filesystem replacement.
-use nacre::{compile_to_c, native};
+mod support;
+
+use nacre::native;
 use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -29,9 +31,8 @@ impl Drop for Scratch {
 }
 
 fn compile(source: &str) -> native::NativeProgram {
-    let c = compile_to_c(source)
-        .unwrap_or_else(|error| panic!("{}", error.render("atomic_files.ncr", source)));
-    native::compile_c_with_flags(&c, &["-DNACRE_MEMORY_STATS"]).unwrap()
+    support::compile(source, &["-DNACRE_MEMORY_STATS"])
+        .unwrap_or_else(|error| panic!("{error}"))
 }
 
 fn assert_live_zero(output: &Output) {

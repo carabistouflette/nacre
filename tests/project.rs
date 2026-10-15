@@ -1,9 +1,10 @@
 //! Whole-program multi-file API and CLI. Native cases require GCC or Clang.
+mod support;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::sync::atomic::{AtomicU64, Ordering};
-use nacre::{native, project::SourceBundle};
+use nacre::project::SourceBundle;
 use nacre::diagnostic::{Diagnostic, Span, line_column};
 static NEXT: AtomicU64 = AtomicU64::new(0);
 struct Temp(PathBuf);
@@ -25,8 +26,10 @@ fn cli(args: &[&std::ffi::OsStr]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_nacre")).args(args).output().unwrap()
 }
 fn run(source: &SourceBundle) -> Output {
-    let c=source.compile_to_c().unwrap_or_else(|d|panic!("{}",source.render(&d)));
-    native::compile_c_with_flags(&c,&["-DNACRE_MEMORY_STATS"]).unwrap().output().unwrap()
+    support::compile(source, &["-DNACRE_MEMORY_STATS"])
+        .unwrap_or_else(|error| panic!("{error}"))
+        .output()
+        .unwrap()
 }
 fn assert_memory_balanced(output: &Output) {
     let report = String::from_utf8_lossy(&output.stderr);
@@ -99,14 +102,14 @@ fn total_bytes_are_bounded() {
 #[test]
 fn source_map_preserves_runtime_location() {
     let b=bundle(&[("Data.ncr","int fail(){\nList<int> xs=new List<int>();return xs.get(0);\n}"),("Main.ncr","void main(){println(fail());}")]);
-    let c=b.compile_to_c().unwrap();let result=native::compile_c(&c).unwrap().output().unwrap();
+    let result=support::compile(&b,&[]).unwrap().output().unwrap();
     assert_eq!(result.status.code(),Some(70));
     assert!(String::from_utf8_lossy(&result.stderr).contains("[Data.ncr:2:"));
 }
 #[test]
 fn single_file_keeps_the_original_runtime_format() {
     let b=bundle(&[("Main.ncr","void main(){println(1/0);}")]);
-    let result=native::compile_c(&b.compile_to_c().unwrap()).unwrap().output().unwrap();
+    let result=support::compile(&b,&[]).unwrap().output().unwrap();
     assert_eq!(result.status.code(),Some(70));
     assert!(String::from_utf8_lossy(&result.stderr).contains("[1:"));
 }

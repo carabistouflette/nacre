@@ -1,4 +1,5 @@
-use nacre::{compile_to_c, native};
+use nacre::compile_to_c;
+mod support;
 use std::process::Output;
 
 const NUMERIC_EXAMPLE: &str = include_str!("../examples/language/numeric_types.ncr");
@@ -16,9 +17,7 @@ fn assert_numeric_output(bytes: &[u8]) {
 }
 
 fn execute(source: &str, flags: &[&str]) -> Output {
-    let c = compile_to_c(source)
-        .unwrap_or_else(|error| panic!("{}", error.render("numeric_types.ncr", source)));
-    native::compile_c_with_flags(&c, flags)
+    support::compile(source, flags)
         .unwrap_or_else(|error| panic!("native compile failed: {error}"))
         .output()
         .unwrap_or_else(|error| panic!("native execution failed: {error}"))

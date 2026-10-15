@@ -1,10 +1,8 @@
-use nacre::{compile_to_c, native};
+mod support;
 use std::process::Output;
 
 fn execute(source: &str, flags: &[&str]) -> Output {
-    let c = compile_to_c(source)
-        .unwrap_or_else(|error| panic!("{}", error.render("unicode_native.ncr", source)));
-    native::compile_c_with_flags(&c, flags)
+    support::compile(source, flags)
         .unwrap_or_else(|error| panic!("native compile failed: {error}"))
         .output()
         .unwrap_or_else(|error| panic!("native execution failed: {error}"))

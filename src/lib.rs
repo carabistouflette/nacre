@@ -105,7 +105,11 @@ pub fn compile_llvm_direct_optimized_with_flags(
     flags: &[&str],
 ) -> Result<native::NativeProgram, String> {
     let typed = front_end(source).map_err(|diagnostic| diagnostic.render("<source>", source))?;
-    let artifact = llvm_codegen::emit_llvm_direct_artifact(&typed, source)
+    let artifact = llvm_codegen::emit_llvm_direct_artifact_with_optimization(
+        &typed,
+        source,
+        optimization != "-O0",
+    )
         .map_err(|error| Diagnostic::new(Span::default(), error).render("<source>", source))?;
     native::compile_llvm_direct_with_runtime(
         &artifact.ir,

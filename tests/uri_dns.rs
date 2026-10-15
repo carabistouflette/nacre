@@ -1,15 +1,14 @@
-use nacre::{compile_to_c, native};
+mod support;
+
+use nacre::native;
 use std::process::{Command, Output, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
 fn compile(source: &str) -> native::NativeProgram {
-    let c = compile_to_c(source)
-        .unwrap_or_else(|error| panic!("{}", error.render("uri_dns.ncr", source)));
-    native::compile_c_with_flags(&c, &["-DNACRE_MEMORY_STATS"])
+    support::compile(source, &["-DNACRE_MEMORY_STATS"])
         .unwrap_or_else(|error| panic!("native compile failed: {error}"))
 }
-
 fn execute(program: &native::NativeProgram) -> Output {
     let mut child = Command::new(program.path())
         .stdin(Stdio::null())
