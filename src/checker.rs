@@ -728,7 +728,7 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
             || (class.native.is_some() && class.constructor.is_none()) { continue; }
         let constructor = class.constructor.clone().unwrap_or_else(|| a::Function {
             name: class.name.clone(), span: class.span, return_type: a::Type::Void,
-            params: Vec::new(), body: Vec::new(), visibility: Visibility::Public, is_static: false, readonly: false,
+            params: Vec::new(), body: Vec::new(), visibility: Visibility::Public, is_static: false, readonly: false, is_async: false,
             qualified_name: format!("{}::{}", class.qualified_name, class.name), unit: class.unit,
         });
         let id = tables.add_signature(&constructor, Some(class_id), Kind::Constructor)?;
@@ -2026,6 +2026,7 @@ impl Checker<'_> {
             E::Unary { op, expr: inner } => self.unary_expression(*op, inner, expr.span)?,
             E::Try(inner) => self.try_expression(inner, expr.span)?,
             E::Binary { op, left, right } => self.binary_expression(*op, left, right, expr.span)?,
+            E::Await(inner) => self.await_expression(inner, expr.span)?,
         };
         Ok(t::Expr { kind, ty, span: expr.span })
     }
@@ -2037,6 +2038,24 @@ impl Checker<'_> {
             return Err(Diagnostic::new(span, "[E6102] numeric casts require numeric source and target types"));
         }
         Ok((t::ExprKind::Cast { value: Box::new(value) }, target))
+    }
+    fn await_expression(&mut self, inner: &a::Expr, span: Span) -> Result<(t::ExprKind, Type), Diagnostic> {
+        if let Ok(receiver) = self.place(inner, false) {
+            if let Some(class) = receiver.ty.object_class() {
+                if let Some(crate::ir::NativeClass::Future(_)) = self.tables.classes[class].native {
+                    let id = *self.tables.classes[class].methods.get("await")
+                        .ok_or_else(|| Diagnostic::new(span, "method `await` is unknown on Future"))?;
+                    let timeout_expr = a::Expr {
+                        kind: a::ExprKind::Long(-1),
+                        span,
+                        depth: inner.depth,
+                    };
+                    return self.call(id, Some(receiver), &[timeout_expr], span);
+                }
+            }
+        }
+        let checked = self.expression(inner)?;
+        Ok((checked.kind, checked.ty))
     }
 
     fn borrow_expression(&mut self, inner: &a::Expr, mutable: bool, span: Span) -> Result<(t::ExprKind, Type), Diagnostic> {

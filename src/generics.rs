@@ -115,11 +115,27 @@ pub fn expand(mut program: a::Program) -> Result<(a::Program, Vec<String>), Diag
     expander.request_unit_mutex_if_needed(&empty, Span::default())?;
     while let Some(request) = expander.pending.pop_front() {
         let mut class = expander.definitions[&request.template].clone();
+        for (bound, arg) in class.type_bounds.iter().zip(&request.args) {
+            if let Some(trait_name) = bound {
+                let arg_name = match arg {
+                    Type::Named(n) => n.as_str(),
+                    _ => "",
+                };
+                let satisfies = program.impls.iter().any(|imp| &imp.trait_name == trait_name && imp.target_class == arg_name);
+                if !satisfies {
+                    return Err(Diagnostic::new(
+                        request.span,
+                        format!("type `{arg_name}` does not satisfy trait bound `{trait_name}`"),
+                    ));
+                }
+            }
+        }
         let env: Environment = class.type_params.iter().cloned().zip(request.args).collect();
         class.name = request.name.clone();
         class.qualified_name = request.name.clone();
         if class.is_builtin { class.span = request.span; }
         class.type_params.clear();
+        class.type_bounds.clear();
         if let Some(constructor) = &mut class.constructor {
             constructor.name = class.name.clone();
             constructor.qualified_name = format!("{}::{}", class.qualified_name, constructor.name);
@@ -556,7 +572,7 @@ impl Expander {
                 for arg in args { self.expression(arg, env)?; }
             }
             E::Unary { expr, .. } | E::Borrow { expr, .. } | E::Cast { expr, .. } |
-            E::Try(expr) => self.expression(expr, env)?,
+            E::Try(expr) | E::Await(expr) => self.expression(expr, env)?,
             E::Binary { left, right, .. } => { self.expression(left, env)?; self.expression(right, env)?; }
             E::Char(_) | E::Int(_) | E::Long(_) | E::Double(_) | E::Unit
             | E::Boolean(_) | E::String(_) | E::Var(_) | E::This => {}

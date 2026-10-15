@@ -43,7 +43,6 @@ pub fn resolve(program: &mut a::Program) -> Result<(), Diagnostic> {
     if program.units.is_empty() {
         program.units.push(a::SourceUnit { module: String::new(), imports: Vec::new() });
     }
-    let resolver = Resolver::new(program)?;
     for class in &mut program.classes {
         let module = &program.units[class.unit].module;
         class.qualified_name = qualify(module, &class.name);
@@ -56,6 +55,53 @@ pub fn resolve(program: &mut a::Program) -> Result<(), Diagnostic> {
             constructor.qualified_name = format!("{}::{}", class.qualified_name, constructor.name);
         }
     }
+
+    let mut trait_map = HashMap::new();
+    for tr in &program.traits {
+        if trait_map.insert(&tr.name, tr).is_some() {
+            return Err(Diagnostic::new(tr.span, format!("duplicate trait `{}`", tr.name)));
+        }
+    }
+
+    for imp in &program.impls {
+        let tr = trait_map.get(&imp.trait_name).ok_or_else(|| {
+            Diagnostic::new(imp.span, format!("unknown trait `{}`", imp.trait_name))
+        })?;
+        let class = program.classes.iter_mut().find(|c| c.name == imp.target_class).ok_or_else(|| {
+            Diagnostic::new(imp.span, format!("unknown class `{}` in impl block", imp.target_class))
+        })?;
+
+        for req in &tr.methods {
+            let imp_method = imp.methods.iter().find(|m| m.name == req.name).ok_or_else(|| {
+                Diagnostic::new(imp.span, format!("missing method `{}` required by trait `{}`", req.name, tr.name))
+            })?;
+            if imp_method.params.len() != req.params.len() {
+                return Err(Diagnostic::new(imp_method.span, format!(
+                    "method `{}` has {} parameters but trait `{}` expects {}",
+                    req.name, imp_method.params.len(), tr.name, req.params.len()
+                )));
+            }
+            if imp_method.return_type != req.return_type {
+                return Err(Diagnostic::new(imp_method.span, format!(
+                    "method `{}` has return type {:?} but trait `{}` expects {:?}",
+                    req.name, imp_method.return_type, tr.name, req.return_type
+                )));
+            }
+        }
+
+        for mut method in imp.methods.clone() {
+            if class.methods.iter().any(|m| m.name == method.name) {
+                return Err(Diagnostic::new(method.span, format!(
+                    "duplicate method `{}` on class `{}`", method.name, class.name
+                )));
+            }
+            method.unit = class.unit;
+            method.qualified_name = format!("{}::{}", class.qualified_name, method.name);
+            class.methods.push(method);
+        }
+    }
+
+    let resolver = Resolver::new(program)?;
     for function in &mut program.functions {
         function.qualified_name = qualify(&program.units[function.unit].module, &function.name);
     }
@@ -485,7 +531,7 @@ impl Resolver {
                 for argument in args { self.expression(argument, context)?; }
             }
             E::Field { base, .. } => self.expression(base, context)?,
-            E::Unary { expr, .. } | E::Borrow { expr, .. } | E::Try(expr) => self.expression(expr, context)?,
+            E::Unary { expr, .. } | E::Borrow { expr, .. } | E::Try(expr) | E::Await(expr) => self.expression(expr, context)?,
             E::Cast { ty, expr } => {
                 self.resolve_type(context.unit, &context.type_params, ty, expression.span)?;
                 self.expression(expr, context)?;

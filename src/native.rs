@@ -195,6 +195,27 @@ pub fn emit_llvm(source: &str, optimization: &str) -> Result<String, String> {
     }
     String::from_utf8(output.stdout).map_err(|e| format!("LLVM output is not valid UTF-8: {e}"))
 }
+
+/// Compile direct textual LLVM IR into a native executable using Clang.
+pub fn compile_llvm_direct(llvm_ir: &str, optimization: &str) -> Result<NativeProgram, String> {
+    check_optimization(optimization)?;
+    let compiler = env::var_os("NACRE_CLANG").unwrap_or_else(|| OsString::from("clang"));
+    let directory = TempDir::new()?;
+    let ll_path = directory.0.join("program.ll");
+    let executable = directory.0.join(if cfg!(windows) { "program.exe" } else { "program" });
+    fs::write(&ll_path, llvm_ir).map_err(|e| format!("failed to write LLVM IR: {e}"))?;
+    let output = Command::new(&compiler)
+        .arg(optimization)
+        .arg(&ll_path)
+        .arg("-o")
+        .arg(&executable)
+        .output()
+        .map_err(|e| format!("failed to run {compiler:?}: {e}"))?;
+    if !output.status.success() {
+        return Err(format!("Clang compilation of direct LLVM IR failed:\n{}", String::from_utf8_lossy(&output.stderr)));
+    }
+    Ok(NativeProgram { executable, _directory: directory })
+}
 fn check_optimization(level: &str) -> Result<(), String> {
     if matches!(level, "-O0" | "-O1" | "-O2" | "-O3" | "-Os") { Ok(()) }
     else { Err("invalid optimization level: choose -O0, -O1, -O2, -O3, or -Os".to_owned()) }

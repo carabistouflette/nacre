@@ -4,7 +4,7 @@ use crate::diagnostic::{Diagnostic, Span};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TokenKind {
     Ident(String), Number(String), String(String), Character(char),
-    Class, Enum, Match, Interface, Implements, Module, Import, Public, Private, Static, New, This, Borrow, Mut, Readonly,
+    Class, Enum, Match, Interface, Implements, Trait, Impl, Module, Import, Public, Private, Static, New, This, Borrow, Mut, Readonly, Async, Await,
     Byte, CharType, Int, Long, Double, UnitType, Boolean, StringType, Void,
     If, Else, While, For, Return, Break, Continue, True, False,
     LParen, RParen, LBrace, RBrace, Comma, Colon, Semicolon, Dot, Question,
@@ -30,6 +30,8 @@ pub fn lex(source: &str) -> Result<Vec<Token>, Diagnostic> {
             match word {
                 "class" => TokenKind::Class, "enum" => TokenKind::Enum, "match" => TokenKind::Match,
                 "interface" => TokenKind::Interface, "implements" => TokenKind::Implements,
+                "trait" => TokenKind::Trait, "impl" => TokenKind::Impl,
+                "async" => TokenKind::Async, "await" => TokenKind::Await,
                 "module" => TokenKind::Module, "import" => TokenKind::Import,
                 "public" => TokenKind::Public,
                 "private" => TokenKind::Private, "static" => TokenKind::Static,

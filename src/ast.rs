@@ -12,7 +12,27 @@ impl Type {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Visibility { Public, Private }
 #[derive(Debug, Clone)]
-pub struct Program { pub units: Vec<SourceUnit>, pub functions: Vec<Function>, pub classes: Vec<Class> }
+pub struct Program {
+    pub units: Vec<SourceUnit>,
+    pub functions: Vec<Function>,
+    pub classes: Vec<Class>,
+    pub traits: Vec<Trait>,
+    pub impls: Vec<Impl>,
+}
+#[derive(Debug, Clone)]
+pub struct Trait {
+    pub name: String,
+    pub span: Span,
+    pub methods: Vec<Function>,
+    pub visibility: Visibility,
+}
+#[derive(Debug, Clone)]
+pub struct Impl {
+    pub trait_name: String,
+    pub target_class: String,
+    pub span: Span,
+    pub methods: Vec<Function>,
+}
 #[derive(Debug, Clone)]
 pub struct SourceUnit { pub module: String, pub imports: Vec<Import> }
 #[derive(Debug, Clone)]
@@ -52,7 +72,7 @@ pub struct Class {
     /// Marks the trusted prelude Result template and its specializations.
     pub is_builtin_result: bool,
     pub name: String, pub span: Span, pub fields: Vec<Field>,
-    pub type_params: Vec<String>, pub implements: Vec<Type>, pub is_interface: bool,
+    pub type_params: Vec<String>, pub type_bounds: Vec<Option<String>>, pub implements: Vec<Type>, pub is_interface: bool,
     pub variants: Option<Vec<Variant>>,
     pub methods: Vec<Function>, pub constructor: Option<Function>,
     pub qualified_name: String, pub unit: usize, pub visibility: Visibility,
@@ -67,6 +87,7 @@ pub struct Function {
     pub name: String, pub span: Span, pub return_type: Type,
     pub params: Vec<Param>, pub body: Block,
     pub visibility: Visibility, pub is_static: bool, pub readonly: bool,
+    pub is_async: bool,
     pub qualified_name: String, pub unit: usize,
 }
 #[derive(Debug, Clone)]
@@ -103,6 +124,7 @@ pub enum ExprKind {
     Unary { op: UnaryOp, expr: Box<Expr> },
     Try(Box<Expr>),
     Binary { op: BinaryOp, left: Box<Expr>, right: Box<Expr> },
+    Await(Box<Expr>),
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnaryOp { Neg, Not, Plus, BitNot }

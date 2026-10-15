@@ -94,6 +94,7 @@ fn execute(args: Vec<OsString>) -> Result<i32, String> {
     let mut lto = false;
     let mut jemalloc = false;
     let mut filter: Option<String> = None;
+    let mut direct_llvm = false;
     let mut optimization = None;
     let mut program_args = &args[args.len()..];
     let mut i = 1;
@@ -131,6 +132,8 @@ fn execute(args: Vec<OsString>) -> Result<i32, String> {
             jemalloc = true; i += 1;
         } else if args[i] == "--check" && command == "fmt" && !check_only {
             check_only = true; i += 1;
+        } else if args[i] == "--direct" && command == "emit-llvm" && !direct_llvm {
+            direct_llvm = true; i += 1;
         } else if !args[i].to_string_lossy().starts_with('-') {
             sources.push(PathBuf::from(&args[i])); i += 1;
         } else { return Err(format!("invalid arguments for {command}\n\n{HELP}")); }
@@ -164,6 +167,18 @@ fn execute(args: Vec<OsString>) -> Result<i32, String> {
             fs::write(&path, flow).map_err(|e| format!("failed to write {}: {e}", path.display()))?;
             eprintln!("Analysis {}: {}", if command == "emit-types" { "types" } else { "ownership" }, path.display());
         } else { io::stdout().write_all(flow.as_bytes()).map_err(|e| e.to_string())?; }
+        return Ok(0);
+    }
+    if command == "emit-llvm" && direct_llvm {
+        let llvm_ir = nacre::emit_llvm_direct(bundle.combined_source()).map_err(|d| bundle.render(&d))?;
+        if let Some(path) = output {
+            for source in bundle.paths() { protect_source(source, &path)?; }
+            native::create_parent(&path)?;
+            fs::write(&path, llvm_ir).map_err(|e| format!("failed to write {}: {e}", path.display()))?;
+            eprintln!("LLVM IR: {}", path.display());
+        } else {
+            io::stdout().write_all(llvm_ir.as_bytes()).map_err(|e| e.to_string())?;
+        }
         return Ok(0);
     }
     let mut c_source = bundle.compile_to_c().map_err(|d| bundle.render(&d))?;

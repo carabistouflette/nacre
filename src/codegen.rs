@@ -305,6 +305,18 @@ fn place_text(place: &Place) -> String {
         PlaceKind::Field { base, field } => format!("({})->ncr_f_{field}", place_text(base)),
     }
 }
+fn escape_c_line_filename(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            '\n' | '\r' => out.push(' '),
+            _ => out.push(c),
+        }
+    }
+    out
+}
 
 struct Emitter<'a> {
     program: &'a t::Program,
@@ -329,7 +341,8 @@ impl Emitter<'_> {
         if span.end > span.start && span.start < self.source.len() {
             let (line, file) = (self.map_span)(span);
             if let Some(filename) = &file {
-                self.output.push_str(&format!("#line {line} \"{filename}\"\n"));
+                let escaped = escape_c_line_filename(filename);
+                self.output.push_str(&format!("#line {line} \"{escaped}\"\n"));
             } else {
                 self.output.push_str(&format!("#line {line}\n"));
             }

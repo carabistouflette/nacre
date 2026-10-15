@@ -26,6 +26,7 @@ pub mod test_runner;
 pub mod bench_runner;
 pub mod doc;
 pub mod fmt;
+pub mod llvm_codegen;
 mod type_report;
 
 use diagnostic::{Diagnostic, Span};
@@ -74,5 +75,11 @@ pub fn emit_borrows(source: &str) -> Result<String, Diagnostic> {
 /// Full validation is performed first; this is not a bypass around safety checks.
 pub fn emit_types(source: &str) -> Result<String, Diagnostic> {
     Ok(type_report::dump(&front_end(source)?))
+}
+
+/// Generate direct textual LLVM IR without intermediary C translation.
+pub fn emit_llvm_direct(source: &str) -> Result<String, Diagnostic> {
+    let checked = front_end(source)?;
+    llvm_codegen::generate_direct_llvm(&checked, source).map_err(|e| Diagnostic::new(Span::default(), e))
 }
 

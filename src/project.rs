@@ -103,7 +103,7 @@ impl SourceBundle {
     pub fn combined_source(&self) -> &str { &self.text }
 
     pub(crate) fn parse(&self) -> Result<ast::Program, Diagnostic> {
-        let mut program = ast::Program { units: Vec::new(), functions: Vec::new(), classes: Vec::new() };
+        let mut program = ast::Program { units: Vec::new(), functions: Vec::new(), classes: Vec::new(), traits: Vec::new(), impls: Vec::new() };
         for source_unit in &self.units {
             let source = &self.text[source_unit.start..source_unit.end];
             let mut tokens = crate::lexer::lex(source).map_err(|mut error| {
@@ -123,6 +123,8 @@ impl SourceBundle {
             program.units.append(&mut parsed.units);
             program.functions.extend(parsed.functions);
             program.classes.extend(parsed.classes);
+            program.traits.extend(parsed.traits);
+            program.impls.extend(parsed.impls);
         }
         Ok(program)
     }

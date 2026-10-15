@@ -202,4 +202,241 @@ fn dwarf_debug_line_directives_map_to_ncr_files() {
     let program = native::compile_c(&bundle_c).unwrap();
     let output = program.output().unwrap();
     assert!(output.status.success());
+
+    // Verify that filenames with quotes and backslashes are escaped safely in C preprocessor
+    let bundle_escaped = nacre::project::SourceBundle::from_sources(vec![
+        ("dir/\"special\"\\file.ncr".to_owned(), source.to_owned()),
+    ]).unwrap();
+    let escaped_c = bundle_escaped.compile_to_c().unwrap();
+    assert!(escaped_c.contains("#line 2 \"dir/\\\"special\\\"\\\\file.ncr\""), "path was not escaped in directive");
+    let program_escaped = native::compile_c(&escaped_c).unwrap();
+    assert!(program_escaped.output().unwrap().status.success());
+}
+
+#[test]
+fn trait_static_polymorphism_and_validation() {
+    let valid_source = r#"
+trait Measurable {
+    int magnitude();
+}
+
+class Vector2D {
+    private int x;
+    private int y;
+    public Vector2D(int x, int y) {
+        this.x = x;
+        this.y = y;
+    }
+}
+
+impl Measurable for Vector2D {
+    int magnitude() {
+        return this.x + this.y;
+    }
+}
+
+void main() {
+    Vector2D v = new Vector2D(3, 4);
+    assert(v.magnitude() == 7);
+}
+"#;
+    let c = compile_to_c(valid_source).unwrap();
+    let program = native::compile_c(&c).unwrap();
+    assert!(program.output().unwrap().status.success());
+
+    // Verify rejection of missing method
+    let missing_method = r#"
+trait T {
+    void mustHave();
+}
+class C {}
+impl T for C {}
+void main() {}
+"#;
+    let err = validate(missing_method).unwrap_err();
+    assert!(err.message.contains("missing method `mustHave` required by trait `T`"), "{err}");
+
+    // Verify rejection of unknown trait
+    let unknown_trait = r#"
+class C {}
+impl NonExistent for C {}
+void main() {}
+"#;
+    let err = validate(unknown_trait).unwrap_err();
+    assert!(err.message.contains("unknown trait `NonExistent`"), "{err}");
+
+    // Verify generic class with trait bound monomorphization
+    let generic_trait_source = r#"
+trait Measurable {
+    readonly int magnitude();
+}
+class Vector2D {
+    private int x;
+    private int y;
+    public Vector2D(int x, int y) { this.x = x; this.y = y; }
+}
+impl Measurable for Vector2D {
+    readonly int magnitude() { return this.x + this.y; }
+}
+class Metrics<T: Measurable> {
+    private T item;
+    public Metrics(T item) { this.item = item; }
+    public readonly int getMagnitude() { return this.item.magnitude(); }
+}
+void main() {
+    Vector2D v = new Vector2D(10, 20);
+    Metrics<Vector2D> m = new Metrics<Vector2D>(v);
+    assert(m.getMagnitude() == 30);
+}
+"#;
+    let c = compile_to_c(generic_trait_source).unwrap();
+    let program = native::compile_c(&c).unwrap();
+    assert!(program.output().unwrap().status.success());
+
+    // Verify rejection when type does not satisfy trait bound
+    let unsatisfied_bound = r#"
+trait Measurable { readonly int magnitude(); }
+class NotMeasurable {}
+class Metrics<T: Measurable> {
+    private T item;
+    public Metrics(T item) { this.item = item; }
+}
+void main() {
+    NotMeasurable n = new NotMeasurable();
+    Metrics<NotMeasurable> m = new Metrics<NotMeasurable>(n);
+}
+"#;
+    let err = validate(unsatisfied_bound).unwrap_err();
+    assert!(err.message.contains("does not satisfy trait bound `Measurable`"), "{err}");
+}
+
+#[test]
+fn async_await_syntax_and_execution() {
+    let source = "async int fetch() { return 42; }\nvoid main() {\n    int x = await fetch();\n    assert(x == 42);\n    int y = fetch().await;\n    assert(y == 42);\n}\n";
+    let c = compile_to_c(source).unwrap();
+    let program = native::compile_c(&c).unwrap();
+    assert!(program.output().unwrap().status.success());
+}
+
+#[test]
+fn async_await_suspends_and_resumes_real_future() {
+    let source = r#"
+class BackgroundTask implements CancelableTask<int> {
+    public Result<int, Text> run(borrow CancellationToken token) {
+        return new Result<int, Text>.Ok(100);
+    }
+}
+
+void main() {
+    match (Future<int>.spawn(new BackgroundTask())) {
+        Ok(fut) {
+            Result<Option<int>, Text> res = await fut;
+            match (res) {
+                Ok(opt) {
+                    match (opt) {
+                        Some(val) { assert(val == 100); }
+                        None { assert(false, "cancelled"); }
+                    }
+                }
+                Err(err) { assert(false, "failed"); }
+            }
+        }
+        Err(err) { assert(false, "spawn failed"); }
+    }
+}
+"#;
+    let c = compile_to_c(source).unwrap();
+    let program = native::compile_c(&c).unwrap();
+    let output = program.output().unwrap();
+    assert!(output.status.success());
+}
+
+#[test]
+fn async_await_suspends_and_resumes_with_barrier_latch() {
+    let source = r#"
+class SuspendedTask implements CancelableTask<int> {
+    private CountDownLatch releaseGate;
+    public SuspendedTask(CountDownLatch gate) {
+        this.releaseGate = gate;
+    }
+    public Result<int, Text> run(borrow CancellationToken token) {
+        if (!this.releaseGate.wait(2000L)?) {
+            return new Result<int, Text>.Err(new Text("gate timed out"));
+        }
+        return new Result<int, Text>.Ok(777);
+    }
+}
+
+class ReleaseWorker implements Task<Unit> {
+    private CountDownLatch gate;
+    public ReleaseWorker(CountDownLatch gate) {
+        this.gate = gate;
+    }
+    public Unit run() {
+        match (Time.sleepMillis(50L)) { Ok(u) {} Err(e) {} }
+        this.gate.countDown();
+        return ();
+    }
+}
+
+Result<Unit, Text> runAsyncTest() {
+    CountDownLatch gate = CountDownLatch.create(1L)?;
+    Future<int> fut = Future<int>.spawn(new SuspendedTask(gate.cloneHandle()?))?;
+    Thread<Unit> releaser = Thread<Unit>.spawn(new ReleaseWorker(gate))?;
+    Result<Option<int>, Text> res = await fut;
+    releaser.join()?;
+    match (res) {
+        Ok(opt) {
+            match (opt) {
+                Some(val) { assert(val == 777); }
+                None { assert(false, "cancelled"); }
+            }
+        }
+        Err(err) { assert(false, "failed"); }
+    }
+    return new Result<Unit, Text>.Ok(());
+}
+
+void main() {
+    match (runAsyncTest()) {
+        Ok(u) {}
+        Err(e) { assert(false, "async test failed"); }
+    }
+}
+"#;
+    let c = compile_to_c(source).unwrap();
+    let program = native::compile_c(&c).unwrap();
+    let output = program.output().unwrap();
+    assert!(output.status.success());
+}
+
+#[test]
+fn direct_llvm_ir_codegen_and_execution() {
+    let source = r#"
+int add(int a, int b) {
+    return a + b;
+}
+
+void main() {
+    int x = 15;
+    int y = 25;
+    int z = add(x, y);
+    assert(z == 40);
+    println(z);
+}
+"#;
+    let llvm_ir = nacre::emit_llvm_direct(source).unwrap();
+    eprintln!("LLVM IR:\n{llvm_ir}");
+    assert!(llvm_ir.contains("target triple = \"x86_64-pc-linux-gnu\""), "missing triple");
+    assert!(llvm_ir.contains("define i32 @ncr_fn_0"), "missing function 0");
+    assert!(llvm_ir.contains("add i32"), "missing add instruction");
+    assert!(llvm_ir.contains("@main"), "missing main");
+
+    // If clang is installed, verify direct LLVM compilation and native execution
+    if std::process::Command::new("clang").arg("--version").output().is_ok() {
+        let program = native::compile_llvm_direct(&llvm_ir, "-O2").unwrap();
+        let output = program.output().unwrap();
+        assert!(output.status.success());
+        assert_eq!(output.stdout, b"40\n");
+    }
 }

@@ -30,12 +30,18 @@ impl Parser {
         else { Err(Diagnostic::new(self.current().span, format!("{what} expected"))) }
     }
     fn ident(&mut self) -> Result<(String, Span), Diagnostic> {
-        if !matches!(self.current().kind, K::Ident(_)) {
-            return Err(Diagnostic::new(self.current().span, "identifier expected"));
+        let token = self.current().clone();
+        match token.kind {
+            K::Ident(name) => {
+                self.bump();
+                Ok((name, token.span))
+            }
+            K::Await => {
+                self.bump();
+                Ok(("await".to_owned(), token.span))
+            }
+            _ => Err(Diagnostic::new(self.current().span, "identifier expected")),
         }
-        let token = self.bump();
-        let K::Ident(name) = token.kind else { unreachable!("identifier checked before consumption") };
-        Ok((name, token.span))
     }
     fn qualified_ident(&mut self) -> Result<(String, Span), Diagnostic> {
         let (mut path, mut span) = self.ident()?;
@@ -56,10 +62,11 @@ impl Parser {
         self.depth -= 1;
         result
     }
-    fn modifiers(&mut self) -> Result<(Visibility, bool, bool), Diagnostic> {
+    fn modifiers(&mut self) -> Result<(Visibility, bool, bool, bool), Diagnostic> {
         let mut visibility = None;
         let mut is_static = false;
         let mut readonly = false;
+        let mut is_async = false;
         loop {
             let token = self.current().clone();
             match token.kind {
@@ -75,10 +82,14 @@ impl Parser {
                     if readonly { return Err(Diagnostic::new(token.span, "readonly modifier repeated")); }
                     self.bump(); readonly = true;
                 }
+                K::Async => {
+                    if is_async { return Err(Diagnostic::new(token.span, "async modifier repeated")); }
+                    self.bump(); is_async = true;
+                }
                 _ => break,
             }
         }
-        Ok((visibility.unwrap_or(Visibility::Public), is_static, readonly))
+        Ok((visibility.unwrap_or(Visibility::Public), is_static, readonly, is_async))
     }
     fn program(mut self) -> Result<Program, Diagnostic> {
         let module = if self.eat(&K::Module) {
@@ -102,43 +113,63 @@ impl Parser {
         }
         let mut functions = Vec::new();
         let mut classes = Vec::new();
+        let mut traits = Vec::new();
+        let mut impls = Vec::new();
         while !self.at(&K::Eof) {
             let start = self.current().span;
-            let (visibility, is_static, readonly) = self.modifiers()?;
+            let (visibility, is_static, readonly, is_async) = self.modifiers()?;
             if self.eat(&K::Class) {
-                if is_static || readonly {
-                    return Err(Diagnostic::new(start, "a top-level class cannot be static or readonly"));
+                if is_static || readonly || is_async {
+                    return Err(Diagnostic::new(start, "a top-level class cannot be static, readonly, or async"));
                 }
                 classes.push(self.class(start, false, visibility)?);
             } else if self.eat(&K::Enum) {
-                if is_static || readonly {
-                    return Err(Diagnostic::new(start, "a top-level enum cannot be static or readonly"));
+                if is_static || readonly || is_async {
+                    return Err(Diagnostic::new(start, "a top-level enum cannot be static, readonly, or async"));
                 }
                 classes.push(self.enum_decl(start, visibility)?);
             } else if self.eat(&K::Interface) {
-                if is_static || readonly {
+                if is_static || readonly || is_async {
                     return Err(Diagnostic::new(start, "invalid modifier on a top-level interface"));
                 }
                 classes.push(self.class(start, true, visibility)?);
+            } else if self.eat(&K::Trait) {
+                if is_static || readonly || is_async {
+                    return Err(Diagnostic::new(start, "invalid modifier on a top-level trait"));
+                }
+                traits.push(self.trait_decl(start, visibility)?);
+            } else if self.eat(&K::Impl) {
+                if is_static || readonly || is_async {
+                    return Err(Diagnostic::new(start, "invalid modifier on a top-level impl block"));
+                }
+                impls.push(self.impl_block(start)?);
             } else {
                 let return_type = self.ty(true)?;
                 let (name, _) = self.ident()?;
                 if readonly { return Err(Diagnostic::new(start, "readonly is reserved for instance methods")); }
-                functions.push(self.function_tail(name, return_type, visibility, true, false, start)?);
+                functions.push(self.function_tail(name, return_type, visibility, true, false, is_async, start)?);
             }
         }
-        Ok(Program { units: vec![SourceUnit { module, imports }], functions, classes })
+        Ok(Program { units: vec![SourceUnit { module, imports }], functions, classes, traits, impls })
     }
     fn enum_decl(&mut self, start: Span, visibility: Visibility) -> Result<Class, Diagnostic> {
         let (name, _) = self.ident()?;
         let mut type_params = Vec::new();
+        let mut type_bounds = Vec::new();
         if self.eat(&K::Less) {
             loop {
                 let (param, span) = self.ident()?;
                 if type_params.contains(&param) {
                     return Err(Diagnostic::new(span, "[E4101] duplicate type parameter"));
                 }
+                let bound = if self.eat(&K::Colon) {
+                    let (b, _) = self.ident()?;
+                    Some(b)
+                } else {
+                    None
+                };
                 type_params.push(param);
+                type_bounds.push(bound);
                 if type_params.len() > 8 {
                     return Err(Diagnostic::new(start, "[E4199] limit of 8 type parameters"));
                 }
@@ -174,19 +205,27 @@ impl Parser {
             return Err(Diagnostic::new(start.join(end), "an enum must declare at least one variant"));
         }
         Ok(Class { native: None, is_builtin: false, is_builtin_result: false, name, span: start.join(end), fields: Vec::new(), methods: Vec::new(),
-            constructor: None, type_params, implements: Vec::new(), is_interface: false, variants: Some(variants),
+            constructor: None, type_params, type_bounds, implements: Vec::new(), is_interface: false, variants: Some(variants),
             qualified_name: String::new(), unit: 0, visibility })
     }
     fn class(&mut self, start: Span, is_interface: bool, visibility: Visibility) -> Result<Class, Diagnostic> {
         let (name, _) = self.ident()?;
         let mut type_params = Vec::new();
+        let mut type_bounds = Vec::new();
         if self.eat(&K::Less) {
             loop {
                 let (param, span) = self.ident()?;
                 if type_params.contains(&param) {
                     return Err(Diagnostic::new(span, "[E4101] duplicate type parameter"));
                 }
+                let bound = if self.eat(&K::Colon) {
+                    let (b, _) = self.ident()?;
+                    Some(b)
+                } else {
+                    None
+                };
                 type_params.push(param);
+                type_bounds.push(bound);
                 if type_params.len() > 8 {
                     return Err(Diagnostic::new(start, "[E4199] limit of 8 type parameters"));
                 }
@@ -212,9 +251,9 @@ impl Parser {
         let mut constructor = None;
         while !self.at(&K::RBrace) && !self.at(&K::Eof) {
             let member_start = self.current().span;
-            let (visibility, is_static, readonly) = self.modifiers()?;
+            let (visibility, is_static, readonly, is_async) = self.modifiers()?;
             if is_interface {
-                if visibility != Visibility::Public || is_static {
+                if visibility != Visibility::Public || is_static || is_async {
                     return Err(Diagnostic::new(member_start, "[E4001] an interface declares public instance methods"));
                 }
                 let return_type = self.ty(true)?;
@@ -222,24 +261,25 @@ impl Parser {
                 let params = self.parameters()?;
                 let end = self.expect(&K::Semicolon, "`;` (interfaces cannot declare bodies, fields, or default methods)")?.span;
                 methods.push(Function { name: method_name, span: member_start.join(end), return_type,
-                    params, body: Vec::new(), visibility, is_static: false, readonly,
+                    params, body: Vec::new(), visibility, is_static: false, readonly, is_async: false,
                     qualified_name: String::new(), unit: 0 });
                 continue;
             }
             if matches!(&self.current().kind, K::Ident(n) if n == &name)
                 && self.tokens.get(self.position.index + 1).is_some_and(|t| t.kind == K::LParen) {
                 self.bump();
-                if is_static || readonly { return Err(Diagnostic::new(member_start, "a constructor cannot be static or readonly")); }
+                if is_static || readonly || is_async { return Err(Diagnostic::new(member_start, "a constructor cannot be static, readonly, or async")); }
                 if constructor.is_some() { return Err(Diagnostic::new(member_start, "one constructor is allowed per class; overloading is not supported")); }
-                constructor = Some(self.function_tail(name.clone(), Type::Void, visibility, false, false, member_start)?);
+                constructor = Some(self.function_tail(name.clone(), Type::Void, visibility, false, false, false, member_start)?);
                 continue;
             }
             let ty = self.ty(true)?;
             let (member_name, _) = self.ident()?;
             if self.at(&K::LParen) {
                 if readonly && is_static { return Err(Diagnostic::new(member_start, "readonly is reserved for instance methods")); }
-                methods.push(self.function_tail(member_name, ty, visibility, is_static, readonly, member_start)?);
+                methods.push(self.function_tail(member_name, ty, visibility, is_static, readonly, is_async, member_start)?);
             } else {
+                if is_async { return Err(Diagnostic::new(member_start, "async modifies a method, not a field")); }
                 if readonly { return Err(Diagnostic::new(member_start, "readonly modifies a method, not a field")); }
                 if is_static { return Err(Diagnostic::new(member_start, "static fields are not supported")); }
                 if ty == Type::Void { return Err(Diagnostic::new(member_start, "a field cannot have type void")); }
@@ -249,8 +289,51 @@ impl Parser {
             }
         }
         let end = self.expect(&K::RBrace, "`}`")?.span;
-        Ok(Class { native: None, is_builtin: false, is_builtin_result: false, name, span: start.join(end), fields, methods, constructor, type_params, implements, is_interface,
+        Ok(Class { native: None, is_builtin: false, is_builtin_result: false, name, span: start.join(end), fields, methods, constructor, type_params, type_bounds, implements, is_interface,
             variants: None, qualified_name: String::new(), unit: 0, visibility })
+    }
+    fn trait_decl(&mut self, start: Span, visibility: Visibility) -> Result<Trait, Diagnostic> {
+        let (name, _) = self.ident()?;
+        self.expect(&K::LBrace, "`{`")?;
+        let mut methods = Vec::new();
+        while !self.at(&K::RBrace) && !self.at(&K::Eof) {
+            let member_start = self.current().span;
+            let (visibility, is_static, readonly, is_async) = self.modifiers()?;
+            if is_static || is_async {
+                return Err(Diagnostic::new(member_start, "trait methods cannot be static or async"));
+            }
+            let return_type = self.ty(true)?;
+            let (method_name, _) = self.ident()?;
+            let params = self.parameters()?;
+            let end = self.expect(&K::Semicolon, "`;`")?.span;
+            methods.push(Function {
+                name: method_name, span: member_start.join(end), return_type,
+                params, body: Vec::new(), visibility, is_static: false, readonly, is_async: false,
+                qualified_name: String::new(), unit: 0,
+            });
+        }
+        let end = self.expect(&K::RBrace, "`}`")?.span;
+        Ok(Trait { name, span: start.join(end), methods, visibility })
+    }
+
+    fn impl_block(&mut self, start: Span) -> Result<Impl, Diagnostic> {
+        let (trait_name, _) = self.ident()?;
+        self.expect(&K::For, "`for` in impl block")?;
+        let (target_class, _) = self.ident()?;
+        self.expect(&K::LBrace, "`{`")?;
+        let mut methods = Vec::new();
+        while !self.at(&K::RBrace) && !self.at(&K::Eof) {
+            let member_start = self.current().span;
+            let (visibility, is_static, readonly, is_async) = self.modifiers()?;
+            if is_static {
+                return Err(Diagnostic::new(member_start, "impl methods cannot be static"));
+            }
+            let return_type = self.ty(true)?;
+            let (method_name, _) = self.ident()?;
+            methods.push(self.function_tail(method_name, return_type, visibility, false, readonly, is_async, member_start)?);
+        }
+        let end = self.expect(&K::RBrace, "`}`")?.span;
+        Ok(Impl { trait_name, target_class, span: start.join(end), methods })
     }
     fn ty(&mut self, allow_void: bool) -> Result<Type, Diagnostic> {
         let token = self.bump();
@@ -320,11 +403,11 @@ impl Parser {
         Ok(params)
     }
     fn function_tail(&mut self, name: String, return_type: Type, visibility: Visibility,
-                     is_static: bool, readonly: bool, start: Span) -> Result<Function, Diagnostic> {
+                     is_static: bool, readonly: bool, is_async: bool, start: Span) -> Result<Function, Diagnostic> {
         let params = self.parameters()?;
         let body = self.block()?;
         let end = self.tokens[self.position.index - 1].span;
-        Ok(Function { name, span: start.join(end), return_type, params, body, visibility, is_static, readonly,
+        Ok(Function { name, span: start.join(end), return_type, params, body, visibility, is_static, readonly, is_async,
             qualified_name: String::new(), unit: 0 })
     }
     fn block(&mut self) -> Result<Block, Diagnostic> {
@@ -531,6 +614,13 @@ impl Parser {
         let mut expr = self.primary()?;
         loop {
             if self.eat(&K::Dot) {
+                if self.at(&K::Await) && !self.tokens.get(self.position.index + 1).is_some_and(|t| t.kind == K::LParen) {
+                    self.bump();
+                    let end = self.tokens[self.position.index - 1].span;
+                    let span = expr.span.join(end);
+                    expr = make_expr(ExprKind::Await(Box::new(expr)), span)?;
+                    continue;
+                }
                 let (name, end) = self.ident()?;
                 let span = expr.span.join(end);
                 expr = if self.at(&K::LParen) {
@@ -581,6 +671,11 @@ impl Parser {
         let token = self.bump();
         let mut span = token.span;
         let kind = match token.kind {
+            K::Await => {
+                let inner = self.expression()?;
+                let end = inner.span;
+                return make_expr(ExprKind::Await(Box::new(inner)), span.join(end));
+            }
             K::Number(text) => number_literal(&text, span)?,
             K::String(text) => ExprKind::String(text),
             K::Character(value) => ExprKind::Char(value),

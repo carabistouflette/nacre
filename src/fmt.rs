@@ -358,8 +358,8 @@ fn tokenize(source: &str) -> Result<Vec<Token>, String> {
     let mut pos = 0;
 
     let keywords = [
-        "class", "enum", "match", "interface", "implements", "module", "import",
-        "public", "private", "static", "new", "this", "borrow", "mut", "readonly",
+        "class", "enum", "match", "interface", "implements", "trait", "impl", "module", "import",
+        "public", "private", "static", "new", "this", "borrow", "mut", "readonly", "async", "await",
         "byte", "char", "int", "long", "double", "Unit", "boolean", "String", "void",
         "if", "else", "while", "for", "return", "break", "continue", "true", "false", "assert",
     ];
