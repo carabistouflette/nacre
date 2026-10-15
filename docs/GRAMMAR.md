@@ -51,8 +51,10 @@ parameters    = "(" [ parameter { "," parameter } ] ")" ;
 parameter     = type identifier ;
 returnType    = type | "void" ;
 type          = "byte" | "char" | "int" | "long" | "double"
-              | "boolean" | "String" | "Unit" | nominalType | borrowedType ;
+              | "boolean" | "String" | "Unit" | nominalType | borrowedType
+              | pairType ;
 borrowedType  = "borrow" [ "mut" ] nominalType ;
+pairType      = "(" type "," type ")" ;
 ```
 
 `public` and `private` may qualify top-level declarations and class members.
@@ -85,7 +87,12 @@ statement     = localDeclaration
               | "return" [ expression ] ";"
               | "break" ";" | "continue" ";" | block ;
 localDeclaration = type identifier [ "=" expression ] ";" ;
-matchArm      = identifier [ "(" [ identifier { "," identifier } ] ")" ] block ;
+matchArm      = pattern [ "if" ( expression | "(" expression ")" ) ] block ;
+pattern       = "_" | qualifiedName [ variantPattern | recordPattern ]
+              | "(" pattern "," pattern ")" ;
+variantPattern = "(" [ pattern { "," pattern } [ "," ] ] ")" ;
+recordPattern = "{" [ fieldPattern { "," fieldPattern } [ "," ] ] "}" ;
+fieldPattern  = identifier ":" pattern ;
 place         = ( identifier | "this" ) { "." identifier } ;
 ```
 
@@ -95,14 +102,29 @@ are copied; owned `Text`, class, interface, and enum keys use readonly borrows.
 Map value bindings use a copyable value type or `borrow V`/`borrow mut V` for affine value types. The collection expression is
 evaluated once and must be a stable place; traversal holds a lexical loan on the
 complete collection root. Map and set order is unspecified; `OrderedMap` and
-`OrderedSet` provide comparator order. `Iterator<T>` is an explicit owned library
-API, not a second loop syntax or a borrowed-iterator feature. See [BORROWING.md](BORROWING.md) and
+`OrderedSet` provide comparator order. `Iterator<T>` remains an explicit owned
+library API, not a second loop syntax.
+Separately, a `List`, `Array`, or `Map` `.iter()` call starts a compiler-fused
+chain only when it ends in `.fold(...)` or `.sizeHint()`; that chain is not an
+`Iterator<T>` value or a `for` input. See [BORROWING.md](BORROWING.md) and
 [STDLIB.md](STDLIB.md).
 
-`match` is exhaustive for enums and uses one branch per variant. Payload bindings
-are local to their arm. Matching an owned enum consumes it; matching an explicitly
-borrowed enum borrows its payloads. Empty variants may be written with or without
-empty parentheses in a match arm.
+`match` requires an owned or borrowed nominal subject; local views cannot be
+subjects. Enum patterns may use a bare or qualified variant name, with positional
+payload patterns in parentheses; nullary variants may omit the parentheses. A
+bare identifier binds unless it names a nullary variant of the subject type, and
+`_` ignores a value. `Class { field: pattern, ... }` recursively matches selected
+accessible fields of an ordinary class; `(first, second)` matches a `Pair`.
+Parenthesized pair types, tuple expressions, and tuple patterns have exactly two
+elements and may nest.
+
+Every match must cover the full nested pattern space. A boolean `if` guard (with
+optional parentheses) does not contribute to exhaustiveness; an earlier unguarded
+pattern that already covers a later arm makes that arm unreachable. Variant
+payload arity and record field names are checked. Matching an owned enum consumes
+it; matching an explicitly borrowed enum borrows its payloads. Pattern names are
+scoped to their arm. Record patterns never partially move class fields: nominal
+field bindings are readonly aliases and cannot escape their lexical scope.
 
 ## Expressions and operators
 
@@ -126,6 +148,7 @@ primitiveType    = "byte" | "char" | "int" | "long" | "double" ;
 postfix          = primary { "." identifier [ arguments ] | "?" } ;
 primary          = literal | "this" | identifier [ arguments ]
                  | "(" expression ")" | "()"
+                 | "(" expression "," expression ")"
                  | newValue | genericStaticCall ;
 newValue         = "new" qualifiedName [ typeArguments ]
                    [ "." identifier ] arguments ;

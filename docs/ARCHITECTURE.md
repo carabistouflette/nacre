@@ -16,9 +16,13 @@ one or more .ncr files or directories
   → checker.rs       names, types, visibility, interfaces, and typed IR
   → ownership.rs     definite initialization and move-flow analysis
   → borrowing.rs     lexical loans, origins, and access conflicts
-  → codegen.rs       C11, interface tables, and deterministic cleanup
-  → stdlib_codegen.rs / stdlib/*.c.in   native C method bodies
-  → native.rs        GCC/Clang to executable, or Clang to textual LLVM IR
+  ├─ default: codegen.rs C11 backend, interface tables, deterministic cleanup
+  │           → stdlib_codegen.rs / stdlib/*.c.in native C method bodies
+  │           → native.rs GCC/Clang executable or Clang C-frontend LLVM IR
+  └─ --direct: llvm_codegen.rs emits typed-IR LLVM for user bodies and main
+               + codegen.rs emits C runtime/support → LLVM bitcode
+               → native.rs llvm-links textual user IR with runtime bitcode,
+                 then Clang optimizes and links the native executable
 ```
 
 The Rust frontend uses the standard library; `serde_json` encodes and decodes LSP
@@ -90,6 +94,12 @@ The cursor advances before the original body is checked by reference, not cloned
 Existing flow, borrowing, and cleanup passes govern joins and exits. Traversal
 does not allocate iterator objects, copy affine owners, or rehash keys to read
 stored values.
+
+`iterator_fusion.rs` assembles finite `List`, `Array`, and `Map` iterator chains
+as typed plans rather than runtime adapter objects. A terminal `fold` or
+`sizeHint` consumes the full chain in one backend loop; `map`, `filter`, `take`,
+`zip`, and `enumerate` retain their staged order. Borrowed sources stay loaned
+through the terminal consumer, and a pipeline cannot escape as `Iterator<T>`.
 
 Recoverable list intrinsics return inline `Option<T>` layouts obtained from
 ordinary specialization. Native enum IDs/tags are looked up, not fixed in the
@@ -194,6 +204,10 @@ Enum references point to inline storage. Borrowed matching preserves the tag
 and binds primitive copies or receiver/scrutinee-derived nominal references;
 payloads containing borrowed fields/local views remain forbidden.
 
+Typed match patterns recurse through enum variants, destructurable class fields,
+and nested `Pair` values. Coverage and unreachable-arm checks follow the nested
+shape; a guard that fails can continue to a later matching arm.
+
 
 Virtual dispatch transfers owned parameters to the concrete implementation,
 without a second cleanup in its adapter. Return, replacement, and loop-exit
@@ -228,13 +242,45 @@ callbacks, without giving it responsibility for unrelated value contracts.
 
 ## Native code and LLVM
 
-`run` and `build` emit C and invoke GCC or Clang at `-O0`, `-O1`, `-O2`
-(the default), `-O3`, or `-Os`. Higher optimization is not a guarantee of faster
-code. Measured comparisons and their limits belong in [VALIDATION.md](VALIDATION.md).
+Default `run` and `build` emit C and invoke GCC or Clang at `-O0`, `-O1`, `-O2`
+(the default for source-file builds), `-O3`, or `-Os`. Manifest runs/builds use
+the dev profile unless `--release` selects the release profile; an explicit
+optimization option overrides the profile value. Higher optimization is not a
+guarantee of faster code. Measured comparisons and their limits belong in
+[VALIDATION.md](VALIDATION.md).
 
-`emit-llvm` invokes Clang with `-S -emit-llvm` on the same generated C. Nacre has no
-direct LLVM backend written in Rust. `NACRE_CLANG` selects that Clang executable;
-`NACRE_CC`/`CC` separately select the compiler used by `run` and `build`.
+`emit-llvm` uses Clang's C frontend by default at `-O2`. `NACRE_CC`/`CC`
+select the C compiler for the default native path. `NACRE_CLANG` selects Clang
+for C-frontend LLVM emission and direct native builds. `--direct` is available
+for `run`, `build`, and `emit-llvm`: `llvm_codegen.rs` emits every user-defined
+function body and `main` from typed IR, without translating user code through C.
+Direct `emit-llvm` writes that LLVM module; it does not include the linked runtime.
+
+Direct native `run`/`build` still require C support. `codegen::generate_direct_runtime`
+emits the trusted runtime and native standard-library bodies, plus type
+layouts/destructors and ABI adapters/helpers. Clang compiles this support C to
+reusable LLVM bitcode. `llvm-link` combines it directly with the textual user
+LLVM module; there is no separate per-program Clang-to-bitcode step. Clang then
+applies the selected optimization and performs the native link. User function
+bodies and literal data remain in the per-program LLVM module, not the C support.
+
+`NACRE_LLVM_LINK` selects `llvm-link` for direct native builds (default:
+`llvm-link`). Clang and `llvm-link` must have matching LLVM major versions; a
+Clang 23/`llvm-link` 22 pair failed, while matching version 22 tools succeeded.
+The direct runtime-bitcode cache stores generated C support, not user bodies,
+literal data, the per-program LLVM module, or the final executable. Its key
+includes the compiler/linker identities and versions, target, runtime source,
+compilation inputs, and relevant header/environment inputs. It defaults to
+`$XDG_CACHE_HOME/nacre` (or `$HOME/.cache/nacre`), `NACRE_CACHE_DIR` overrides
+that location, and `NACRE_NO_CACHE` disables it. PGO builds bypass runtime-bitcode
+caching. Direct native builds retain the selected optimization and native/link
+options, including `--native`, `--lto`, `--jemalloc`, and sanitizer flags.
+
+Rust consumers can call `nacre::emit_llvm_direct`,
+`nacre::compile_llvm_direct`, `nacre::compile_llvm_direct_with_flags`, and
+`nacre::compile_llvm_direct_optimized_with_flags` for one source file.
+`project::SourceBundle` exposes matching direct-emit and direct-compile methods
+for a complete source bundle.
 
 For GCC-backed C builds, `--pgo-generate=DIR` instruments the executable; run it
 on representative inputs before rebuilding the same sources with
@@ -318,9 +364,9 @@ to the concrete value layout.
 
 Each map remains one alias domain. Native argument sequencing and projected
 receiver freezing remain in force; separate keys do not provide disjoint
-borrowing. Map and Set traversal does not add a first-class iterator or a
-per-entry lifetime model. Native collection code remains part of the trusted
-base.
+borrowing. Map and Set pipelines do not provide first-class escaping borrowed
+iterators or a per-entry lifetime model. Native collection code remains part of
+the trusted base.
 
 The backend injects source line/column arguments into native calls and substitutes
 numeric identifiers into C templates. Buffers use the same accounting as object
@@ -342,8 +388,9 @@ object are not.
 Files are lexed and parsed independently so a comment or declaration cannot
 cross a file boundary. Their AST units are then resolved together: each
 `module` header supplies a namespace, and each file's imports bind declarations
-from the selected source bundle. This is whole-program compilation, not
-separate compilation, package linking, or external dependency resolution.
+from the selected source bundle, including local path dependencies loaded from
+the manifest. This is whole-program compilation, not separate compilation,
+package linking, or registry/Git/version-based dependency resolution.
 
 Primary diagnostics and their notes map back to the original file. Multi-file C
 output includes a compact table of file starting lines for runtime errors.
@@ -394,8 +441,9 @@ remaining source-byte budget and retains document versions, overlay precedence,
 scope association, combined snapshots, and diagnostic publication. The policy
 module does not depend on `Server`, `Document`, or protocol output.
 
-The nearest ancestor `nacre.json` declares project source roots. Within a project
-scope, open buffers override disk files, including unsaved new source files under
+The nearest ancestor `Nacre.toml` (or legacy `nacre.json`) declares project source
+roots. TOML manifests also resolve local path dependencies and workspace members.
+Within a project scope, open buffers override disk files, including unsaved new source files under
 the configured roots. Stale document versions do not replace newer snapshots.
 Without a marker, each document is validated alone; nearby files are not merged.
 VS Code and Zed launch the same server. See [PROJECTS.md](PROJECTS.md) for the

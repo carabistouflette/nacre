@@ -906,6 +906,7 @@ fn synthetic_expr(kind: a::ExprKind, span: Span) -> a::Expr {
         a::ExprKind::Binary { left, right, .. } => left.depth.max(right.depth),
         a::ExprKind::Unary { expr, .. } | a::ExprKind::Borrow { expr, .. } |
         a::ExprKind::Cast { expr, .. } | a::ExprKind::Try(expr) => expr.depth,
+        a::ExprKind::Tuple(first, second) => first.depth.max(second.depth),
         a::ExprKind::Call { args, .. } | a::ExprKind::StaticCall { args, .. } |
         a::ExprKind::New { args, .. } | a::ExprKind::Variant { args, .. } =>
             args.iter().map(|arg| arg.depth).max().unwrap_or(0),
@@ -963,6 +964,146 @@ impl Checker<'_> {
             Ok((out, stops))
         })();
         self.block_depth -= 1; self.scopes.pop(); result
+    }
+    fn checked_pattern(&mut self, pattern: &a::Pattern, expected: Type) -> Result<t::Pattern, Diagnostic> {
+        let (kind, class) = match &pattern.kind {
+            a::PatternKind::Name(name) if name == "_" => (t::PatternKind::Wildcard, None),
+            a::PatternKind::Name(name) => {
+                let class = expected.object_class();
+                let variants = class.and_then(|class| self.tables.classes[class].variants.clone());
+                let variant_name = if let Some(class) = class {
+                    if let Some((qualifier, variant)) = name.rsplit_once('.') {
+                        if base_type_name(qualifier) != base_type_name(&self.tables.classes[class].name) {
+                            return Err(Diagnostic::new(pattern.span,
+                                format!("qualified variant `{name}` does not belong to `{}`", self.tables.classes[class].name)));
+                        }
+                        Some((variants.as_ref(), variant))
+                    } else {
+                        Some((variants.as_ref(), name.as_str()))
+                    }
+                } else { None };
+                if let Some((Some(variants), variant_name)) = variant_name {
+                    if let Some(variant) = variants.iter().position(|v| v.name == variant_name) {
+                        if !variants[variant].fields.is_empty() {
+                            return Err(Diagnostic::new(pattern.span,
+                                format!("variant `{variant_name}` has payloads; use `{variant_name}(...)` to destructure them")));
+                        }
+                        (t::PatternKind::Variant { class: class.unwrap(), variant, fields: Vec::new() }, None)
+                    } else if name.contains('.') {
+                        return Err(Diagnostic::new(pattern.span, format!(
+                            "unknown variant `{variant_name}` in `{}`", self.tables.classes[class.unwrap()].name)));
+                    } else {
+                        let id = self.declare(name, expected, pattern.span)?;
+                        (t::PatternKind::Binding { id, guard_id: None }, Some(id))
+                    }
+                } else {
+                    let id = self.declare(name, expected, pattern.span)?;
+                    (t::PatternKind::Binding { id, guard_id: None }, Some(id))
+                }
+            }
+            a::PatternKind::Variant { name, fields } => {
+                let class = expected.object_class().ok_or_else(|| Diagnostic::new(pattern.span,
+                    "variant pattern requires an enum value"))?;
+                let variants = self.tables.classes[class].variants.clone().ok_or_else(|| Diagnostic::new(
+                    pattern.span, format!("variant pattern requires an enum, not `{}`", self.tables.classes[class].name)))?;
+                let variant_name = if let Some((qualifier, variant)) = name.rsplit_once('.') {
+                    if base_type_name(qualifier) != base_type_name(&self.tables.classes[class].name) {
+                        return Err(Diagnostic::new(pattern.span,
+                            format!("variant `{name}` does not belong to `{}`", self.tables.classes[class].name)));
+                    }
+                    variant
+                } else { name.as_str() };
+                let variant = variants.iter().position(|known| known.name == variant_name)
+                    .ok_or_else(|| Diagnostic::new(pattern.span, format!(
+                        "unknown variant `{variant_name}` in `{}`", self.tables.classes[class].name)))?;
+                let payload = variants[variant].fields.clone();
+                if fields.len() != payload.len() {
+                    return Err(Diagnostic::new(pattern.span, format!(
+                        "variant `{variant_name}` expects {} payload pattern(s), {} provided", payload.len(), fields.len())));
+                }
+                let mut checked_fields = Vec::with_capacity(fields.len());
+                for (field, ty) in fields.iter().zip(payload) {
+                    checked_fields.push(self.checked_pattern(field, projected_variant_type(expected, ty))?);
+                }
+                (t::PatternKind::Variant { class, variant, fields: checked_fields }, None)
+            }
+            a::PatternKind::Record { class: name, fields } => {
+                let class = expected.object_class().ok_or_else(|| Diagnostic::new(pattern.span,
+                    "record pattern requires a class value"))?;
+                let info_name = self.tables.classes[class].name.clone();
+                let is_enum = self.tables.classes[class].variants.is_some();
+                let is_native = self.tables.classes[class].native.is_some();
+                let is_interface = self.tables.classes[class].is_interface;
+                let info_fields: Vec<_> = self.tables.classes[class].fields.iter()
+                    .map(|field| (field.name.clone(), field.ty, field.visibility)).collect();
+                if base_type_name(name) != base_type_name(&info_name) {
+                    return Err(Diagnostic::new(pattern.span, format!(
+                        "record pattern `{name}` does not match value type `{info_name}`")));
+                }
+                if is_enum || is_native || is_interface {
+                    return Err(Diagnostic::new(pattern.span, format!(
+                        "`{info_name}` is not a destructurable record class")));
+                }
+                let mut seen = HashSet::new();
+                let mut checked_fields = Vec::with_capacity(fields.len());
+                for (field_name, field_pattern) in fields {
+                    if !seen.insert(field_name.as_str()) {
+                        return Err(Diagnostic::new(field_pattern.span,
+                            format!("field `{field_name}` appears more than once in the record pattern")));
+                    }
+                    let field = info_fields.iter().position(|known| known.0 == *field_name)
+                        .ok_or_else(|| Diagnostic::new(field_pattern.span, format!(
+                            "unknown field `{field_name}` in `{info_name}`")))?;
+                    self.accessible(info_fields[field].2, class, field_pattern.span, "field")?;
+                    let field_type = projected_record_type(expected, info_fields[field].1);
+                    checked_fields.push((field, self.checked_pattern(field_pattern, field_type)?));
+                }
+                (t::PatternKind::Record { class, fields: checked_fields }, None)
+            }
+            a::PatternKind::Tuple(first, second) => {
+                let class = expected.object_class().ok_or_else(|| Diagnostic::new(pattern.span,
+                    "pair pattern requires a Pair value"))?;
+                if !self.is_pair_class(class) {
+                    return Err(Diagnostic::new(pattern.span, format!(
+                        "pair pattern cannot match `{}`; expected `Pair<T, U>`", self.tables.classes[class].name)));
+                }
+                let first_type = projected_record_type(expected, self.tables.classes[class].fields[0].ty);
+                let second_type = projected_record_type(expected, self.tables.classes[class].fields[1].ty);
+                let first = self.checked_pattern(first, first_type)?;
+                let second = self.checked_pattern(second, second_type)?;
+                (t::PatternKind::Record { class, fields: vec![(0, first), (1, second)] }, None)
+            }
+        };
+        let _ = class;
+        Ok(t::Pattern { kind, ty: expected, span: pattern.span })
+    }
+    fn install_guard_bindings(&mut self, pattern: &mut t::Pattern) {
+        match &mut pattern.kind {
+            t::PatternKind::Binding { id, guard_id } => {
+                let body_ty = self.variables[*id].ty;
+                let body_span = self.variables[*id].span;
+                let body_name = self.variables[*id].name.clone();
+                let guard_type = match body_ty {
+                    Type::Object(class) | Type::Borrow { class, .. } =>
+                        Type::Borrow { class, mutable: false },
+                    ty => ty,
+                };
+                let alias = self.variables.len();
+                self.variables.push(t::Local {
+                    name: format!("$nacre_guard_{alias}"), ty: guard_type, span: body_span,
+                });
+                self.scopes.last_mut().expect("guard pattern scope")
+                    .insert(body_name, alias);
+                *guard_id = Some(alias);
+            }
+            t::PatternKind::Variant { fields, .. } => {
+                for field in fields { self.install_guard_bindings(field); }
+            }
+            t::PatternKind::Record { fields, .. } => {
+                for (_, field) in fields { self.install_guard_bindings(field); }
+            }
+            t::PatternKind::Wildcard => {}
+        }
     }
     fn statement(&mut self, stmt: &a::Stmt) -> Result<(t::Stmt, bool), Diagnostic> {
         use a::StmtKind as S;
@@ -1064,65 +1205,50 @@ impl Checker<'_> {
             }
             S::Match { value, arms } => {
                 let value = self.expression(value)?;
+                if self.tables.is_view(value.ty) {
+                    return Err(Diagnostic::new(stmt.span, "[E3007] local views cannot be match subjects"));
+                }
                 let class = value.ty.object_class()
-                    .ok_or_else(|| Diagnostic::new(stmt.span, "match requires an owned or borrowed enum"))?;
-                let borrowed = match value.ty {
-                    Type::Borrow { mutable, .. } => Some(mutable),
-                    _ => None,
-                };
-                let variants = self.tables.classes[class].variants.clone()
-                    .ok_or_else(|| Diagnostic::new(stmt.span, format!("match requires an enum, not `{}`", self.tables.classes[class].name)))?;
-                let mut seen = vec![false; variants.len()];
+                    .ok_or_else(|| Diagnostic::new(stmt.span, "match requires an owned or borrowed class value"))?;
+                let mut coverage = Vec::<Vec<CoveragePattern>>::new();
+                let mut coverage_work = 0usize;
                 let mut all_arms_stop = true;
                 let mut checked_arms = Vec::with_capacity(arms.len());
                 for arm in arms {
-                    let variant = variants.iter().position(|v| v.name == arm.variant)
-                        .ok_or_else(|| Diagnostic::new(arm.span, format!("unknown variant `{}` in `{}`", arm.variant, self.tables.classes[class].name)))?;
-                    if seen[variant] {
-                        return Err(Diagnostic::new(arm.span, format!("variant `{}` is repeated in the match", arm.variant)));
-                    }
-                    if arm.guard.is_none() {
-                        seen[variant] = true;
-                    }
-                    let payload = &variants[variant].fields;
-                    if arm.bindings.len() != payload.len() {
-                        return Err(Diagnostic::new(arm.span, format!("match arm `{}` expects {} payload binding(s), {} provided",
-                            arm.variant, payload.len(), arm.bindings.len())));
-                    }
                     self.scopes.push(HashMap::new());
-                    let mut bindings = Vec::with_capacity(payload.len());
-                    for (name, ty) in arm.bindings.iter().zip(payload) {
-                        let binding_type = match (*ty, borrowed) {
-                            (Type::Object(class), Some(mutable)) => Type::Borrow { class, mutable },
-                            _ => *ty,
-                        };
-                        if name == "_" {
-                            let id = self.variables.len();
-                            self.variables.push(t::Local { ty: binding_type, name: format!("$nacre_discard_{id}"), span: arm.span });
-                            bindings.push(id);
-                        } else {
-                            let id = self.declare(name, binding_type, arm.span)?;
-                            bindings.push(id);
-                        }
+                    let mut pattern = self.checked_pattern(&arm.pattern, value.ty)?;
+                    let shape = coverage_pattern(self.tables, &pattern);
+                    if !coverage_useful(self.tables, &coverage, std::slice::from_ref(&shape), &[value.ty],
+                        &mut coverage_work, arm.span)? {
+                        return Err(Diagnostic::new(arm.span,
+                            "unreachable match arm; earlier unguarded patterns already cover it"));
                     }
                     let guard = if let Some(g) = &arm.guard {
+                        self.scopes.push(HashMap::new());
+                        self.install_guard_bindings(&mut pattern);
                         let expr = self.expected_expression(Type::Boolean, g)?;
+                        self.scopes.pop();
                         Some(expr)
-                    } else {
-                        None
-                    };
+                    } else { None };
                     let (body, stops) = self.block(&arm.body)?;
                     self.scopes.pop();
                     all_arms_stop &= stops;
-                    checked_arms.push(t::MatchArm { variant, bindings, guard, body });
+                    if guard.is_none() { coverage.push(vec![shape]); }
+                    checked_arms.push(t::MatchArm { pattern, guard, body });
                 }
-                let all_stop = all_arms_stop;
-                let missing: Vec<_> = variants.iter().enumerate().filter(|(id, _)| !seen[*id])
-                    .map(|(_, variant)| variant.name.as_str()).collect();
-                if !missing.is_empty() {
-                    return Err(Diagnostic::new(stmt.span, format!("match is not exhaustive; missing variants: {}", missing.join(", "))));
+                if coverage_useful(self.tables, &coverage, &[CoveragePattern::Wild], &[value.ty],
+                    &mut coverage_work, stmt.span)? {
+                    let missing = missing_variant_names(self.tables, &coverage, value.ty,
+                        &mut coverage_work, stmt.span)?;
+                    let detail = if missing.is_empty() {
+                        "some nested cases".to_owned()
+                    } else {
+                        format!("variants: {}", missing.join(", "))
+                    };
+                    return Err(Diagnostic::new(stmt.span, format!("match is not exhaustive; missing {detail}")));
                 }
-                (t::Stmt::Match { value, arms: checked_arms }, all_stop)
+                let _ = class;
+                (t::Stmt::Match { value, arms: checked_arms }, all_arms_stop)
             }
             S::Return(value) => {
                 if self.return_type == Type::Void && value.is_some() {
@@ -1549,8 +1675,29 @@ impl Checker<'_> {
             let loop_body = vec![t::Stmt::Match {
                 value: next,
                 arms: vec![
-                    t::MatchArm { variant: none_variant, bindings: Vec::new(), guard: None, body: vec![t::Stmt::Break] },
-                    t::MatchArm { variant: some_variant, bindings: vec![item_owner_id], guard: None, body: some_body },
+                    t::MatchArm {
+                        pattern: t::Pattern {
+                            kind: t::PatternKind::Variant { class: option_class, variant: none_variant, fields: Vec::new() },
+                            ty: Type::Object(option_class), span: collection_span,
+                        },
+                        guard: None,
+                        body: vec![t::Stmt::Break],
+                    },
+                    t::MatchArm {
+                        pattern: t::Pattern {
+                            kind: t::PatternKind::Variant {
+                                class: option_class,
+                                variant: some_variant,
+                                fields: vec![t::Pattern {
+                                    kind: t::PatternKind::Binding { id: item_owner_id, guard_id: None },
+                                    ty: element_type, span: *header_span,
+                                }],
+                            },
+                            ty: Type::Object(option_class), span: collection_span,
+                        },
+                        guard: None,
+                        body: some_body,
+                    },
                 ],
             }];
             lowered.push(t::Stmt::While {
@@ -1866,7 +2013,109 @@ impl Checker<'_> {
         }
     }
     /// Borrowing changes the call contract, not ownership. No allocation or copy.
+    fn is_pair_class(&self, class: usize) -> bool {
+        let info = &self.tables.classes[class];
+        let name = info.name.split('<').next().unwrap_or(&info.name);
+        let base = name.rsplit("::").next().unwrap_or(name);
+        base == "Pair" && info.fields.len() == 2
+            && info.fields[0].name == "first" && info.fields[1].name == "second"
+    }
+    fn pair_class_for_types(&self, first: Type, second: Type) -> Option<usize> {
+        self.tables.classes.iter().enumerate().find_map(|(id, class)| {
+            let name = class.name.split('<').next().unwrap_or(&class.name);
+            let base = name.rsplit("::").next().unwrap_or(name);
+            (base == "Pair" && class.fields.len() == 2
+                && class.fields[0].ty == first && class.fields[1].ty == second)
+                .then_some(id)
+        })
+    }
+    fn option_long_class(&self) -> Option<usize> {
+        self.tables.classes.iter().enumerate().find_map(|(id, class)| {
+            let name = class.name.split('<').next().unwrap_or(&class.name);
+            let base = name.rsplit("::").next().unwrap_or(name);
+            let variants = class.variants.as_ref()?;
+            (base == "Option" && variants.iter().any(|v| v.name == "Some" && v.fields.as_slice() == [Type::Long])
+                && variants.iter().any(|v| v.name == "None" && v.fields.is_empty())).then_some(id)
+        })
+    }
+    fn iterator_callback_interface(
+        &self,
+        callback_type: Type,
+        method: &str,
+        choices: &[(&str, Vec<Type>, Option<Type>)],
+        span: Span,
+    ) -> Result<(usize, usize, Type), Diagnostic> {
+        let callback_class = callback_type.object_class().ok_or_else(|| Diagnostic::new(
+            span, "iterator callback must be an object implementing the required callback interface"))?;
+        let info = &self.tables.classes[callback_class];
+        let mut interfaces = Vec::new();
+        if info.is_interface { interfaces.push(callback_class); }
+        interfaces.extend(info.implementations.iter().map(|(interface, _)| *interface));
+        for (expected_name, expected_params, expected_return) in choices {
+            for &interface in &interfaces {
+                let class = &self.tables.classes[interface];
+                let name = class.name.split('<').next().unwrap_or(&class.name);
+                if name.rsplit("::").next().unwrap_or(name) != *expected_name { continue; }
+                let Some(method_id) = class.interface_methods.iter().copied()
+                    .find(|id| self.tables.signatures[*id].name == method) else { continue; };
+                let signature = &self.tables.signatures[method_id];
+                if signature.params.as_slice() == expected_params.as_slice()
+                    && expected_return.is_none_or(|ty| signature.return_type == ty) {
+                    return Ok((interface, method_id, signature.return_type));
+                }
+            }
+        }
+        let required = choices.iter().map(|(name, _, _)| *name).collect::<Vec<_>>().join(" or ");
+        Err(Diagnostic::new(span, format!(
+            "iterator callback must implement a compatible {required} interface for `{}`",
+            self.tables.type_name(callback_type))))
+    }
+    fn upcast_iterator_callback(
+        &self, mut callback: t::Expr, interface: usize,
+    ) -> Result<t::Expr, Diagnostic> {
+        let actual = callback.ty.object_class().ok_or_else(|| Diagnostic::new(
+            callback.span, "iterator callback is not an object"))?;
+        if !self.tables.can_upcast(actual, interface) {
+            return Err(Diagnostic::new(callback.span, format!(
+                "callback type `{}` cannot be viewed as `{}`",
+                self.tables.type_name(callback.ty), self.tables.classes[interface].name)));
+        }
+        match callback.ty {
+            Type::Object(_) if actual == interface => Ok(callback),
+            Type::Object(concrete) => {
+                let span = callback.span;
+                Ok(t::Expr { kind: t::ExprKind::Upcast {
+                    value: Box::new(callback), interface, concrete,
+                }, ty: Type::Object(interface), span })
+            }
+            Type::Borrow { .. } if actual == interface => {
+                callback.ty = Type::Borrow { class: interface, mutable: false };
+                Ok(callback)
+            }
+            Type::Borrow { .. } => {
+                let span = callback.span;
+                let concrete = actual;
+                callback.ty = Type::Borrow { class: concrete, mutable: false };
+                Ok(t::Expr { kind: t::ExprKind::Upcast {
+                    value: Box::new(callback), interface, concrete,
+                }, ty: Type::Borrow { class: interface, mutable: false }, span })
+            }
+            _ => unreachable!("object_class came from object or borrow type"),
+        }
+    }
     fn expected_expression(&mut self, expected: Type, expr: &a::Expr) -> Result<t::Expr, Diagnostic> {
+        if let a::ExprKind::Tuple(first, second) = &expr.kind {
+            let Type::Object(class) = expected else {
+                return Err(Diagnostic::new(expr.span, "a pair expression requires a `(T, U)` or `Pair<T, U>` expected type"));
+            };
+            if !self.is_pair_class(class) {
+                return Err(Diagnostic::new(expr.span, format!(
+                    "a pair expression cannot initialize `{}`; expected a Pair type", self.tables.classes[class].name)));
+            }
+            let class_name = self.tables.classes[class].name.clone();
+            let (kind, ty) = self.new_expression(&class_name, &[first.as_ref().clone(), second.as_ref().clone()], expr.span)?;
+            return Ok(t::Expr { kind, ty, span: expr.span });
+        }
         if let Type::Borrow { class, mutable } = expected {
             if matches!(expr.kind, a::ExprKind::Call { .. } | a::ExprKind::MethodCall { .. } | a::ExprKind::Borrow { .. }) {
                 let mut value = self.expression(expr)?;
@@ -2037,6 +2286,8 @@ impl Checker<'_> {
             E::Variant { class, variant, args, .. } => self.variant_expression(class, variant, args, expr.span)?,
             E::Call { name, args } => self.call_expression(name, args, expr.span)?,
             E::StaticCall { .. } => unreachable!("generic static calls expand before type checking"),
+            E::Tuple(_, _) => return Err(Diagnostic::new(expr.span,
+                "a pair expression requires an expected `(T, U)` or `Pair<T, U>` type")),
             E::MethodCall { receiver, name, args } => self.method_expression(receiver, name, args, expr.span)?,
             E::Unary { op, expr: inner } => self.unary_expression(*op, inner, expr.span)?,
             E::Try(inner) => self.try_expression(inner, expr.span)?,
@@ -2055,9 +2306,9 @@ impl Checker<'_> {
         Ok((t::ExprKind::Cast { value: Box::new(value) }, target))
     }
     fn await_expression(&mut self, inner: &a::Expr, span: Span) -> Result<(t::ExprKind, Type), Diagnostic> {
-        if let Ok(receiver) = self.place(inner, false) {
-            if let Some(class) = receiver.ty.object_class() {
-                if let Some(crate::ir::NativeClass::Future(_)) = self.tables.classes[class].native {
+        if let Ok(receiver) = self.place(inner, false)
+            && let Some(class) = receiver.ty.object_class()
+                && let Some(crate::ir::NativeClass::Future(_)) = self.tables.classes[class].native {
                     let id = *self.tables.classes[class].methods.get("await")
                         .ok_or_else(|| Diagnostic::new(span, "method `await` is unknown on Future"))?;
                     let timeout_expr = a::Expr {
@@ -2067,8 +2318,6 @@ impl Checker<'_> {
                     };
                     return self.call(id, Some(receiver), &[timeout_expr], span);
                 }
-            }
-        }
         let checked = self.expression(inner)?;
         Ok((checked.kind, checked.ty))
     }
@@ -2159,9 +2408,156 @@ impl Checker<'_> {
             self.call(id, None, args, span)
         }
     }
+    fn iterator_source(&mut self, receiver: &a::Expr, span: Span) -> Result<t::IteratorPlan, Diagnostic> {
+        let (receiver_type, collection) = match self.place(receiver, false) {
+            Ok(place) => (place.ty, crate::iterator_fusion::borrowed_receiver(place)),
+            Err(_) => {
+                let value = self.expression(receiver)?;
+                let receiver_type = value.ty;
+                let collection = if receiver_type.is_borrow() {
+                    crate::iterator_fusion::borrowed_expression(value)
+                } else if receiver_type.is_object() {
+                    crate::iterator_fusion::owned_receiver(value)
+                } else {
+                    return Err(Diagnostic::new(span, "iterator source must be a List, Array, or Map"));
+                };
+                (receiver_type, collection)
+            }
+        };
+        let class = receiver_type.object_class().ok_or_else(|| Diagnostic::new(
+            span, "iterator source must be a List, Array, or Map"))?;
+        let (source, item_type) = match self.tables.classes[class].native {
+            Some(t::NativeClass::List(element_type)) => (
+                t::IteratorSource::List { collection, element_type },
+                iterator_borrowed_item_type(element_type)),
+            Some(t::NativeClass::Array(element_type)) => (
+                t::IteratorSource::Array { collection, element_type },
+                iterator_borrowed_item_type(element_type)),
+            Some(t::NativeClass::Map { key: key_type, value: value_type, .. }) => {
+                let pair_class = self.pair_class_for_types(key_type, value_type).ok_or_else(|| Diagnostic::new(
+                    span, "missing Pair<K, V> specialization for Map iteration"))?;
+                (t::IteratorSource::Map { collection, key_type, value_type, pair_class },
+                    Type::Borrow { class: pair_class, mutable: false })
+            }
+            _ => return Err(Diagnostic::new(span, "only List, Array, and Map values provide `.iter()`")),
+        };
+        Ok(crate::iterator_fusion::source(source, item_type, span))
+    }
+    fn iterator_plan(&mut self, expr: &a::Expr, depth: usize) -> Result<t::IteratorPlan, Diagnostic> {
+        if depth >= 128 { return Err(Diagnostic::new(expr.span, "iterator pipeline is too deep")); }
+        let a::ExprKind::MethodCall { receiver, name, args } = &expr.kind else {
+            return Err(Diagnostic::new(expr.span, "expected a fused iterator pipeline"));
+        };
+        match name.as_str() {
+            "iter" => {
+                if !args.is_empty() { return Err(Diagnostic::new(expr.span, "`.iter()` expects no arguments")); }
+                self.iterator_source(receiver, expr.span)
+            }
+            "map" => {
+                if args.len() != 1 { return Err(Diagnostic::new(expr.span, "`.map()` expects one Mapper or RefMapper callback")); }
+                let mut plan = self.iterator_plan(receiver, depth + 1)?;
+                let item_type = plan.item_type;
+                let borrowed_item = iterator_borrowed_item_type(item_type);
+                let choices = if item_type.is_borrow() {
+                    vec![("RefMapper", vec![borrowed_item], None)]
+                } else {
+                    vec![("Mapper", vec![item_type], None), ("RefMapper", vec![borrowed_item], None)]
+                };
+                let callback = self.expression(&args[0])?;
+                let (interface, method, output_type) =
+                    self.iterator_callback_interface(callback.ty, "apply", &choices, args[0].span)?;
+                if output_type == Type::Void || output_type.is_borrow() || self.tables.is_view(output_type) {
+                    return Err(Diagnostic::new(args[0].span,
+                        "`.map()` callbacks must return a non-borrowed, non-view value"));
+                }
+                let callback = self.upcast_iterator_callback(callback, interface)?;
+                crate::iterator_fusion::map(&mut plan, callback, method, output_type);
+                Ok(plan)
+            }
+            "filter" => {
+                if args.len() != 1 { return Err(Diagnostic::new(expr.span, "`.filter()` expects one Predicate callback")); }
+                let mut plan = self.iterator_plan(receiver, depth + 1)?;
+                let item_type = iterator_borrowed_item_type(plan.item_type);
+                let choices = vec![("Predicate", vec![item_type], Some(Type::Boolean))];
+                let callback = self.expression(&args[0])?;
+                let (interface, method, _) =
+                    self.iterator_callback_interface(callback.ty, "test", &choices, args[0].span)?;
+                let callback = self.upcast_iterator_callback(callback, interface)?;
+                crate::iterator_fusion::filter(&mut plan, callback, method);
+                Ok(plan)
+            }
+            "take" => {
+                if args.len() != 1 { return Err(Diagnostic::new(expr.span, "`.take()` expects one long count")); }
+                let mut plan = self.iterator_plan(receiver, depth + 1)?;
+                let count = self.expected_expression(Type::Long, &args[0])?;
+                crate::iterator_fusion::take(&mut plan, count);
+                Ok(plan)
+            }
+            "enumerate" => {
+                if !args.is_empty() { return Err(Diagnostic::new(expr.span, "`.enumerate()` expects no arguments")); }
+                let mut plan = self.iterator_plan(receiver, depth + 1)?;
+                let item_type = iterator_raw_item_type(plan.item_type);
+                let pair_class = self.pair_class_for_types(Type::Long, item_type).ok_or_else(|| Diagnostic::new(
+                    expr.span, "missing Pair<long, T> specialization for enumerate"))?;
+                crate::iterator_fusion::enumerate(&mut plan, pair_class);
+                Ok(plan)
+            }
+            "zip" => {
+                if args.len() != 1 { return Err(Diagnostic::new(expr.span, "`.zip()` expects one iterator pipeline")); }
+                let mut plan = self.iterator_plan(receiver, depth + 1)?;
+                let right = self.iterator_plan(&args[0], depth + 1)?;
+                let left_type = iterator_raw_item_type(plan.item_type);
+                let right_type = iterator_raw_item_type(right.item_type);
+                let pair_class = self.pair_class_for_types(left_type, right_type).ok_or_else(|| Diagnostic::new(
+                    expr.span, "missing Pair<T, U> specialization for zip"))?;
+                crate::iterator_fusion::zip(&mut plan, right, pair_class);
+                Ok(plan)
+            }
+            _ => Err(Diagnostic::new(expr.span, format!("`{name}` is not a fused iterator stage"))),
+        }
+    }
+    fn iterator_fold_expression(
+        &mut self, receiver: &a::Expr, args: &[a::Expr], span: Span,
+    ) -> Result<(t::ExprKind, Type), Diagnostic> {
+        if args.len() != 2 { return Err(Diagnostic::new(span, "`.fold()` expects an initial accumulator and a Folder callback")); }
+        let plan = self.iterator_plan(receiver, 0)?;
+        let initial = self.expression(&args[0])?;
+        if initial.ty == Type::Void || initial.ty.is_borrow() {
+            return Err(Diagnostic::new(args[0].span, "fold accumulator must be a value, not void or a borrow"));
+        }
+        let item_type = iterator_borrowed_item_type(plan.item_type);
+        let choices = vec![("Folder", vec![initial.ty, item_type], Some(initial.ty))];
+        let folder = self.expression(&args[1])?;
+        let (interface, method, _) =
+            self.iterator_callback_interface(folder.ty, "apply", &choices, args[1].span)?;
+        let folder = self.upcast_iterator_callback(folder, interface)?;
+        let accumulator_type = initial.ty;
+        Ok((t::ExprKind::IteratorFold {
+            plan: Box::new(plan), initial: Box::new(initial), folder: Box::new(folder),
+            folder_method: method, accumulator_type,
+        }, accumulator_type))
+    }
+    fn iterator_size_hint_expression(
+        &mut self, receiver: &a::Expr, args: &[a::Expr], span: Span,
+    ) -> Result<(t::ExprKind, Type), Diagnostic> {
+        if !args.is_empty() { return Err(Diagnostic::new(span, "`.sizeHint()` expects no arguments")); }
+        let plan = self.iterator_plan(receiver, 0)?;
+        let option_class = self.option_long_class().ok_or_else(|| Diagnostic::new(
+            span, "missing Option<long> specialization for iterator size hints"))?;
+        let pair_class = self.pair_class_for_types(Type::Long, Type::Object(option_class)).ok_or_else(|| Diagnostic::new(
+            span, "missing Pair<long, Option<long>> specialization for iterator size hints"))?;
+        Ok((t::ExprKind::IteratorSizeHint { plan: Box::new(plan), pair_class, option_class }, Type::Object(pair_class)))
+    }
 
     fn method_expression(&mut self, receiver: &a::Expr, name: &str, args: &[a::Expr], span: Span) -> Result<(t::ExprKind, Type), Diagnostic> {
         use a::ExprKind as E;
+        if is_iterator_chain(receiver) {
+            match name {
+                "fold" => return self.iterator_fold_expression(receiver, args, span),
+                "sizeHint" => return self.iterator_size_hint_expression(receiver, args, span),
+                _ => {}
+            }
+        }
         let system_println = name == "println" && matches!(&receiver.kind,
             E::Field { base, name } if name == "out" && matches!(&base.kind, E::Var(s) if s == "System"));
         if system_println { return self.builtin(args, span); }
@@ -2282,4 +2678,185 @@ impl Checker<'_> {
         }
         Ok((t::ExprKind::Binary { op, left: Box::new(left), right: Box::new(right) }, ty))
     }
+}
+fn is_iterator_chain(expr: &a::Expr) -> bool {
+    let a::ExprKind::MethodCall { receiver, name, .. } = &expr.kind else { return false; };
+    if name == "iter" { return true; }
+    matches!(name.as_str(), "map" | "filter" | "take" | "enumerate" | "zip")
+        && is_iterator_chain(receiver)
+}
+
+fn iterator_borrowed_item_type(item: Type) -> Type {
+    match item {
+        Type::Object(class) | Type::Borrow { class, .. } =>
+            Type::Borrow { class, mutable: false },
+        primitive => primitive,
+    }
+}
+
+fn iterator_raw_item_type(item: Type) -> Type {
+    match item {
+        Type::Borrow { class, .. } => Type::Object(class),
+        other => other,
+    }
+}
+
+const MAX_PATTERN_WORK: usize = 100_000;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum CoverageCtor { Variant(usize), Record, Opaque }
+#[derive(Clone)]
+enum CoveragePattern { Wild, Constructor(CoverageCtor, Vec<CoveragePattern>) }
+struct CoverageCtorInfo { key: CoverageCtor, fields: Vec<Type> }
+
+fn base_type_name(name: &str) -> &str {
+    name.split('<').next().unwrap_or(name)
+}
+
+fn projected_variant_type(parent: Type, field: Type) -> Type {
+    match (parent, field) {
+        (Type::Borrow { mutable, .. }, Type::Object(class)) => Type::Borrow { class, mutable },
+        (_, field) => field,
+    }
+}
+
+fn projected_record_type(_parent: Type, field: Type) -> Type {
+    match field {
+        Type::Object(class) | Type::Borrow { class, .. } =>
+            Type::Borrow { class, mutable: false },
+        other => other,
+    }
+}
+
+fn coverage_pattern(tables: &Tables, pattern: &t::Pattern) -> CoveragePattern {
+    match &pattern.kind {
+        t::PatternKind::Binding { .. } | t::PatternKind::Wildcard => CoveragePattern::Wild,
+        t::PatternKind::Variant { variant, fields, .. } => CoveragePattern::Constructor(
+            CoverageCtor::Variant(*variant), fields.iter().map(|field| coverage_pattern(tables, field)).collect()),
+        t::PatternKind::Record { class, fields } => {
+            let mut children = vec![CoveragePattern::Wild; tables.classes[*class].fields.len()];
+            for (field, pattern) in fields {
+                children[*field] = coverage_pattern(tables, pattern);
+            }
+            CoveragePattern::Constructor(CoverageCtor::Record, children)
+        }
+    }
+}
+
+fn coverage_constructors(tables: &Tables, ty: Type) -> Vec<CoverageCtorInfo> {
+    if let Some(class) = ty.object_class() {
+        let info = &tables.classes[class];
+        if let Some(variants) = &info.variants {
+            return variants.iter().enumerate().map(|(id, variant)| CoverageCtorInfo {
+                key: CoverageCtor::Variant(id), fields: variant.fields.clone(),
+            }).collect();
+        }
+        if info.native.is_none() && !info.is_interface {
+            return vec![CoverageCtorInfo {
+                key: CoverageCtor::Record, fields: info.fields.iter().map(|field| field.ty).collect(),
+            }];
+        }
+    }
+    vec![CoverageCtorInfo { key: CoverageCtor::Opaque, fields: Vec::new() }]
+}
+
+fn is_coverage_wild(pattern: &CoveragePattern) -> bool {
+    matches!(pattern, CoveragePattern::Wild)
+}
+
+fn specialize_coverage(
+    matrix: &[Vec<CoveragePattern>], key: CoverageCtor, arity: usize,
+) -> Vec<Vec<CoveragePattern>> {
+    let mut specialized = Vec::new();
+    for row in matrix {
+        let Some((first, rest)) = row.split_first() else { continue; };
+        match first {
+            CoveragePattern::Wild => {
+                let mut next = vec![CoveragePattern::Wild; arity];
+                next.extend(rest.iter().cloned());
+                specialized.push(next);
+            }
+            CoveragePattern::Constructor(found, fields) if *found == key => {
+                let mut next = fields.clone();
+                next.extend(rest.iter().cloned());
+                specialized.push(next);
+            }
+            CoveragePattern::Constructor(_, _) => {}
+        }
+    }
+    specialized
+}
+
+fn coverage_useful(
+    tables: &Tables,
+    matrix: &[Vec<CoveragePattern>],
+    vector: &[CoveragePattern],
+    types: &[Type],
+    work: &mut usize,
+    span: Span,
+) -> Result<bool, Diagnostic> {
+    *work = work.saturating_add(matrix.len().saturating_add(1));
+    if *work > MAX_PATTERN_WORK {
+        return Err(Diagnostic::new(span, "[E4199] pattern analysis is too complex"));
+    }
+    if vector.is_empty() { return Ok(matrix.is_empty()); }
+    let Some((&ty, remaining_types)) = types.split_first() else {
+        return Err(Diagnostic::new(span, "invalid typed pattern matrix"));
+    };
+    if let CoveragePattern::Constructor(key, fields) = &vector[0] {
+        let Some(info) = coverage_constructors(tables, ty).into_iter().find(|info| info.key == *key) else {
+            return Ok(false);
+        };
+        let specialized = specialize_coverage(matrix, *key, info.fields.len());
+        let mut next_vector = fields.clone();
+        next_vector.extend(vector[1..].iter().cloned());
+        let mut next_types = info.fields;
+        next_types.extend_from_slice(remaining_types);
+        return coverage_useful(tables, &specialized, &next_vector, &next_types, work, span);
+    }
+
+    let constructors = coverage_constructors(tables, ty);
+    let complete = constructors.iter().all(|constructor| matrix.iter().any(|row| {
+        row.first().is_some_and(|pattern|
+            matches!(pattern, CoveragePattern::Constructor(key, _) if *key == constructor.key))
+    }));
+    if complete {
+        for constructor in constructors {
+            let specialized = specialize_coverage(matrix, constructor.key, constructor.fields.len());
+            let mut next_vector = vec![CoveragePattern::Wild; constructor.fields.len()];
+            next_vector.extend(vector[1..].iter().cloned());
+            let mut next_types = constructor.fields;
+            next_types.extend_from_slice(remaining_types);
+            if coverage_useful(tables, &specialized, &next_vector, &next_types, work, span)? {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    } else {
+        let defaults: Vec<_> = matrix.iter().filter_map(|row| {
+            let (first, rest) = row.split_first()?;
+            is_coverage_wild(first).then(|| rest.to_vec())
+        }).collect();
+        coverage_useful(tables, &defaults, &vector[1..], remaining_types, work, span)
+    }
+}
+
+fn missing_variant_names(
+    tables: &Tables,
+    matrix: &[Vec<CoveragePattern>],
+    ty: Type,
+    work: &mut usize,
+    span: Span,
+) -> Result<Vec<String>, Diagnostic> {
+    let Some(class) = ty.object_class() else { return Ok(Vec::new()); };
+    let Some(variants) = &tables.classes[class].variants else { return Ok(Vec::new()); };
+    let mut missing = Vec::new();
+    for (id, variant) in variants.iter().enumerate() {
+        let fields = vec![CoveragePattern::Wild; variant.fields.len()];
+        let candidate = CoveragePattern::Constructor(CoverageCtor::Variant(id), fields);
+        if coverage_useful(tables, matrix, &[candidate], &[ty], work, span)? {
+            missing.push(variant.name.clone());
+        }
+    }
+    Ok(missing)
 }

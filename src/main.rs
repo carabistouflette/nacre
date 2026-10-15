@@ -10,19 +10,21 @@ use nacre::project::{self, SourceBundle};
 const HELP: &str = "Nacre — experimental native compiler written in Rust
 
 Usage:
-  nacre check  source.ncr ... | directory
+  nacre check  [source.ncr ... | directory | Nacre.toml]
   nacre test   source.ncr ... | directory [--native] [--lto] [--jemalloc] [-- filter]
   nacre bench  source.ncr ... | directory [--native] [--lto] [--jemalloc] [-- filter]
   nacre fmt    source.ncr ... | directory [--check]
   nacre doc    source.ncr ... | directory [-o output-dir]
-  nacre run    source.ncr [--memory-stats] [--native] [--lto] [--jemalloc] [-O0|-O1|-O2|-O3|-Os] [-- arguments...]
-  nacre build  source.ncr [-o executable] [--memory-stats] [--native] [--lto] [--jemalloc] [-O0|-O1|-O2|-O3|-Os]
+  nacre run    [source.ncr ... | directory | Nacre.toml] [--release] [--memory-stats] [--direct] [--native] [--lto] [--jemalloc] [-O0|-O1|-O2|-O3|-Os] [-- arguments...]
+  nacre build  [source.ncr ... | directory | Nacre.toml] [-o executable] [--release] [--memory-stats] [--direct] [--native] [--lto] [--jemalloc] [-O0|-O1|-O2|-O3|-Os]
   nacre emit-c source.ncr [-o output.c] [--memory-stats]
   nacre emit-flow source.ncr [-o output.flow]
   nacre emit-borrows source.ncr [-o output.borrows]
   nacre emit-types source.ncr [-o output.types]
-  nacre emit-llvm source.ncr [-o output.ll] [--memory-stats] [-O0|-O1|-O2|-O3|-Os]
+  nacre emit-llvm source.ncr [-o output.ll] [--direct] [--memory-stats] [-O0|-O1|-O2|-O3|-Os]
+  nacre new new-project-directory
   nacre init new-project-directory
+  nacre add <path> [--manifest-path <file>]
   nacre doctor
   nacre lsp
   nacre --help
@@ -34,23 +36,28 @@ Examples with Cargo:
   cargo run -- build examples/language/counter.ncr -o out/counter
   cargo run -- emit-c examples/language/counter.ncr -o out/counter.c
 
-Multiple files or a .ncr directory are accepted by all commands.
+Multiple files or a .ncr directory are accepted by source commands. A directory or Nacre.toml can select a manifest package; build, run, and check default to . when Nacre.toml exists.
 Source files may declare modules and import public names; all requested inputs are compiled together.
 --sanitize (run/build): AddressSanitizer + UndefinedBehaviorSanitizer.
---native (run/build): enable host CPU native instructions (-march=native).
---lto (run/build): enable link-time optimization (-flto).
+--direct (run/build): compile typed Nacre LLVM IR and a stdlib-only C runtime via llvm-link; requires Clang and llvm-link.
+--native (run/build): enable host CPU native instructions (-march=native), independent of --direct.
+--lto (run/build): enable link-time optimization (-flto); combines with the manifest profile.
+--release (run/build): use the manifest release profile; otherwise manifest build/run uses dev.
 --jemalloc (run/build): link high-performance jemalloc allocator (-ljemalloc).
 --pgo-generate (run/build): enable Profile-Guided Optimization instrumentation (-fprofile-generate).
 --pgo-use (run/build): compile using collected PGO profile data (-fprofile-use).
-init: create a new project; refuse an existing path.
+new / init: create a new project; refuse an existing path.
+add: add a local path dependency to Nacre.toml (defaults to ./Nacre.toml).
 doctor: compile and run an end-to-end test with List and Text.
-build: default output is out/<source-name>.
+build: default output is out/<package-name> for a manifest package, otherwise out/<source-name>.
 emit-c / emit-flow / emit-borrows / emit-types / emit-llvm: write to stdout when -o is omitted.
-emit-llvm: textual LLVM via Clang's C frontend (NACRE_CLANG), not a direct backend.
-Native and LLVM optimization: -O2 by default.
+emit-llvm: default emits LLVM via Clang's C frontend; --direct emits user IR from the typed Nacre backend without C translation.
+Native builds and C-front-end LLVM emission: -O2 by default.
 emit-flow: ownership graph without a C compiler.
---memory-stats: allocation/deallocation counters on the target program's stderr.
+--memory-stats: allocation/deallocation counters on the target program's stderr; unavailable for emit-llvm --direct.
 CC or NACRE_CC: path to a standalone C11 executable (cc, clang, gcc), without options.
+NACRE_CLANG: Clang executable for LLVM emission and direct native builds.
+NACRE_LLVM_LINK: llvm-link executable for direct native builds (defaults to llvm-link).
 Existing output files are replaced, except for the source file.
 Initial targets: Linux and WSL. macOS has not been tested.
 ";
@@ -73,11 +80,34 @@ fn execute(args: Vec<OsString>) -> Result<i32, String> {
         nacre::lsp::run()?;
         return Ok(0);
     }
-    if command == "init" {
-        if args.len() != 2 { return Err("usage: nacre init new-project-directory".to_owned()); }
+    if matches!(command, "new" | "init") {
+        if args.len() != 2 { return Err(format!("usage: nacre {command} new-project-directory")); }
         let path = PathBuf::from(&args[1]);
         project::init(&path)?;
         println!("Project created: {}", path.display());
+        return Ok(0);
+    }
+    if command == "add" {
+        let usage = "usage: nacre add <path> [--manifest-path <file>]";
+        let mut dependency_path = None;
+        let mut manifest_path = PathBuf::from("Nacre.toml");
+        let mut manifest_path_seen = false;
+        let mut i = 1;
+        while i < args.len() {
+            if args[i] == "--manifest-path" && !manifest_path_seen {
+                manifest_path = PathBuf::from(args.get(i + 1).ok_or(usage)?);
+                manifest_path_seen = true;
+                i += 2;
+            } else if !args[i].to_string_lossy().starts_with('-') && dependency_path.is_none() {
+                dependency_path = Some(PathBuf::from(&args[i]));
+                i += 1;
+            } else {
+                return Err(usage.to_owned());
+            }
+        }
+        let dependency_path = dependency_path.ok_or(usage)?;
+        let name = nacre::manifest::add_dependency(&manifest_path, &dependency_path)?;
+        println!("Added dependency {name}");
         return Ok(0);
     }
     if command == "doctor" {
@@ -94,6 +124,7 @@ fn execute(args: Vec<OsString>) -> Result<i32, String> {
     let mut sanitize = false;
     let mut native_arch = false;
     let mut lto = false;
+    let mut release = false;
     let mut jemalloc = false;
     let mut pgo_generate: Option<PathBuf> = None;
     let mut pgo_use: Option<PathBuf> = None;
@@ -132,6 +163,9 @@ fn execute(args: Vec<OsString>) -> Result<i32, String> {
             native_arch = true; i += 1;
         } else if args[i] == "--lto" && matches!(command, "run" | "build" | "test" | "bench") && !lto {
             lto = true; i += 1;
+        } else if args[i] == "--release" && matches!(command, "run" | "build") && !release {
+            release = true;
+            i += 1;
         } else if args[i] == "--jemalloc" && matches!(command, "run" | "build" | "test" | "bench") && !jemalloc {
             jemalloc = true; i += 1;
         } else if args[i].to_string_lossy().starts_with("--pgo-generate") && matches!(command, "run" | "build") && pgo_generate.is_none() {
@@ -158,13 +192,24 @@ fn execute(args: Vec<OsString>) -> Result<i32, String> {
             i += 1;
         } else if args[i] == "--check" && command == "fmt" && !check_only {
             check_only = true; i += 1;
-        } else if args[i] == "--direct" && command == "emit-llvm" && !direct_llvm {
+        } else if args[i] == "--direct" && matches!(command, "emit-llvm" | "run" | "build") && !direct_llvm {
             direct_llvm = true; i += 1;
         } else if !args[i].to_string_lossy().starts_with('-') {
             sources.push(PathBuf::from(&args[i])); i += 1;
         } else { return Err(format!("invalid arguments for {command}\n\n{HELP}")); }
     }
-    let source_path = sources.first().ok_or_else(|| format!("missing source file\n\n{HELP}"))?;
+    if sources.is_empty() && matches!(command, "check" | "run" | "build") && Path::new("Nacre.toml").is_file() {
+        sources.push(PathBuf::from("."));
+    }
+    let source_path = sources.first().cloned().ok_or_else(|| format!("missing source file\n\n{HELP}"))?;
+    let manifest_path = if sources.len() == 1 { manifest_path_for_source(&sources[0]) } else { None };
+    let source_inputs = sources.clone();
+    let sources = if command == "fmt" { project::resolve_inputs(&sources)? } else { sources };
+    let manifest = if matches!(command, "run" | "build") {
+        manifest_path.as_deref().map(nacre::manifest::Manifest::load).transpose()?
+    } else {
+        None
+    };
     if command == "test" {
         return nacre::test_runner::run_tests(&sources, filter.as_deref(), native_arch, lto, jemalloc);
     }
@@ -175,10 +220,19 @@ fn execute(args: Vec<OsString>) -> Result<i32, String> {
         return nacre::fmt::format_files(&sources, check_only);
     }
     if command == "doc" {
+        if let Some(output_path) = output.as_deref() {
+            for source in &source_inputs { protect_source_and_manifests(source, output_path)?; }
+            if let Some(manifest_path) = &manifest_path { protect_source(manifest_path, output_path)?; }
+        }
         nacre::doc::generate_docs(&sources, output.as_deref())?;
         return Ok(0);
     }
     let bundle = SourceBundle::from_paths(&sources)?;
+    if let Some(output_path) = output.as_deref() {
+        for source in bundle.paths() { protect_source_and_manifests(source, output_path)?; }
+        for source in &source_inputs { protect_source_and_manifests(source, output_path)?; }
+        if let Some(manifest_path) = &manifest_path { protect_source(manifest_path, output_path)?; }
+    }
     if command == "check" {
         bundle.validate().map_err(|d| bundle.render(&d))?;
         println!("OK: {} ({} source file(s))", source_path.display(), bundle.source_count());
@@ -188,7 +242,6 @@ fn execute(args: Vec<OsString>) -> Result<i32, String> {
         let flow = (if command == "emit-flow" { bundle.emit_flow() } else if command == "emit-types" { bundle.emit_types() } else { bundle.emit_borrows() })
             .map_err(|d| bundle.render(&d))?;
         if let Some(path) = output {
-            for source in bundle.paths() { protect_source(source, &path)?; }
             native::create_parent(&path)?;
             fs::write(&path, flow).map_err(|e| format!("failed to write {}: {e}", path.display()))?;
             eprintln!("Analysis {}: {}", if command == "emit-types" { "types" } else { "ownership" }, path.display());
@@ -196,9 +249,11 @@ fn execute(args: Vec<OsString>) -> Result<i32, String> {
         return Ok(0);
     }
     if command == "emit-llvm" && direct_llvm {
+        if memory_stats {
+            return Err("--memory-stats cannot be used with emit-llvm --direct".to_owned());
+        }
         let llvm_ir = bundle.emit_llvm_direct().map_err(|d| bundle.render(&d))?;
         if let Some(path) = output {
-            for source in bundle.paths() { protect_source(source, &path)?; }
             native::create_parent(&path)?;
             fs::write(&path, llvm_ir).map_err(|e| format!("failed to write {}: {e}", path.display()))?;
             eprintln!("LLVM IR: {}", path.display());
@@ -210,19 +265,37 @@ fn execute(args: Vec<OsString>) -> Result<i32, String> {
     if pgo_generate.is_some() && pgo_use.is_some() {
         return Err("cannot specify both --pgo-generate and --pgo-use".to_owned());
     }
-    let mut c_source = bundle.compile_to_c().map_err(|d| bundle.render(&d))?;
-    if memory_stats { c_source.insert_str(0, "#define NACRE_MEMORY_STATS 1\n"); }
+    let direct_native = direct_llvm;
+    let mut c_source = if direct_native {
+        None
+    } else {
+        Some(bundle.compile_to_c().map_err(|d| bundle.render(&d))?)
+    };
+    if memory_stats
+        && let Some(c_source) = &mut c_source {
+            c_source.insert_str(0, "#define NACRE_MEMORY_STATS 1\n");
+        }
     if command == "emit-c" || command == "emit-llvm" {
-        if command == "emit-llvm" { c_source = native::emit_llvm(&c_source, optimization.unwrap_or("-O2"))?; }
+        let mut generated_source = c_source.take().ok_or("generated C source is unavailable")?;
+        if command == "emit-llvm" {
+            generated_source = native::emit_llvm(&generated_source, optimization.unwrap_or("-O2"))?;
+        }
         if let Some(path) = output {
-            for source in bundle.paths() { protect_source(source, &path)?; }
             native::create_parent(&path)?;
-            fs::write(&path, c_source).map_err(|e| format!("failed to write {}: {e}", path.display()))?;
+            fs::write(&path, generated_source).map_err(|e| format!("failed to write {}: {e}", path.display()))?;
             eprintln!("{} generated: {}", if command == "emit-llvm" { "LLVM" } else { "C" }, path.display());
-        } else { io::stdout().write_all(c_source.as_bytes()).map_err(|e| e.to_string())?; }
+        } else {
+            io::stdout().write_all(generated_source.as_bytes()).map_err(|e| e.to_string())?;
+        }
         return Ok(0);
     }
+    let profile = manifest.as_ref().map(|manifest| {
+        if release { &manifest.profile.release } else { &manifest.profile.dev }
+    });
+    let profile_optimization = profile.map(|profile| format!("-O{}", profile.opt_level));
+    if profile.is_some_and(|profile| profile.lto) { lto = true; }
     let mut flags = Vec::new();
+    if direct_native && memory_stats { flags.push("-DNACRE_MEMORY_STATS"); }
     if sanitize {
         flags.extend(["-fsanitize=address,undefined", "-fno-sanitize-recover=all", "-fno-omit-frame-pointer", "-g"]);
         if cfg!(target_os = "linux") { flags.extend(["-fno-pie", "-no-pie"]); }
@@ -244,17 +317,41 @@ fn execute(args: Vec<OsString>) -> Result<i32, String> {
         flags.push(&pgo_flag_use);
         flags.push("-fprofile-correction");
     }
-    let program = native::compile_c_optimized(&c_source, optimization.unwrap_or("-O2"), &flags)?;
+    let effective_optimization = optimization.or(profile_optimization.as_deref()).unwrap_or("-O2");
+    let program = if direct_native {
+        bundle.compile_llvm_direct_optimized_with_flags(effective_optimization, &flags)?
+    } else {
+        native::compile_c_optimized(
+            c_source.as_deref().ok_or("generated C source is unavailable")?,
+            effective_optimization,
+            &flags,
+        )?
+    };
     if command == "run" { return Ok(program.run(program_args)?.code().unwrap_or(1)); }
     let path = output.unwrap_or_else(|| {
-        let name = source_path.file_stem().unwrap_or_else(|| std::ffi::OsStr::new("program"));
+        let name = manifest.as_ref().and_then(|manifest| manifest.package.as_ref())
+            .map(|package| std::ffi::OsString::from(&package.name))
+            .unwrap_or_else(|| source_path.file_stem().unwrap_or_else(|| std::ffi::OsStr::new("program")).to_os_string());
         let path = Path::new("out").join(name);
         if cfg!(windows) { path.with_extension("exe") } else { path }
     });
-    for source in bundle.paths() { protect_source(source, &path)?; }
+    for source in bundle.paths() { protect_source_and_manifests(source, &path)?; }
+    for source in &source_inputs { protect_source_and_manifests(source, &path)?; }
+    if let Some(manifest_path) = &manifest_path { protect_source(manifest_path, &path)?; }
     program.save(&path)?;
     eprintln!("Native executable: {}", path.display());
     Ok(0)
+}
+
+fn manifest_path_for_source(source: &Path) -> Option<PathBuf> {
+    if source.file_name() == Some(std::ffi::OsStr::new("Nacre.toml")) {
+        return source.is_file().then(|| source.to_owned());
+    }
+    if source.is_dir() {
+        let manifest = source.join("Nacre.toml");
+        return manifest.is_file().then_some(manifest);
+    }
+    None
 }
 
 fn protect_source(source: &Path, output: &Path) -> Result<(), String> {
@@ -272,6 +369,19 @@ fn protect_source(source: &Path, output: &Path) -> Result<(), String> {
     }
     Ok(())
 }
+fn protect_source_and_manifests(source: &Path, output: &Path) -> Result<(), String> {
+    protect_source(source, output)?;
+    let mut directory = if source.is_dir() { Some(source) } else { source.parent() };
+    while let Some(path) = directory {
+        let manifest = path.join("Nacre.toml");
+        if manifest.is_file() {
+            protect_source(&manifest, output)?;
+        }
+        directory = path.parent();
+    }
+    Ok(())
+}
+
 
 fn doctor() -> Result<i32, String> {
     let source = "void main() { List<int> xs = new List<int>(); xs.add(42); Text text = new Text(\"test=\"); text.appendInt(xs.pop()); text.print(); }";

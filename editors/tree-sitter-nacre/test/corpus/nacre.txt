@@ -316,3 +316,180 @@ void main() {
              (binary_expression
                (integer_literal)
                (integer_literal))))))))
+
+==================
+Nested tuples and recursive match patterns
+==================
+class Point {
+    int x;
+}
+enum Inner {
+    Empty;
+    Value(Point);
+}
+enum Outer {
+    Empty;
+    Nested(Inner);
+    Nothing;
+}
+void inspect(Outer outer) {
+    match (outer) {
+        Empty {}
+        Outer.Nothing {}
+        Nested(Value(Point { x: value })) if value > 0 => {}
+        Nested(Value(Point { x: value })) {}
+        Nested(Empty) {}
+    }
+}
+void tuplePatterns() {
+    (int, (int, int)) pair = (1, (2, 3));
+    match (pair) {
+        (first, (second, third)) if first > 0 => {}
+        (first, (second, third)) {}
+    }
+}
+---
+(source_file
+  (class_declaration
+    (identifier)
+    (class_body
+      (field_declaration
+        (primitive_type)
+        (identifier))))
+  (enum_declaration
+    (identifier)
+    (enum_body
+      (enum_variant
+        (identifier))
+      (enum_variant
+        (identifier)
+        (variant_fields
+          (type_identifier)))))
+  (enum_declaration
+    (identifier)
+    (enum_body
+      (enum_variant
+        (identifier))
+      (enum_variant
+        (identifier)
+        (variant_fields
+          (type_identifier)))
+      (enum_variant
+        (identifier))))
+  (function_declaration
+    (primitive_type)
+    (identifier)
+    (parameter_list
+      (parameter
+        (type_identifier)
+        (identifier)))
+    (block
+      (match_statement
+        (identifier)
+        (match_arm
+          (match_binding
+            (qualified_identifier
+              (namespace_identifier)))
+          (block))
+        (match_arm
+          (match_binding
+            (qualified_identifier
+              (namespace_identifier)
+              (namespace_identifier)))
+          (block))
+        (match_arm
+          (variant_pattern
+            (qualified_identifier
+              (namespace_identifier))
+            (match_bindings
+              (variant_pattern
+                (qualified_identifier
+                  (namespace_identifier))
+                (match_bindings
+                  (record_pattern
+                    (qualified_identifier
+                      (namespace_identifier))
+                    (field_pattern
+                      (identifier)
+                      (match_binding
+                        (qualified_identifier
+                          (namespace_identifier)))))))))
+          (binary_expression
+            (identifier)
+            (integer_literal))
+          (block))
+        (match_arm
+          (variant_pattern
+            (qualified_identifier
+              (namespace_identifier))
+            (match_bindings
+              (variant_pattern
+                (qualified_identifier
+                  (namespace_identifier))
+                (match_bindings
+                  (record_pattern
+                    (qualified_identifier
+                      (namespace_identifier))
+                    (field_pattern
+                      (identifier)
+                      (match_binding
+                        (qualified_identifier
+                          (namespace_identifier)))))))))
+          (block))
+        (match_arm
+          (variant_pattern
+            (qualified_identifier
+              (namespace_identifier))
+            (match_bindings
+              (match_binding
+                (qualified_identifier
+                  (namespace_identifier)))))
+          (block)))))
+  (function_declaration
+    (primitive_type)
+    (identifier)
+    (parameter_list)
+    (block
+      (variable_declaration
+        (tuple_type
+          (primitive_type)
+          (tuple_type
+            (primitive_type)
+            (primitive_type)))
+        (identifier)
+        (tuple_expression
+          (integer_literal)
+          (tuple_expression
+            (integer_literal)
+            (integer_literal))))
+      (match_statement
+        (identifier)
+        (match_arm
+          (tuple_pattern
+            (match_binding
+              (qualified_identifier
+                (namespace_identifier)))
+            (tuple_pattern
+              (match_binding
+                (qualified_identifier
+                  (namespace_identifier)))
+              (match_binding
+                (qualified_identifier
+                  (namespace_identifier)))))
+          (binary_expression
+            (identifier)
+            (integer_literal))
+          (block))
+        (match_arm
+          (tuple_pattern
+            (match_binding
+              (qualified_identifier
+                (namespace_identifier)))
+            (tuple_pattern
+              (match_binding
+                (qualified_identifier
+                  (namespace_identifier)))
+              (match_binding
+                (qualified_identifier
+                  (namespace_identifier)))))
+          (block))))))

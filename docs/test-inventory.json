@@ -34,6 +34,8 @@
     "tests/interfaces_generics_tools.rs": 17,
     "tests/io.rs": 13,
     "tests/iteration_traversal.rs": 7,
+    "tests/iterator_fusion.rs": 8,
+    "tests/llvm_native.rs": 12,
     "tests/lsp.rs": 3,
     "tests/map_traversal.rs": 11,
     "tests/math_random_time.rs": 9,
@@ -47,6 +49,9 @@
     "tests/objects_native.rs": 41,
     "tests/ownership_frontend.rs": 81,
     "tests/ownership_native.rs": 41,
+    "tests/package_resolution.rs": 8,
+    "tests/packages.rs": 7,
+    "tests/patterns_deep.rs": 8,
     "tests/process.rs": 11,
     "tests/project.rs": 35,
     "tests/result_option.rs": 6,
@@ -67,8 +72,9 @@
     "src/lsp/file_uri.rs": 3,
     "src/lsp/framing.rs": 1,
     "src/lsp.rs": 5,
+    "src/manifest.rs": 9,
     "src/ownership.rs": 4,
     "src/project.rs": 1
   },
-  "total": 1290
+  "total": 1342
 }

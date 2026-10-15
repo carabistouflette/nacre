@@ -1,4 +1,4 @@
-//! Native compilation with a system C11 compiler. Commands never invoke a shell.
+//! Native C11/LLVM compilation with explicit tool arguments; commands never invoke a shell.
 use std::env;
 use std::ffi::OsString;
 use std::fs;
@@ -12,6 +12,23 @@ mod dependencies;
 use dependencies::NativeLibraries;
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(0);
+const RUNTIME_C_FLAGS: &[&str] = &[
+    "-std=c11",
+    "-pthread",
+    "-g",
+    "-fdebug-compilation-dir=.",
+    "-fno-math-errno",
+    "-Wall",
+    "-Wextra",
+    "-pedantic",
+    "-Wno-unused-function",
+    "-Wno-unused-variable",
+    "-Wno-unused-parameter",
+    "-Wno-unused-but-set-variable",
+];
+const LINUX_SECTION_FLAGS: &[&str] = &["-ffunction-sections", "-fdata-sections"];
+const BITCODE_FLAGS: &[&str] = &["-emit-llvm", "-c"];
+const USER_IR_FLAGS: &[&str] = &["-pthread", "-g", "-fno-math-errno"];
 
 struct TempDir(PathBuf);
 impl TempDir {
@@ -224,26 +241,204 @@ pub fn emit_llvm(source: &str, optimization: &str) -> Result<String, String> {
     String::from_utf8(output.stdout).map_err(|e| format!("LLVM output is not valid UTF-8: {e}"))
 }
 
-/// Compile direct textual LLVM IR into a native executable using Clang.
-pub fn compile_llvm_direct(llvm_ir: &str, optimization: &str) -> Result<NativeProgram, String> {
+/// Compile direct LLVM IR together with the stdlib-only C runtime through LLVM bitcode.
+/// User code is never sent through the C frontend.
+pub(crate) fn compile_llvm_direct_with_runtime(
+    llvm_ir: &str,
+    runtime_c: &str,
+    optimization: &str,
+    flags: &[&str],
+) -> Result<NativeProgram, String> {
     check_optimization(optimization)?;
     let compiler = env::var_os("NACRE_CLANG").unwrap_or_else(|| OsString::from("clang"));
+    let linker = env::var_os("NACRE_LLVM_LINK").unwrap_or_else(|| OsString::from("llvm-link"));
+    let compiler_version = tool_output(&compiler, &["--version"], "Clang")?;
+    let linker_version = tool_output(&linker, &["--version"], "llvm-link")?;
+    let target = tool_output(&compiler, &["-print-target-triple"], "Clang")?;
+    let libraries = NativeLibraries::from_source(runtime_c);
+    let section_flags: &[&str] = if cfg!(target_os = "linux") { LINUX_SECTION_FLAGS } else { &[] };
+    let cache_entry = cache_dir().filter(|_| pgo_directory(flags).is_none()).map(|cache| {
+        let key = compute_runtime_cache_key(
+            [
+                compiler.as_encoded_bytes(), compiler_version.as_bytes(),
+                linker.as_encoded_bytes(), linker_version.as_bytes(),
+                target.as_bytes(), optimization.as_bytes(),
+            ],
+            flags,
+            section_flags,
+            libraries.header_flags(),
+            runtime_c,
+        );
+        cache.join(format!("llvm-runtime-{key}.bc"))
+    });
     let directory = TempDir::new()?;
-    let ll_path = directory.0.join("program.ll");
     let executable = directory.0.join(if cfg!(windows) { "program.exe" } else { "program" });
-    fs::write(&ll_path, llvm_ir).map_err(|e| format!("failed to write LLVM IR: {e}"))?;
+    let runtime_bitcode = directory.0.join("runtime.bc");
+    let user_path = directory.0.join("program.ll");
+    let linked_bitcode = directory.0.join("linked.bc");
+
+    fs::write(&user_path, llvm_ir).map_err(|e| format!("failed to write temporary direct LLVM IR: {e}"))?;
+
+    let cached_runtime = cache_entry.as_ref().filter(|path| {
+        fs::metadata(path).is_ok_and(|metadata| metadata.is_file() && metadata.len() > 0)
+    });
+    let runtime_bitcode_input = if let Some(cached) = cached_runtime {
+        cached.as_path()
+    } else {
+        let runtime_path = directory.0.join("runtime.c");
+        fs::write(&runtime_path, runtime_c).map_err(|e| format!("failed to write temporary LLVM runtime C source: {e}"))?;
+        let mut command = Command::new(&compiler);
+        command
+            .arg(optimization)
+            .args(RUNTIME_C_FLAGS)
+            .args(section_flags)
+            .args(libraries.header_flags())
+            .args(flags.iter().copied().filter(|flag| !is_link_only_flag(flag)))
+            .args(BITCODE_FLAGS)
+            .arg(&runtime_path)
+            .arg("-o")
+            .arg(&runtime_bitcode);
+        let output = command.output().map_err(|e| format!("failed to run Clang {compiler:?} for LLVM runtime bitcode: {e}"))?;
+        if !output.status.success() {
+            return Err(format!(
+                "Clang compilation of LLVM runtime bitcode failed:\n{}",
+                String::from_utf8_lossy(&output.stderr),
+            ));
+        }
+        if let Some(cache_entry) = &cache_entry {
+            cache_bitcode(&runtime_bitcode, cache_entry);
+        }
+        runtime_bitcode.as_path()
+    };
+
+    let output = Command::new(&linker)
+        .args(["--only-needed", "--internalize"])
+        .arg(&user_path)
+        .arg(runtime_bitcode_input)
+        .arg("-o")
+        .arg(&linked_bitcode)
+        .output()
+        .map_err(|e| format!("direct LLVM compilation requires llvm-link ({linker:?}): {e}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "llvm-link {linker:?} failed to link direct LLVM and runtime bitcode:\n{}",
+            String::from_utf8_lossy(&output.stderr),
+        ));
+    }
+
     let output = Command::new(&compiler)
         .arg(optimization)
-        .arg(&ll_path)
+        .args(USER_IR_FLAGS)
+        .args(section_flags)
+        .args(flags)
+        .arg(&linked_bitcode)
+        .args(if cfg!(unix) { &["-lm"][..] } else { &[][..] })
+        .args(if cfg!(target_os = "linux") { &["-Wl,--gc-sections"][..] } else { &[][..] })
+        .args(libraries.link_flags())
         .arg("-o")
         .arg(&executable)
         .output()
-        .map_err(|e| format!("failed to run {compiler:?}: {e}"))?;
+        .map_err(|e| format!("failed to run Clang {compiler:?} for native LLVM linking: {e}"))?;
     if !output.status.success() {
-        return Err(format!("Clang compilation of direct LLVM IR failed:\n{}", String::from_utf8_lossy(&output.stderr)));
+        return Err(format!(
+            "Clang native linking of direct LLVM program failed:\n{}",
+            String::from_utf8_lossy(&output.stderr),
+        ));
     }
     Ok(NativeProgram { executable, _directory: directory })
 }
+
+fn tool_output(tool: &std::ffi::OsStr, args: &[&str], name: &str) -> Result<String, String> {
+    let output = Command::new(tool)
+        .args(args)
+        .output()
+        .map_err(|e| format!("direct LLVM compilation requires {name} ({tool:?}): {e}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "{name} {tool:?} failed for {}:\n{}",
+            args.join(" "),
+            String::from_utf8_lossy(&output.stderr),
+        ));
+    }
+    let mut result = String::from_utf8_lossy(&output.stdout).into_owned();
+    result.push_str(&String::from_utf8_lossy(&output.stderr));
+    Ok(result)
+}
+
+fn is_link_only_flag(flag: &str) -> bool {
+    flag.starts_with("-l") || flag.starts_with("-L") || flag.starts_with("-Wl,")
+}
+
+fn compute_runtime_cache_key(
+    identity: [&[u8]; 6],
+    flags: &[&str],
+    section_flags: &[&str],
+    header_flags: impl Iterator<Item = &'static str>,
+    runtime_c: &str,
+) -> String {
+    let mut hash = 0xcbf29ce484222325u64 as u128;
+    let prime = 0x100000001b3u64 as u128;
+    for part in identity {
+        for &byte in part {
+            hash = (hash ^ byte as u128).wrapping_mul(prime);
+        }
+        hash = (hash ^ 0xff).wrapping_mul(prime);
+    }
+    for group in [RUNTIME_C_FLAGS, section_flags] {
+        hash_flag_group(&mut hash, group.iter().copied());
+    }
+    hash_flag_group(&mut hash, header_flags);
+    for group in [flags, BITCODE_FLAGS] {
+        hash_flag_group(&mut hash, group.iter().copied());
+    }
+    for variable in ["CPATH", "C_INCLUDE_PATH", "SDKROOT", "MACOSX_DEPLOYMENT_TARGET", "CLANG_CONFIG_FILE", "CCC_OVERRIDE_OPTIONS"] {
+        for &byte in variable.as_bytes() {
+            hash = (hash ^ byte as u128).wrapping_mul(prime);
+        }
+        hash = (hash ^ 0xff).wrapping_mul(prime);
+        if let Some(value) = env::var_os(variable) {
+            for &byte in value.as_encoded_bytes() {
+                hash = (hash ^ byte as u128).wrapping_mul(prime);
+            }
+        }
+        hash = (hash ^ 0xff).wrapping_mul(prime);
+    }
+    for &byte in runtime_c.as_bytes() {
+        hash = (hash ^ byte as u128).wrapping_mul(prime);
+    }
+    format!("{hash:032x}")
+}
+
+fn hash_flag_group<'a>(hash: &mut u128, flags: impl Iterator<Item = &'a str>) {
+    const PRIME: u128 = 0x100000001b3;
+    *hash = (*hash ^ 0xfe).wrapping_mul(PRIME);
+    for flag in flags {
+        for &byte in flag.as_bytes() {
+            *hash = (*hash ^ u128::from(byte)).wrapping_mul(PRIME);
+        }
+        *hash = (*hash ^ 0xff).wrapping_mul(PRIME);
+    }
+}
+
+fn cache_bitcode(source: &Path, cache_entry: &Path) {
+    let Some(parent) = cache_entry.parent() else { return };
+    if fs::create_dir_all(parent).is_err() { return; }
+    let serial = NEXT_ID.fetch_add(1, Ordering::Relaxed);
+    let temporary = cache_entry.with_file_name(format!(
+        "{}.tmp.{}.{}",
+        cache_entry.file_name().unwrap_or_default().to_string_lossy(),
+        std::process::id(),
+        serial,
+    ));
+    if fs::copy(source, &temporary).is_err() {
+        let _ = fs::remove_file(&temporary);
+        return;
+    }
+    if fs::rename(&temporary, cache_entry).is_err() {
+        let _ = fs::remove_file(&temporary);
+    }
+}
+
 fn check_optimization(level: &str) -> Result<(), String> {
     if matches!(level, "-O0" | "-O1" | "-O2" | "-O3" | "-Os") { Ok(()) }
     else { Err("invalid optimization level: choose -O0, -O1, -O2, -O3, or -Os".to_owned()) }

@@ -100,12 +100,12 @@ class Counter {
     readonly int value() { return this.stored; }
     void increment() { this.stored = this.stored + 1; }
 }
-enum Pair { Both(Counter, Counter); }
-int read(borrow Pair pair) {
+enum CounterPair { Both(Counter, Counter); }
+int read(borrow CounterPair pair) {
     match (pair) { Both(first, second) { return first.value() + second.value(); } }
 }
 void main() {
-    Pair pair = new Pair.Both(new Counter(1), new Counter(2));
+    CounterPair pair = new CounterPair.Both(new Counter(1), new Counter(2));
     match (borrow mut pair) { Both(first, second) { first.increment(); second.increment(); } }
     println(read(pair));
     int index = 0;

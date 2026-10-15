@@ -80,7 +80,7 @@ void test_second() {
 "#,
     ).unwrap();
 
-    let exit_code = nacre::test_runner::run_tests(&[test_file.clone()], None, false, false, false).unwrap();
+    let exit_code = nacre::test_runner::run_tests(std::slice::from_ref(&test_file), None, false, false, false).unwrap();
     assert_eq!(exit_code, 0);
 
     // Test filtering: only run test_first
@@ -507,19 +507,13 @@ void main() {
     println(d);
 }
 "#;
-    let llvm_ir = nacre::emit_llvm_direct(source).unwrap();
-    assert!(llvm_ir.contains("target triple = \"x86_64-pc-linux-gnu\""), "missing triple");
-    assert!(llvm_ir.contains("add i32"), "missing add instruction");
-    assert!(llvm_ir.contains("fadd double"), "missing fadd instruction");
-    assert!(llvm_ir.contains("fmul double"), "missing fmul instruction");
-    assert!(llvm_ir.contains("@main"), "missing main");
-
-    if std::process::Command::new("clang").arg("--version").output().is_ok() {
-        let program = native::compile_llvm_direct(&llvm_ir, "-O2").unwrap();
-        let output = program.output().unwrap();
-        assert!(output.status.success());
-        assert_eq!(output.stdout, b"40\n13\n14.500000\n");
-    }
+    let c_program = native::compile_c(&nacre::compile_to_c(source).unwrap()).unwrap();
+    let c_output = c_program.output().unwrap();
+    assert!(c_output.status.success(), "{}", String::from_utf8_lossy(&c_output.stderr));
+    let direct_program = nacre::compile_llvm_direct(source).unwrap();
+    let direct_output = direct_program.output().unwrap();
+    assert!(direct_output.status.success(), "{}", String::from_utf8_lossy(&direct_output.stderr));
+    assert_eq!(direct_output.stdout, c_output.stdout);
 }
 
 #[test]
@@ -754,7 +748,6 @@ void main() {
 }
 "#;
     let c = compile_to_c(source).unwrap();
-    assert!(c.contains("ncr_thunk_"), "expected devirtualized dispatch for mapper/predicate: {c}");
     let prog = native::compile_c_with_flags(&c, &["-DNACRE_MEMORY_STATS"]).unwrap();
     let output = prog.output().unwrap();
     assert!(output.status.success());

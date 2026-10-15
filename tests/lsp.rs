@@ -274,8 +274,13 @@ fn unsaved_cross_module_privacy_errors_clear_when_imported_overlay_changes() {
 
 #[test]
 fn unsaved_sources_under_a_missing_configured_root_resolve_and_revalidate() {
+    missing_source_root_overlays("nacre.json", r#"{"sources":["src"]}"#);
+    missing_source_root_overlays("Nacre.toml", "[package]\nname = 'editor'\nversion = '0.1.0'\nsources = ['src']\n");
+}
+
+fn missing_source_root_overlays(marker: &str, configuration: &str) {
     let temp = TempDir::new();
-    fs::write(temp.0.join("nacre.json"), r#"{"sources":["src"]}"#).unwrap();
+    fs::write(temp.0.join(marker), configuration).unwrap();
     let source_dir = temp.0.join("src");
     let main_path = source_dir.join("Main file-é.ncr");
     let item_path = source_dir.join("Item.ncr");

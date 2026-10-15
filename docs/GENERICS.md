@@ -5,22 +5,27 @@ checking. This is static nominal specialization, not Java-style runtime erasure 
 a bounded trait system.
 
 ```java
-class Pair<A, B> {
+class Duo<A, B> {
     A first;
     B second;
-    Pair(A a, B b) { first = a; second = b; }
+    Duo(A a, B b) { first = a; second = b; }
 }
 void main() {
-    Pair<int, String> pair = new Pair<int, String>(42, "ok");
+    Duo<int, String> pair = new Duo<int, String>(42, "ok");
     println(pair.first);
     println(pair.second);
 }
 ```
 
-`Pair<int,String>` and `Pair<String,int>` are distinct nominal types. Applications
+`Duo<int,String>` and `Duo<String,int>` are distinct nominal types. Applications
 are invariant; whitespace around `<`, `>`, and `,` does not affect their identity.
 Nested applications are supported. In type syntax `>>` closes two nested type
 arguments; in expressions it is the signed right-shift operator.
+
+`Pair<T, U>` is the prelude's reserved built-in pair type used by parenthesized
+pair types `(T, U)`, tuple expressions and patterns, and iterator pair items.
+Pair types and tuples are exactly binary and may nest; user declarations cannot
+reuse the built-in name.
 
 ## Type parameters and applications
 

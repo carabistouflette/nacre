@@ -113,7 +113,9 @@ pub fn expand(mut program: a::Program) -> Result<(a::Program, Vec<String>), Diag
         }
     }
     expander.request_unit_mutex_if_needed(&empty, Span::default())?;
-    while let Some(request) = expander.pending.pop_front() {
+    let mut iterator_pairs_discovered = false;
+    loop {
+        while let Some(request) = expander.pending.pop_front() {
         let mut class = expander.definitions[&request.template].clone();
         for (bound, arg) in class.type_bounds.iter().zip(&request.args) {
             if let Some(trait_name) = bound {
@@ -147,6 +149,10 @@ pub fn expand(mut program: a::Program) -> Result<(a::Program, Vec<String>), Diag
         if concrete.iter().filter(|c| !c.is_builtin).count() > 128 {
             return Err(Diagnostic::new(request.span, "[E4199] limit of 128 concrete types, including specializations"));
         }
+    }
+        if iterator_pairs_discovered { break; }
+        iterator_pairs_discovered = true;
+        discover_iterator_specializations(&mut expander, &concrete, &program.functions, &program.impls)?;
     }
     program.classes = concrete;
     Ok((program, expander.names))
@@ -527,7 +533,10 @@ impl Expander {
                 }
                 S::Match { value, arms } => {
                     self.expression(value, env)?;
-                    for arm in arms { self.block(&mut arm.body, env)?; }
+                    for arm in arms {
+                        if let Some(guard) = &mut arm.guard { self.expression(guard, env)?; }
+                        self.block(&mut arm.body, env)?;
+                    }
                 }
                 S::Return(Some(expr)) => self.expression(expr, env)?,
                 S::Block(block) => self.block(block, env)?,
@@ -573,10 +582,335 @@ impl Expander {
             }
             E::Unary { expr, .. } | E::Borrow { expr, .. } | E::Cast { expr, .. } |
             E::Try(expr) | E::Await(expr) => self.expression(expr, env)?,
+            E::Tuple(first, second) => { self.expression(first, env)?; self.expression(second, env)?; }
             E::Binary { left, right, .. } => { self.expression(left, env)?; self.expression(right, env)?; }
             E::Char(_) | E::Int(_) | E::Long(_) | E::Double(_) | E::Unit
             | E::Boolean(_) | E::String(_) | E::Var(_) | E::This => {}
         }
         Ok(())
     }
+}
+
+fn builtin_template(expander: &Expander, name: &str, arity: usize) -> Option<String> {
+    let mut candidates: Vec<_> = expander.definitions.iter().filter_map(|(qualified, class)| {
+        let base = qualified.rsplit("::").next().unwrap_or(qualified);
+        (class.is_builtin && class.type_params.len() == arity && base == name)
+            .then_some(qualified.clone())
+    }).collect();
+    candidates.sort();
+    candidates.into_iter().next()
+}
+
+fn concrete_class_for_type<'a>(ty: &Type, classes: &'a [a::Class]) -> Option<&'a a::Class> {
+    let name = match ty {
+        Type::Named(name) => name.clone(),
+        Type::Applied { .. } => {
+            let mut name = String::new();
+            append_type_name(&mut name, ty);
+            name
+        }
+        Type::Borrow { name, args, .. } if args.is_empty() => name.clone(),
+        Type::Borrow { name, args, .. } => {
+            let mut full = name.clone();
+            append_type_arguments(&mut full, args);
+            full
+        }
+        _ => return None,
+    };
+    classes.iter().find(|class| class.qualified_name == name || class.name == name)
+}
+
+fn inferred_expression_type(
+    expr: &a::Expr,
+    locals: &HashMap<String, Type>,
+    current_class: Option<&a::Class>,
+    classes: &[a::Class],
+    functions: &[a::Function],
+) -> Option<Type> {
+    use a::ExprKind as E;
+    match &expr.kind {
+        E::Var(name) => locals.get(name).cloned()
+            .or_else(|| current_class.and_then(|class|
+                class.fields.iter().find(|field| field.name == *name).map(|field| field.ty.clone())))
+            .or_else(|| classes.iter().find(|class| class.qualified_name == *name)
+                .map(|class| Type::Named(class.qualified_name.clone()))),
+        E::This => current_class.map(|class| Type::Named(class.qualified_name.clone())),
+        E::Field { base, name } => {
+            let base = inferred_expression_type(base, locals, current_class, classes, functions)?;
+            concrete_class_for_type(&base, classes)?.fields.iter()
+                .find(|field| field.name == *name).map(|field| field.ty.clone())
+        }
+        E::New { class, .. } | E::Variant { class, .. } => Some(Type::Named(class.clone())),
+        E::Borrow { expr, .. } => inferred_expression_type(expr, locals, current_class, classes, functions),
+        E::Cast { ty, .. } => Some(ty.clone()),
+        E::Call { name, .. } => functions.iter().find(|function|
+            function.qualified_name == *name || function.name == *name)
+            .map(|function| function.return_type.clone()),
+        E::MethodCall { receiver, name, .. } => {
+            let receiver = inferred_expression_type(receiver, locals, current_class, classes, functions)?;
+            concrete_class_for_type(&receiver, classes)?.methods.iter()
+                .find(|method| method.name == *name).map(|method| method.return_type.clone())
+        }
+        E::StaticCall { class, name, .. } => concrete_class_for_type(&Type::Named(class.clone()), classes)?
+            .methods.iter().find(|method| method.name == *name).map(|method| method.return_type.clone()),
+        E::Char(_) => Some(Type::Char), E::Int(_) => Some(Type::Int), E::Long(_) => Some(Type::Long),
+        E::Double(_) => Some(Type::Double), E::Unit => Some(Type::Unit), E::Boolean(_) => Some(Type::Boolean),
+        E::String(_) => Some(Type::String),
+        E::Tuple(_, _) | E::Unary { .. } | E::Try(_) | E::Await(_) | E::Binary { .. } => None,
+    }
+}
+
+fn iterator_chain(expr: &a::Expr) -> bool {
+    let a::ExprKind::MethodCall { receiver, name, .. } = &expr.kind else { return false; };
+    if name == "iter" { return true; }
+    matches!(name.as_str(), "map" | "filter" | "take" | "enumerate" | "zip")
+        && iterator_chain(receiver)
+}
+
+fn request_pair(
+    expander: &mut Expander, template: &str, first: Type, second: Type, span: Span,
+) -> Result<Type, Diagnostic> {
+    expander.ty(&Type::Applied { name: template.to_owned(), args: vec![first, second] },
+        &Environment::new(), span, 0)
+}
+
+struct IteratorContext<'a> {
+    current_class: Option<&'a a::Class>,
+    classes: &'a [a::Class],
+    functions: &'a [a::Function],
+    pair_template: &'a str,
+    option_template: &'a str,
+}
+
+fn iterator_item_type(
+    expander: &mut Expander,
+    expr: &a::Expr,
+    locals: &HashMap<String, Type>,
+    context: &IteratorContext<'_>,
+    depth: usize,
+) -> Result<Option<Type>, Diagnostic> {
+    let IteratorContext { current_class, classes, functions, pair_template, .. } = *context;
+    if depth >= 128 { return Ok(None); }
+    let a::ExprKind::MethodCall { receiver, name, args } = &expr.kind else { return Ok(None); };
+    match name.as_str() {
+        "iter" => {
+            let Some(receiver_type) = inferred_expression_type(receiver, locals, current_class, classes, functions) else {
+                return Ok(None);
+            };
+            let Some(class) = concrete_class_for_type(&receiver_type, classes) else { return Ok(None); };
+            Ok(match &class.native {
+                Some(a::NativeClass::List(element) | a::NativeClass::Array(element)) => Some(element.clone()),
+                Some(a::NativeClass::Map { key, value, .. }) =>
+                    Some(request_pair(expander, pair_template, key.clone(), value.clone(), expr.span)?),
+                _ => None,
+            })
+        }
+        "map" if args.len() == 1 => {
+            let _ = iterator_item_type(expander, receiver, locals, context, depth + 1)?;
+            let Some(callback_type) = inferred_expression_type(&args[0], locals, current_class, classes, functions) else {
+                return Ok(None);
+            };
+            let Some(callback) = concrete_class_for_type(&callback_type, classes) else { return Ok(None); };
+            Ok(callback.methods.iter().find(|method| method.name == "apply")
+                .map(|method| method.return_type.clone()))
+        }
+        "filter" | "take" if args.len() == 1 => iterator_item_type(expander, receiver, locals, context, depth + 1),
+        "enumerate" if args.is_empty() => {
+            let Some(item) = iterator_item_type(expander, receiver, locals, context, depth + 1)? else { return Ok(None); };
+            Ok(Some(request_pair(expander, pair_template, Type::Long, item, expr.span)?))
+        }
+        "zip" if args.len() == 1 => {
+            let Some(left) = iterator_item_type(expander, receiver, locals, context, depth + 1)? else { return Ok(None); };
+            let Some(right) = iterator_item_type(expander, &args[0], locals, context, depth + 1)? else { return Ok(None); };
+            Ok(Some(request_pair(expander, pair_template, left, right, expr.span)?))
+        }
+        _ => Ok(None),
+    }
+}
+
+fn bind_pattern_types(
+    pattern: &a::Pattern,
+    ty: &Type,
+    locals: &mut HashMap<String, Type>,
+    classes: &[a::Class],
+) {
+    match &pattern.kind {
+        a::PatternKind::Name(name) => {
+            if name == "_" { return; }
+            let variant_name = name.rsplit('.').next().unwrap_or(name);
+            if concrete_class_for_type(ty, classes).and_then(|class| class.variants.as_ref())
+                .is_some_and(|variants| variants.iter().any(|variant| variant.name == variant_name)) {
+                return;
+            }
+            locals.insert(name.clone(), ty.clone());
+        }
+        a::PatternKind::Variant { name, fields } => {
+            let Some(class) = concrete_class_for_type(ty, classes) else { return; };
+            let Some(variants) = &class.variants else { return; };
+            let variant_name = name.rsplit('.').next().unwrap_or(name);
+            let Some(variant) = variants.iter().find(|variant| variant.name == variant_name) else { return; };
+            for (pattern, field_type) in fields.iter().zip(&variant.fields) {
+                bind_pattern_types(pattern, field_type, locals, classes);
+            }
+        }
+        a::PatternKind::Record { fields, .. } => {
+            let Some(class) = concrete_class_for_type(ty, classes) else { return; };
+            for (name, pattern) in fields {
+                if let Some(field) = class.fields.iter().find(|field| field.name == *name) {
+                    bind_pattern_types(pattern, &field.ty, locals, classes);
+                }
+            }
+        }
+        a::PatternKind::Tuple(first, second) => {
+            let Some(class) = concrete_class_for_type(ty, classes) else { return; };
+            if class.fields.len() == 2 {
+                bind_pattern_types(first, &class.fields[0].ty, locals, classes);
+                bind_pattern_types(second, &class.fields[1].ty, locals, classes);
+            }
+        }
+    }
+}
+
+fn scan_iterator_expr(
+    expander: &mut Expander,
+    expr: &a::Expr,
+    locals: &HashMap<String, Type>,
+    context: &IteratorContext<'_>,
+) -> Result<(), Diagnostic> {
+    let IteratorContext { pair_template, option_template, .. } = *context;
+    use a::ExprKind as E;
+    if let E::MethodCall { receiver, name, .. } = &expr.kind
+        && matches!(name.as_str(), "fold" | "sizeHint") && iterator_chain(receiver) {
+            let _ = iterator_item_type(expander, receiver, locals, context, 0)?;
+            if name == "sizeHint" {
+                let option = expander.ty(&Type::Applied {
+                    name: option_template.to_owned(), args: vec![Type::Long],
+                }, &Environment::new(), expr.span, 0)?;
+                let _ = request_pair(expander, pair_template, Type::Long, option, expr.span)?;
+            }
+        }
+    match &expr.kind {
+        E::Field { base, .. } | E::Borrow { expr: base, .. } | E::Cast { expr: base, .. }
+        | E::Unary { expr: base, .. } | E::Try(base) | E::Await(base) =>
+            scan_iterator_expr(expander, base, locals, context)?,
+        E::Call { args, .. } | E::New { args, .. } | E::Variant { args, .. } =>
+            for arg in args { scan_iterator_expr(expander, arg, locals, context)?; },
+        E::MethodCall { receiver, args, .. } => {
+            scan_iterator_expr(expander, receiver, locals, context)?;
+            for arg in args { scan_iterator_expr(expander, arg, locals, context)?; }
+        }
+        E::StaticCall { args, .. } => for arg in args {
+            scan_iterator_expr(expander, arg, locals, context)?;
+        },
+        E::Tuple(first, second) | E::Binary { left: first, right: second, .. } => {
+            scan_iterator_expr(expander, first, locals, context)?;
+            scan_iterator_expr(expander, second, locals, context)?;
+        }
+        E::Char(_) | E::Int(_) | E::Long(_) | E::Double(_) | E::Unit | E::Boolean(_) |
+        E::String(_) | E::Var(_) | E::This => {}
+    }
+    Ok(())
+}
+
+fn scan_iterator_block(
+    expander: &mut Expander,
+    block: &a::Block,
+    locals: &mut HashMap<String, Type>,
+    context: &IteratorContext<'_>,
+) -> Result<(), Diagnostic> {
+    let IteratorContext { current_class, classes, functions, .. } = *context;
+    use a::StmtKind as S;
+    let saved = locals.clone();
+    for statement in block {
+        match &statement.kind {
+            S::Let { ty, name, value } => {
+                if let Some(value) = value {
+                    scan_iterator_expr(expander, value, locals, context)?;
+                }
+                locals.insert(name.clone(), ty.clone());
+            }
+            S::Assign { target, value } => {
+                scan_iterator_expr(expander, target, locals, context)?;
+                scan_iterator_expr(expander, value, locals, context)?;
+            }
+            S::Expr(expr) => scan_iterator_expr(expander, expr, locals, context)?,
+            S::If { condition, then_block, else_block } => {
+                scan_iterator_expr(expander, condition, locals, context)?;
+                let mut branch = locals.clone();
+                scan_iterator_block(expander, then_block, &mut branch, context)?;
+                if let Some(other) = else_block {
+                    let mut branch = locals.clone();
+                    scan_iterator_block(expander, other, &mut branch, context)?;
+                }
+            }
+            S::While { condition, body } => {
+                scan_iterator_expr(expander, condition, locals, context)?;
+                let mut loop_locals = locals.clone();
+                scan_iterator_block(expander, body, &mut loop_locals, context)?;
+            }
+            S::ForEach { ty, name, key, collection, body, .. } => {
+                scan_iterator_expr(expander, collection, locals, context)?;
+                let mut loop_locals = locals.clone();
+                loop_locals.insert(name.clone(), ty.clone());
+                if let Some((key_type, key_name)) = key { loop_locals.insert(key_name.clone(), key_type.clone()); }
+                scan_iterator_block(expander, body, &mut loop_locals, context)?;
+            }
+            S::Match { value, arms } => {
+                scan_iterator_expr(expander, value, locals, context)?;
+                let value_type = inferred_expression_type(value, locals, current_class, classes, functions);
+                for arm in arms {
+                    let mut arm_locals = locals.clone();
+                    if let Some(ty) = &value_type { bind_pattern_types(&arm.pattern, ty, &mut arm_locals, classes); }
+                    if let Some(guard) = &arm.guard {
+                        scan_iterator_expr(expander, guard, &arm_locals, context)?;
+                    }
+                    scan_iterator_block(expander, &arm.body, &mut arm_locals, context)?;
+                }
+            }
+            S::Return(Some(expr)) => scan_iterator_expr(expander, expr, locals, context)?,
+            S::Block(inner) => scan_iterator_block(expander, inner, locals, context)?,
+            S::Return(None) | S::Break | S::Continue => {}
+        }
+    }
+    *locals = saved;
+    Ok(())
+}
+
+fn discover_iterator_specializations(
+    expander: &mut Expander,
+    classes: &[a::Class],
+    functions: &[a::Function],
+    _impls: &[a::Impl],
+) -> Result<(), Diagnostic> {
+    let Some(pair_template) = builtin_template(expander, "Pair", 2) else { return Ok(()); };
+    let option_template = builtin_template(expander, "Option", 1).unwrap_or_default();
+    let context = IteratorContext {
+        current_class: None, classes, functions,
+        pair_template: &pair_template, option_template: &option_template,
+    };
+    for function in functions {
+        let mut locals: HashMap<_, _> = function.params.iter()
+            .map(|param| (param.name.clone(), param.ty.clone())).collect();
+        scan_iterator_block(expander, &function.body, &mut locals, &context)?;
+    }
+    for class in classes {
+        let context = IteratorContext { current_class: Some(class), ..context };
+        for field in &class.fields {
+            if let Some(initializer) = &field.initializer {
+                let locals = HashMap::new();
+                scan_iterator_expr(expander, initializer, &locals, &context)?;
+            }
+        }
+        if let Some(constructor) = &class.constructor {
+            let mut locals: HashMap<_, _> = constructor.params.iter()
+                .map(|param| (param.name.clone(), param.ty.clone())).collect();
+            scan_iterator_block(expander, &constructor.body, &mut locals, &context)?;
+        }
+        for method in &class.methods {
+            let mut locals: HashMap<_, _> = method.params.iter()
+                .map(|param| (param.name.clone(), param.ty.clone())).collect();
+            scan_iterator_block(expander, &method.body, &mut locals, &context)?;
+        }
+    }
+    Ok(())
 }

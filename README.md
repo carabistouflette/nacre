@@ -1,11 +1,14 @@
 # Nacre
 
 Nacre is an experimental Linux-only native-language alpha compiler implemented
-in Rust, with Java-like source syntax and the pipeline **Nacre → C11 →
-GCC/Clang → native executable**. It has no JVM, garbage collector, or implicit
-reference counting/cloning. Ordinary owners are affine; only named mutex and
-channel handles are shared explicitly. Cargo package/CLI: `nacre` **0.12.0**;
-source files: `.ncr`; project marker: `nacre.json`. Rust **1.99** is the
+in Rust, with Java-like source syntax. Its default native path is **Nacre → C11 →
+GCC/Clang → native executable**; opt-in `--direct` lowers typed user functions
+and `main` to LLVM while retaining separately compiled C runtime support. It has
+no JVM, garbage collector, or implicit reference counting/cloning. Ordinary owners
+are affine; only named mutex and channel handles are shared explicitly. Cargo
+package/CLI: `nacre` **0.12.0**;
+source files: `.ncr`; package manifest: `Nacre.toml` (legacy LSP marker:
+`nacre.json`). Rust **1.99** is the
 declared minimum; compiler and extension crates use edition **2024**.
 
 Nacre includes module/import name resolution within a whole source bundle,
@@ -114,8 +117,8 @@ void main() {
 Nominal elements use `for (borrow T item : list)` or
 `for (borrow mut T item : list)`. The list stays loaned for the complete loop;
 each element binding ends at its iteration boundary. Structural mutation through
-another alias is rejected, even for copied primitive traversal. This is not a
-first-class iterator or an NLL feature.
+another alias is rejected, even for copied primitive traversal. These loops do
+not expose first-class escaping borrowed iterators or implement NLL.
 
 `tryGet` is available for copyable scalar types only. `tryPop` and `tryRemove`
 transfer any supported element into an inline `Option<T>` without a wrapper
@@ -154,6 +157,13 @@ and run the example:
 ```sh
 cargo run --offline --locked -- run examples/collections/map_traversal.ncr --memory-stats
 ```
+
+## Fused iterator pipelines
+
+Built-in chains such as `values.iter().map(...).filter(...).take(...).fold(...)`
+are fused into one terminal traversal without intermediate adapter allocations.
+Callbacks stay lazy and in chain order; `take(0)` runs none. These pipelines do
+not provide first-class escaping borrowed iterators.
 
 ## Ownership and borrowed access
 
@@ -225,6 +235,11 @@ and enforce variant arity and uniqueness. `Option<T>` and `Result<T,E>` are
 preinjected ordinary generic enums. Nested inline layouts must have finite size;
 cycles through allocated objects require a real terminating case.
 
+Nested patterns can destructure enum variants, named class fields, and `Pair`
+values recursively, for example `Nested(Value(Leaf { value: value }))` or
+`(first, (second, third))`. A failed pattern guard can fall through to a later
+matching arm.
+
 ### Local views and interfaces
 
 Shared borrowed fields form local views with constructor-origin tracking. Views
@@ -270,33 +285,60 @@ runtime failures remain fatal; no exception unwinding is provided.
 ## CLI and projects
 
 ```text
-nacre check source.ncr ... | directory
+nacre check source.ncr ... | directory | Nacre.toml
 nacre test  sources [--native] [--lto] [--jemalloc] [-- filter]
 nacre bench sources [--native] [--lto] [--jemalloc] [-- filter]
 nacre fmt   sources [--check]
 nacre doc   sources [-o output-dir]
-nacre run   sources [--memory-stats] [--sanitize] [--native] [--lto] [--jemalloc] [-O0|-O1|-O2|-O3|-Os] [-- arguments...]
-nacre build sources [-o executable] [--memory-stats] [--sanitize] [--native] [--lto] [--jemalloc] [-O0|-O1|-O2|-O3|-Os]
+nacre run   [source.ncr ... | directory | Nacre.toml] [--release] [--memory-stats] [--direct] [--sanitize] [--native] [--lto] [--jemalloc] [-O0|-O1|-O2|-O3|-Os] [-- arguments...]
+nacre build [source.ncr ... | directory | Nacre.toml] [-o executable] [--release] [--memory-stats] [--direct] [--sanitize] [--native] [--lto] [--jemalloc] [-O0|-O1|-O2|-O3|-Os]
 nacre emit-c sources [-o output.c] [--memory-stats]
 nacre emit-flow sources [-o output.flow]
 nacre emit-borrows sources [-o output.borrows]
 nacre emit-types sources [-o output.types]
-nacre emit-llvm sources [-o output.ll] [--memory-stats] [-O0|-O1|-O2|-O3|-Os]
-nacre init new-directory
+nacre emit-llvm sources [-o output.ll] [--direct] [--memory-stats] [-O0|-O1|-O2|-O3|-Os]
+nacre new new-project-directory
+nacre init new-project-directory
+nacre add <path> [--manifest-path <file>]
 nacre doctor
 nacre lsp
 ```
 Commands accept multiple sources or recursively collected directories, resolving
-their module namespaces together as one whole-program compilation. `init` refuses
-an existing path. Existing outputs are replaced except the input source.
-Native optimization defaults to `-O2`; default build output is `out/<source-name>`.
-`--sanitize` enables ASan/UBSan; `--native` enables host CPU instruction extensions
-(`-march=native`); `--lto` enables link-time optimization (`-flto`); `--jemalloc`
-links the thread-local size-class jemalloc allocator (`-ljemalloc`). Automatic
-SHA-keyed compilation caching in `$XDG_CACHE_HOME/nacre` accelerates `nacre run` re-runs.
-`NACRE_CC` or `CC` selects one C compiler executable, without embedded flags.
-`NACRE_CLANG` selects Clang for textual LLVM emission; this is the C frontend's
-LLVM output, not a direct Rust LLVM backend. Flow/borrow/type inspection does not
+their module namespaces together as one whole-program compilation. `init` and
+`new` create projects; `init` is an alias. Existing outputs are replaced except
+the input source.
+
+Raw source-file native builds and default C-front-end `emit-llvm` use `-O2`.
+Manifest `run`/`build` use the dev profile by default; `--release` selects the
+profile, and an explicit `-O` option overrides its optimization level. Default
+build output is `out/<package-name>` for a manifest package, otherwise
+`out/<source-name>`. `--sanitize` enables ASan/UBSan; `--native` enables host CPU
+instruction extensions (`-march=native`); `--lto` enables link-time optimization
+(`-flto`); `--jemalloc` links jemalloc (`-ljemalloc`). These options and the
+selected optimization also apply to `--direct` native builds.
+
+The default C `run`/`build` path caches completed executables, keyed by generated
+C source, compiler, optimization level, and flags. The cache defaults to
+`$XDG_CACHE_HOME/nacre` (or `$HOME/.cache/nacre`); `NACRE_CACHE_DIR` overrides
+the location and `NACRE_NO_CACHE` disables caching. PGO builds bypass the cache.
+Direct native builds use a separate runtime-bitcode cache only; they do not cache
+the per-program user LLVM module or final executable.
+
+`emit-llvm` uses Clang's C frontend by default. With `--direct`, it emits the
+typed-IR user functions and `main` as LLVM; `--memory-stats` is unavailable for
+`emit-llvm --direct`. For `run`/`build --direct`, the generated C side is runtime,
+standard-library, layout/destructor, and ABI support only. Clang compiles that
+support C separately to reusable LLVM bitcode; `llvm-link` combines it directly
+with the textual user LLVM module. Clang applies the selected optimization and
+performs the native link. The runtime-bitcode cache excludes user bodies and
+literal data.
+
+`NACRE_CC` or `CC` selects the C compiler for the default C path. `NACRE_CLANG`
+selects Clang for default C-frontend LLVM emission and direct native builds;
+`NACRE_LLVM_LINK` selects `llvm-link` for direct native builds (default:
+`llvm-link`). Direct native builds require Clang and `llvm-link` from matching
+LLVM major versions: Clang 23 with `llvm-link` 22 failed, while a matching 22
+pair succeeded. Flow/borrow/type inspection and `emit-llvm --direct` do not
 require a C compiler. See [PROJECTS.md](docs/PROJECTS.md).
 
 ## VS Code and Zed
@@ -397,12 +439,14 @@ Git repositories and a local bare remote; CI runs these regression scenarios.
 
 ## Boundaries and design notes
 
-Modules and `import` resolve names only inside the source files selected for one
-whole-program compilation; there is no separate compilation, package manager, or
-external dependency resolver. There is no `T[]` syntax or bracket indexing; use
-`Array<T>` or another collection. First-class borrowed iterators, NLL/lifetime
-parameters, disjoint-entry borrowing, FFI, class inheritance, overloading, and a
-direct LLVM backend are not provided. GUI, reflection, JVM execution, and dynamic
+Modules and `import` resolve across the selected whole-program bundle, including
+local path dependencies loaded from `Nacre.toml`; this is not separate
+compilation. Manifests support local path dependencies and workspaces, but do
+not resolve registry, Git, or version-based dependencies. There is no `T[]`
+syntax or bracket indexing; use `Array<T>` or another collection.
+First-class escaping borrowed iterators,
+NLL/lifetime parameters, disjoint-entry borrowing, FFI, class inheritance, and
+overloading are not provided. GUI, reflection, JVM execution, and dynamic
 loading are outside the project scope. Very deep owned trees may exhaust the C
 stack during recursive destruction. Programs are not sandboxed; compiler/LSP
 input limits are not a security certification.

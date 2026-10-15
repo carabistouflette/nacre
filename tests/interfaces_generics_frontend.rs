@@ -237,7 +237,7 @@ fn interface_many_replacements() {
 
 #[test]
 fn generic_two_parameters() {
-    let source = "class Pair<A,B>{A first;B second;Pair(A a,B b){first=a;second=b;}}void main(){Pair<int,String> p=new Pair<int,String>(42,\"ok\");println(p.first);println(p.second);}";
+    let source = "class Duo<A,B>{A first;B second;Duo(A a,B b){first=a;second=b;}}void main(){Duo<int,String> p=new Duo<int,String>(42,\"ok\");println(p.first);println(p.second);}";
     validate(source).unwrap_or_else(|e| panic!("{}", e.render("case.ncr", source)));
 }
 
@@ -599,7 +599,7 @@ fn unknown_type_argument() {
 
 #[test]
 fn duplicate_type_param() {
-    let source = "class Pair<T,T>{}void main(){}";
+    let source = "class Duo<T,T>{}void main(){}";
     let _error = validate(source).expect_err("invalid source accepted");
     assert!(_error.message.contains("E4101"), "{}", _error.render("case.ncr", source));
 }

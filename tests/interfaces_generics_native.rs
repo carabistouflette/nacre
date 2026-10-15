@@ -443,7 +443,7 @@ fn interface_many_replacements() {
 
 #[test]
 fn generic_two_parameters() {
-    let source = "class Pair<A,B>{A first;B second;Pair(A a,B b){first=a;second=b;}}void main(){Pair<int,String> p=new Pair<int,String>(42,\"ok\");println(p.first);println(p.second);}";
+    let source = "class Duo<A,B>{A first;B second;Duo(A a,B b){first=a;second=b;}}void main(){Duo<int,String> p=new Duo<int,String>(42,\"ok\");println(p.first);println(p.second);}";
     let c = compile_to_c(source).unwrap_or_else(|e| panic!("{}", e.render("case.ncr", source)));
     let program = native::compile_c_with_flags(&c, &["-DNACRE_MEMORY_STATS"]).unwrap();
     let result = program.output().unwrap();

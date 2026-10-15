@@ -107,7 +107,7 @@ pub fn format_source(source: &str) -> Result<String, String> {
     let tokens = tokenize(source)?;
     let mut out = String::with_capacity(source.len());
 
-    let mut indent = 0;
+    let mut indent: usize = 0;
     let mut at_line_start = true;
     let mut in_for_header = 0;
     let mut prev_token: Option<&Token> = None;
@@ -140,9 +140,7 @@ pub fn format_source(source: &str) -> Result<String, String> {
                 continue;
             }
             Token::RBrace => {
-                if indent > 0 {
-                    indent -= 1;
-                }
+                indent = indent.saturating_sub(1);
                 if at_line_start {
                     push_indent(&mut out, indent);
                 } else {
@@ -159,14 +157,13 @@ pub fn format_source(source: &str) -> Result<String, String> {
                         out.push_str("else");
                         prev_token = Some(&tokens[i + 1]);
                         i += 2;
-                        if let Some(Token::Keyword(next_kw)) = tokens.get(i) {
-                            if next_kw == "if" {
+                        if let Some(Token::Keyword(next_kw)) = tokens.get(i)
+                            && next_kw == "if" {
                                 out.push(' ');
                                 out.push_str("if");
                                 prev_token = Some(&tokens[i]);
                                 i += 1;
                             }
-                        }
                         continue;
                     }
                 } else if let Some(Token::Semi) = next {
@@ -194,11 +191,10 @@ pub fn format_source(source: &str) -> Result<String, String> {
 
         match tok {
             Token::LBrace => {
-                if let Some(prev) = prev_token {
-                    if !matches!(prev, Token::LBrace | Token::Newline) && !out.ends_with(' ') {
+                if let Some(prev) = prev_token
+                    && !matches!(prev, Token::LBrace | Token::Newline) && !out.ends_with(' ') {
                         out.push(' ');
                     }
-                }
                 out.push('{');
                 indent += 1;
                 out.push('\n');
@@ -228,8 +224,8 @@ pub fn format_source(source: &str) -> Result<String, String> {
                 out.push(' ');
             }
             Token::LParen => {
-                if let Some(Token::Keyword(kw)) = prev_token {
-                    if matches!(kw.as_str(), "if" | "while" | "for" | "match") {
+                if let Some(Token::Keyword(kw)) = prev_token
+                    && matches!(kw.as_str(), "if" | "while" | "for" | "match") {
                         if !out.ends_with(' ') {
                             out.push(' ');
                         }
@@ -237,7 +233,6 @@ pub fn format_source(source: &str) -> Result<String, String> {
                             in_for_header += 1;
                         }
                     }
-                }
                 out.push('(');
             }
             Token::RParen => {

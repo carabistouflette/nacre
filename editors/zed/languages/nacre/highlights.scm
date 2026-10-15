@@ -4,15 +4,17 @@
 (primitive_type) @type.builtin
 (numeric_type) @type.builtin
 ((type_identifier) @type.builtin
- (#match? @type.builtin "^(Array|Arrays|ByteBuffer|Channel|Command|Comparator|Console|Datagram|Deque|Directory|Env|ExitStatus|File|FileInfo|Files|Guard|List|Map|Math|Mutex|Option|Path|Process|ProcessOutput|Random|Receiver|Regex|RegexMatch|Result|SendError|Sender|Set|SocketAddress|Task|TcpListener|TcpStream|Text|Thread|Time|TlsConfig|TlsStream|UdpSocket|Uri|WebSocket|WebSocketMessage)$"))
+ (#match? @type.builtin "^(Array|Arrays|ByteBuffer|Channel|Command|Comparator|Console|Datagram|Deque|Directory|Env|ExitStatus|File|FileInfo|Files|Guard|List|Map|Math|Mutex|Option|Pair|Path|Process|ProcessOutput|Random|Receiver|Regex|RegexMatch|Result|SendError|Sender|Set|SocketAddress|Task|TcpListener|TcpStream|Text|Thread|Time|TlsConfig|TlsStream|UdpSocket|Uri|WebSocket|WebSocketMessage)$"))
 (parameter name: (identifier) @variable.parameter)
 (class_declaration name: (identifier) @type)
 (interface_declaration name: (identifier) @type)
 (enum_declaration name: (identifier) @type)
 (enum_variant name: (identifier) @constructor)
 (new_expression variant: (identifier) @constructor)
-(match_arm variant: (identifier) @constructor)
-(match_binding name: (identifier) @variable.parameter)
+(match_arm pattern: (variant_pattern variant: (qualified_identifier) @constructor))
+(record_pattern type: (qualified_identifier) @type)
+(field_pattern name: (identifier) @property)
+(match_binding name: (qualified_identifier) @variable.parameter)
 (for_statement name: (identifier) @variable.parameter)
 (for_statement key: (identifier) @variable.parameter)
 (for_statement value: (identifier) @variable.parameter)
@@ -35,8 +37,7 @@
 (escape_sequence) @string.escape
 (character_escape_sequence) @string.escape
 (comment) @comment
-["+" "-" "*" "/" "%" "=" "==" "!" "!=" "<" "<=" ">" ">=" "&&" "||"
+["+" "-" "*" "/" "%" "=" "==" "!" "!=" "<" "<=" ">" ">=" "&&" "||" "=>"
  "|" "^" "&" "~" "<<" "?"] @operator
-(shift_right_operator) @operator
 ["(" ")" "{" "}"] @punctuation.bracket
 [";" "," "." ":"] @punctuation.delimiter

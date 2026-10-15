@@ -154,20 +154,41 @@ impl Builder {
                 let at = self.expression(value, at);
                 let branch = self.step(at, Op::Nop("match"));
                 let join = self.node(Op::Nop("match-join"));
+                let mut next_arm = branch;
                 let mut has_normal_arm = false;
                 for arm in arms {
-                    let start = self.step(branch, Op::Nop("match-arm"));
+                    let attempt = self.step(next_arm, Op::Nop("match-arm"));
+                    let test = self.step(attempt, Op::Nop("match-pattern-test"));
+                    let matched = self.node(Op::Nop("match-pattern-success"));
+                    let failed = self.node(Op::Nop("match-next-arm"));
+                    self.edge(test, matched);
+                    self.edge(test, failed);
+                    let mut bindings = Vec::new();
+                    collect_pattern_bindings(&arm.pattern, &mut bindings);
                     self.owners.push(Vec::new());
-                    let mut cursor = start;
-                    for id in &arm.bindings {
+                    let mut cursor = matched;
+                    if let Some(guard) = &arm.guard {
+                        for (_, guard_id) in &bindings {
+                            if let Some(id) = guard_id {
+                                cursor = self.step(cursor, Op::Declare(*id));
+                                cursor = self.step(cursor, Op::Write(*id));
+                            }
+                        }
+                        cursor = self.expression(guard, cursor);
+                        let guard_test = self.step(cursor, Op::Nop("match-guard"));
+                        let body_start = self.node(Op::Nop("match-guard-success"));
+                        let guard_failed = self.node(Op::Nop("match-guard-failure"));
+                        self.edge(guard_test, body_start);
+                        self.edge(guard_test, guard_failed);
+                        self.edge(guard_failed, failed);
+                        cursor = body_start;
+                    }
+                    for (id, _) in &bindings {
                         cursor = self.step(cursor, Op::Declare(*id));
                         cursor = self.step(cursor, Op::Write(*id));
                         if self.local_types[*id].is_object() {
                             self.owners.last_mut().expect("match arm scope").push(*id);
                         }
-                    }
-                    if let Some(guard) = &arm.guard {
-                        cursor = self.expression(guard, cursor);
                     }
                     if let Some(end) = self.block(&arm.body, cursor) {
                         let end = self.cleanup(end, self.owners.len() - 1);
@@ -175,6 +196,7 @@ impl Builder {
                         has_normal_arm = true;
                     }
                     self.owners.pop();
+                    next_arm = failed;
                 }
                 if has_normal_arm { Some(join) } else { None }
             }
@@ -199,6 +221,44 @@ impl Builder {
             None => at, // this is a non-escaping receiver; constructor readiness is checked earlier
         }
     }
+    fn iterator_plan(
+        &mut self,
+        plan: &t::IteratorPlan,
+        mut at: NodeId,
+        drops: &mut Vec<(usize, Span)>,
+    ) -> NodeId {
+        let receiver = match &plan.source {
+            t::IteratorSource::List { collection, .. }
+            | t::IteratorSource::Array { collection, .. }
+            | t::IteratorSource::Map { collection, .. } => collection,
+        };
+        at = match receiver {
+            t::IteratorReceiver::Borrowed(place) => self.read_place(place, plan.span, true, at),
+            t::IteratorReceiver::BorrowedExpr(value) => self.expression(value, at),
+            t::IteratorReceiver::Owned(value) => {
+                let at = self.expression(value, at);
+                if let Type::Object(class) = value.ty { drops.push((class, value.span)); }
+                at
+            }
+        };
+        for stage in &plan.stages {
+            at = match stage {
+                t::IteratorStage::Map { callback, .. }
+                | t::IteratorStage::Filter { callback, .. } => {
+                    let at = self.expression(callback, at);
+                    if let Type::Object(class) = callback.ty {
+                        drops.push((class, callback.span));
+                    }
+                    at
+                }
+                t::IteratorStage::Take { count } => self.expression(count, at),
+                t::IteratorStage::Enumerate { .. } => at,
+                t::IteratorStage::Zip { right, .. } => self.iterator_plan(right, at, drops),
+            };
+        }
+        at
+    }
+
     fn expression(&mut self, expr: &t::Expr, at: NodeId) -> NodeId {
         use t::ExprKind as E;
         match &expr.kind {
@@ -211,6 +271,29 @@ impl Builder {
             E::MapSlot { map, index, .. } => {
                 let at = self.read_place(map, expr.span, true, at);
                 self.expression(index, at)
+            }
+            E::IteratorFold { plan, initial, folder, .. } => {
+                let mut drops = Vec::new();
+                let mut at = self.iterator_plan(plan, at, &mut drops);
+                at = self.expression(initial, at);
+                at = self.expression(folder, at);
+                if let Type::Object(class) = folder.ty {
+                    drops.push((class, folder.span));
+                }
+                at = self.step(at, Op::Nop("iterator-fold"));
+                for (class, span) in drops.into_iter().rev() {
+                    at = self.step(at, Op::DropTemporary { class, span });
+                }
+                at
+            }
+            E::IteratorSizeHint { plan, .. } => {
+                let mut drops = Vec::new();
+                let mut at = self.iterator_plan(plan, at, &mut drops);
+                at = self.step(at, Op::Nop("iterator-size-hint"));
+                for (class, span) in drops.into_iter().rev() {
+                    at = self.step(at, Op::DropTemporary { class, span });
+                }
+                at
             }
             E::Drop(inner) => {
                 let at = self.expression(inner, at);
@@ -375,6 +458,17 @@ pub fn check(program: &t::Program) -> Result<(), Diagnostic> {
         verify(&graph, function, &states)?;
     }
     Ok(())
+}
+
+fn collect_pattern_bindings(pattern: &t::Pattern, out: &mut Vec<(usize, Option<usize>)>) {
+    match &pattern.kind {
+        t::PatternKind::Binding { id, guard_id } => out.push((*id, *guard_id)),
+        t::PatternKind::Wildcard => {}
+        t::PatternKind::Variant { fields, .. } =>
+            for field in fields { collect_pattern_bindings(field, out); },
+        t::PatternKind::Record { fields, .. } =>
+            for (_, field) in fields { collect_pattern_bindings(field, out); },
+    }
 }
 
 /// A textual ownership CFG, not an executable or complete computation IR.

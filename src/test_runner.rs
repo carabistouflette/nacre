@@ -32,7 +32,7 @@ pub fn run_tests(
 
     let (test_cases, filtered_out): (Vec<_>, Vec<_>) = all_tests
         .into_iter()
-        .partition(|(name, _)| filter.map_or(true, |f| name.contains(f)));
+        .partition(|(name, _)| filter.is_none_or(|f| name.contains(f)));
 
     let filtered_count = filtered_out.len();
     println!("\nrunning {} test(s)", test_cases.len());

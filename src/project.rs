@@ -1,6 +1,6 @@
 //! Independent parsing for source units followed by whole-program module resolution.
 //! This is whole-program compilation, not separate package linking.
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -28,16 +28,12 @@ impl SourceBundle {
             Ok((PathBuf::from(name), source))
         }))
     }
-    /// Recursively collect .ncr files, sorted within each requested directory.
+    /// Resolve manifests and recursively collect .ncr files in deterministic order.
     /// Symlinks are rejected; hidden directories, target and out are excluded.
     pub fn from_paths(paths: &[PathBuf]) -> Result<Self, String> {
-        let mut files = Vec::new();
-        for path in paths { collect(path, 0, &mut files)?; }
-        let mut seen = HashSet::new();
+        let files = resolve_inputs(paths)?;
         let mut remaining = MAX_SOURCE_BYTES;
         Self::from_units(files.into_iter().map(|path| {
-            let canonical = path.canonicalize().map_err(|e| format!("{}: {e}", path.display()))?;
-            if !seen.insert(canonical) { return Err(format!("duplicate source: {}", path.display())); }
             let mut data = Vec::new();
             fs::File::open(&path).map_err(|e| format!("{}: {e}", path.display()))?
                 .take(remaining as u64 + 1).read_to_end(&mut data)
@@ -147,6 +143,33 @@ impl SourceBundle {
         crate::llvm_codegen::generate_direct_llvm(&typed, &self.text)
             .map_err(|e| Diagnostic::new(Span::default(), e))
     }
+    /// Compile this complete source bundle through the direct LLVM backend.
+    pub fn compile_llvm_direct(&self) -> Result<crate::native::NativeProgram, String> {
+        self.compile_llvm_direct_with_flags(&[])
+    }
+    /// Compile with additional trusted native compiler flags.
+    pub fn compile_llvm_direct_with_flags(&self, flags: &[&str]) -> Result<crate::native::NativeProgram, String> {
+        self.compile_llvm_direct_optimized_with_flags("-O2", flags)
+    }
+    /// Compile direct LLVM IR and its stdlib-only runtime at an explicit optimization level.
+    pub fn compile_llvm_direct_optimized_with_flags(
+        &self,
+        optimization: &str,
+        flags: &[&str],
+    ) -> Result<crate::native::NativeProgram, String> {
+        let typed = self.typed().map_err(|diagnostic| self.render(&diagnostic))?;
+        let mut artifact = crate::llvm_codegen::emit_llvm_direct_artifact(&typed, &self.text)
+            .map_err(|error| self.render(&Diagnostic::new(Span::default(), error)))?;
+        if self.units.len() > 1 {
+            artifact.runtime_c.insert_str(0, &self.runtime_source_map());
+        }
+        crate::native::compile_llvm_direct_with_runtime(
+            &artifact.ir,
+            &artifact.runtime_c,
+            optimization,
+            flags,
+        )
+    }
     pub fn emit_flow(&self) -> Result<String, Diagnostic> {
         crate::ownership::dump(&self.typed()?, &self.text)
     }
@@ -245,17 +268,182 @@ fn c_string(text: &str) -> String {
     out.push('"'); out
 }
 
+/// Resolve local package dependencies and workspace members into source files.
+/// Packages share the language's module namespace and one entry point.
+pub fn resolve_inputs(paths: &[PathBuf]) -> Result<Vec<PathBuf>, String> {
+    let mut graph = PackageGraph::default();
+    let mut files = Vec::new();
+    let mut seen = HashSet::new();
+    for path in paths {
+        if let Some(manifest) = manifest_path(path) {
+            let start = graph.roots.len();
+            graph.visit(&manifest, None, 0)?;
+            for root in &graph.roots[start..] {
+                let mut package_files = Vec::new();
+                collect(root, 0, &mut package_files)?;
+                for file in package_files {
+                    let canonical = file.canonicalize().map_err(|e| format!("{}: {e}", file.display()))?;
+                    if seen.insert(canonical) { files.push(file); }
+                }
+            }
+        } else {
+            let mut raw_files = Vec::new();
+            collect(path, 0, &mut raw_files)?;
+            for file in raw_files {
+                let canonical = file.canonicalize().map_err(|e| format!("{}: {e}", file.display()))?;
+                if !seen.insert(canonical) { return Err(format!("duplicate source: {}", file.display())); }
+                files.push(file);
+            }
+        }
+        if files.len() > MAX_FILES { return Err(format!("source file limit is {MAX_FILES}")); }
+    }
+    Ok(files)
+}
+
+fn manifest_path(path: &Path) -> Option<PathBuf> {
+    if path.file_name().is_some_and(|name| name == "Nacre.toml") {
+        Some(path.to_owned())
+    } else if path.is_dir() && path.join("Nacre.toml").exists() {
+        Some(path.join("Nacre.toml"))
+    } else {
+        None
+    }
+}
+
+/// Includes directory roots so that the editor can admit unsaved source files.
+pub(crate) fn manifest_source_roots(manifest: &Path) -> Result<Vec<PathBuf>, String> {
+    let mut graph = PackageGraph::default();
+    graph.visit(manifest, None, 0)?;
+    graph.roots.sort();
+    graph.roots.dedup();
+    let mut roots = Vec::new();
+    let mut directories: Vec<PathBuf> = Vec::new();
+    for path in graph.roots {
+        if directories.iter().any(|directory| path.starts_with(directory)) { continue; }
+        if path.is_dir() { directories.push(path.clone()); }
+        roots.push(path);
+    }
+    Ok(roots)
+}
+
+#[derive(Default)]
+struct PackageGraph {
+    active: HashSet<PathBuf>,
+    completed: HashSet<PathBuf>,
+    names: HashMap<String, PathBuf>,
+    roots: Vec<PathBuf>,
+}
+
+impl PackageGraph {
+    fn visit(&mut self, path: &Path, expected_name: Option<&str>, depth: usize) -> Result<(), String> {
+        if depth > 32 { return Err("package dependency nesting limit is 32".to_owned()); }
+        let metadata = fs::symlink_metadata(path).map_err(|e| format!("{}: {e}", path.display()))?;
+        if metadata.file_type().is_symlink() {
+            return Err(format!("symbolic-link manifest is not allowed: {}", path.display()));
+        }
+        let path = path.canonicalize().map_err(|e| format!("{}: {e}", path.display()))?;
+        let manifest = crate::manifest::Manifest::load(&path)?;
+        let root = path.parent().ok_or("manifest has no parent directory")?;
+        if let Some(expected) = expected_name {
+            let package = manifest.package.as_ref().ok_or_else(|| format!("{}: dependency must contain [package]", path.display()))?;
+            if package.name != expected {
+                return Err(format!("{}: dependency name `{expected}` does not match package `{}`", path.display(), package.name));
+            }
+        }
+        if self.active.contains(&path) {
+            return Err(format!("package dependency cycle at {}", path.display()));
+        }
+        if self.completed.contains(&path) { return Ok(()); }
+        if self.completed.len() + self.active.len() >= MAX_FILES {
+            return Err(format!("package manifest limit is {MAX_FILES}"));
+        }
+        if let Some(package) = &manifest.package {
+            if let Some(previous) = self.names.get(&package.name) {
+                if previous != root {
+                    return Err(format!("conflicting package `{}` at {} and {}", package.name, previous.display(), root.display()));
+                }
+            } else {
+                self.names.insert(package.name.clone(), root.to_owned());
+            }
+        }
+        self.active.insert(path.clone());
+        for (name, dependency) in &manifest.dependencies {
+            let dependency = root.join(&dependency.path);
+            let dependency = if dependency.is_dir() { dependency.join("Nacre.toml") } else { dependency };
+            self.visit(&dependency, Some(name), depth + 1)?;
+        }
+        if let Some(workspace) = &manifest.workspace {
+            for member in &workspace.members {
+                let member = root.join(member);
+                let member = if member.is_dir() { member.join("Nacre.toml") } else { member };
+                self.visit(&member, None, depth + 1)?;
+            }
+        }
+        if let Some(package) = manifest.package {
+            for source in package.sources {
+                reject_source_symlinks(root, &source)?;
+                self.roots.push(root.join(source));
+            }
+            if let Some(entry) = package.entry {
+                reject_source_symlinks(root, &entry)?;
+                let entry = root.join(entry);
+                if !is_source_file(&entry) || !entry.is_file() {
+                    return Err(format!("{}: package entry must name an existing .ncr file", entry.display()));
+                }
+                self.roots.push(entry);
+            }
+        }
+        self.active.remove(&path);
+        self.completed.insert(path);
+        Ok(())
+    }
+}
+
+fn reject_source_symlinks(root: &Path, relative: &Path) -> Result<(), String> {
+    let mut path = root.to_owned();
+    for component in relative.components() {
+        path.push(component);
+        match fs::symlink_metadata(&path) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                return Err(format!("symbolic-link source is not allowed: {}", path.display()));
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => break,
+            Err(error) => return Err(format!("{}: {error}", path.display())),
+        }
+    }
+    Ok(())
+}
+
 /// Create a fresh project, never overwrite an existing path.
 pub fn init(path: &Path) -> Result<(), String> {
+    let mut name = path.file_name().and_then(|name| name.to_str()).unwrap_or("app")
+        .chars().map(|c| if c.is_ascii_alphanumeric() || c == '_' || c == '-' { c } else { '_' }).collect::<String>();
+    if !name.as_bytes().first().is_some_and(u8::is_ascii_alphanumeric) { name.insert_str(0, "app_"); }
     fs::create_dir(path).map_err(|e| format!("unable to create {} (the path must be new): {e}", path.display()))?;
+    // Encode punctuation injectively, and prefix digits/keywords into identifiers.
+    let mut module_prefix = String::with_capacity(5 + name.len() * 2);
+    module_prefix.push_str("pkg_");
+    for byte in name.bytes() {
+        match byte {
+            b'_' => module_prefix.push_str("__"),
+            b'-' => module_prefix.push_str("_h"),
+            _ => module_prefix.push(char::from(byte)),
+        }
+    }
+    module_prefix.push('.');
     let write = || -> std::io::Result<()> {
         fs::create_dir(path.join("src"))?;
-        fs::write(path.join("src/Main.ncr"), include_str!("../examples/language/modules/Main.ncr"))?;
-        fs::write(path.join("src/Math.ncr"), include_str!("../examples/language/modules/Math.ncr"))?;
-        fs::write(path.join("src/Box.ncr"), include_str!("../examples/language/modules/Box.ncr"))?;
-        fs::write(path.join("nacre.json"), "{\"sources\":[\"src\"]}\n")?;
+        for (file, source) in [
+            ("Main.ncr", include_str!("../examples/language/modules/Main.ncr")),
+            ("Math.ncr", include_str!("../examples/language/modules/Math.ncr")),
+            ("Box.ncr", include_str!("../examples/language/modules/Box.ncr")),
+        ] {
+            fs::write(path.join("src").join(file), source.replace("examples.", &module_prefix))?;
+        }
+        fs::write(path.join("Nacre.toml"), format!("[package]\nname = \"{name}\"\nversion = \"0.1.0\"\nsources = [\"src\"]\nentry = \"src/Main.ncr\"\n"))?;
         fs::write(path.join(".gitignore"), "out/\n*.ll\n")?;
-        fs::write(path.join("README.md"), "# Nacre project\n\n```sh\nnacre check src\nnacre run src\nnacre build src -o out/app\n```\n\nSource units declare modules and import public types or functions. All configured source files are compiled together.\n")?;
+        fs::write(path.join("README.md"), "# Nacre project\n\n```sh\nnacre check\nnacre run\nnacre build --release\n```\n\nSource units declare modules and import public types or functions. Nacre.toml selects source roots and local path dependencies; all selected source files are compiled together.\n")?;
         Ok(())
     };
     write().map_err(|e| format!("partial project creation at {}: {e}", path.display()))

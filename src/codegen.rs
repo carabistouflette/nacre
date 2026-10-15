@@ -57,6 +57,558 @@ where
     writeln!(out, "\n#line 1 \"nacre_main.c\"\nint main(int argc, char **argv) {{\n    ncr_argc = argc;\n    ncr_argv = argv;\n    ncr_fn_{}();\n    ncr_memory_report();\n    return 0;\n}}", program.main).unwrap();
     out
 }
+/// Emit the reusable C runtime half of direct LLVM compilation.
+///
+/// Unlike `generate_mapped`, this contains trusted runtime and standard-library
+/// code only. User function bodies live in the LLVM module; C functions here
+/// are ABI adapters and runtime layout/access helpers.
+pub(crate) fn generate_direct_runtime(program: &t::Program) -> String {
+    let (native_calls, virtual_calls, map_slots) = direct_runtime_references(program);
+    let mut out = String::from("/* Generated Nacre runtime for direct LLVM code. */\n");
+    out.push_str(include_str!("runtime.c"));
+    out.push_str("\n/* Process arguments belong to the generated executable. */\nstatic int ncr_argc;\nstatic char **ncr_argv;\n");
+    out.push_str(&crate::stdlib_codegen::preamble(program));
+    out.push_str(&class_support(program));
+
+    out.push_str("\n/* Prototypes shared by native templates and direct-code adapters. */\n");
+    for function in &program.functions {
+        if crate::stdlib_codegen::should_emit_prototype(program, function) {
+            writeln!(out, "{};", signature(program, function)).unwrap();
+        }
+    }
+    for function in &program.functions {
+        if function.native.is_none() && function.virtual_slot.is_none() {
+            writeln!(out, "extern void {}({});",
+                direct_function_symbol(function.id),
+                direct_slot_parameters(function)).unwrap();
+        }
+    }
+
+    out.push_str(&crate::stdlib_codegen::implementations(program));
+    out.push_str(&direct_user_adapters(program));
+    out.push_str(&interface_implementations(program));
+    out.push_str(&direct_virtual_dispatchers(program));
+    out.push_str(&direct_runtime_helpers(program, &native_calls, &virtual_calls, &map_slots));
+    out
+}
+
+type RuntimeMapSlot = (String, usize, t::MapSlotKind, Type, Type);
+type RuntimeReferences = (Vec<usize>, Vec<usize>, Vec<RuntimeMapSlot>);
+
+pub(crate) fn direct_runtime_references(
+    program: &t::Program,
+) -> RuntimeReferences {
+    use std::collections::BTreeMap;
+
+    fn native_method(program: &t::Program, class: usize, method: t::NativeMethod,
+                     native: &mut HashSet<usize>) {
+        let function = program.functions.iter().find(|function|
+            function.receiver == Some(class) && function.native == Some(method))
+            .unwrap_or_else(|| panic!("missing native iterator method {method:?} for class {class}"));
+        native.insert(function.id);
+    }
+    fn iterator_receiver_class(receiver: &t::IteratorReceiver) -> usize {
+        match receiver {
+            t::IteratorReceiver::Borrowed(place) => place.ty.object_class(),
+            t::IteratorReceiver::BorrowedExpr(value) | t::IteratorReceiver::Owned(value) =>
+                value.ty.object_class(),
+        }.expect("iterator source receiver class")
+    }
+    fn iterator_plan(
+        program: &t::Program,
+        plan: &t::IteratorPlan,
+        native: &mut HashSet<usize>,
+        virtuals: &mut HashSet<usize>,
+        slots: &mut BTreeMap<String, (usize, t::MapSlotKind, Type, Type)>,
+    ) {
+        match &plan.source {
+            t::IteratorSource::List { collection, element_type } => {
+                let class = iterator_receiver_class(collection);
+                native_method(program, class, t::NativeMethod::ListSize, native);
+                let access = if element_type.is_object() {
+                    t::NativeMethod::ListGetRef
+                } else {
+                    t::NativeMethod::ListGet
+                };
+                native_method(program, class, access, native);
+                iterator_receiver(collection, program, native, virtuals, slots);
+            }
+            t::IteratorSource::Array { collection, element_type } => {
+                let class = iterator_receiver_class(collection);
+                native_method(program, class, t::NativeMethod::ArraySize, native);
+                let access = if element_type.is_object() {
+                    t::NativeMethod::ArrayGetRef
+                } else {
+                    t::NativeMethod::ArrayGet
+                };
+                native_method(program, class, access, native);
+                iterator_receiver(collection, program, native, virtuals, slots);
+            }
+            t::IteratorSource::Map { collection, pair_class, .. } => {
+                let class = iterator_receiver_class(collection);
+                native_method(program, class, t::NativeMethod::MapSize, native);
+                let fields = &program.classes[*pair_class].fields;
+                let slot_types = [
+                    (t::MapSlotKind::Occupied, Type::Boolean),
+                    (t::MapSlotKind::Key, fields[0]),
+                    (t::MapSlotKind::Value, fields[1]),
+                ];
+                for (kind, ty) in slot_types {
+                    let index = Type::Int;
+                    let name = direct_map_slot_symbol(class, kind, ty, index);
+                    slots.insert(name, (class, kind, ty, index));
+                }
+                iterator_receiver(collection, program, native, virtuals, slots);
+            }
+        }
+        for stage in &plan.stages {
+            match stage {
+                t::IteratorStage::Map { callback, callback_method, .. } |
+                t::IteratorStage::Filter { callback, callback_method, .. } => {
+                    expr(callback, program, native, virtuals, slots);
+                    virtuals.insert(*callback_method);
+                }
+                t::IteratorStage::Take { count } => expr(count, program, native, virtuals, slots),
+                t::IteratorStage::Enumerate { .. } => {}
+                t::IteratorStage::Zip { right, .. } =>
+                    iterator_plan(program, right, native, virtuals, slots),
+            }
+        }
+    }
+    fn iterator_receiver(
+        receiver: &t::IteratorReceiver,
+        program: &t::Program,
+        native: &mut HashSet<usize>,
+        virtuals: &mut HashSet<usize>,
+        slots: &mut BTreeMap<String, (usize, t::MapSlotKind, Type, Type)>,
+    ) {
+        match receiver {
+            t::IteratorReceiver::Borrowed(_) => {}
+            t::IteratorReceiver::BorrowedExpr(value) | t::IteratorReceiver::Owned(value) =>
+                expr(value, program, native, virtuals, slots),
+        }
+    }
+    fn expr(
+        value: &t::Expr,
+        program: &t::Program,
+        native: &mut HashSet<usize>,
+        virtuals: &mut HashSet<usize>,
+        slots: &mut BTreeMap<String, (usize, t::MapSlotKind, Type, Type)>,
+    ) {
+        use t::ExprKind as E;
+        match &value.kind {
+            E::MapSlot { map, index, kind, .. } => {
+                let class = map.ty.object_class().expect("map-slot receiver class");
+                let key = direct_map_slot_symbol(class, *kind, value.ty, index.ty);
+                slots.insert(key, (class, *kind, value.ty, index.ty));
+                expr(index, program, native, virtuals, slots);
+            }
+            E::Call { target: t::CallTarget::Function(id), args, .. } => {
+                let function = &program.functions[*id];
+                if function.native.is_some() {
+                    native.insert(*id);
+                } else if function.virtual_slot.is_some() {
+                    virtuals.insert(*id);
+                }
+                for arg in args { expr(arg, program, native, virtuals, slots); }
+            }
+            E::Call { args, .. } => for arg in args { expr(arg, program, native, virtuals, slots); },
+            E::New { constructor, args, .. } => {
+                let function = &program.functions[*constructor];
+                if function.native.is_some() { native.insert(*constructor); }
+                for arg in args { expr(arg, program, native, virtuals, slots); }
+            }
+            E::Variant { args, .. } => for arg in args { expr(arg, program, native, virtuals, slots); },
+            E::Binary { left, right, .. } => {
+                expr(left, program, native, virtuals, slots);
+                expr(right, program, native, virtuals, slots);
+            }
+            E::IteratorFold { plan, initial, folder, folder_method, .. } => {
+                iterator_plan(program, plan, native, virtuals, slots);
+                expr(initial, program, native, virtuals, slots);
+                expr(folder, program, native, virtuals, slots);
+                virtuals.insert(*folder_method);
+            }
+            E::IteratorSizeHint { plan, .. } =>
+                iterator_plan(program, plan, native, virtuals, slots),
+            E::Unary { expr: inner, .. } | E::Cast { value: inner } |
+            E::Drop(inner) | E::Upcast { value: inner, .. } | E::Try { value: inner, .. } =>
+                expr(inner, program, native, virtuals, slots),
+            E::String(_) | E::Char(_) | E::Int(_) | E::Long(_) | E::Double(_) |
+            E::Unit | E::Boolean(_) | E::Read(_) | E::Move(_) | E::Borrow { .. } |
+            E::MapCapacity(_) => {}
+        }
+    }
+    fn block(
+        values: &t::Block,
+        program: &t::Program,
+        native: &mut HashSet<usize>,
+        virtuals: &mut HashSet<usize>,
+        slots: &mut BTreeMap<String, (usize, t::MapSlotKind, Type, Type)>,
+    ) {
+        for stmt in values {
+            match stmt {
+                t::Stmt::Let { value: Some(value), .. } | t::Stmt::Expr(value) =>
+                    expr(value, program, native, virtuals, slots),
+                t::Stmt::Let { value: None, .. } | t::Stmt::Break | t::Stmt::Continue => {}
+                t::Stmt::Assign { value, .. } | t::Stmt::Return(Some(value)) =>
+                    expr(value, program, native, virtuals, slots),
+                t::Stmt::Return(None) => {}
+                t::Stmt::If { condition, then_block, else_block } => {
+                    expr(condition, program, native, virtuals, slots);
+                    block(then_block, program, native, virtuals, slots);
+                    if let Some(other) = else_block { block(other, program, native, virtuals, slots); }
+                }
+                t::Stmt::While { condition, body } => {
+                    expr(condition, program, native, virtuals, slots);
+                    block(body, program, native, virtuals, slots);
+                }
+                t::Stmt::Match { value, arms } => {
+                    expr(value, program, native, virtuals, slots);
+                    for arm in arms {
+                        if let Some(guard) = &arm.guard { expr(guard, program, native, virtuals, slots); }
+                        block(&arm.body, program, native, virtuals, slots);
+                    }
+                }
+                t::Stmt::Block(inner) => block(inner, program, native, virtuals, slots),
+            }
+        }
+    }
+
+    let mut native = HashSet::new();
+    let mut virtuals = HashSet::new();
+    let mut slots = BTreeMap::new();
+    for function in &program.functions {
+        if function.native.is_none() && function.virtual_slot.is_none() {
+            block(&function.body, program, &mut native, &mut virtuals, &mut slots);
+        }
+    }
+    let mut native: Vec<_> = native.into_iter().collect();
+    let mut virtuals: Vec<_> = virtuals.into_iter().collect();
+    native.sort_unstable();
+    virtuals.sort_unstable();
+    let slots = slots.into_iter().map(|(name, (class, kind, ty, index))|
+        (name, class, kind, ty, index)).collect();
+    (native, virtuals, slots)
+}
+
+fn direct_function_symbol(id: usize) -> String {
+    format!("ncr_llvm_fn_{id}")
+}
+
+fn direct_slot_parameters(function: &t::Function) -> String {
+    let mut params = vec!["void *ncr_result".to_owned()];
+    if function.receiver.is_some() { params.push("void *ncr_self".to_owned()); }
+    params.extend(function.params.iter().map(|(id, _)| format!("void *ncr_arg_{id}")));
+    params.join(", ")
+}
+
+fn direct_virtual_dispatchers(program: &t::Program) -> String {
+    let mut out = String::from("\n/* Interface dispatchers used by direct LLVM calls. */\n");
+    for function in &program.functions {
+        let Some(slot) = function.virtual_slot else { continue; };
+        let Some(interface) = function.receiver else { continue; };
+        let mut args = vec!["ncr_self".to_string()];
+        let mut params = vec![format!("{} ncr_self", ctype(program, Type::Object(interface)))];
+        for (id, ty) in &function.params {
+            params.push(format!("{} ncr_v_{id}", ctype_param(program, *ty)));
+            args.push(format!("ncr_v_{id}"));
+        }
+        let call = format!("ncr_self.vtable->m{slot}(ncr_self.data{})",
+            if args.len() > 1 { format!(", {}", args[1..].join(", ")) } else { String::new() });
+        if function.return_type == Type::Void {
+            out.push_str(&format!(
+                "static inline void ncr_fn_{}({}) {{ {}; }}\n",
+                function.id, params.join(", "), call,
+            ));
+        } else {
+            out.push_str(&format!(
+                "static inline {} ncr_fn_{}({}) {{ return {}; }}\n",
+                ctype(program, function.return_type), function.id, params.join(", "), call,
+            ));
+        }
+    }
+    out
+}
+
+fn direct_user_adapters(program: &t::Program) -> String {
+    let mut out = String::from("\n/* C-ABI entry points for user functions; bodies remain LLVM-only. */\n");
+    for function in &program.functions {
+        if function.native.is_some() || function.virtual_slot.is_some() { continue; }
+        let mut call_args = vec![
+            if function.return_type == Type::Void { "NULL".to_owned() } else { "&ncr_result".to_owned() }
+        ];
+        if let Some(class) = function.receiver {
+            call_args.push(if program.classes[class].variants.is_some() {
+                "&ncr_self".to_owned()
+            } else {
+                "ncr_self".to_owned()
+            });
+        }
+        call_args.extend(function.params.iter().map(|(id, _)| format!("&ncr_v_{id}")));
+        let params = c_params_signature(program, function);
+        let return_type = ctype(program, function.return_type);
+        if function.return_type == Type::Void {
+            out.push_str(&format!(
+                "static inline void ncr_fn_{}({}) {{ {}({}); }}\n",
+                function.id, params, direct_function_symbol(function.id), call_args.join(", "),
+            ));
+        } else {
+            out.push_str(&format!(
+                "static inline {} ncr_fn_{}({}) {{ {} ncr_result; {}({}); return ncr_result; }}\n",
+                return_type, function.id, params, return_type,
+                direct_function_symbol(function.id), call_args.join(", "),
+            ));
+        }
+    }
+    out
+}
+
+fn c_params_signature(program: &t::Program, function: &t::Function) -> String {
+    let mut params = Vec::new();
+    if let Some(class) = function.receiver {
+        params.push(format!("{} ncr_self", ctype(program, Type::Object(class))));
+    }
+    params.extend(function.params.iter().map(|(id, ty)|
+        format!("{} ncr_v_{id}", ctype_param(program, *ty))));
+    if params.is_empty() { "void".to_owned() } else { params.join(", ") }
+}
+
+fn direct_type_code(ty: Type) -> String {
+    match ty {
+        Type::Byte => "byte".to_owned(),
+        Type::Char => "char".to_owned(),
+        Type::Int => "int".to_owned(),
+        Type::Long => "long".to_owned(),
+        Type::Double => "double".to_owned(),
+        Type::Unit => "unit".to_owned(),
+        Type::Boolean => "bool".to_owned(),
+        Type::String => "string".to_owned(),
+        Type::Void => "void".to_owned(),
+        Type::Object(class) => format!("object_{class}"),
+        Type::Borrow { class, mutable } => format!("borrow_{class}_{}", if mutable { "mut" } else { "ro" }),
+    }
+}
+
+pub(crate) fn direct_map_slot_symbol(
+    class: usize, kind: t::MapSlotKind, value_type: Type, index_type: Type,
+) -> String {
+    let kind = match kind {
+        t::MapSlotKind::Occupied => "occupied",
+        t::MapSlotKind::Key => "key",
+        t::MapSlotKind::Value => "value",
+    };
+    format!("ncr_llvm_map_slot_{class}_{kind}_{}_{}", direct_type_code(value_type), direct_type_code(index_type))
+}
+
+fn direct_runtime_helpers(
+    program: &t::Program,
+    native_calls: &[usize],
+    virtual_calls: &[usize],
+    map_slots: &[(String, usize, t::MapSlotKind, Type, Type)],
+) -> String {
+    let mut out = String::from("\n/* Pointer-slot runtime ABI for direct LLVM code. */\n");
+    out.push_str("void ncr_llvm_set_arguments(int32_t argc, char **argv) { ncr_argc = argc; ncr_argv = argv; }\n");
+    out.push_str("uint64_t ncr_llvm_sizeof_string(void) { return (uint64_t)sizeof(ncr_string); }\n");
+    out.push_str("void ncr_llvm_copy_string(void *out, const void *in) { *(ncr_string *)out = *(const ncr_string *)in; }\n");
+    out.push_str("void ncr_llvm_zero_string(void *out) { *(ncr_string *)out = (ncr_string){NULL, 0}; }\n");
+    out.push_str("void ncr_llvm_set_string(void *out, const unsigned char *data, uint64_t length) { *(ncr_string *)out = (ncr_string){data, (size_t)length}; }\n");
+    out.push_str("void ncr_llvm_print_string(void *slot) { ncr_print_string(*(ncr_string *)slot); }\n");
+    out.push_str("void ncr_llvm_print_int(void *slot) { ncr_print_int(*(int32_t *)slot); }\n");
+    out.push_str("void ncr_llvm_print_byte(void *slot) { ncr_print_byte(*(uint8_t *)slot); }\n");
+    out.push_str("void ncr_llvm_print_char(void *slot) { ncr_print_char(*(uint32_t *)slot); }\n");
+    out.push_str("void ncr_llvm_print_long(void *slot) { ncr_print_long(*(int64_t *)slot); }\n");
+    out.push_str("void ncr_llvm_print_double(void *slot) { ncr_print_double(*(double *)slot); }\n");
+    out.push_str("void ncr_llvm_print_unit(void *slot) { ncr_print_unit(*(uint8_t *)slot); }\n");
+    out.push_str("void ncr_llvm_print_boolean(void *slot) { ncr_print_boolean(*(bool *)slot); }\n");
+    out.push_str("void ncr_llvm_assert(void *condition, void *message, uint64_t line, uint64_t column) { ncr_string text = *(ncr_string *)message; ncr_assert(*(bool *)condition, text.data, text.length, (size_t)line, (size_t)column); }\n");
+    out.push_str("void ncr_llvm_assert_default(void *condition, uint64_t line, uint64_t column) { static const unsigned char text[] = \"assertion failed\"; ncr_assert(*(bool *)condition, text, sizeof(text) - 1, (size_t)line, (size_t)column); }\n");
+    out.push_str("void ncr_llvm_memory_report(void) { ncr_memory_report(); }\n");
+    out.push_str("void ncr_llvm_fail_overflow(uint64_t line, uint64_t column) { ncr_fail(\"integer overflow\", (size_t)line, (size_t)column); }\n");
+    out.push_str("void ncr_llvm_fail_divide(uint64_t line, uint64_t column) { ncr_fail(\"division by zero\", (size_t)line, (size_t)column); }\n");
+    out.push_str("void ncr_llvm_fail_negative_take(uint64_t line, uint64_t column) { ncr_fail(\"negative iterator bound\", (size_t)line, (size_t)column); }\n");
+    out.push_str("void ncr_llvm_div_int(void *out, void *left, void *right, uint64_t line, uint64_t column) { *(int32_t *)out = ncr_div(*(int32_t *)left, *(int32_t *)right, (size_t)line, (size_t)column); }\n");
+    out.push_str("void ncr_llvm_rem_int(void *out, void *left, void *right, uint64_t line, uint64_t column) { *(int32_t *)out = ncr_rem(*(int32_t *)left, *(int32_t *)right, (size_t)line, (size_t)column); }\n");
+    out.push_str("void ncr_llvm_div_long(void *out, void *left, void *right, uint64_t line, uint64_t column) { *(int64_t *)out = ncr_long_div(*(int64_t *)left, *(int64_t *)right, (size_t)line, (size_t)column); }\n");
+    out.push_str("void ncr_llvm_rem_long(void *out, void *left, void *right, uint64_t line, uint64_t column) { *(int64_t *)out = ncr_long_rem(*(int64_t *)left, *(int64_t *)right, (size_t)line, (size_t)column); }\n");
+    out.push_str("void ncr_llvm_shl_int(void *out, void *value, void *count, uint64_t line, uint64_t column) { *(int32_t *)out = ncr_i32_shl(*(int32_t *)value, *(int32_t *)count, (size_t)line, (size_t)column); }\n");
+    out.push_str("void ncr_llvm_shr_int(void *out, void *value, void *count, uint64_t line, uint64_t column) { *(int32_t *)out = ncr_i32_shr(*(int32_t *)value, *(int32_t *)count, (size_t)line, (size_t)column); }\n");
+    out.push_str("void ncr_llvm_shl_long(void *out, void *value, void *count, uint64_t line, uint64_t column) { *(int64_t *)out = ncr_i64_shl(*(int64_t *)value, *(int32_t *)count, (size_t)line, (size_t)column); }\n");
+    out.push_str("void ncr_llvm_shr_long(void *out, void *value, void *count, uint64_t line, uint64_t column) { *(int64_t *)out = ncr_i64_shr(*(int64_t *)value, *(int32_t *)count, (size_t)line, (size_t)column); }\n");
+    direct_cast_adapters(&mut out);
+
+    for class in &program.classes {
+        let id = class.id;
+        let object_ty = Type::Object(id);
+        let cty = ctype(program, object_ty);
+        writeln!(out, "uint64_t ncr_llvm_sizeof_object_{id}(void) {{ return (uint64_t)sizeof(ncr_obj_{id}); }}").unwrap();
+        if class.variants.is_some() || class.is_interface {
+            writeln!(out, "uint64_t ncr_llvm_sizeof_class_{id}(void) {{ return (uint64_t)sizeof(ncr_obj_{id}); }}").unwrap();
+            writeln!(out, "void ncr_llvm_copy_class_{id}(void *out, const void *in) {{ *(ncr_obj_{id} *)out = *(const ncr_obj_{id} *)in; }}").unwrap();
+            writeln!(out, "void ncr_llvm_zero_class_{id}(void *out) {{ *(ncr_obj_{id} *)out = {}; }}",
+                object_zero(program, id)).unwrap();
+            if let Some(variants) = &class.variants {
+                writeln!(out, "int32_t ncr_llvm_tag_class_{id}(const void *value) {{ return ((const ncr_obj_{id} *)value)->tag; }}").unwrap();
+                writeln!(out, "void ncr_llvm_set_tag_class_{id}(void *value, int32_t tag) {{ ((ncr_obj_{id} *)value)->tag = tag; }}").unwrap();
+                for (variant_id, variant) in variants.iter().enumerate() {
+                    for field_id in 0..variant.fields.len() {
+                        writeln!(out,
+                            "void *ncr_llvm_variant_field_{id}_{variant_id}_{field_id}(void *value) {{ return &((ncr_obj_{id} *)value)->data.v{variant_id}.f{field_id}; }}").unwrap();
+                    }
+                    let params: Vec<_> = (0..variant.fields.len()).map(|i| format!("void *ncr_arg_{i}")).collect();
+                    let mut init = format!("ncr_obj_{id} value = {{ .tag = {variant_id}, .data.v{variant_id} = {{");
+                    if variant.fields.is_empty() {
+                        init.push_str(".ncr_empty = 0");
+                    } else {
+                        for field_id in 0..variant.fields.len() {
+                            if field_id != 0 { init.push_str(", "); }
+                            write!(init, ".f{field_id} = *({} *)ncr_arg_{field_id}",
+                                ctype(program, variant.fields[field_id])).unwrap();
+                        }
+                    }
+                    init.push_str("} };\n    *(ncr_obj_");
+                    init.push_str(&id.to_string());
+                    init.push_str(" *)out = value;");
+                    let mut signature = vec!["void *out".to_owned()];
+                    signature.extend(params);
+                    writeln!(out, "void ncr_llvm_variant_init_{id}_{variant_id}({}) {{\n    {}\n}}",
+                        signature.join(", "), init).unwrap();
+                }
+            }
+        }
+        writeln!(out, "void ncr_llvm_drop_class_{id}(void *slot) {{ ncr_drop_{id}(*({cty} *)slot); }}").unwrap();
+        if !class.is_interface && class.variants.is_none() && class.native.is_none() {
+            writeln!(out,
+                "void ncr_llvm_zero_object_{id}(void *object) {{ *(ncr_obj_{id} *)object = (ncr_obj_{id}){{0}}; }}").unwrap();
+            writeln!(out,
+                "void ncr_llvm_drop_fields_{id}(void *object) {{ ncr_drop_fields_{id}((ncr_obj_{id} *)object); }}").unwrap();
+        }
+        if !class.is_interface && class.variants.is_none() {
+            writeln!(out, "void *ncr_llvm_allocate_class_{id}(uint64_t line, uint64_t column) {{ return ncr_allocate(sizeof(ncr_obj_{id}), (size_t)line, (size_t)column); }}").unwrap();
+            if class.native.is_none() {
+                for field in 0..class.fields.len() {
+                    writeln!(out, "void *ncr_llvm_field_{id}_{field}(void *object) {{ return &((ncr_obj_{id} *)object)->ncr_f_{field}; }}").unwrap();
+                }
+            }
+        }
+        if let Some(native) = class.native
+            && matches!(native, t::NativeClass::Map { .. } | t::NativeClass::Set { .. }) {
+                writeln!(out,
+                    "void ncr_llvm_map_capacity_{id}(void *out, void *map_slot) {{ ncr_obj_{id} *map = *(ncr_obj_{id} **)map_slot; *(int32_t *)out = map->table.capacity; }}").unwrap();
+            }
+    }
+
+    for (name, class, kind, value_type, index_type) in map_slots {
+        let native = program.classes[*class].native.expect("map-slot native storage");
+        let map_type = ctype(program, Type::Object(*class));
+        let index_ctype = ctype(program, *index_type);
+        let value_ctype = ctype(program, *value_type);
+        let map_expr = "ncr_map";
+        let index_expr = "ncr_index";
+        let expression = crate::stdlib_codegen::map_slot_expression(
+            program, *class, map_expr, index_expr, *kind, *value_type,
+        );
+        let _ = native;
+        writeln!(out,
+            "void {name}(void *out, void *map_slot, void *index_slot) {{\n    {map_type} ncr_map = *({map_type} *)map_slot;\n    {index_ctype} ncr_index = *({index_ctype} *)index_slot;\n    *({value_ctype} *)out = {expression};\n}}").unwrap();
+    }
+
+    for function_id in native_calls {
+        let function = &program.functions[*function_id];
+        let mut params = vec!["void *ncr_result".to_owned(), "void *ncr_receiver".to_owned()];
+        params.extend(function.params.iter().enumerate().map(|(i, _)| format!("void *ncr_arg_{i}")));
+        params.extend(["uint64_t ncr_line".to_owned(), "uint64_t ncr_column".to_owned()]);
+        let mut args = Vec::new();
+        if let Some(class) = function.receiver {
+            args.push(if program.classes[class].is_interface || program.classes[class].variants.is_some() {
+                format!("*(ncr_obj_{class} *)ncr_receiver")
+            } else {
+                format!("({} )ncr_receiver", ctype(program, Type::Object(class)))
+            });
+        }
+        args.extend(function.params.iter().enumerate().map(|(i, (_, ty))|
+            format!("*({} *)ncr_arg_{i}", ctype(program, *ty))));
+        args.extend(["(size_t)ncr_line".to_owned(), "(size_t)ncr_column".to_owned()]);
+        let call = format!("ncr_fn_{}({})", function.id, args.join(", "));
+        if function.return_type == Type::Void {
+            writeln!(out, "void ncr_llvm_native_{}({}) {{ (void)ncr_result; {}; }}",
+                function.id, params.join(", "), call).unwrap();
+        } else {
+            writeln!(out, "void ncr_llvm_native_{}({}) {{ *({} *)ncr_result = {}; }}",
+                function.id, params.join(", "), ctype(program, function.return_type), call).unwrap();
+        }
+    }
+
+    for function_id in virtual_calls {
+        let function = &program.functions[*function_id];
+        let receiver_class = function.receiver.expect("interface method receiver");
+        let mut params = vec!["void *ncr_result".to_owned(), "void *ncr_receiver".to_owned()];
+        params.extend(function.params.iter().enumerate().map(|(i, _)| format!("void *ncr_arg_{i}")));
+        let mut args = vec![format!("*(ncr_obj_{receiver_class} *)ncr_receiver")];
+        args.extend(function.params.iter().enumerate().map(|(i, (_, ty))|
+            format!("*({} *)ncr_arg_{i}", ctype(program, *ty))));
+        let call = format!("ncr_fn_{}({})", function.id, args.join(", "));
+        if function.return_type == Type::Void {
+            writeln!(out, "void ncr_llvm_call_{}({}) {{ (void)ncr_result; {}; }}",
+                function.id, params.join(", "), call).unwrap();
+        } else {
+            writeln!(out, "void ncr_llvm_call_{}({}) {{ *({} *)ncr_result = {}; }}",
+                function.id, params.join(", "), ctype(program, function.return_type), call).unwrap();
+        }
+    }
+
+    for (concrete, class) in program.classes.iter().enumerate() {
+        for (interface, _) in &class.implementations {
+            writeln!(out,
+                "void ncr_llvm_upcast_{interface}_{concrete}(void *out, void *object) {{ *(ncr_obj_{interface} *)out = (ncr_obj_{interface}){{ .data = object, .vtable = &ncr_vtable_{concrete}_{interface} }}; }}").unwrap();
+        }
+    }
+    out
+}
+fn direct_cast_adapters(out: &mut String) {
+    let adapters = [
+        ("byte", "char", "uint8_t", "uint32_t", "ncr_cast_byte_u32"),
+        ("byte", "int", "uint8_t", "int32_t", "ncr_cast_byte_i32"),
+        ("byte", "long", "uint8_t", "int64_t", "ncr_cast_byte_i64"),
+        ("byte", "double", "uint8_t", "double", "ncr_cast_byte_f64"),
+        ("char", "int", "uint32_t", "int32_t", "ncr_cast_char_i32"),
+        ("char", "long", "uint32_t", "int64_t", "ncr_cast_char_i64"),
+        ("char", "double", "uint32_t", "double", "ncr_cast_char_f64"),
+        ("int", "long", "int32_t", "int64_t", "ncr_cast_i32_i64"),
+        ("int", "double", "int32_t", "double", "ncr_cast_i32_f64"),
+        ("long", "double", "int64_t", "double", "ncr_cast_i64_f64"),
+    ];
+    for (target, source, out_type, in_type, helper) in adapters {
+        writeln!(out,
+            "void ncr_llvm_cast_{target}_{source}(void *out, void *in, uint64_t line, uint64_t column) {{ *({out_type} *)out = {helper}(*({in_type} *)in, (size_t)line, (size_t)column); }}").unwrap();
+    }
+}
+
+pub(crate) fn direct_cast_symbol(target: Type, source: Type) -> Option<String> {
+    let pair = match (target, source) {
+        (Type::Byte, Type::Char | Type::Int | Type::Long | Type::Double) => {
+            let source = match source {
+                Type::Char => "char", Type::Int => "int", Type::Long => "long",
+                Type::Double => "double", _ => unreachable!(),
+            };
+            Some(("byte", source))
+        }
+        (Type::Char, Type::Int | Type::Long | Type::Double) => {
+            let source = match source {
+                Type::Int => "int", Type::Long => "long", Type::Double => "double",
+                _ => unreachable!(),
+            };
+            Some(("char", source))
+        }
+        (Type::Int, Type::Long | Type::Double) => {
+            let source = if source == Type::Long { "long" } else { "double" };
+            Some(("int", source))
+        }
+        (Type::Long, Type::Double) => Some(("long", "double")),
+        _ => None,
+    }?;
+    Some(format!("ncr_llvm_cast_{}_{}", pair.0, pair.1))
+}
 fn cast_expression(target: Type, source: Type, value: &str, line: usize, column: usize) -> String {
     let checked = |name: &str| format!("{name}({value}, {line}, {column})");
     match target {
@@ -333,6 +885,58 @@ fn escape_c_line_filename(s: &str) -> String {
     out
 }
 
+#[derive(Clone)]
+enum IteratorOwnership {
+    None,
+    Owned { ty: Type, value: String },
+    Pair(Box<IteratorOwnership>, Box<IteratorOwnership>),
+}
+
+#[derive(Clone, Copy)]
+enum CIteratorSource {
+    List { class: usize },
+    Array { class: usize },
+    Map { class: usize, pair_class: usize },
+}
+
+struct CIteratorSourceState {
+    kind: CIteratorSource,
+    collection: String,
+    item_type: Type,
+    item_value: String,
+    pair_storage: Option<String>,
+    cursor: String,
+    scan_limit: String,
+}
+
+enum CIteratorStage {
+    Map { callback: String, method: usize, output_type: Type, output: String },
+    Filter { callback: String, method: usize },
+    Take { count: String, consumed: String },
+    Enumerate {
+        pair_class: usize, index: String, pair_storage: String, output: String,
+    },
+    Zip {
+        right: Box<CIteratorState>, pair_class: usize,
+        pair_storage: String, output: String, available: String,
+    },
+}
+
+struct CIteratorState {
+    source: CIteratorSourceState,
+    stages: Vec<CIteratorStage>,
+    item_type: Type,
+    item_value: String,
+    ownership: IteratorOwnership,
+    available: String,
+    done_label: String,
+    lower: String,
+    upper: String,
+}
+
+#[derive(Clone, Copy)]
+enum IteratorCBackendMode { Fold, SizeHint }
+
 struct Emitter<'a> {
     program: &'a t::Program,
     source: &'a str,
@@ -343,7 +947,7 @@ struct Emitter<'a> {
     literals: Vec<String>,
     owners: Vec<Vec<(usize, usize)>>, // lexical scopes of (variable ID, class ID)
     temporary_owners: Vec<(usize, usize)>, // fresh temporary ID and class ID until ownership transfers
-    loops: Vec<usize>,              // first scope cleaned by break/continue
+    loops: Vec<(usize, usize)>, // first lexical scope and temporary cleaned by break/continue
     stack_promoted: HashSet<usize>,
 }
 
@@ -393,8 +997,12 @@ impl Emitter<'_> {
         self.line(&format!("ncr_drop_{class}({value});"));
     }
     fn cleanup_temporaries(&mut self) {
+        self.emit_temporary_cleanup(0);
+    }
+    // Keep the ledger: alternate control-flow paths still own these slots.
+    fn emit_temporary_cleanup(&mut self, first: usize) {
         let mut index = self.temporary_owners.len();
-        while index > 0 {
+        while index > first {
             index -= 1;
             let (temporary, class) = self.temporary_owners[index];
             self.drop_value(class, &format!("{TEMPORARY_PREFIX}{temporary}"));
@@ -440,7 +1048,7 @@ impl Emitter<'_> {
         }
         self.next_temp = 0;
         self.owners.clear(); self.temporary_owners.clear(); self.loops.clear();
-        self.stack_promoted = find_stack_promoted(function, self.program);
+        self.stack_promoted = crate::stack_promotion::find_stack_promoted(function, self.program);
         self.owners.push(function.params.iter().filter_map(|(id, ty)| {
             if let Type::Object(class) = ty { Some((*id, *class)) } else { None }
         }).collect());
@@ -539,7 +1147,7 @@ impl Emitter<'_> {
                 // This must remain inside the loop: continue recomputes it.
                 let condition = self.expression(condition);
                 self.line(&format!("if (!{condition}) {{ break; }}"));
-                self.loops.push(self.owners.len());
+                self.loops.push((self.owners.len(), self.temporary_owners.len()));
                 self.block(body, function);
                 self.loops.pop();
                 self.indent -= 1;
@@ -547,111 +1155,45 @@ impl Emitter<'_> {
             }
             t::Stmt::Match { value, arms } => {
                 let value_type = value.ty;
-                let class = value_type.object_class().expect("typed enum match");
-                let borrow_mode = match value_type { Type::Borrow { mutable, .. } => Some(mutable), _ => None };
-                let borrowed = borrow_mode.is_some();
+                let class = value_type.object_class().expect("typed class match");
+                let borrowed = value_type.is_borrow();
                 let value = self.expression(value);
-                let member = if borrowed { format!("({value})->") } else { format!("{value}.") };
-                let has_guards = arms.iter().any(|a| a.guard.is_some());
-                if has_guards {
-                    self.line("bool ncr_matched = false;");
-                    for arm in arms {
-                        self.line(&format!("if (!ncr_matched && {member}tag == {}) {{", arm.variant));
+                self.line("{");
+                self.indent += 1;
+                let matched = self.fresh();
+                self.line(&format!("bool {matched} = false;"));
+                for arm in arms {
+                    let test = pattern_test(self.program, &arm.pattern, &value);
+                    self.line(&format!("if (!{matched} && ({test})) {{"));
+                    self.indent += 1;
+                    if let Some(guard) = &arm.guard {
+                        self.emit_guard_pattern_bindings(&arm.pattern, &value, function);
+                        let guard_value = self.expression(guard);
+                        self.line(&format!("if ({guard_value}) {{"));
                         self.indent += 1;
-                        let field_count = self.program.classes[class].variants.as_ref().unwrap()[arm.variant].fields.len();
-                        for field in 0..field_count {
-                            let ty = self.program.classes[class].variants.as_ref().unwrap()[arm.variant].fields[field];
-                            let payload = format!("{member}data.v{}.f{field}", arm.variant);
-                            if let Some(id) = arm.bindings.get(field) {
-                                let binding_type = match (ty, borrow_mode) {
-                                    (Type::Object(class), Some(mutable)) => Type::Borrow { class, mutable },
-                                    _ => ty,
-                                };
-                                let initializer = if borrowed && matches!(ty, Type::Object(owner) if self.program.classes[owner].variants.is_some()) {
-                                    format!("&({payload})")
-                                } else { payload };
-                                self.line(&format!("{} ncr_v_{id} = {initializer};", ctype(self.program, binding_type)));
-                            }
-                        }
-                        if let Some(guard) = &arm.guard {
-                            let guard_val = self.expression(guard);
-                            self.line(&format!("if ({guard_val}) {{"));
-                            self.indent += 1;
-                        }
-                        self.line("ncr_matched = true;");
-                        if !borrowed {
-                            self.line(&format!("{value}.tag = -1; /* active payload transferred */"));
-                        }
-                        self.owners.push(Vec::new());
-                        for field in 0..field_count {
-                            let ty = self.program.classes[class].variants.as_ref().unwrap()[arm.variant].fields[field];
-                            if let Some(id) = arm.bindings.get(field) {
-                                if !borrowed && let Type::Object(owner) = ty {
-                                    self.owners.last_mut().unwrap().push((*id, owner));
-                                }
-                            } else if !borrowed && let Type::Object(owner) = ty {
-                                let payload = format!("{member}data.v{}.f{field}", arm.variant);
-                                self.drop_value(owner, &payload);
-                            }
-                        }
-                        self.block(&arm.body, function);
-                        self.cleanup_from(self.owners.len() - 1);
-                        self.owners.pop();
-                        if arm.guard.is_some() {
-                            self.indent -= 1;
-                            self.line("}");
-                        }
+                    }
+                    self.line(&format!("{matched} = true;"));
+                    self.owners.push(Vec::new());
+                    self.emit_pattern_bindings(&arm.pattern, &value, function);
+                    self.block(&arm.body, function);
+                    self.cleanup_from(self.owners.len() - 1);
+                    self.owners.pop();
+                    if !borrowed { self.drop_value(class, &value); }
+                    if arm.guard.is_some() {
                         self.indent -= 1;
                         self.line("}");
                     }
-                    self.line("if (!ncr_matched) {");
-                    self.indent += 1;
-                    if !borrowed { self.drop_value(class, &value); }
-                    self.line("abort();");
-                    self.indent -= 1;
-                    self.line("}");
-                } else {
-                    for (index, arm) in arms.iter().enumerate() {
-                        self.line(&format!("{} ({member}tag == {}) {{",
-                            if index == 0 { "if" } else { "else if" }, arm.variant));
-                        self.indent += 1;
-                        if !borrowed {
-                            self.line(&format!("{value}.tag = -1; /* active payload transferred */"));
-                        }
-                        self.owners.push(Vec::new());
-                        let field_count = self.program.classes[class].variants.as_ref().unwrap()[arm.variant].fields.len();
-                        for field in 0..field_count {
-                            let ty = self.program.classes[class].variants.as_ref().unwrap()[arm.variant].fields[field];
-                            let payload = format!("{member}data.v{}.f{field}", arm.variant);
-                            if let Some(id) = arm.bindings.get(field) {
-                                let binding_type = match (ty, borrow_mode) {
-                                    (Type::Object(class), Some(mutable)) => Type::Borrow { class, mutable },
-                                    _ => ty,
-                                };
-                                let initializer = if borrowed && matches!(ty, Type::Object(owner) if self.program.classes[owner].variants.is_some()) {
-                                    format!("&({payload})")
-                                } else { payload };
-                                self.line(&format!("{} ncr_v_{id} = {initializer};", ctype(self.program, binding_type)));
-                                if !borrowed
-                                    && let Type::Object(owner) = ty {
-                                        self.owners.last_mut().unwrap().push((*id, owner));
-                                    }
-                            } else if !borrowed
-                                && let Type::Object(owner) = ty { self.drop_value(owner, &payload); }
-                        }
-                        self.block(&arm.body, function);
-                        self.cleanup_from(self.owners.len() - 1);
-                        self.owners.pop();
-                        self.indent -= 1;
-                        self.line("}");
-                    }
-                    self.line("else {");
-                    self.indent += 1;
-                    if !borrowed { self.drop_value(class, &value); }
-                    self.line("abort();");
                     self.indent -= 1;
                     self.line("}");
                 }
+                self.line(&format!("if (!{matched}) {{"));
+                self.indent += 1;
+                if !borrowed { self.drop_value(class, &value); }
+                self.line("abort();");
+                self.indent -= 1;
+                self.line("}");
+                self.indent -= 1;
+                self.line("}");
                 if !borrowed { self.consume_temporary(value_type, &value); }
             }
             t::Stmt::Return(value) => {
@@ -666,11 +1208,15 @@ impl Emitter<'_> {
                 else { self.line("return;"); }
             }
             t::Stmt::Break => {
-                self.cleanup_from(*self.loops.last().expect("checked loop"));
+                let (scope, temporary) = *self.loops.last().expect("checked loop");
+                self.emit_temporary_cleanup(temporary);
+                self.cleanup_from(scope);
                 self.line("break;");
             }
             t::Stmt::Continue => {
-                self.cleanup_from(*self.loops.last().expect("checked loop"));
+                let (scope, temporary) = *self.loops.last().expect("checked loop");
+                self.emit_temporary_cleanup(temporary);
+                self.cleanup_from(scope);
                 self.line("continue;");
             }
             t::Stmt::Block(block) => {
@@ -680,6 +1226,540 @@ impl Emitter<'_> {
             }
         }
     }
+    fn emit_guard_pattern_bindings(&mut self, pattern: &t::Pattern, value: &str, function: &t::Function) {
+        match &pattern.kind {
+            t::PatternKind::Binding { guard_id: Some(id), .. } => {
+                let target_type = function.locals[*id].ty;
+                let initializer = pattern_binding_initializer(self.program, pattern.ty, target_type, value);
+                self.line(&format!("{} ncr_v_{id} = {initializer};", ctype(self.program, target_type)));
+            }
+            t::PatternKind::Binding { guard_id: None, .. } | t::PatternKind::Wildcard => {}
+            t::PatternKind::Variant { class, variant, fields } => {
+                for (index, field_pattern) in fields.iter().enumerate() {
+                    let raw_type = self.program.classes[*class].variants.as_ref().unwrap()[*variant].fields[index];
+                    let payload = pattern_variant_payload(self.program, pattern.ty, value, *variant, index);
+                    let child = pattern_projected_value(self.program, raw_type, field_pattern.ty, &payload);
+                    self.emit_guard_pattern_bindings(field_pattern, &child, function);
+                }
+            }
+            t::PatternKind::Record { class, fields } => {
+                for (index, field_pattern) in fields {
+                    let raw_type = self.program.classes[*class].fields[*index];
+                    let field = pattern_record_field(self.program, pattern.ty, value, *index);
+                    let child = pattern_projected_value(self.program, raw_type, field_pattern.ty, &field);
+                    self.emit_guard_pattern_bindings(field_pattern, &child, function);
+                }
+            }
+        }
+    }
+    fn emit_pattern_bindings(&mut self, pattern: &t::Pattern, value: &str, function: &t::Function) {
+        match &pattern.kind {
+            t::PatternKind::Binding { id, .. } => {
+                let target_type = function.locals[*id].ty;
+                let initializer = pattern_binding_initializer(self.program, pattern.ty, target_type, value);
+                self.line(&format!("{} ncr_v_{id} = {initializer};", ctype(self.program, target_type)));
+                if let Type::Object(class) = target_type {
+                    self.owners.last_mut().expect("match arm owner scope").push((*id, class));
+                    self.line(&format!("{value} = {};", object_zero(self.program, class)));
+                }
+            }
+            t::PatternKind::Wildcard => {}
+            t::PatternKind::Variant { class, variant, fields } => {
+                for (index, field_pattern) in fields.iter().enumerate() {
+                    let raw_type = self.program.classes[*class].variants.as_ref().unwrap()[*variant].fields[index];
+                    let payload = pattern_variant_payload(self.program, pattern.ty, value, *variant, index);
+                    let child = pattern_projected_value(self.program, raw_type, field_pattern.ty, &payload);
+                    self.emit_pattern_bindings(field_pattern, &child, function);
+                }
+            }
+            t::PatternKind::Record { class, fields } => {
+                for (index, field_pattern) in fields {
+                    let raw_type = self.program.classes[*class].fields[*index];
+                    let field = pattern_record_field(self.program, pattern.ty, value, *index);
+                    let child = pattern_projected_value(self.program, raw_type, field_pattern.ty, &field);
+                    self.emit_pattern_bindings(field_pattern, &child, function);
+                }
+            }
+        }
+    }
+    fn cleanup_temporaries_from(&mut self, first: usize) {
+        while self.temporary_owners.len() > first {
+            let (id, class) = self.temporary_owners.pop().expect("temporary owner suffix");
+            let value = format!("{TEMPORARY_PREFIX}{id}");
+            self.drop_value(class, &value);
+            self.line(&format!("{value} = {};", object_zero(self.program, class)));
+        }
+    }
+
+    fn drop_iterator_ownership(&mut self, ownership: &IteratorOwnership) {
+        match ownership {
+            IteratorOwnership::None => {}
+            IteratorOwnership::Owned { ty, value } => {
+                let class = ty.object_class().expect("owned iterator item is an object");
+                self.drop_value(class, value);
+                self.line(&format!("{value} = {};", object_zero(self.program, class)));
+            }
+            IteratorOwnership::Pair(first, second) => {
+                self.drop_iterator_ownership(first);
+                self.drop_iterator_ownership(second);
+            }
+        }
+    }
+
+    fn clear_iterator_ownership(&mut self, ownership: &IteratorOwnership) {
+        match ownership {
+            IteratorOwnership::None => {}
+            IteratorOwnership::Owned { ty, value } => {
+                let class = ty.object_class().expect("owned iterator item is an object");
+                self.line(&format!("{value} = {};", object_zero(self.program, class)));
+            }
+            IteratorOwnership::Pair(first, second) => {
+                self.clear_iterator_ownership(first);
+                self.clear_iterator_ownership(second);
+            }
+        }
+    }
+
+    fn iterator_receiver_value(&mut self, receiver: &t::IteratorReceiver) -> (String, Type) {
+        match receiver {
+            t::IteratorReceiver::Borrowed(place) => {
+                let class = place.ty.object_class().expect("iterator source is an object");
+                let ty = Type::Borrow { class, mutable: false };
+                (self.bind(ty, &place_text(place)), ty)
+            }
+            t::IteratorReceiver::BorrowedExpr(expr) | t::IteratorReceiver::Owned(expr) => {
+                (self.expression(expr), expr.ty)
+            }
+        }
+    }
+
+    fn prepare_iterator_plan(
+        &mut self,
+        plan: &t::IteratorPlan,
+        mode: IteratorCBackendMode,
+    ) -> CIteratorState {
+        let emit_items = matches!(mode, IteratorCBackendMode::Fold);
+        let (receiver, item_type, source_kind, bounds_expression, scan_expression) =
+            match &plan.source {
+                t::IteratorSource::List { collection, element_type } => {
+                    let (receiver, ty) = self.iterator_receiver_value(collection);
+                    let class = ty.object_class().expect("List source is an object");
+                    let item_type = match element_type {
+                        Type::Object(class) => Type::Borrow { class: *class, mutable: false },
+                        ty => *ty,
+                    };
+                    let bounds_expression = format!("(int64_t)({receiver}->length)");
+                    let scan_expression = format!("{receiver}->length");
+                    (
+                        receiver,
+                        item_type,
+                        CIteratorSource::List { class },
+                        bounds_expression,
+                        scan_expression,
+                    )
+                }
+                t::IteratorSource::Array { collection, element_type } => {
+                    let (receiver, ty) = self.iterator_receiver_value(collection);
+                    let class = ty.object_class().expect("Array source is an object");
+                    let item_type = match element_type {
+                        Type::Object(class) => Type::Borrow { class: *class, mutable: false },
+                        ty => *ty,
+                    };
+                    let bounds_expression = format!("(int64_t)({receiver}->length)");
+                    let scan_expression = format!("{receiver}->length");
+                    (
+                        receiver,
+                        item_type,
+                        CIteratorSource::Array { class },
+                        bounds_expression,
+                        scan_expression,
+                    )
+                }
+                t::IteratorSource::Map { collection, pair_class, .. } => {
+                    let (receiver, ty) = self.iterator_receiver_value(collection);
+                    let class = ty.object_class().expect("Map source is an object");
+                    let bounds_expression = format!("(int64_t)({receiver}->table.length)");
+                    let scan_expression = format!("{receiver}->table.capacity");
+                    (
+                        receiver,
+                        Type::Borrow { class: *pair_class, mutable: false },
+                        CIteratorSource::Map { class, pair_class: *pair_class },
+                        bounds_expression,
+                        scan_expression,
+                    )
+                }
+            };
+
+        let lower = self.bind(Type::Long, &bounds_expression);
+        let upper = lower.clone();
+        let (cursor, scan_limit, source_item, pair_storage, available, done_label) = if emit_items {
+            let cursor = self.bind(Type::Int, "INT32_C(0)");
+            let scan_limit = self.bind(Type::Int, &scan_expression);
+            let (source_item, pair_storage) = match source_kind {
+                CIteratorSource::Map { pair_class, .. } => {
+                    let storage = self.fresh();
+                    self.line(&format!("ncr_obj_{pair_class} {storage};"));
+                    let item = self.fresh();
+                    self.line(&format!(
+                        "{} {item} = &{storage};",
+                        ctype(self.program, item_type),
+                    ));
+                    (item, Some(storage))
+                }
+                CIteratorSource::List { .. } | CIteratorSource::Array { .. } => {
+                    let item = self.fresh();
+                    self.line(&format!("{} {item};", ctype(self.program, item_type)));
+                    (item, None)
+                }
+            };
+            let available = self.bind(Type::Boolean, "false");
+            let done_label = format!("{}_done", self.fresh());
+            (cursor, scan_limit, source_item, pair_storage, available, done_label)
+        } else {
+            (String::new(), String::new(), String::new(), None, String::new(), String::new())
+        };
+
+        let source = CIteratorSourceState {
+            kind: source_kind,
+            collection: receiver,
+            item_type,
+            item_value: source_item.clone(),
+            pair_storage,
+            cursor,
+            scan_limit,
+        };
+        let mut stages = Vec::with_capacity(plan.stages.len());
+        let mut item_value = source_item;
+        let mut lower = lower;
+        for stage in &plan.stages {
+            match stage {
+                t::IteratorStage::Map { callback, callback_method, output_type, .. } => {
+                    let callback = self.expression(callback);
+                    let output = if emit_items {
+                        let output = self.fresh();
+                        self.line(&format!("{} {output};", ctype(self.program, *output_type)));
+                        item_value = output.clone();
+                        output
+                    } else {
+                        String::new()
+                    };
+                    stages.push(CIteratorStage::Map {
+                        callback, method: *callback_method, output_type: *output_type, output,
+                    });
+                }
+                t::IteratorStage::Filter { callback, callback_method, .. } => {
+                    let callback = self.expression(callback);
+                    stages.push(CIteratorStage::Filter { callback, method: *callback_method });
+                    lower = self.bind(Type::Long, "INT64_C(0)");
+                }
+                t::IteratorStage::Take { count } => {
+                    let count_value = self.expression(count);
+                    let (line, column) = line_column(self.source, count.span.start);
+                    self.line(&format!(
+                        "if ({count_value} < INT64_C(0)) ncr_fail(\"negative iterator bound\", {line}, {column});"
+                    ));
+                    let consumed = if emit_items { self.bind(Type::Long, "INT64_C(0)") } else { String::new() };
+                    self.line(&format!("if ({lower} > {count_value}) {lower} = {count_value};"));
+                    self.line(&format!("if ({upper} > {count_value}) {upper} = {count_value};"));
+                    stages.push(CIteratorStage::Take { count: count_value, consumed });
+                }
+                t::IteratorStage::Enumerate { pair_class, .. } => {
+                    let (index, pair_storage, output) = if emit_items {
+                        let index = self.bind(Type::Long, "INT64_C(0)");
+                        let pair_storage = self.fresh();
+                        self.line(&format!("ncr_obj_{pair_class} {pair_storage};"));
+                        let output = self.fresh();
+                        self.line(&format!(
+                            "{} {output} = &{pair_storage};",
+                            ctype(self.program, Type::Borrow { class: *pair_class, mutable: false }),
+                        ));
+                        item_value = output.clone();
+                        (index, pair_storage, output)
+                    } else {
+                        (String::new(), String::new(), String::new())
+                    };
+                    stages.push(CIteratorStage::Enumerate {
+                        pair_class: *pair_class, index, pair_storage, output,
+                    });
+                }
+                t::IteratorStage::Zip { right, pair_class, .. } => {
+                    let right = Box::new(self.prepare_iterator_plan(right, mode));
+                    self.line(&format!(
+                        "if ({lower} > {}) {lower} = {};",
+                        right.lower, right.lower,
+                    ));
+                    self.line(&format!(
+                        "if ({upper} > {}) {upper} = {};",
+                        right.upper, right.upper,
+                    ));
+                    let (pair_storage, output, available) = if emit_items {
+                        let pair_storage = self.fresh();
+                        self.line(&format!("ncr_obj_{pair_class} {pair_storage};"));
+                        let output = self.fresh();
+                        self.line(&format!(
+                            "{} {output} = &{pair_storage};",
+                            ctype(self.program, Type::Borrow { class: *pair_class, mutable: false }),
+                        ));
+                        let available = self.bind(Type::Boolean, "false");
+                        item_value = output.clone();
+                        (pair_storage, output, available)
+                    } else {
+                        (String::new(), String::new(), String::new())
+                    };
+                    stages.push(CIteratorStage::Zip {
+                        right, pair_class: *pair_class, pair_storage, output, available,
+                    });
+                }
+            }
+        }
+        CIteratorState {
+            source,
+            stages,
+            item_type: plan.item_type,
+            item_value,
+            ownership: IteratorOwnership::None,
+            available,
+            done_label,
+            lower,
+            upper,
+        }
+    }
+
+    fn iterator_value_for_target(&self, source: Type, target: Type, value: &str) -> String {
+        match (source, target) {
+            (Type::Object(from), Type::Borrow { class: to, .. })
+                if from == to && self.program.classes[from].variants.is_some() =>
+            {
+                format!("&({value})")
+            }
+            (Type::Borrow { class: from, .. }, Type::Object(to))
+                if from == to && self.program.classes[from].variants.is_some() =>
+            {
+                format!("*({value})")
+            }
+            _ => value.to_owned(),
+        }
+    }
+
+    fn consume_iterator_temporary(&mut self, ty: Type, value: &str) {
+        let Type::Object(class) = ty else { return; };
+        let Some(id) = value.strip_prefix(TEMPORARY_PREFIX).and_then(|suffix| suffix.parse::<usize>().ok()) else {
+            return;
+        };
+        if self.temporary_owners.iter().any(|(temporary, owner)| *temporary == id && *owner == class) {
+            self.consume_temporary(ty, value);
+        }
+    }
+
+    fn emit_iterator_next(&mut self, state: &mut CIteratorState) {
+        let available = state.available.clone();
+        let done_label = state.done_label.clone();
+        let collection = state.source.collection.clone();
+        let cursor = state.source.cursor.clone();
+        let scan_limit = state.source.scan_limit.clone();
+        let source_item = state.source.item_value.clone();
+        let source_item_type = state.source.item_type;
+        let source_kind = state.source.kind;
+        self.line(&format!("{available} = false;"));
+        self.line(&format!("while ({cursor} < {scan_limit}) {{"));
+        self.indent += 1;
+
+        for stage in &state.stages {
+            if let CIteratorStage::Take { count, consumed } = stage {
+                self.line(&format!("if ({consumed} >= {count}) break;"));
+            }
+        }
+        match source_kind {
+            CIteratorSource::Map { class, .. } => {
+                let occupied = crate::stdlib_codegen::map_slot_expression(
+                    self.program, class, &collection, &cursor, t::MapSlotKind::Occupied, Type::Boolean,
+                );
+                self.line(&format!("if (!({occupied})) {{ ++{cursor}; continue; }}"));
+                let CIteratorSource::Map { pair_class, .. } = source_kind else { unreachable!() };
+                let pair = state.source.pair_storage.as_ref().expect("map pair scratch storage");
+                debug_assert_eq!(self.program.classes[pair_class].fields.len(), 2);
+                self.line(&format!(
+                    "{pair}.ncr_f_0 = {collection}->table.entries[{cursor}].key;"
+                ));
+                self.line(&format!(
+                    "{pair}.ncr_f_1 = {collection}->table.entries[{cursor}].value;"
+                ));
+            }
+            CIteratorSource::List { class, .. } | CIteratorSource::Array { class, .. } => {
+                let item = crate::stdlib_codegen::map_slot_expression(
+                    self.program, class, &collection, &cursor, t::MapSlotKind::Value, source_item_type,
+                );
+                self.line(&format!("{source_item} = {item};"));
+            }
+        }
+        self.line(&format!("++{cursor};"));
+
+        let mut current_type = source_item_type;
+        let mut current_value = source_item;
+        let mut ownership = IteratorOwnership::None;
+        for stage in &mut state.stages {
+            match stage {
+                CIteratorStage::Map { callback, method, output_type, output } => {
+                    let parameter_type = self.program.functions[*method].params[0].1;
+                    let argument = self.iterator_value_for_target(current_type, parameter_type, &current_value);
+                    self.line(&format!(
+                        "{output} = ncr_fn_{method}({callback}, {argument});"
+                    ));
+                    if matches!(parameter_type, Type::Object(_)) {
+                        self.clear_iterator_ownership(&ownership);
+                    } else {
+                        self.drop_iterator_ownership(&ownership);
+                    }
+                    current_type = *output_type;
+                    current_value = output.clone();
+                    ownership = if output_type.is_object() {
+                        IteratorOwnership::Owned { ty: *output_type, value: output.clone() }
+                    } else {
+                        IteratorOwnership::None
+                    };
+                }
+                CIteratorStage::Filter { callback, method } => {
+                    let parameter_type = self.program.functions[*method].params[0].1;
+                    let argument = self.iterator_value_for_target(current_type, parameter_type, &current_value);
+                    let accepted = self.fresh();
+                    self.line(&format!(
+                        "bool {accepted} = ncr_fn_{method}({callback}, {argument});"
+                    ));
+                    self.line(&format!("if (!{accepted}) {{"));
+                    self.indent += 1;
+                    self.drop_iterator_ownership(&ownership);
+                    self.line("continue;");
+                    self.indent -= 1;
+                    self.line("}");
+                }
+                CIteratorStage::Take { consumed, .. } => {
+                    self.line(&format!("++{consumed};"));
+                }
+                CIteratorStage::Enumerate { pair_class, index, pair_storage, output } => {
+                    let fields = &self.program.classes[*pair_class].fields;
+                    let second = self.iterator_value_for_target(current_type, fields[1], &current_value);
+                    self.line(&format!("{pair_storage}.ncr_f_0 = {index};"));
+                    self.line(&format!("{pair_storage}.ncr_f_1 = {second};"));
+                    self.line(&format!("++{index};"));
+                    ownership = IteratorOwnership::Pair(
+                        Box::new(IteratorOwnership::None),
+                        Box::new(ownership),
+                    );
+                    current_type = Type::Borrow { class: *pair_class, mutable: false };
+                    current_value = output.clone();
+                }
+                CIteratorStage::Zip { right, pair_class, pair_storage, output, available } => {
+                    let right_available = right.available.clone();
+                    self.emit_iterator_next(right);
+                    self.line(&format!("{available} = {right_available};"));
+                    self.line(&format!("if (!{available}) {{"));
+                    self.indent += 1;
+                    self.drop_iterator_ownership(&ownership);
+                    self.line(&format!("goto {done_label};"));
+                    self.indent -= 1;
+                    self.line("}");
+                    let fields = &self.program.classes[*pair_class].fields;
+                    let left = self.iterator_value_for_target(current_type, fields[0], &current_value);
+                    let right_value = self.iterator_value_for_target(right.item_type, fields[1], &right.item_value);
+                    self.line(&format!("{pair_storage}.ncr_f_0 = {left};"));
+                    self.line(&format!("{pair_storage}.ncr_f_1 = {right_value};"));
+                    ownership = IteratorOwnership::Pair(
+                        Box::new(ownership),
+                        Box::new(right.ownership.clone()),
+                    );
+                    current_type = Type::Borrow { class: *pair_class, mutable: false };
+                    current_value = output.clone();
+                }
+            }
+        }
+        self.line(&format!("{available} = true;"));
+        self.line("break;");
+        self.indent -= 1;
+        self.line("}");
+        self.line(&format!("{done_label}: ;"));
+        state.item_value = current_value;
+        state.ownership = ownership;
+    }
+
+    fn iterator_fold(
+        &mut self,
+        plan: &t::IteratorPlan,
+        initial: &t::Expr,
+        folder: &t::Expr,
+        folder_method: usize,
+        accumulator_type: Type,
+    ) -> String {
+        let temporary_start = self.temporary_owners.len();
+        let mut state = self.prepare_iterator_plan(plan, IteratorCBackendMode::Fold);
+        let initial_value = self.expression(initial);
+        let accumulator = self.fresh();
+        self.line(&format!(
+            "{} {accumulator} = {initial_value};",
+            ctype(self.program, accumulator_type),
+        ));
+        self.consume_iterator_temporary(initial.ty, &initial_value);
+        let folder_value = self.expression(folder);
+        let item_parameter_type = self.program.functions[folder_method].params[1].1;
+        self.line("while (true) {");
+        self.indent += 1;
+        self.emit_iterator_next(&mut state);
+        self.line(&format!("if (!{}) break;", state.available));
+        let item = self.iterator_value_for_target(state.item_type, item_parameter_type, &state.item_value);
+        self.line(&format!(
+            "{accumulator} = ncr_fn_{folder_method}({folder_value}, {accumulator}, {item});"
+        ));
+        self.drop_iterator_ownership(&state.ownership);
+        self.indent -= 1;
+        self.line("}");
+        self.cleanup_temporaries_from(temporary_start);
+        if accumulator_type.is_object() {
+            self.bind_owned(accumulator_type, &accumulator)
+        } else {
+            self.bind(accumulator_type, &accumulator)
+        }
+    }
+
+    fn iterator_size_hint(
+        &mut self,
+        expr: &t::Expr,
+        plan: &t::IteratorPlan,
+        pair_class: usize,
+        option_class: usize,
+    ) -> String {
+        let temporary_start = self.temporary_owners.len();
+        let state = self.prepare_iterator_plan(plan, IteratorCBackendMode::SizeHint);
+        self.cleanup_temporaries_from(temporary_start);
+        let variants = self.program.classes[option_class].variants.as_ref()
+            .expect("sizeHint Option is a tagged enum");
+        let some = variants.iter().position(|variant| variant.name == "Some")
+            .expect("sizeHint Option has Some");
+        let option_value = self.bind_owned(
+            Type::Object(option_class),
+            &format!(
+                "(ncr_obj_{option_class}){{.tag = {some}, .data.v{some} = {{.f0 = {}}}}}",
+                state.upper,
+            ),
+        );
+        let constructor_id = self.program.functions.iter().find(|function| {
+            function.receiver == Some(pair_class)
+                && function.return_type == Type::Void
+                && function.params.len() == 2
+                && function.params[0].1 == Type::Long
+                && function.params[1].1 == Type::Object(option_class)
+        }).map(|function| function.id).expect("Pair<long, Option<long>> constructor");
+        let (line, column) = line_column(self.source, expr.span.start);
+        let result = self.bind_owned(
+            Type::Object(pair_class),
+            &format!("ncr_allocate(sizeof(ncr_obj_{pair_class}), {line}, {column})"),
+        );
+        self.line(&format!(
+            "ncr_fn_{constructor_id}({result}, {}, {option_value});",
+            state.lower,
+        ));
+        self.consume_iterator_temporary(Type::Object(option_class), &option_value);
+        result
+    }
+
     // An empty result is used only for void calls, never as a C expression.
     fn expression(&mut self, expr: &t::Expr) -> String {
         use t::ExprKind as E;
@@ -725,6 +1805,10 @@ impl Emitter<'_> {
                 let capacity = crate::stdlib_codegen::map_capacity_expression(&map);
                 self.bind(expr.ty, &capacity)
             }
+            E::IteratorFold { plan, initial, folder, folder_method, accumulator_type } =>
+                self.iterator_fold(plan, initial, folder, *folder_method, *accumulator_type),
+            E::IteratorSizeHint { plan, pair_class, option_class } =>
+                self.iterator_size_hint(expr, plan, *pair_class, *option_class),
             E::MapSlot { map, index, kind, .. } => {
                 let index = self.expression(index);
                 let map_text = place_text(map);
@@ -976,166 +2060,75 @@ impl Emitter<'_> {
     }
 }
 
-fn find_stack_promoted(function: &t::Function, program: &t::Program) -> HashSet<usize> {
-    let mut candidates = HashSet::new();
-    for stmt in &function.body {
-        if let t::Stmt::Let { id, ty: Type::Object(class), value: Some(val) } = stmt {
-            if matches!(val.kind, t::ExprKind::New { .. })
-                && program.classes[*class].native.is_none()
-                && program.classes[*class].variants.is_none()
-            {
-                candidates.insert(*id);
-            }
-        }
-    }
-    if candidates.is_empty() {
-        return candidates;
-    }
-
-    let mut escaping = HashSet::new();
-    for stmt in &function.body {
-        check_escape_stmt(stmt, &mut escaping);
-    }
-
-    candidates.retain(|id| !escaping.contains(id));
-    candidates
+fn pattern_subject_member(program: &t::Program, ty: Type, value: &str) -> String {
+    let class = ty.object_class().expect("class pattern subject");
+    let access = if matches!(ty, Type::Object(_)) && program.classes[class].variants.is_some() {
+        "."
+    } else {
+        "->"
+    };
+    format!("({value}){access}")
 }
 
-fn check_escape_stmt(stmt: &t::Stmt, escaping: &mut HashSet<usize>) {
-    match stmt {
-        t::Stmt::Let { value, .. } => {
-            if let Some(v) = value {
-                check_escape_expr(v, escaping);
-            }
-        }
-        t::Stmt::Assign { target, value } => {
-            if let Some(root) = target.root_var() {
-                escaping.insert(root);
-            }
-            if matches!(target.kind, PlaceKind::Field { .. }) {
-                collect_moved_vars(value, escaping);
-            }
-            check_escape_expr(value, escaping);
-        }
-        t::Stmt::Expr(e) => {
-            check_escape_expr(e, escaping);
-        }
-        t::Stmt::If { condition, then_block, else_block } => {
-            check_escape_expr(condition, escaping);
-            for s in then_block { check_escape_stmt(s, escaping); }
-            if let Some(eb) = else_block {
-                for s in eb { check_escape_stmt(s, escaping); }
-            }
-        }
-        t::Stmt::While { condition, body } => {
-            check_escape_expr(condition, escaping);
-            for s in body { check_escape_stmt(s, escaping); }
-        }
-        t::Stmt::Return(opt_v) => {
-            if let Some(v) = opt_v {
-                collect_moved_vars(v, escaping);
-                check_escape_expr(v, escaping);
-            }
-        }
-        t::Stmt::Block(inner) => {
-            for s in inner { check_escape_stmt(s, escaping); }
-        }
-        t::Stmt::Match { value, arms } => {
-            check_escape_expr(value, escaping);
-            for arm in arms {
-                for s in &arm.body { check_escape_stmt(s, escaping); }
-            }
-        }
-        t::Stmt::Break | t::Stmt::Continue => {}
+fn pattern_variant_payload(
+    program: &t::Program, ty: Type, value: &str, variant: usize, field: usize,
+) -> String {
+    format!("{}data.v{variant}.f{field}", pattern_subject_member(program, ty, value))
+}
+
+fn pattern_record_field(program: &t::Program, ty: Type, value: &str, field: usize) -> String {
+    format!("{}ncr_f_{field}", pattern_subject_member(program, ty, value))
+}
+
+fn pattern_projected_value(program: &t::Program, raw_type: Type, projected: Type, value: &str) -> String {
+    if let (Type::Object(source), Type::Borrow { class: target, .. }) = (raw_type, projected)
+        && source == target
+        && program.classes[source].variants.is_some()
+    {
+        format!("&({value})")
+    } else {
+        value.to_owned()
     }
 }
 
-fn check_escape_expr(expr: &t::Expr, escaping: &mut HashSet<usize>) {
-    use t::ExprKind as E;
-    match &expr.kind {
-        E::Move(id) => {
-            escaping.insert(*id);
-        }
-        E::Call { args, .. } | E::New { args, .. } | E::Variant { args, .. } => {
-            for a in args {
-                check_escape_expr(a, escaping);
-            }
-        }
-        E::Binary { left, right, .. } => {
-            check_escape_expr(left, escaping);
-            check_escape_expr(right, escaping);
-        }
-        E::Unary { expr: inner, .. }
-        | E::Cast { value: inner }
-        | E::Drop(inner)
-        | E::Upcast { value: inner, .. }
-        | E::Try { value: inner, .. } => {
-            check_escape_expr(inner, escaping);
-        }
-        E::MapSlot { index, .. } => {
-            check_escape_expr(index, escaping);
-        }
-        E::Read(place) => {
-            if matches!(expr.ty, Type::Object(_)) {
-                if let Some(root) = place.root_var() {
-                    escaping.insert(root);
-                }
-            }
-        }
-        E::Borrow { .. }
-        | E::MapCapacity(_)
-        | E::Char(_)
-        | E::Int(_)
-        | E::Long(_)
-        | E::Double(_)
-        | E::Boolean(_)
-        | E::Unit
-        | E::String(_) => {}
+fn pattern_binding_initializer(program: &t::Program, source: Type, target: Type, value: &str) -> String {
+    if let (Type::Object(source), Type::Borrow { class: target, .. }) = (source, target)
+        && source == target
+        && program.classes[source].variants.is_some()
+    {
+        format!("&({value})")
+    } else {
+        value.to_owned()
     }
 }
 
-fn collect_moved_vars(expr: &t::Expr, escaping: &mut HashSet<usize>) {
-    use t::ExprKind as E;
-    match &expr.kind {
-        E::Move(id) => {
-            escaping.insert(*id);
-        }
-        E::Read(place) => {
-            if let Some(root) = place.root_var() {
-                escaping.insert(root);
+fn pattern_test(program: &t::Program, pattern: &t::Pattern, value: &str) -> String {
+    let mut tests = Vec::new();
+    match &pattern.kind {
+        t::PatternKind::Binding { .. } | t::PatternKind::Wildcard => {}
+        t::PatternKind::Variant { class, variant, fields } => {
+            let member = pattern_subject_member(program, pattern.ty, value);
+            if pattern.ty.is_borrow() { tests.push(format!("({value} != NULL)")); }
+            tests.push(format!("({member}tag == {variant})"));
+            for (index, field_pattern) in fields.iter().enumerate() {
+                let raw_type = program.classes[*class].variants.as_ref().unwrap()[*variant].fields[index];
+                let payload = pattern_variant_payload(program, pattern.ty, value, *variant, index);
+                let child = pattern_projected_value(program, raw_type, field_pattern.ty, &payload);
+                let nested = pattern_test(program, field_pattern, &child);
+                if nested != "true" { tests.push(nested); }
             }
         }
-        E::Try { value, .. }
-        | E::Unary { expr: value, .. }
-        | E::Cast { value }
-        | E::Drop(value)
-        | E::Upcast { value, .. } => {
-            collect_moved_vars(value, escaping);
-        }
-        E::New { args, .. } | E::Call { args, .. } | E::Variant { args, .. } => {
-            for a in args {
-                collect_moved_vars(a, escaping);
+        t::PatternKind::Record { class, fields } => {
+            tests.push(format!("({value} != NULL)"));
+            for (index, field_pattern) in fields {
+                let raw_type = program.classes[*class].fields[*index];
+                let field = pattern_record_field(program, pattern.ty, value, *index);
+                let child = pattern_projected_value(program, raw_type, field_pattern.ty, &field);
+                let nested = pattern_test(program, field_pattern, &child);
+                if nested != "true" { tests.push(nested); }
             }
         }
-        E::Binary { left, right, .. } => {
-            collect_moved_vars(left, escaping);
-            collect_moved_vars(right, escaping);
-        }
-        E::Borrow { place, .. } => {
-            if let Some(root) = place.root_var() {
-                escaping.insert(root);
-            }
-        }
-        E::MapSlot { index, .. } => {
-            collect_moved_vars(index, escaping);
-        }
-        E::MapCapacity(_)
-        | E::Char(_)
-        | E::Int(_)
-        | E::Long(_)
-        | E::Double(_)
-        | E::Boolean(_)
-        | E::Unit
-        | E::String(_) => {}
     }
+    if tests.is_empty() { "true".to_owned() } else { format!("({})", tests.join(" && ")) }
 }
+

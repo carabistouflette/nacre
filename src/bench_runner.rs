@@ -32,7 +32,7 @@ pub fn run_benchmarks(
 
     let (bench_cases, filtered_out): (Vec<_>, Vec<_>) = all_benches
         .into_iter()
-        .partition(|(name, _)| filter.map_or(true, |f| name.contains(f)));
+        .partition(|(name, _)| filter.is_none_or(|f| name.contains(f)));
 
     let filtered_count = filtered_out.len();
     println!("\nrunning {} benchmark(s)", bench_cases.len());
@@ -172,7 +172,7 @@ fn format_with_commas(s: &str) -> String {
     let chars: Vec<char> = s.chars().collect();
     let len = chars.len();
     for (i, c) in chars.into_iter().enumerate() {
-        if i > 0 && (len - i) % 3 == 0 {
+        if i > 0 && (len - i).is_multiple_of(3) {
             result.push(',');
         }
         result.push(c);

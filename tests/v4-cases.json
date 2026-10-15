@@ -235,7 +235,7 @@
   },
   {
     "name": "generic_two_parameters",
-    "source": "class Pair<A,B>{A first;B second;Pair(A a,B b){first=a;second=b;}}void main(){Pair<int,String> p=new Pair<int,String>(42,\"ok\");println(p.first);println(p.second);}",
+    "source": "class Duo<A,B>{A first;B second;Duo(A a,B b){first=a;second=b;}}void main(){Duo<int,String> p=new Duo<int,String>(42,\"ok\");println(p.first);println(p.second);}",
     "valid": true,
     "stdout": "42\nok\n"
   },
@@ -557,7 +557,7 @@
   },
   {
     "name": "duplicate_type_param",
-    "source": "class Pair<T,T>{}void main(){}",
+    "source": "class Duo<T,T>{}void main(){}",
     "valid": false,
     "error": "E4101"
   },

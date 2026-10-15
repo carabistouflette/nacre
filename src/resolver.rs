@@ -79,20 +79,16 @@ pub fn resolve(program: &mut a::Program) -> Result<(), Diagnostic> {
             let mut matches = Vec::new();
             for import in &program.units[imp.unit].imports {
                 if import.wildcard {
-                    if let Some(found) = trait_map.get(&(import.path.clone(), imp.trait_name.clone())) {
-                        if !matches.iter().any(|m: &&a::Trait| m.qualified_name == found.qualified_name) {
+                    if let Some(found) = trait_map.get(&(import.path.clone(), imp.trait_name.clone()))
+                        && !matches.iter().any(|m: &&a::Trait| m.qualified_name == found.qualified_name) {
                             matches.push(*found);
                         }
-                    }
-                } else if let Some((mod_path, name)) = import.path.rsplit_once('.') {
-                    if name == imp.trait_name {
-                        if let Some(found) = trait_map.get(&(mod_path.to_string(), imp.trait_name.clone())) {
-                            if !matches.iter().any(|m: &&a::Trait| m.qualified_name == found.qualified_name) {
+                } else if let Some((mod_path, name)) = import.path.rsplit_once('.')
+                    && name == imp.trait_name
+                        && let Some(found) = trait_map.get(&(mod_path.to_string(), imp.trait_name.clone()))
+                            && !matches.iter().any(|m: &&a::Trait| m.qualified_name == found.qualified_name) {
                                 matches.push(*found);
                             }
-                        }
-                    }
-                }
             }
             if matches.len() > 1 {
                 return Err(Diagnostic::new(
@@ -456,6 +452,32 @@ impl Resolver {
         Err(Diagnostic::new(span, format!("module `{module}` has no function `{name}`")))
     }
 
+    fn resolve_pattern(&self, unit: usize, type_params: &[String], pattern: &mut a::Pattern) -> Result<(), Diagnostic> {
+        match &mut pattern.kind {
+            a::PatternKind::Name(name) | a::PatternKind::Variant { name, .. } => {
+                if let Some((class, variant)) = name.rsplit_once('.') {
+                    if let Some(qualified) = self.try_class_name(unit, class, type_params, pattern.span)? {
+                        *name = format!("{qualified}.{variant}");
+                    } else if !self.unit_modules[unit].is_empty() || class.contains('.') {
+                        return Err(Diagnostic::new(pattern.span, format!("enum `{class}` is not declared or imported")));
+                    }
+                }
+                if let a::PatternKind::Variant { fields, .. } = &mut pattern.kind {
+                    for field in fields { self.resolve_pattern(unit, type_params, field)?; }
+                }
+            }
+            a::PatternKind::Record { class, fields } => {
+                *class = self.try_class_name(unit, class, type_params, pattern.span)?
+                    .ok_or_else(|| Diagnostic::new(pattern.span, format!("type `{class}` is not declared or imported")))?;
+                for (_, field) in fields { self.resolve_pattern(unit, type_params, field)?; }
+            }
+            a::PatternKind::Tuple(first, second) => {
+                self.resolve_pattern(unit, type_params, first)?;
+                self.resolve_pattern(unit, type_params, second)?;
+            }
+        }
+        Ok(())
+    }
     fn block(&self, block: &mut a::Block, context: &mut BodyContext) -> Result<(), Diagnostic> {
         context.scopes.push(HashSet::new());
         for statement in block {
@@ -492,7 +514,11 @@ impl Resolver {
             S::Match { value, arms } => {
                 self.expression(value, context)?;
                 for arm in arms {
-                    context.scopes.push(arm.bindings.iter().cloned().collect());
+                    self.resolve_pattern(context.unit, &context.type_params, &mut arm.pattern)?;
+                    let mut bindings = HashSet::new();
+                    collect_pattern_bindings(&arm.pattern, &mut bindings);
+                    context.scopes.push(bindings);
+                    if let Some(guard) = &mut arm.guard { self.expression(guard, context)?; }
                     self.block(&mut arm.body, context)?;
                     context.scopes.pop();
                 }
@@ -590,6 +616,7 @@ impl Resolver {
                 self.resolve_type(context.unit, &context.type_params, ty, expression.span)?;
                 self.expression(expr, context)?;
             }
+            E::Tuple(first, second) => { self.expression(first, context)?; self.expression(second, context)?; }
             E::Binary { left, right, .. } => { self.expression(left, context)?; self.expression(right, context)?; }
             E::Char(_) | E::Int(_) | E::Long(_) | E::Double(_) | E::Unit |
             E::Boolean(_) | E::String(_) | E::Var(_) | E::This => {}
@@ -603,5 +630,21 @@ fn expression_path(expression: &Expr) -> Option<String> {
         E::Var(name) => Some(name.clone()),
         E::Field { base, name } => Some(format!("{}.{}", expression_path(base)?, name)),
         _ => None,
+    }
+}
+fn collect_pattern_bindings(pattern: &a::Pattern, output: &mut HashSet<String>) {
+    match &pattern.kind {
+        a::PatternKind::Name(name) if name != "_" => { output.insert(name.clone()); }
+        a::PatternKind::Variant { fields, .. } => {
+            for field in fields { collect_pattern_bindings(field, output); }
+        }
+        a::PatternKind::Record { fields, .. } => {
+            for (_, field) in fields { collect_pattern_bindings(field, output); }
+        }
+        a::PatternKind::Tuple(first, second) => {
+            collect_pattern_bindings(first, output);
+            collect_pattern_bindings(second, output);
+        }
+        a::PatternKind::Name(_) => {}
     }
 }

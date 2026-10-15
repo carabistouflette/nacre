@@ -10,6 +10,10 @@ use super::file_uri::normalize_path;
 const MAX_DIRECTORY_ENTRIES: usize = 4096;
 
 pub(super) fn configured_source_roots(root: &Path) -> Result<Vec<PathBuf>, String> {
+    let manifest = root.join("Nacre.toml");
+    if manifest.exists() {
+        return crate::project::manifest_source_roots(&manifest);
+    }
     const MAX_CONFIG_BYTES: usize = 64 * 1024;
     let config = root.join("nacre.json");
     let metadata = fs::symlink_metadata(&config).map_err(|error| format!("{}: {error}", config.display()))?;

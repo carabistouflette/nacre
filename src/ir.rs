@@ -100,8 +100,17 @@ pub enum Stmt {
     Match { value: Expr, arms: Vec<MatchArm> },
     Return(Option<Expr>), Break, Continue, Block(Block),
 }
+#[derive(Debug, Clone)]
+pub struct Pattern { pub kind: PatternKind, pub ty: Type, pub span: Span }
+#[derive(Debug, Clone)]
+pub enum PatternKind {
+    Binding { id: usize, guard_id: Option<usize> },
+    Wildcard,
+    Variant { class: usize, variant: usize, fields: Vec<Pattern> },
+    Record { class: usize, fields: Vec<(usize, Pattern)> },
+}
 #[derive(Debug)]
-pub struct MatchArm { pub variant: usize, pub bindings: Vec<usize>, pub guard: Option<Expr>, pub body: Block }
+pub struct MatchArm { pub pattern: Pattern, pub guard: Option<Expr>, pub body: Block }
 #[derive(Debug, Clone)]
 pub struct Place { pub kind: PlaceKind, pub ty: Type }
 #[derive(Debug, Clone)]
@@ -122,6 +131,16 @@ pub enum ExprKind {
     MapCapacity(Place),
     /// Compiler-only map-like slot access; `pair` links key/value entry borrows.
     MapSlot { map: Place, index: Box<Expr>, kind: MapSlotKind, pair: Option<usize> },
+    /// A fused terminal that borrows its collection source for this evaluation.
+    IteratorFold {
+        plan: Box<IteratorPlan>,
+        initial: Box<Expr>,
+        folder: Box<Expr>,
+        folder_method: usize,
+        accumulator_type: Type,
+    },
+    /// Computes the sound finite-source size bounds without pulling any item.
+    IteratorSizeHint { plan: Box<IteratorPlan>, pair_class: usize, option_class: usize },
     Drop(Box<Expr>),
     /// Allocation-free interface upcast, preserving owned or borrowed status.
     Upcast { value: Box<Expr>, interface: usize, concrete: usize },
@@ -133,6 +152,49 @@ pub enum ExprKind {
     Binary { op: BinaryOp, left: Box<Expr>, right: Box<Expr> },
     Cast { value: Box<Expr> },
 }
+/// A sized iterator pipeline is compiler IR, never a runtime adapter object.
+#[derive(Debug)]
+pub struct IteratorPlan {
+    pub source: IteratorSource,
+    pub stages: Vec<IteratorStage>,
+    pub item_type: Type,
+    /// True only when the current item is an owned affine value produced by a map stage.
+    pub item_owned: bool,
+    pub size_hint: IteratorSizeHint,
+    pub span: Span,
+}
+#[derive(Debug)]
+pub enum IteratorSource {
+    List { collection: IteratorReceiver, element_type: Type },
+    Array { collection: IteratorReceiver, element_type: Type },
+    Map { collection: IteratorReceiver, key_type: Type, value_type: Type, pair_class: usize },
+}
+#[derive(Debug)]
+pub enum IteratorReceiver {
+    Borrowed(Place),
+    /// A borrow-returning receiver expression whose loan lasts through the terminal.
+    BorrowedExpr(Box<Expr>),
+    Owned(Box<Expr>),
+}
+#[derive(Debug)]
+pub enum IteratorStage {
+    Map {
+        callback: Expr,
+        callback_method: usize,
+        input_type: Type,
+        output_type: Type,
+        input_owned: bool,
+    },
+    Filter { callback: Expr, callback_method: usize, item_type: Type },
+    Take { count: Expr },
+    Enumerate { pair_class: usize, input_type: Type, input_owned: bool },
+    Zip { right: Box<IteratorPlan>, pair_class: usize, left_type: Type, right_type: Type },
+}
+/// Every source is finite: Exact means lower == upper; Bounded means lower is
+/// zero and upper is soundly propagated from source length and take bounds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IteratorSizeHint { Exact, Bounded }
+
 #[derive(Debug, Clone, Copy)]
 pub enum MapSlotKind { Occupied, Key, Value }
 #[derive(Debug, Clone, Copy)]

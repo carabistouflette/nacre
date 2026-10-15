@@ -14,6 +14,7 @@ const PREC = {
 };
 
 const commaSep1 = (rule) => seq(rule, repeat(seq(',', rule)));
+const commaSep1Trailing = (rule) => seq(rule, repeat(seq(',', rule)), optional(','));
 
 module.exports = grammar({
   name: 'nacre',
@@ -27,6 +28,7 @@ module.exports = grammar({
   conflicts: ($) => [
     [$.qualified_type_identifier, $._expression],
     [$._type_identifier, $._expression],
+    [$.record_pattern, $.match_binding],
   ],
 
   rules: {
@@ -205,6 +207,7 @@ module.exports = grammar({
       $._type_identifier,
       $.generic_type,
       $.borrowed_type,
+      $.tuple_type,
     ),
 
     _return_type: ($) => choice($._type, alias('void', $.primitive_type)),
@@ -229,6 +232,8 @@ module.exports = grammar({
       field('name', $._type_identifier),
       field('type_arguments', $.type_arguments),
     ),
+
+    tuple_type: ($) => seq('(', $._type, ',', $._type, ')'),
 
     borrowed_type: ($) => seq(
       'borrow',
@@ -270,18 +275,39 @@ module.exports = grammar({
     ),
 
     match_arm: ($) => seq(
-      field('variant', $.identifier),
-      optional(field('bindings', $.match_bindings)),
+      field('pattern', $._match_pattern),
+      optional(seq('if', field('guard', $._expression))),
+      optional('=>'),
       field('body', $.block),
     ),
 
+    _match_pattern: ($) => choice(
+      $.variant_pattern, $.record_pattern, $.tuple_pattern, $.match_binding,
+    ),
+
+    variant_pattern: ($) => seq(
+      field('variant', $.qualified_identifier),
+      field('bindings', $.match_bindings),
+    ),
+
+    record_pattern: ($) => seq(
+      field('type', $.qualified_identifier),
+      '{', optional(commaSep1Trailing($.field_pattern)), '}',
+    ),
+
+    field_pattern: ($) => seq(
+      field('name', $.identifier), ':', field('pattern', $._match_pattern),
+    ),
+
+    tuple_pattern: ($) => seq('(', $._match_pattern, ',', $._match_pattern, ')'),
+
     match_bindings: ($) => seq(
       '(',
-      optional(commaSep1($.match_binding)),
+      optional(commaSep1Trailing($._match_pattern)),
       ')',
     ),
 
-    match_binding: ($) => field('name', $.identifier),
+    match_binding: ($) => field('name', $.qualified_identifier),
 
     variable_declaration: ($) => prec(1, seq(
       field('type', $._type),
@@ -363,6 +389,7 @@ module.exports = grammar({
       $.new_expression,
       $.unit_literal,
       $.parenthesized_expression,
+      $.tuple_expression,
       $.this_expression,
       $.identifier,
       $.integer_literal,
@@ -449,6 +476,8 @@ module.exports = grammar({
     unit_literal: ($) => seq('(', ')'),
 
     parenthesized_expression: ($) => seq('(', $._expression, ')'),
+
+    tuple_expression: ($) => seq('(', $._expression, ',', $._expression, ')'),
 
     this_expression: ($) => 'this',
 

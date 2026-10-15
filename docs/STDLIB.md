@@ -858,6 +858,13 @@ stored. A collection's element references loan the complete collection root, not
 just one index or key. Structural mutation, movement, replacement, and destruction
 that conflict with a live loan are rejected until its lexical scope ends.
 
+### `Pair<T, U>` and tuple syntax
+
+`Pair<T, U>` is the prelude's pair type, with public `first` and `second` fields
+and a constructor taking those two values. The parenthesized type `(T, U)` denotes
+`Pair<T, U>`, and `(a, b)` constructs a pair value. Types, expressions, and
+patterns are exactly binary and may nest; `Pair` is a reserved built-in name.
+
 ### `List<T>`
 
 ```java
@@ -1049,6 +1056,43 @@ loops hold a whole-root loan for their complete lexical extent; different entrie
 do not grant disjoint mutable access. See
 [MAP_TRAVERSAL.md](MAP_TRAVERSAL.md) for the base map traversal contract.
 
+### Fused collection pipelines
+
+The compiler fuses terminal chains rooted at `List<T>.iter()`, `Array<T>.iter()`,
+or `Map<K, V>.iter()`. Supported stages are `.map(callback)`,
+`.filter(predicate)`, `.take(longCount)`, `.zip(otherPipeline)`, and
+`.enumerate()`, in any written order; `.fold(initial, folder)` and `.sizeHint()`
+are the terminals. A chain is recognized only as part of a terminal expression:
+it is not an `Iterator<T>` or another first-class value and cannot be stored,
+returned, or used as a `for` traversal source.
+
+Stages run in written order. Thus `.take(2L).filter(...)` limits the input to the
+first two items before filtering, while `.filter(...).take(2L)` takes the first
+two accepted items. `take` takes one nonnegative `long`; a negative runtime count
+is fatal, and `take(0L)` invokes no mapper, predicate, or folder method. `zip`
+stops at the shorter input. `enumerate` pairs each item with a zero-based `long`
+index.
+
+Callbacks use the prelude interfaces `Mapper<T, U>` (`U apply(T value)`),
+`RefMapper<T, U>` (`U apply(borrow T value)`), `Predicate<T>`
+(`readonly boolean test(borrow T value)`), and `Folder<A, T>`
+(`A apply(A accumulator, borrow T value)`). Copyable items are passed by value;
+affine items are exposed as readonly borrows. `map` accepts `Mapper` for
+copyable items and `RefMapper` for borrowed items (and may use `RefMapper` for
+copyable items); its result must be a non-borrowed, non-view value. `filter`
+uses `Predicate`; `fold` returns the accumulator type established by `initial`.
+
+Collection items and the pair views produced by Map iteration, `zip`, and
+`enumerate` are not copied into adapter objects. Those pair items are temporary
+stack `Pair` views borrowed by callbacks. The fusion stages allocate no runtime
+adapter objects, but callback construction/calls and mapped values may allocate.
+`sizeHint()` returns an allocated ordinary `Pair<long, Option<long>>` value:
+`first` is the lower bound and `second` is the upper-bound option. These finite
+sources provide a `Some` upper bound. Without a filter the bounds are exact; any
+filter makes the lower bound zero. `map` and `enumerate` preserve the bounds;
+`take` caps the upper bound, and `zip` takes the minimum of the two upper bounds.
+`sizeHint()` does not pull items or invoke mapper/predicate methods, although
+stage-argument expressions are still evaluated normally.
 
 ## Ordered collections, priority queues, bit sets, and iterators
 
@@ -1181,8 +1225,9 @@ until a value passes or the input ends. Rejected filter values are destroyed.
 `Iterators<T>.take` and `skip` lazily bound and discard a nonnegative number of
 values; a negative count is fatal. All adapters own their inputs and callbacks,
 and dropping an adapter recursively drops those owners. These are explicit owned
-pipelines, separate from collection traversal's whole-root lexical loans; there are
-no borrowed iterators or early-release loans.
+`Iterator<T>` values, distinct from collection traversal and compiler-fused
+terminal pipelines. A fused chain is only a compiler plan: it produces no
+`Iterator<T>` value, and its source loan ends with the terminal.
 
 Collection and iterator sendability includes hidden key/value/element storage
 and owned comparator, mapper, predicate, and input objects. An empty container

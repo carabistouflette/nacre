@@ -9,6 +9,13 @@ pub fn parse(tokens: Vec<Token>) -> Result<Program, Diagnostic> {
 
 struct Parser { tokens: Vec<Token>, position: TokenPosition, depth: usize }
 
+struct FunctionModifiers {
+    visibility: Visibility,
+    is_static: bool,
+    readonly: bool,
+    is_async: bool,
+}
+
 /// Speculative parsing must checkpoint the physical and virtual token positions together.
 #[derive(Clone, Default)]
 struct TokenPosition { index: usize, pending_greater: Option<Token> }
@@ -147,7 +154,7 @@ impl Parser {
                 let return_type = self.ty(true)?;
                 let (name, _) = self.ident()?;
                 if readonly { return Err(Diagnostic::new(start, "readonly is reserved for instance methods")); }
-                functions.push(self.function_tail(name, return_type, visibility, true, false, is_async, start)?);
+                functions.push(self.function_tail(name, return_type, FunctionModifiers { visibility, is_static: true, readonly: false, is_async }, start)?);
             }
         }
         Ok(Program { units: vec![SourceUnit { module, imports }], functions, classes, traits, impls })
@@ -270,14 +277,14 @@ impl Parser {
                 self.bump();
                 if is_static || readonly || is_async { return Err(Diagnostic::new(member_start, "a constructor cannot be static, readonly, or async")); }
                 if constructor.is_some() { return Err(Diagnostic::new(member_start, "one constructor is allowed per class; overloading is not supported")); }
-                constructor = Some(self.function_tail(name.clone(), Type::Void, visibility, false, false, false, member_start)?);
+                constructor = Some(self.function_tail(name.clone(), Type::Void, FunctionModifiers { visibility, is_static: false, readonly: false, is_async: false }, member_start)?);
                 continue;
             }
             let ty = self.ty(true)?;
             let (member_name, _) = self.ident()?;
             if self.at(&K::LParen) {
                 if readonly && is_static { return Err(Diagnostic::new(member_start, "readonly is reserved for instance methods")); }
-                methods.push(self.function_tail(member_name, ty, visibility, is_static, readonly, is_async, member_start)?);
+                methods.push(self.function_tail(member_name, ty, FunctionModifiers { visibility, is_static, readonly, is_async }, member_start)?);
             } else {
                 if is_async { return Err(Diagnostic::new(member_start, "async modifies a method, not a field")); }
                 if readonly { return Err(Diagnostic::new(member_start, "readonly modifies a method, not a field")); }
@@ -330,7 +337,7 @@ impl Parser {
             }
             let return_type = self.ty(true)?;
             let (method_name, _) = self.ident()?;
-            methods.push(self.function_tail(method_name, return_type, visibility, false, readonly, is_async, member_start)?);
+            methods.push(self.function_tail(method_name, return_type, FunctionModifiers { visibility, is_static: false, readonly, is_async }, member_start)?);
         }
         let end = self.expect(&K::RBrace, "`}`")?.span;
         Ok(Impl { trait_name, target_class, span: start.join(end), methods, unit: 0 })
@@ -348,6 +355,16 @@ impl Parser {
             K::Int => Ok(Type::Int), K::Long => Ok(Type::Long),
             K::Double => Ok(Type::Double), K::UnitType => Ok(Type::Unit),
             K::Boolean => Ok(Type::Boolean), K::StringType => Ok(Type::String),
+            K::LParen => self.nested(|p| {
+                let first = p.ty(false)?;
+                p.expect(&K::Comma, "`,` in a pair type")?;
+                let second = p.ty(false)?;
+                if p.at(&K::Comma) {
+                    return Err(Diagnostic::new(p.current().span, "tuple types have exactly two elements"));
+                }
+                p.expect(&K::RParen, "`)` after a pair type")?;
+                Ok(Type::Applied { name: "Pair".to_owned(), args: vec![first, second] })
+            }),
             K::Ident(first) => {
                 let mut name = first;
                 while self.eat(&K::Dot) {
@@ -360,8 +377,63 @@ impl Parser {
             },
             K::Void if allow_void => Ok(Type::Void),
             K::Void => Err(Diagnostic::new(token.span, "`void` is reserved for function return types")),
-            _ => Err(Diagnostic::new(token.span, "expected type: byte, char, int, long, double, Unit, boolean, String, or a class name")),
+            _ => Err(Diagnostic::new(token.span, "expected type: byte, char, int, long, double, Unit, boolean, String, a pair type, or a class name")),
         }
+    }
+    fn pattern(&mut self, nested: bool) -> Result<Pattern, Diagnostic> {
+        self.nested(|p| p.pattern_inner(nested))
+    }
+    fn pattern_inner(&mut self, nested: bool) -> Result<Pattern, Diagnostic> {
+        if self.at(&K::LParen) {
+            let start = self.bump().span;
+            let first = self.pattern(true)?;
+            self.expect(&K::Comma, "`,` in a pair pattern")?;
+            let second = self.pattern(true)?;
+            if self.at(&K::Comma) {
+                return Err(Diagnostic::new(self.current().span, "tuple patterns have exactly two elements"));
+            }
+            let end = self.expect(&K::RParen, "`)` after a pair pattern")?.span;
+            return Ok(Pattern { kind: PatternKind::Tuple(Box::new(first), Box::new(second)), span: start.join(end) });
+        }
+        let (name, start) = self.qualified_ident()?;
+        if self.eat(&K::LParen) {
+            let mut fields = Vec::new();
+            if !self.at(&K::RParen) {
+                loop {
+                    fields.push(self.pattern(true)?);
+                    if !self.eat(&K::Comma) { break; }
+                    if self.at(&K::RParen) { break; }
+                }
+            }
+            let end = self.expect(&K::RParen, "`)` after variant pattern")?.span;
+            return Ok(Pattern { kind: PatternKind::Variant { name, fields }, span: start.join(end) });
+        }
+        // A bare name's following braces normally start its arm body. Only a
+        // field-colon prefix, or an empty record followed by its own body/guard
+        // (or a nested-pattern delimiter), identifies record-pattern braces.
+        let next_kind = self.tokens.get(self.position.index + 1).map(|token| &token.kind);
+        let after_next = self.tokens.get(self.position.index + 2).map(|token| &token.kind);
+        let record_fields = matches!(next_kind, Some(K::Ident(_))) && matches!(after_next, Some(K::Colon));
+        let empty_record = matches!(next_kind, Some(K::RBrace))
+            && (nested || matches!(after_next, Some(K::LBrace | K::If)));
+        if self.at(&K::LBrace) && (record_fields || empty_record) {
+            self.bump();
+            let mut fields = Vec::new();
+            if !self.at(&K::RBrace) {
+                loop {
+                    let (field, _) = self.ident()?;
+                    self.expect(&K::Colon, "`:` after a field name in a record pattern")?;
+                    let pattern = self.pattern(true)?;
+                    fields.push((field, pattern));
+                    if !self.eat(&K::Comma) { break; }
+                    if self.at(&K::RBrace) { break; }
+                }
+            }
+            let end = self.expect(&K::RBrace, "`}` after record pattern")?.span;
+            return Ok(Pattern { kind: PatternKind::Record { class: name, fields }, span: start.join(end) });
+        }
+        let end = self.tokens[self.position.index - 1].span;
+        Ok(Pattern { kind: PatternKind::Name(name), span: start.join(end) })
     }
     fn type_arguments(&mut self) -> Result<Vec<Type>, Diagnostic> {
         if !self.eat(&K::Less) { return Ok(Vec::new()); }
@@ -402,8 +474,9 @@ impl Parser {
         self.expect(&K::RParen, "`)`")?;
         Ok(params)
     }
-    fn function_tail(&mut self, name: String, return_type: Type, visibility: Visibility,
-                     is_static: bool, readonly: bool, is_async: bool, start: Span) -> Result<Function, Diagnostic> {
+    fn function_tail(&mut self, name: String, return_type: Type,
+                     modifiers: FunctionModifiers, start: Span) -> Result<Function, Diagnostic> {
+        let FunctionModifiers { visibility, is_static, readonly, is_async } = modifiers;
         let params = self.parameters()?;
         let body = self.block()?;
         let end = self.tokens[self.position.index - 1].span;
@@ -426,7 +499,7 @@ impl Parser {
         if matches!(self.current().kind,
             K::Byte | K::CharType | K::Int | K::Long | K::Double | K::UnitType |
             K::Boolean | K::StringType | K::Borrow) { return true; }
-        if !matches!(self.current().kind, K::Ident(_)) { return false; }
+        if !matches!(self.current().kind, K::Ident(_) | K::LParen) { return false; }
         let saved = self.position.clone();
         let result = self.ty(false).is_ok() && matches!(self.current().kind, K::Ident(_));
         self.position = saved;
@@ -490,17 +563,8 @@ impl Parser {
                 self.expect(&K::LBrace, "`{`")?;
                 let mut arms = Vec::new();
                 while !self.at(&K::RBrace) && !self.at(&K::Eof) {
-                    let (variant, arm_start) = self.ident()?;
-                    let mut bindings = Vec::new();
-                    if self.eat(&K::LParen) {
-                        if !self.at(&K::RParen) {
-                            loop {
-                                bindings.push(self.ident()?.0);
-                                if !self.eat(&K::Comma) { break; }
-                            }
-                        }
-                        self.expect(&K::RParen, "`)`")?;
-                    }
+                    let pattern = self.pattern(false)?;
+                    let arm_start = pattern.span;
                     let guard = if self.eat(&K::If) {
                         let expr = if self.eat(&K::LParen) {
                             let cond = self.expression()?;
@@ -515,7 +579,7 @@ impl Parser {
                     };
                     let body = self.block()?;
                     let arm_end = self.tokens[self.position.index - 1].span;
-                    arms.push(MatchArm { variant, bindings, guard, body, span: arm_start.join(arm_end) });
+                    arms.push(MatchArm { pattern, guard, body, span: arm_start.join(arm_end) });
                     self.eat(&K::Comma);
                 }
                 self.expect(&K::RBrace, "`}` after the match arms")?;
@@ -715,9 +779,18 @@ impl Parser {
             }
             K::LParen => {
                 if self.eat(&K::RParen) { return make_expr(ExprKind::Unit, span.join(self.tokens[self.position.index - 1].span)); }
-                let mut expr = self.expression()?;
-                expr.span = span.join(self.expect(&K::RParen, "`)`")?.span);
-                return Ok(expr);
+                let mut first = self.expression()?;
+                if self.eat(&K::Comma) {
+                    let second = self.expression()?;
+                    if self.at(&K::Comma) {
+                        return Err(Diagnostic::new(self.current().span, "tuple expressions have exactly two elements"));
+                    }
+                    let end = self.expect(&K::RParen, "`)` after a pair expression")?.span;
+                    span = span.join(end);
+                    return make_expr(ExprKind::Tuple(Box::new(first), Box::new(second)), span);
+                }
+                first.span = span.join(self.expect(&K::RParen, "`)`")?.span);
+                return Ok(first);
             }
             _ => return Err(Diagnostic::new(span, "expected an expression")),
         };
@@ -766,6 +839,7 @@ fn make_expr(kind: ExprKind, span: Span) -> Result<Expr, Diagnostic> {
         ExprKind::Binary { left, right, .. } => left.depth.max(right.depth),
         ExprKind::Unary { expr, .. } | ExprKind::Borrow { expr, .. } |
         ExprKind::Cast { expr, .. } | ExprKind::Try(expr) => expr.depth,
+        ExprKind::Tuple(first, second) => first.depth.max(second.depth),
         ExprKind::Call { args, .. } | ExprKind::StaticCall { args, .. } |
         ExprKind::New { args, .. } | ExprKind::Variant { args, .. } =>
             args.iter().map(|arg| arg.depth).max().unwrap_or(0),

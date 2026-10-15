@@ -265,6 +265,7 @@ impl<'a> Analyzer<'a> {
             }
             S::Match { value, arms } => {
                 let mark = self.loans.len();
+                let pair_mark = self.map_pairs.len();
                 let origin = if value.ty.is_borrow() {
                     Some(self.reference(value, "borrowed match".to_owned())?)
                 } else {
@@ -273,15 +274,27 @@ impl<'a> Analyzer<'a> {
                 };
                 for arm in arms {
                     let arm_mark = self.loans.len();
+                    let mut bindings = Vec::new();
+                    collect_match_bindings(&arm.pattern, &mut bindings);
                     if let Some(origin) = origin {
-                        for id in &arm.bindings {
+                        for (id, guard_id) in &bindings {
                             if self.function.locals[*id].ty.is_borrow() {
                                 self.bindings.insert(*id, origin);
                             }
+                            if let Some(guard_id) = guard_id
+                                && self.function.locals[*guard_id].ty.is_borrow() {
+                                    self.bindings.insert(*guard_id, origin);
+                                }
+                        }
+                    }
+                    if let Some(guard) = &arm.guard {
+                        self.expression(guard)?;
+                        for (_, guard_id) in &bindings {
+                            if let Some(guard_id) = guard_id { self.bindings.remove(guard_id); }
                         }
                     }
                     self.block(&arm.body)?;
-                    for id in arm.bindings.iter().rev() {
+                    for (id, guard_id) in bindings.iter().rev() {
                         let ty = self.function.locals[*id].ty;
                         if ty.is_object() {
                             self.access(Origin { root: Root::Local(*id), via: None }, Access::Destroy,
@@ -289,10 +302,15 @@ impl<'a> Analyzer<'a> {
                         }
                         self.bindings.remove(id);
                         self.views.remove(id);
+                        if let Some(guard_id) = guard_id {
+                            self.bindings.remove(guard_id);
+                            self.views.remove(guard_id);
+                        }
                     }
                     self.end_since(arm_mark, &HashSet::new(), "match arm completed");
                 }
                 self.end_since(mark, &HashSet::new(), "match completed");
+                self.map_pairs.truncate(pair_mark);
             }
             S::Return(value) => {
                 if let Some(value) = value {
@@ -406,6 +424,33 @@ impl<'a> Analyzer<'a> {
         }
         Ok(None)
     }
+    fn iterator_plan(&mut self, plan: &t::IteratorPlan) -> Result<(), Diagnostic> {
+        let receiver = match &plan.source {
+            t::IteratorSource::List { collection, .. }
+            | t::IteratorSource::Array { collection, .. }
+            | t::IteratorSource::Map { collection, .. } => collection,
+        };
+        match receiver {
+            t::IteratorReceiver::Borrowed(place) => {
+                self.borrow(place, false, plan.span, "iterator source".to_owned())?;
+            }
+            t::IteratorReceiver::BorrowedExpr(value) => {
+                self.reference(value, "iterator source".to_owned())?;
+            }
+            t::IteratorReceiver::Owned(value) => self.expression(value)?,
+        }
+        for stage in &plan.stages {
+            match stage {
+                t::IteratorStage::Map { callback, .. }
+                | t::IteratorStage::Filter { callback, .. } => self.expression(callback)?,
+                t::IteratorStage::Take { count } => self.expression(count)?,
+                t::IteratorStage::Enumerate { .. } => {}
+                t::IteratorStage::Zip { right, .. } => self.iterator_plan(right)?,
+            }
+        }
+        Ok(())
+    }
+
     fn expression(&mut self, expr: &t::Expr) -> Result<(), Diagnostic> {
         if expr.ty.is_borrow() {
             let mark = self.loans.len();
@@ -433,6 +478,18 @@ impl<'a> Analyzer<'a> {
                 self.projections(map, expr.span)?;
                 self.access(self.origin(map), Access::Read, expr.span)?;
             }
+            E::IteratorFold { plan, initial, folder, .. } => {
+                let mark = self.loans.len();
+                self.iterator_plan(plan)?;
+                self.expression(initial)?;
+                self.expression(folder)?;
+                self.end_since(mark, &HashSet::new(), "fused iterator fold completed");
+            }
+            E::IteratorSizeHint { plan, .. } => {
+                let mark = self.loans.len();
+                self.iterator_plan(plan)?;
+                self.end_since(mark, &HashSet::new(), "iterator size hint completed");
+            }
             E::Move(id) => {
                 self.access(Origin { root: Root::Local(*id), via: None }, Access::Destroy, expr.span)?;
             }
@@ -456,6 +513,17 @@ impl<'a> Analyzer<'a> {
             }
         }
         Ok(())
+    }
+}
+
+fn collect_match_bindings(pattern: &t::Pattern, out: &mut Vec<(usize, Option<usize>)>) {
+    match &pattern.kind {
+        t::PatternKind::Binding { id, guard_id } => out.push((*id, *guard_id)),
+        t::PatternKind::Wildcard => {}
+        t::PatternKind::Variant { fields, .. } =>
+            for field in fields { collect_match_bindings(field, out); },
+        t::PatternKind::Record { fields, .. } =>
+            for (_, field) in fields { collect_match_bindings(field, out); },
     }
 }
 

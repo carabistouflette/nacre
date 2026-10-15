@@ -23,10 +23,10 @@ enum Problem {
     TextFailure(Text);
 }
 
-class Pair {
+class LabeledValue {
     Text label;
     int value;
-    public Pair(Text label, int value) {
+    public LabeledValue(Text label, int value) {
         this.label = label;
         this.value = value;
     }
@@ -46,12 +46,12 @@ Result<int, Text> parseWithPending(borrow Text input) {
     return accept(new Text("pending"), input.parseInt()?);
 }
 
-Result<Pair, Text> makePair(borrow Text input) {
-    return new Result<Pair, Text>.Ok(new Pair(new Text("nested"), input.parseInt()?));
+Result<LabeledValue, Text> makePair(borrow Text input) {
+    return new Result<LabeledValue, Text>.Ok(new LabeledValue(new Text("nested"), input.parseInt()?));
 }
 
 Result<int, Text> pairValue(borrow Text input) {
-    Pair pair = makePair(input)?;
+    LabeledValue pair = makePair(input)?;
     return new Result<int, Text>.Ok(pair.getValue());
 }
 

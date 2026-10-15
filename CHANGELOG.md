@@ -9,6 +9,28 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 - Fix GCC PGO training/use identity across native temporary directories. Keep
   generated-C source locations and auxiliary profile names stable, and bypass
   executable/bitcode caches for builds with mutable profile inputs.
+- Fuse terminal `List`, `Array`, and `Map` iterator chains into direct loops:
+  `iter`, `map`, `filter`, `fold`, `zip`, `take`, `enumerate`, and finite size
+  hints. Readonly source loans and stack-backed pair views avoid intermediate
+  adapter allocations; pipelines cannot escape their terminal expression.
+- Add recursive enum, class-field, and binary tuple patterns with guarded
+  fallback arms, exhaustiveness checking, and unreachable-arm diagnostics.
+  The prelude now reserves `Pair<T, U>`; existing user `Pair` types must be renamed.
+  Tree-sitter and Zed queries recognize the same nested patterns, guards, and tuples.
+- Lower user functions and entry points directly from typed IR to LLVM, including
+  owned classes, sums, interfaces, native calls, and fused iterator pipelines.
+  Link separately cached runtime bitcode with matching-major Clang/`llvm-link`;
+  `--direct` selects this path for LLVM emission and native builds.
+  Both backends share nonescaping-object stack-promotion eligibility and preserve
+  fields-only destruction for promoted owners.
+- Keep large iterator plans out of ordinary IR expression storage so long
+  expression trees retain bounded per-frame frontend stack usage.
+- Add `Nacre.toml` packages with validated metadata, source roots, entry files,
+  dev/release profiles, local path dependencies, and explicit workspace members.
+  Resolve dependency diamonds once and reject cycles and conflicting identities.
+  `nacre new`, `nacre add`, and `nacre build/run --release` use the manifest;
+  the LSP recognizes it while retaining existing `nacre.json` projects.
+  Generated helper modules use distinct, punctuation-preserving package namespaces.
 - Build canonical generic-specialization names directly in their final buffer.
   One argument writer owns separators and nested type spelling, eliminating
   temporary argument strings, vectors, and joins while preserving names,

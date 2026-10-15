@@ -11,6 +11,7 @@ mod c_repr;
 mod codegen;
 pub mod diagnostic;
 mod ir;
+mod iterator_fusion;
 mod lexer;
 pub mod native;
 mod parser;
@@ -18,10 +19,12 @@ mod generics;
 mod resolver;
 mod ownership;
 mod borrowing;
+mod stack_promotion;
 mod stdlib;
 mod stdlib_codegen;
 pub mod lsp;
 pub mod project;
+pub mod manifest;
 pub mod test_runner;
 pub mod bench_runner;
 pub mod doc;
@@ -81,5 +84,34 @@ pub fn emit_types(source: &str) -> Result<String, Diagnostic> {
 pub fn emit_llvm_direct(source: &str) -> Result<String, Diagnostic> {
     let checked = front_end(source)?;
     llvm_codegen::generate_direct_llvm(&checked, source).map_err(|e| Diagnostic::new(Span::default(), e))
+}
+/// Compile a single source file through the direct LLVM backend.
+pub fn compile_llvm_direct(source: &str) -> Result<native::NativeProgram, String> {
+    compile_llvm_direct_with_flags(source, &[])
+}
+
+/// Compile a single source file through direct LLVM with trusted native compiler flags.
+pub fn compile_llvm_direct_with_flags(
+    source: &str,
+    flags: &[&str],
+) -> Result<native::NativeProgram, String> {
+    compile_llvm_direct_optimized_with_flags(source, "-O2", flags)
+}
+
+/// Compile direct LLVM at an explicit optimization level with trusted compiler flags.
+pub fn compile_llvm_direct_optimized_with_flags(
+    source: &str,
+    optimization: &str,
+    flags: &[&str],
+) -> Result<native::NativeProgram, String> {
+    let typed = front_end(source).map_err(|diagnostic| diagnostic.render("<source>", source))?;
+    let artifact = llvm_codegen::emit_llvm_direct_artifact(&typed, source)
+        .map_err(|error| Diagnostic::new(Span::default(), error).render("<source>", source))?;
+    native::compile_llvm_direct_with_runtime(
+        &artifact.ir,
+        &artifact.runtime_c,
+        optimization,
+        flags,
+    )
 }
 

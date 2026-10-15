@@ -45,10 +45,40 @@ fn block(program: &t::Program, statements: &t::Block,
             }
             S::Match { value, arms } => {
                 expression(program, value, inspect)?;
-                for arm in arms { block(program, &arm.body, inspect)?; }
+                for arm in arms {
+                    if let Some(guard) = &arm.guard { expression(program, guard, inspect)?; }
+                    block(program, &arm.body, inspect)?;
+                }
             }
             S::Block(body) => block(program, body, inspect)?,
             S::Break | S::Continue => {}
+        }
+    }
+    ControlFlow::Continue(())
+}
+
+fn iterator_plan(
+    program: &t::Program,
+    plan: &t::IteratorPlan,
+    inspect: &mut impl FnMut(NativeMethod) -> ControlFlow<()>,
+) -> ControlFlow<()> {
+    let collection = match &plan.source {
+        t::IteratorSource::List { collection, .. }
+        | t::IteratorSource::Array { collection, .. }
+        | t::IteratorSource::Map { collection, .. } => collection,
+    };
+    match collection {
+        t::IteratorReceiver::Borrowed(_) => {}
+        t::IteratorReceiver::BorrowedExpr(expr) | t::IteratorReceiver::Owned(expr) =>
+            expression(program, expr, inspect)?,
+    }
+    for stage in &plan.stages {
+        match stage {
+            t::IteratorStage::Map { callback, .. } | t::IteratorStage::Filter { callback, .. } =>
+                expression(program, callback, inspect)?,
+            t::IteratorStage::Take { count } => expression(program, count, inspect)?,
+            t::IteratorStage::Enumerate { .. } => {}
+            t::IteratorStage::Zip { right, .. } => iterator_plan(program, right, inspect)?,
         }
     }
     ControlFlow::Continue(())
@@ -75,6 +105,12 @@ fn expression(program: &t::Program, value: &t::Expr,
             expression(program, left, inspect)?;
             expression(program, right, inspect)?;
         }
+        E::IteratorFold { plan, initial, folder, .. } => {
+            iterator_plan(program, plan, inspect)?;
+            expression(program, initial, inspect)?;
+            expression(program, folder, inspect)?;
+        }
+        E::IteratorSizeHint { plan, .. } => iterator_plan(program, plan, inspect)?,
         E::Char(_) | E::Int(_) | E::Long(_) | E::Double(_) | E::Unit | E::Boolean(_)
         | E::String(_) | E::Read(_) | E::Move(_) | E::Borrow { .. } | E::MapCapacity(_) => {}
     }

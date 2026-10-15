@@ -447,7 +447,7 @@ impl Server {
         let mut current = Some(directory);
         for _ in 0..=32 {
             let Some(dir) = current else { break; };
-            if dir.join("nacre.json").is_file() {
+            if dir.join("Nacre.toml").is_file() || dir.join("nacre.json").is_file() {
                 return ProjectScope { root: dir.to_owned(), has_marker: true };
             }
             if boundary == Some(dir) { break; }

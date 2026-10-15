@@ -132,6 +132,26 @@ alias domain.
 index, so active loans still reject them. Recoverable runtime failure does not
 relax static ownership requirements. `tryGet` copies copyable scalar values only.
 
+## Fused collection pipelines
+
+The compiler recognizes `List`, `Array`, and `Map` chains beginning with
+`.iter()` and ending in `.fold(...)` or `.sizeHint()`. They are terminal
+expressions, not `Iterator<T>` values: a pipeline cannot be stored, returned, or
+used as a `for` traversal source.
+
+A named source has a shared loan on its complete root from terminal evaluation
+through completion of `fold` or `sizeHint`, including evaluation of stage
+arguments and callbacks. Structural mutation and exclusive access through that
+root conflict with the loan. The loan ends with the terminal expression; no
+pipeline value or retained source loan remains afterward.
+
+Copyable scalar and static `String` items are copied. Affine items are exposed as
+readonly borrows, so callbacks cannot mutate or move an item out of its source.
+Map iteration, `zip`, and `enumerate` expose each pair as a temporary shared
+`Pair` view; its bindings do not outlive the callback/item evaluation. Map key and
+value components follow the ordinary copied-versus-borrowed Map traversal rules,
+and hash-map order remains unspecified.
+
 ## Map and Set key/value references
 
 `Map<K,V>` provides shared `getRef(key)` and exclusive `getMut(key)` access for
@@ -184,7 +204,7 @@ cannot be moved, replaced, or destroyed during RHS evaluation. Borrowed fields
 remain immutable, local views cannot be replaced, and arbitrary moves out of
 owned fields/partial initialization are not introduced.
 
-## Borrowed enum matching
+## Match patterns and borrowing
 
 ```java
 Option<Text> phone = new Option<Text>.Some(new Text("+123"));
@@ -199,16 +219,26 @@ match (borrow mut phone) {
 // phone is still owned and retains its active variant.
 ```
 
-`match (value)` still consumes an owning enum. Matching an explicitly borrowed
-place or an already borrowed enum is non-consuming and follows its access mode.
-All modes require exhaustive variants, correct payload arity, and no duplicate
-arms. Primitive bindings copy; nominal owning payloads bind shared/exclusive
-references tied to the scrutinee. Nested enum payloads use their inline address.
+Matching an owned enum consumes it. Matching an explicitly borrowed place or an
+already borrowed enum is non-consuming and follows its access mode. Patterns may
+recurse through enum variants, ordinary class fields, and binary `Pair` tuples.
+All matches must be exhaustive over nested cases; guards do not add coverage, and
+an earlier unguarded pattern that covers a later one makes that arm unreachable.
+Variant patterns require the correct payload arity; record patterns name
+accessible fields, with omitted fields unconstrained.
 
-Borrowed matching never resets a tag or destroys borrowed payloads. Bindings
-cannot outlive an arm. Payload bindings share the match's root capability;
+For borrowed enum subjects, primitive payload bindings copy and nominal payloads
+bind shared or exclusive references according to the scrutinee's access mode.
+Direct nominal payload bindings from an owned enum may move those payload owners.
+Borrowed matching never resets a tag or destroys borrowed payloads. Borrowed
+payload aliases cannot outlive an arm. They share the match's root capability;
 subsequent reborrows use the same conservative conflict checks. Branches,
 `return`, `break`, and `continue` retain lexical cleanup and definite-state rules.
+
+Class record patterns never partially move class fields, even when the subject is
+owned. Scalar field bindings copy; nominal field bindings are readonly shared
+aliases tied to the matched object. These aliases cannot be moved, returned,
+stored, or otherwise escape the arm's lexical scope.
 
 ## Local views
 

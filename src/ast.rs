@@ -110,7 +110,16 @@ pub enum StmtKind {
     Return(Option<Expr>), Break, Continue, Block(Block),
 }
 #[derive(Debug, Clone)]
-pub struct MatchArm { pub variant: String, pub bindings: Vec<String>, pub guard: Option<Expr>, pub body: Block, pub span: Span }
+pub struct MatchArm { pub pattern: Pattern, pub guard: Option<Expr>, pub body: Block, pub span: Span }
+#[derive(Debug, Clone)]
+pub struct Pattern { pub kind: PatternKind, pub span: Span }
+#[derive(Debug, Clone)]
+pub enum PatternKind {
+    Name(String),
+    Variant { name: String, fields: Vec<Pattern> },
+    Record { class: String, fields: Vec<(String, Pattern)> },
+    Tuple(Box<Pattern>, Box<Pattern>),
+}
 #[derive(Debug, Clone)]
 pub struct Expr { pub kind: ExprKind, pub span: Span, pub depth: usize }
 #[derive(Debug, Clone)]
@@ -125,8 +134,9 @@ pub enum ExprKind {
     Borrow { expr: Box<Expr>, mutable: bool },
     Cast { ty: Type, expr: Box<Expr> },
     Unary { op: UnaryOp, expr: Box<Expr> },
-    Try(Box<Expr>),
+    Tuple(Box<Expr>, Box<Expr>),
     Binary { op: BinaryOp, left: Box<Expr>, right: Box<Expr> },
+    Try(Box<Expr>),
     Await(Box<Expr>),
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
