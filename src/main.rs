@@ -95,8 +95,8 @@ fn execute(args: Vec<OsString>) -> Result<i32, String> {
     let mut native_arch = false;
     let mut lto = false;
     let mut jemalloc = false;
-    let mut pgo_generate = false;
-    let mut pgo_use = false;
+    let mut pgo_generate: Option<PathBuf> = None;
+    let mut pgo_use: Option<PathBuf> = None;
     let mut filter: Option<String> = None;
     let mut direct_llvm = false;
     let mut optimization = None;
@@ -134,10 +134,28 @@ fn execute(args: Vec<OsString>) -> Result<i32, String> {
             lto = true; i += 1;
         } else if args[i] == "--jemalloc" && matches!(command, "run" | "build" | "test" | "bench") && !jemalloc {
             jemalloc = true; i += 1;
-        } else if args[i] == "--pgo-generate" && matches!(command, "run" | "build") && !pgo_generate {
-            pgo_generate = true; i += 1;
-        } else if args[i] == "--pgo-use" && matches!(command, "run" | "build") && !pgo_use {
-            pgo_use = true; i += 1;
+        } else if args[i].to_string_lossy().starts_with("--pgo-generate") && matches!(command, "run" | "build") && pgo_generate.is_none() {
+            let path = if let Some(dir) = args[i].to_str().and_then(|s| s.strip_prefix("--pgo-generate=")) {
+                PathBuf::from(dir)
+            } else if args.get(i + 1).is_some_and(|next| !next.to_string_lossy().starts_with('-')) {
+                i += 1;
+                PathBuf::from(&args[i])
+            } else {
+                PathBuf::from(".pgo")
+            };
+            pgo_generate = Some(path);
+            i += 1;
+        } else if args[i].to_string_lossy().starts_with("--pgo-use") && matches!(command, "run" | "build") && pgo_use.is_none() {
+            let path = if let Some(dir) = args[i].to_str().and_then(|s| s.strip_prefix("--pgo-use=")) {
+                PathBuf::from(dir)
+            } else if args.get(i + 1).is_some_and(|next| !next.to_string_lossy().starts_with('-')) {
+                i += 1;
+                PathBuf::from(&args[i])
+            } else {
+                PathBuf::from(".pgo")
+            };
+            pgo_use = Some(path);
+            i += 1;
         } else if args[i] == "--check" && command == "fmt" && !check_only {
             check_only = true; i += 1;
         } else if args[i] == "--direct" && command == "emit-llvm" && !direct_llvm {
@@ -189,7 +207,7 @@ fn execute(args: Vec<OsString>) -> Result<i32, String> {
         }
         return Ok(0);
     }
-    if pgo_generate && pgo_use {
+    if pgo_generate.is_some() && pgo_use.is_some() {
         return Err("cannot specify both --pgo-generate and --pgo-use".to_owned());
     }
     let mut c_source = bundle.compile_to_c().map_err(|d| bundle.render(&d))?;
@@ -212,9 +230,18 @@ fn execute(args: Vec<OsString>) -> Result<i32, String> {
     if native_arch { flags.push("-march=native"); }
     if lto { flags.push("-flto"); }
     if jemalloc { flags.push("-ljemalloc"); }
-    if pgo_generate { flags.push("-fprofile-generate"); }
-    if pgo_use {
-        flags.push("-fprofile-use");
+    let pgo_flag_gen;
+    let pgo_flag_use;
+    if let Some(dir) = &pgo_generate {
+        fs::create_dir_all(dir).map_err(|e| format!("failed to create PGO directory: {e}"))?;
+        let abs = fs::canonicalize(dir).unwrap_or_else(|_| dir.clone());
+        pgo_flag_gen = format!("-fprofile-generate={}", abs.display());
+        flags.push(&pgo_flag_gen);
+    }
+    if let Some(dir) = &pgo_use {
+        let abs = fs::canonicalize(dir).unwrap_or_else(|_| dir.clone());
+        pgo_flag_use = format!("-fprofile-use={}", abs.display());
+        flags.push(&pgo_flag_use);
         flags.push("-fprofile-correction");
     }
     let program = native::compile_c_optimized(&c_source, optimization.unwrap_or("-O2"), &flags)?;

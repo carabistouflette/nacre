@@ -181,6 +181,7 @@ fn pgo_generate_and_use_workflow_and_mutual_exclusion() {
     let source = temp.path("pgo.ncr");
     fs::write(&source, "void main() { int i = 0; while (i < 100) { i = i + 1; } println(i); }").unwrap();
     let bin = temp.path("pgo_bin");
+    let pgo_dir = temp.path("pgo_data");
 
     // 1. Mutual exclusion: cannot pass both --pgo-generate and --pgo-use
     let both = nacre(&["build", path_str(&source), "-o", path_str(&bin), "--pgo-generate", "--pgo-use"]);
@@ -188,7 +189,7 @@ fn pgo_generate_and_use_workflow_and_mutual_exclusion() {
     assert!(String::from_utf8_lossy(&both.stderr).contains("cannot specify both"));
 
     // 2. Build instrumented executable with --pgo-generate
-    let build_gen = nacre(&["build", path_str(&source), "-o", path_str(&bin), "--pgo-generate"]);
+    let build_gen = nacre(&["build", path_str(&source), "-o", path_str(&bin), &format!("--pgo-generate={}", pgo_dir.display())]);
     assert!(build_gen.status.success(), "{}", String::from_utf8_lossy(&build_gen.stderr));
 
     // Run instrumented executable to produce profile counts
@@ -196,9 +197,19 @@ fn pgo_generate_and_use_workflow_and_mutual_exclusion() {
     assert!(run_res.status.success());
     assert_eq!(run_res.stdout, b"100\n");
 
+    // Assert profile count data actually exists in pgo_data directory
+    let has_profile = fs::read_dir(&pgo_dir).unwrap().any(|entry| {
+        let path = entry.unwrap().path();
+        path.is_dir() || path.extension().is_some_and(|ext| ext == "gcda" || ext == "profraw")
+    });
+    assert!(has_profile, "expected profile data in {}", pgo_dir.display());
+
     // 3. Build optimized executable with --pgo-use
-    let opt = nacre(&["build", path_str(&source), "-o", path_str(&bin), "--pgo-use"]);
+    let opt = nacre(&["build", path_str(&source), "-o", path_str(&bin), &format!("--pgo-use={}", pgo_dir.display())]);
     assert!(opt.status.success(), "{}", String::from_utf8_lossy(&opt.stderr));
+    let stderr_use = String::from_utf8_lossy(&opt.stderr);
+    assert!(!stderr_use.contains("missing-profile") && !stderr_use.contains("profile count data file not found"), "{stderr_use}");
+
     let run_opt = Command::new(&bin).output().unwrap();
     assert!(run_opt.status.success());
     assert_eq!(run_opt.stdout, b"100\n");
