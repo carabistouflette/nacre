@@ -434,6 +434,14 @@
     },
     {
       "category": "apps",
+      "source": "examples/apps/http_server.ncr",
+      "stdin": "",
+      "args": ["8095", "0"],
+      "expected_status": 0,
+      "meaningful_outputs": ["Nacre HTTP Server listening", "Server cleanly shut down after serving 0 request(s)."]
+    },
+    {
+      "category": "apps",
       "source": "examples/apps/lending_desk",
       "stdin": "add-book\nThe Left Hand of Darkness\nUrsula K. Le Guin\n14\nadd-member\nAda Ω\nReader\nlend\n1\n1\nlist\nquit\n",
       "args": [],

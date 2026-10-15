@@ -1,0 +1,226 @@
+// Lightweight HTTP/1.1 File & Status Server.
+// Demonstrates TCP sockets, stream I/O, binary buffers, and MIME routing.
+
+class HttpServer {
+    private int port = 8080;
+    private int maxRequests = 1;
+    private int requestCount = 0;
+
+    HttpServer(int p, int maxReq) {
+        this.port = p;
+        this.maxRequests = maxReq;
+        this.requestCount = 0;
+    }
+
+    private String getMimeType(borrow Text path) {
+        Text htmlExt = new Text(".html");
+        if (path.endsWith(htmlExt)) {
+            return "text/html; charset=utf-8";
+        }
+        Text jsonExt = new Text(".json");
+        if (path.endsWith(jsonExt)) {
+            return "application/json";
+        }
+        Text txtExt = new Text(".txt");
+        if (path.endsWith(txtExt)) {
+            return "text/plain; charset=utf-8";
+        }
+        Text cssExt = new Text(".css");
+        if (path.endsWith(cssExt)) {
+            return "text/css";
+        }
+        Text jsExt = new Text(".js");
+        if (path.endsWith(jsExt)) {
+            return "application/javascript";
+        }
+        return "application/octet-stream";
+    }
+
+    private Text buildResponse(int statusCode, String statusText, String contentType, borrow Text body) {
+        Text response = new Text("HTTP/1.1 ");
+        response.appendInt(statusCode);
+        response.append(" ");
+        response.append(statusText);
+        response.append("\r\nServer: Nacre-Native/0.12.0\r\nContent-Type: ");
+        response.append(contentType);
+        response.append("\r\nContent-Length: ");
+        response.appendInt(body.byteLength());
+        response.append("\r\nConnection: close\r\n\r\n");
+        response.appendText(body);
+        return response;
+    }
+
+    private void handleClient(borrow mut TcpStream stream) {
+        match (ByteBuffer.withCapacity(2048L)) {
+            Err(e) { return; }
+            Ok(rxBuffer) {
+                long readBytes = 0L;
+                match (stream.readSome(rxBuffer, 2048L, 1000L)) {
+                    Ok(n) { readBytes = n; }
+                    Err(e) { return; }
+                }
+
+                if (readBytes <= 0L) {
+                    return;
+                }
+
+                Text rawRequest = new Text("");
+                match (Encoding.utf8Decode(rxBuffer)) {
+                    Ok(t) { rawRequest = t; }
+                    Err(e) {
+                        Text errBody = new Text("{\"error\": \"Malformed UTF-8 Request\"}");
+                        Text res = this.buildResponse(400, "Bad Request", "application/json", errBody);
+                        ByteBuffer resBytes = Encoding.utf8Encode(res);
+                        match (stream.writeAll(resBytes, 1000L)) {
+                            Ok(u) {}
+                            Err(err) {}
+                        }
+                        return;
+                    }
+                }
+
+                Text space = new Text(" ");
+                int firstSpace = rawRequest.indexOf(space);
+                if (firstSpace < 0) {
+                    return;
+                }
+
+                Text method = new Text("");
+                match (rawRequest.sliceBytes(0, firstSpace)) {
+                    Ok(m) { method = m; }
+                    Err(e) { return; }
+                }
+
+                Text httpPrefix = new Text(" HTTP/");
+                int secondSpace = rawRequest.indexOf(httpPrefix);
+                if (secondSpace < 0) {
+                    secondSpace = rawRequest.byteLength();
+                }
+
+                Text path = new Text("");
+                match (rawRequest.sliceBytes(firstSpace + 1, secondSpace)) {
+                    Ok(p) { path = p; }
+                    Err(e) { return; }
+                }
+
+                Text responseText = new Text("");
+                if (!method.equalsString("GET") && !method.equalsString("HEAD")) {
+                    Text body = new Text("{\"error\": \"Method Not Allowed\"}");
+                    responseText = this.buildResponse(405, "Method Not Allowed", "application/json", body);
+                } else if (path.equalsString("/") || path.equalsString("/index.html")) {
+                    Text body = new Text("<!DOCTYPE html><html><head><title>Nacre Server</title></head><body><h1>Welcome to Nacre HTTP/1.1</h1><p>High-performance native Linux server.</p><ul><li><a href=\"/api/status\">/api/status</a></li></ul></body></html>");
+                    responseText = this.buildResponse(200, "OK", "text/html; charset=utf-8", body);
+                } else if (path.equalsString("/api/status")) {
+                    Text body = new Text("{\"status\": \"healthy\", \"runtime\": \"Nacre C11 Native\", \"requests_served\": ");
+                    body.appendInt(this.requestCount + 1);
+                    body.append("}");
+                    responseText = this.buildResponse(200, "OK", "application/json", body);
+                } else {
+                    Text relativePath = new Text(".");
+                    relativePath.appendText(path);
+                    match (Files.readText(relativePath)) {
+                        Ok(fileContent) {
+                            String mime = this.getMimeType(path);
+                            responseText = this.buildResponse(200, "OK", mime, fileContent);
+                        }
+                        Err(e) {
+                            Text body = new Text("{\"error\": \"Not Found\", \"path\": \"");
+                            body.appendText(path);
+                            body.append("\"}");
+                            responseText = this.buildResponse(404, "Not Found", "application/json", body);
+                        }
+                    }
+                }
+
+                ByteBuffer resBytes = Encoding.utf8Encode(responseText);
+                match (stream.writeAll(resBytes, 1000L)) {
+                    Ok(u) {}
+                    Err(err) {}
+                }
+                this.requestCount = this.requestCount + 1;
+            }
+        }
+    }
+
+    public void serve() {
+        Text host = new Text("127.0.0.1");
+        match (SocketAddress.resolve(host, this.port, false)) {
+            Err(e) {
+                Console.print("Address resolution error: ");
+                Console.printText(e);
+                println("");
+                return;
+            }
+            Ok(addrs) {
+                match (TcpListener.bind(addrs.getRef(0), 16)) {
+                    Err(e) {
+                        Console.print("TCP bind error: ");
+                        Console.printText(e);
+                        println("");
+                        return;
+                    }
+                    Ok(listener) {
+                        Console.print("Nacre HTTP Server listening on http://127.0.0.1:");
+                        println(this.port);
+
+                        while (this.requestCount < this.maxRequests) {
+                            match (listener.accept(50L)) {
+                                Ok(stream) {
+                                    this.handleClient(stream);
+                                    match (stream.close()) {
+                                        Ok(u) {}
+                                        Err(err) {}
+                                    }
+                                }
+                                Err(timeout) {
+                                    // Accept deadline expired; continue to check stop condition
+                                }
+                            }
+                        }
+
+                        match (listener.close()) {
+                            Ok(u) {}
+                            Err(e) {}
+                        }
+                        Text shutdownMsg = new Text("Server cleanly shut down after serving ");
+                        shutdownMsg.appendInt(this.requestCount);
+                        shutdownMsg.append(" request(s).");
+                        shutdownMsg.print();
+                    }
+                }
+            }
+        }
+    }
+}
+
+void main() {
+    int port = 8089;
+    int maxReq = 1;
+
+    int argCount = Args.count();
+    if (argCount >= 1) {
+        match (Args.get(0)) {
+            Ok(pText) {
+                match (pText.parseInt()) {
+                    Ok(p) { port = p; }
+                    Err(e) {}
+                }
+            }
+            Err(e) {}
+        }
+    }
+    if (argCount >= 2) {
+        match (Args.get(1)) {
+            Ok(rText) {
+                match (rText.parseInt()) {
+                    Ok(r) { maxReq = r; }
+                    Err(e) {}
+                }
+            }
+            Err(e) {}
+        }
+    }
+
+    HttpServer server = new HttpServer(port, maxReq);
+    server.serve();
+}

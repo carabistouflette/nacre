@@ -82,12 +82,15 @@ output and allocation balance. It is a smoke check, not a general safety proof.
 - [Game of Life](examples/apps/game_of_life.ncr): Conway's Game of Life on a
   toroidal grid with presets (glider, blinker, toad, beacon, r-pentomino),
   generation stepping, interactive cell editing, and scriptable arguments.
+- [HTTP server](examples/apps/http_server.ncr): Lightweight HTTP/1.1 file and
+  API server with MIME routing, JSON status endpoints, binary buffers, and TCP sockets.
 
 ```sh
 nacre run examples/apps/lending_desk --memory-stats
 nacre run examples/io/contact_book.ncr --memory-stats
 nacre run examples/apps/sudoku.ncr --memory-stats
 nacre run examples/apps/game_of_life.ncr --memory-stats
+nacre run examples/apps/http_server.ncr --memory-stats -- 8089 1
 ```
 Memory statistics appear on stderr as
 `NACRE_MEMORY allocations=N frees=N live=0`; object allocations and owned buffers
@@ -268,8 +271,8 @@ runtime failures remain fatal; no exception unwinding is provided.
 
 ```text
 nacre check source.ncr ... | directory
-nacre run sources [--memory-stats] [--sanitize] [-O0|-O1|-O2|-O3|-Os] [-- arguments...]
-nacre build sources [-o executable] [--memory-stats] [--sanitize] [-O0|-O1|-O2|-O3|-Os]
+nacre run sources [--memory-stats] [--sanitize] [--native] [--lto] [--jemalloc] [-O0|-O1|-O2|-O3|-Os] [-- arguments...]
+nacre build sources [-o executable] [--memory-stats] [--sanitize] [--native] [--lto] [--jemalloc] [-O0|-O1|-O2|-O3|-Os]
 nacre emit-c sources [-o output.c] [--memory-stats]
 nacre emit-flow sources [-o output.flow]
 nacre emit-borrows sources [-o output.borrows]
@@ -282,10 +285,12 @@ nacre lsp
 
 Commands accept multiple sources or recursively collected directories, resolving
 their module namespaces together as one whole-program compilation. `init` refuses
-an existing path. Existing outputs are replaced except the input source. Native
-optimization defaults to `-O2`; default build output is `out/<source-name>`.
-`--sanitize` enables ASan/UBSan.
-
+an existing path. Existing outputs are replaced except the input source.
+Native optimization defaults to `-O2`; default build output is `out/<source-name>`.
+`--sanitize` enables ASan/UBSan; `--native` enables host CPU instruction extensions
+(`-march=native`); `--lto` enables link-time optimization (`-flto`); `--jemalloc`
+links the thread-local size-class jemalloc allocator (`-ljemalloc`). Automatic
+SHA-keyed compilation caching in `$XDG_CACHE_HOME/nacre` accelerates `nacre run` re-runs.
 `NACRE_CC` or `CC` selects one C compiler executable, without embedded flags.
 `NACRE_CLANG` selects Clang for textual LLVM emission; this is the C frontend's
 LLVM output, not a direct Rust LLVM backend. Flow/borrow/type inspection does not
