@@ -1073,15 +1073,17 @@ impl Checker<'_> {
                 let variants = self.tables.classes[class].variants.clone()
                     .ok_or_else(|| Diagnostic::new(stmt.span, format!("match requires an enum, not `{}`", self.tables.classes[class].name)))?;
                 let mut seen = vec![false; variants.len()];
+                let mut variant_stops = vec![false; variants.len()];
                 let mut checked_arms = Vec::with_capacity(arms.len());
-                let mut all_stop = true;
                 for arm in arms {
                     let variant = variants.iter().position(|v| v.name == arm.variant)
                         .ok_or_else(|| Diagnostic::new(arm.span, format!("unknown variant `{}` in `{}`", arm.variant, self.tables.classes[class].name)))?;
                     if seen[variant] {
                         return Err(Diagnostic::new(arm.span, format!("variant `{}` is repeated in the match", arm.variant)));
                     }
-                    seen[variant] = true;
+                    if arm.guard.is_none() {
+                        seen[variant] = true;
+                    }
                     let payload = &variants[variant].fields;
                     if arm.bindings.len() != payload.len() {
                         return Err(Diagnostic::new(arm.span, format!("match arm `{}` expects {} payload binding(s), {} provided",
@@ -1097,11 +1099,20 @@ impl Checker<'_> {
                         let id = self.declare(name, binding_type, arm.span)?;
                         bindings.push(id);
                     }
+                    let guard = if let Some(g) = &arm.guard {
+                        let expr = self.expected_expression(Type::Boolean, g)?;
+                        Some(expr)
+                    } else {
+                        None
+                    };
                     let (body, stops) = self.block(&arm.body)?;
                     self.scopes.pop();
-                    all_stop &= stops;
-                    checked_arms.push(t::MatchArm { variant, bindings, body });
+                    if arm.guard.is_none() && stops {
+                        variant_stops[variant] = true;
+                    }
+                    checked_arms.push(t::MatchArm { variant, bindings, guard, body });
                 }
+                let all_stop = variant_stops.iter().all(|s| *s);
                 let missing: Vec<_> = variants.iter().enumerate().filter(|(id, _)| !seen[*id])
                     .map(|(_, variant)| variant.name.as_str()).collect();
                 if !missing.is_empty() {
@@ -1534,8 +1545,8 @@ impl Checker<'_> {
             let loop_body = vec![t::Stmt::Match {
                 value: next,
                 arms: vec![
-                    t::MatchArm { variant: none_variant, bindings: Vec::new(), body: vec![t::Stmt::Break] },
-                    t::MatchArm { variant: some_variant, bindings: vec![item_owner_id], body: some_body },
+                    t::MatchArm { variant: none_variant, bindings: Vec::new(), guard: None, body: vec![t::Stmt::Break] },
+                    t::MatchArm { variant: some_variant, bindings: vec![item_owner_id], guard: None, body: some_body },
                 ],
             }];
             lowered.push(t::Stmt::While {

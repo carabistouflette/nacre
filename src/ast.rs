@@ -110,7 +110,7 @@ pub enum StmtKind {
     Return(Option<Expr>), Break, Continue, Block(Block),
 }
 #[derive(Debug, Clone)]
-pub struct MatchArm { pub variant: String, pub bindings: Vec<String>, pub body: Block, pub span: Span }
+pub struct MatchArm { pub variant: String, pub bindings: Vec<String>, pub guard: Option<Expr>, pub body: Block, pub span: Span }
 #[derive(Debug, Clone)]
 pub struct Expr { pub kind: ExprKind, pub span: Span, pub depth: usize }
 #[derive(Debug, Clone)]

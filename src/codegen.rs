@@ -552,46 +552,106 @@ impl Emitter<'_> {
                 let borrowed = borrow_mode.is_some();
                 let value = self.expression(value);
                 let member = if borrowed { format!("({value})->") } else { format!("{value}.") };
-                for (index, arm) in arms.iter().enumerate() {
-                    self.line(&format!("{} ({member}tag == {}) {{",
-                        if index == 0 { "if" } else { "else if" }, arm.variant));
-                    self.indent += 1;
-                    if !borrowed {
-                        self.line(&format!("{value}.tag = -1; /* active payload transferred */"));
-                    }
-                    self.owners.push(Vec::new());
-                    let field_count = self.program.classes[class].variants.as_ref().unwrap()[arm.variant].fields.len();
-                    for field in 0..field_count {
-                        let ty = self.program.classes[class].variants.as_ref().unwrap()[arm.variant].fields[field];
-                        let payload = format!("{member}data.v{}.f{field}", arm.variant);
-                        if let Some(id) = arm.bindings.get(field) {
-                            let binding_type = match (ty, borrow_mode) {
-                                (Type::Object(class), Some(mutable)) => Type::Borrow { class, mutable },
-                                _ => ty,
-                            };
-                            let initializer = if borrowed && matches!(ty, Type::Object(owner) if self.program.classes[owner].variants.is_some()) {
-                                format!("&({payload})")
-                            } else { payload };
-                            self.line(&format!("{} ncr_v_{id} = {initializer};", ctype(self.program, binding_type)));
-                            if !borrowed
-                                && let Type::Object(owner) = ty {
+                let has_guards = arms.iter().any(|a| a.guard.is_some());
+                if has_guards {
+                    self.line("bool ncr_matched = false;");
+                    for arm in arms {
+                        self.line(&format!("if (!ncr_matched && {member}tag == {}) {{", arm.variant));
+                        self.indent += 1;
+                        let field_count = self.program.classes[class].variants.as_ref().unwrap()[arm.variant].fields.len();
+                        for field in 0..field_count {
+                            let ty = self.program.classes[class].variants.as_ref().unwrap()[arm.variant].fields[field];
+                            let payload = format!("{member}data.v{}.f{field}", arm.variant);
+                            if let Some(id) = arm.bindings.get(field) {
+                                let binding_type = match (ty, borrow_mode) {
+                                    (Type::Object(class), Some(mutable)) => Type::Borrow { class, mutable },
+                                    _ => ty,
+                                };
+                                let initializer = if borrowed && matches!(ty, Type::Object(owner) if self.program.classes[owner].variants.is_some()) {
+                                    format!("&({payload})")
+                                } else { payload };
+                                self.line(&format!("{} ncr_v_{id} = {initializer};", ctype(self.program, binding_type)));
+                            }
+                        }
+                        if let Some(guard) = &arm.guard {
+                            let guard_val = self.expression(guard);
+                            self.line(&format!("if ({guard_val}) {{"));
+                            self.indent += 1;
+                        }
+                        self.line("ncr_matched = true;");
+                        if !borrowed {
+                            self.line(&format!("{value}.tag = -1; /* active payload transferred */"));
+                        }
+                        self.owners.push(Vec::new());
+                        for field in 0..field_count {
+                            let ty = self.program.classes[class].variants.as_ref().unwrap()[arm.variant].fields[field];
+                            if let Some(id) = arm.bindings.get(field) {
+                                if !borrowed && let Type::Object(owner) = ty {
                                     self.owners.last_mut().unwrap().push((*id, owner));
                                 }
-                        } else if !borrowed
-                            && let Type::Object(owner) = ty { self.drop_value(owner, &payload); }
+                            } else if !borrowed && let Type::Object(owner) = ty {
+                                let payload = format!("{member}data.v{}.f{field}", arm.variant);
+                                self.drop_value(owner, &payload);
+                            }
+                        }
+                        self.block(&arm.body, function);
+                        self.cleanup_from(self.owners.len() - 1);
+                        self.owners.pop();
+                        if arm.guard.is_some() {
+                            self.indent -= 1;
+                            self.line("}");
+                        }
+                        self.indent -= 1;
+                        self.line("}");
                     }
-                    self.block(&arm.body, function);
-                    self.cleanup_from(self.owners.len() - 1);
-                    self.owners.pop();
+                    self.line("if (!ncr_matched) {");
+                    self.indent += 1;
+                    if !borrowed { self.drop_value(class, &value); }
+                    self.line("abort();");
+                    self.indent -= 1;
+                    self.line("}");
+                } else {
+                    for (index, arm) in arms.iter().enumerate() {
+                        self.line(&format!("{} ({member}tag == {}) {{",
+                            if index == 0 { "if" } else { "else if" }, arm.variant));
+                        self.indent += 1;
+                        if !borrowed {
+                            self.line(&format!("{value}.tag = -1; /* active payload transferred */"));
+                        }
+                        self.owners.push(Vec::new());
+                        let field_count = self.program.classes[class].variants.as_ref().unwrap()[arm.variant].fields.len();
+                        for field in 0..field_count {
+                            let ty = self.program.classes[class].variants.as_ref().unwrap()[arm.variant].fields[field];
+                            let payload = format!("{member}data.v{}.f{field}", arm.variant);
+                            if let Some(id) = arm.bindings.get(field) {
+                                let binding_type = match (ty, borrow_mode) {
+                                    (Type::Object(class), Some(mutable)) => Type::Borrow { class, mutable },
+                                    _ => ty,
+                                };
+                                let initializer = if borrowed && matches!(ty, Type::Object(owner) if self.program.classes[owner].variants.is_some()) {
+                                    format!("&({payload})")
+                                } else { payload };
+                                self.line(&format!("{} ncr_v_{id} = {initializer};", ctype(self.program, binding_type)));
+                                if !borrowed
+                                    && let Type::Object(owner) = ty {
+                                        self.owners.last_mut().unwrap().push((*id, owner));
+                                    }
+                            } else if !borrowed
+                                && let Type::Object(owner) = ty { self.drop_value(owner, &payload); }
+                        }
+                        self.block(&arm.body, function);
+                        self.cleanup_from(self.owners.len() - 1);
+                        self.owners.pop();
+                        self.indent -= 1;
+                        self.line("}");
+                    }
+                    self.line("else {");
+                    self.indent += 1;
+                    if !borrowed { self.drop_value(class, &value); }
+                    self.line("abort();");
                     self.indent -= 1;
                     self.line("}");
                 }
-                self.line("else {");
-                self.indent += 1;
-                if !borrowed { self.drop_value(class, &value); }
-                self.line("abort();");
-                self.indent -= 1;
-                self.line("}");
                 if !borrowed { self.consume_temporary(value_type, &value); }
             }
             t::Stmt::Return(value) => {

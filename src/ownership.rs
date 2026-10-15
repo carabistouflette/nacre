@@ -166,6 +166,9 @@ impl Builder {
                             self.owners.last_mut().expect("match arm scope").push(*id);
                         }
                     }
+                    if let Some(guard) = &arm.guard {
+                        cursor = self.expression(guard, cursor);
+                    }
                     if let Some(end) = self.block(&arm.body, cursor) {
                         let end = self.cleanup(end, self.owners.len() - 1);
                         self.edge(end, join);

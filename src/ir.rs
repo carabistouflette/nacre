@@ -101,7 +101,7 @@ pub enum Stmt {
     Return(Option<Expr>), Break, Continue, Block(Block),
 }
 #[derive(Debug)]
-pub struct MatchArm { pub variant: usize, pub bindings: Vec<usize>, pub body: Block }
+pub struct MatchArm { pub variant: usize, pub bindings: Vec<usize>, pub guard: Option<Expr>, pub body: Block }
 #[derive(Debug, Clone)]
 pub struct Place { pub kind: PlaceKind, pub ty: Type }
 #[derive(Debug, Clone)]

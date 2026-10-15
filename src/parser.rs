@@ -501,9 +501,21 @@ impl Parser {
                         }
                         self.expect(&K::RParen, "`)`")?;
                     }
+                    let guard = if self.eat(&K::If) {
+                        let expr = if self.eat(&K::LParen) {
+                            let cond = self.expression()?;
+                            self.expect(&K::RParen, "`)`")?;
+                            cond
+                        } else {
+                            self.expression()?
+                        };
+                        Some(expr)
+                    } else {
+                        None
+                    };
                     let body = self.block()?;
                     let arm_end = self.tokens[self.position.index - 1].span;
-                    arms.push(MatchArm { variant, bindings, body, span: arm_start.join(arm_end) });
+                    arms.push(MatchArm { variant, bindings, guard, body, span: arm_start.join(arm_end) });
                     self.eat(&K::Comma);
                 }
                 self.expect(&K::RBrace, "`}` after the match arms")?;

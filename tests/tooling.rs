@@ -743,3 +743,48 @@ void main() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("live=0"), "expected memory balanced: {stderr}");
 }
+
+#[test]
+fn pattern_matching_guards_and_fallback_execution() {
+    let source = r#"
+enum Number {
+    Val(int);
+    None;
+}
+
+int categorize(Number n) {
+    match (n) {
+        Val(x) if x > 100 { return 3; }
+        Val(x) if x > 10 { return 2; }
+        Val(x) if x > 0 { return 1; }
+        Val(x) { return 0; }
+        None { return -1; }
+    }
+}
+
+void main() {
+    assert(categorize(new Number.Val(500)) == 3);
+    assert(categorize(new Number.Val(42)) == 2);
+    assert(categorize(new Number.Val(7)) == 1);
+    assert(categorize(new Number.Val(-5)) == 0);
+    assert(categorize(new Number.None()) == -1);
+}
+"#;
+    let c = compile_to_c(source).unwrap();
+    let prog = native::compile_c(&c).unwrap();
+    assert!(prog.output().unwrap().status.success());
+
+    // Verify rejection of repeated variant after an unguarded arm
+    let repeated_unguarded = r#"
+enum Status { Ready; Waiting; }
+void main() {
+    Status s = new Status.Ready();
+    match (s) {
+        Ready { println(1); }
+        Ready { println(2); }
+        Waiting { println(0); }
+    }
+}
+"#;
+    assert!(validate(repeated_unguarded).is_err());
+}
