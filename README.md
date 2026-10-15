@@ -79,13 +79,16 @@ output and allocation balance. It is a smoke check, not a general safety proof.
   display borrows an `Option<Text>` payload. Unicode and paths with spaces work.
 - [Sudoku](examples/apps/sudoku.ncr): immutable clues, validated moves, solving,
   validated load, and atomic saves that preserve clues separately from moves.
+- [Game of Life](examples/apps/game_of_life.ncr): Conway's Game of Life on a
+  toroidal grid with presets (glider, blinker, toad, beacon, r-pentomino),
+  generation stepping, interactive cell editing, and scriptable arguments.
 
 ```sh
 nacre run examples/apps/lending_desk --memory-stats
 nacre run examples/io/contact_book.ncr --memory-stats
 nacre run examples/apps/sudoku.ncr --memory-stats
+nacre run examples/apps/game_of_life.ncr --memory-stats
 ```
-
 Memory statistics appear on stderr as
 `NACRE_MEMORY allocations=N frees=N live=0`; object allocations and owned buffers
 are both counted.

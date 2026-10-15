@@ -1,0 +1,586 @@
+// Conway's Game of Life on a toroidal grid.
+// Implements classic B3/S23 rules:
+// - A live cell with 2 or 3 live neighbours survives.
+// - A dead cell with exactly 3 live neighbours becomes a live cell.
+// - All other live cells die; all other dead cells stay dead.
+
+class GameOfLife {
+    private int rows = 15;
+    private int cols = 30;
+    private int generation = 0;
+    private List<int> cells = new List<int>();
+
+    public GameOfLife(int r, int c) {
+        this.rows = r;
+        this.cols = c;
+        this.generation = 0;
+        int total = r * c;
+        this.cells.reserve(total);
+        int i = 0;
+        while (i < total) {
+            this.cells.add(0);
+            i = i + 1;
+        }
+    }
+
+    public void clear() {
+        int total = this.rows * this.cols;
+        int i = 0;
+        while (i < total) {
+            this.cells.set(i, 0);
+            i = i + 1;
+        }
+        this.generation = 0;
+    }
+
+    public boolean setCell(int row, int col, int value) {
+        if (row < 1 || row > this.rows || col < 1 || col > this.cols) {
+            return false;
+        }
+        int index = (row - 1) * this.cols + (col - 1);
+        int state = 0;
+        if (value != 0) {
+            state = 1;
+        }
+        this.cells.set(index, state);
+        return true;
+    }
+
+    public readonly int getCell(int row, int col) {
+        if (row < 1 || row > this.rows || col < 1 || col > this.cols) {
+            return 0;
+        }
+        int index = (row - 1) * this.cols + (col - 1);
+        return this.cells.get(index);
+    }
+
+    public readonly int liveCount() {
+        int count = 0;
+        int total = this.rows * this.cols;
+        int i = 0;
+        while (i < total) {
+            if (this.cells.get(i) != 0) {
+                count = count + 1;
+            }
+            i = i + 1;
+        }
+        return count;
+    }
+
+    public readonly int countNeighbors(int r, int c) {
+        int count = 0;
+        int dr = -1;
+        while (dr <= 1) {
+            int dc = -1;
+            while (dc <= 1) {
+                if (dr != 0 || dc != 0) {
+                    int nr = (r + dr + this.rows) % this.rows;
+                    int nc = (c + dc + this.cols) % this.cols;
+                    int index = nr * this.cols + nc;
+                    if (this.cells.get(index) != 0) {
+                        count = count + 1;
+                    }
+                }
+                dc = dc + 1;
+            }
+            dr = dr + 1;
+        }
+        return count;
+    }
+
+    public void step() {
+        List<int> nextState = new List<int>();
+        int total = this.rows * this.cols;
+        nextState.reserve(total);
+
+        int r = 0;
+        while (r < this.rows) {
+            int c = 0;
+            while (c < this.cols) {
+                int index = r * this.cols + c;
+                int current = this.cells.get(index);
+                int neighbors = this.countNeighbors(r, c);
+                int nextVal = 0;
+                if (current != 0) {
+                    if (neighbors == 2 || neighbors == 3) {
+                        nextVal = 1;
+                    }
+                } else {
+                    if (neighbors == 3) {
+                        nextVal = 1;
+                    }
+                }
+                nextState.add(nextVal);
+                c = c + 1;
+            }
+            r = r + 1;
+        }
+
+        int i = 0;
+        while (i < total) {
+            this.cells.set(i, nextState.get(i));
+            i = i + 1;
+        }
+        this.generation = this.generation + 1;
+    }
+
+    public void loadGlider() {
+        this.clear();
+        this.setCell(2, 3, 1);
+        this.setCell(3, 4, 1);
+        this.setCell(4, 2, 1);
+        this.setCell(4, 3, 1);
+        this.setCell(4, 4, 1);
+    }
+
+    public void loadBlinker() {
+        this.clear();
+        int midR = this.rows / 2 + 1;
+        int midC = this.cols / 2;
+        this.setCell(midR, midC - 1, 1);
+        this.setCell(midR, midC, 1);
+        this.setCell(midR, midC + 1, 1);
+    }
+
+    public void loadToad() {
+        this.clear();
+        int midR = this.rows / 2;
+        int midC = this.cols / 2;
+        this.setCell(midR, midC, 1);
+        this.setCell(midR, midC + 1, 1);
+        this.setCell(midR, midC + 2, 1);
+        this.setCell(midR + 1, midC - 1, 1);
+        this.setCell(midR + 1, midC, 1);
+        this.setCell(midR + 1, midC + 1, 1);
+    }
+
+    public void loadBeacon() {
+        this.clear();
+        int midR = this.rows / 2;
+        int midC = this.cols / 2;
+        this.setCell(midR - 1, midC - 2, 1);
+        this.setCell(midR - 1, midC - 1, 1);
+        this.setCell(midR, midC - 2, 1);
+        this.setCell(midR, midC - 1, 1);
+
+        this.setCell(midR + 1, midC, 1);
+        this.setCell(midR + 1, midC + 1, 1);
+        this.setCell(midR + 2, midC, 1);
+        this.setCell(midR + 2, midC + 1, 1);
+    }
+
+    public void loadRPentomino() {
+        this.clear();
+        int midR = this.rows / 2;
+        int midC = this.cols / 2;
+        this.setCell(midR - 1, midC, 1);
+        this.setCell(midR - 1, midC + 1, 1);
+        this.setCell(midR, midC - 1, 1);
+        this.setCell(midR, midC, 1);
+        this.setCell(midR + 1, midC, 1);
+    }
+
+    public boolean loadPresetByName(borrow Text name) {
+        if (name.equalsString("glider")) {
+            this.loadGlider();
+            return true;
+        }
+        if (name.equalsString("blinker")) {
+            this.loadBlinker();
+            return true;
+        }
+        if (name.equalsString("toad")) {
+            this.loadToad();
+            return true;
+        }
+        if (name.equalsString("beacon")) {
+            this.loadBeacon();
+            return true;
+        }
+        if (name.equalsString("r-pentomino")) {
+            this.loadRPentomino();
+            return true;
+        }
+        return false;
+    }
+
+    public readonly void show() {
+        Text border = new Text("+");
+        int c = 0;
+        while (c < this.cols) {
+            border.append("-");
+            c = c + 1;
+        }
+        border.append("+");
+        border.print();
+
+        int r = 0;
+        while (r < this.rows) {
+            Text rowText = new Text("|");
+            int col = 0;
+            while (col < this.cols) {
+                int index = r * this.cols + col;
+                if (this.cells.get(index) != 0) {
+                    rowText.append("O");
+                } else {
+                    rowText.append(".");
+                }
+                col = col + 1;
+            }
+            rowText.append("|");
+            rowText.print();
+            r = r + 1;
+        }
+
+        border.print();
+
+        Text stats = new Text("Generation: ");
+        stats.appendInt(this.generation);
+        stats.append(" | Live cells: ");
+        stats.appendInt(this.liveCount());
+        stats.print();
+    }
+
+    private readonly int skipSpaces(borrow Text line, int position) {
+        int length = line.byteLength();
+        while (position < length) {
+            int value = line.byteAt(position);
+            if (value != 32 && value != 9) {
+                return position;
+            }
+            position = position + 1;
+        }
+        return position;
+    }
+
+    private readonly int tokenEnd(borrow Text line, int position) {
+        int length = line.byteLength();
+        while (position < length) {
+            int value = line.byteAt(position);
+            if (value == 32 || value == 9) {
+                return position;
+            }
+            position = position + 1;
+        }
+        return position;
+    }
+
+    private readonly boolean noArguments(borrow Text line, int position) {
+        return this.skipSpaces(line, position) == line.byteLength();
+    }
+
+    private Result<int, Text> parseIntegerToken(borrow Text line, int start, int end) {
+        Result<Text, Text> part = line.sliceBytes(start, end);
+        match (part) {
+            Ok(token) { return token.parseInt(); }
+            Err(error) { return new Result<int, Text>.Err(error); }
+        }
+    }
+
+    private void reportError(Text error) {
+        Console.print("Error: ");
+        Console.printText(error);
+        println("");
+    }
+
+    private void printHelp() {
+        println("Commands:");
+        println("  step [N]          Advance simulation by N generations (default: 1)");
+        println("  set ROW COL       Set cell to alive (rows 1-15, cols 1-30)");
+        println("  clear ROW COL     Set cell to dead");
+        println("  clear             Clear entire grid");
+        println("  preset NAME       Load preset: glider, blinker, toad, beacon, r-pentomino");
+        println("  show              Display current grid and stats");
+        println("  reset             Reset grid to initial glider pattern");
+        println("  help              Show this help message");
+        println("  quit              Exit the simulation");
+    }
+
+    private void handleStep(borrow Text line, int position) {
+        int argStart = this.skipSpaces(line, position);
+        int argEnd = this.tokenEnd(line, argStart);
+        int steps = 1;
+
+        if (argStart < argEnd) {
+            if (!this.noArguments(line, argEnd)) {
+                println("Usage: step [N]");
+                return;
+            }
+            Result<int, Text> parseResult = this.parseIntegerToken(line, argStart, argEnd);
+            match (parseResult) {
+                Ok(n) {
+                    if (n <= 0) {
+                        println("Step count must be positive.");
+                        return;
+                    }
+                    steps = n;
+                }
+                Err(error) {
+                    this.reportError(error);
+                    return;
+                }
+            }
+        }
+
+        int s = 0;
+        while (s < steps) {
+            this.step();
+            s = s + 1;
+        }
+        this.show();
+    }
+
+    private void handleSet(borrow Text line, int position) {
+        int rStart = this.skipSpaces(line, position);
+        int rEnd = this.tokenEnd(line, rStart);
+        int cStart = this.skipSpaces(line, rEnd);
+        int cEnd = this.tokenEnd(line, cStart);
+
+        if (rStart == rEnd || cStart == cEnd || !this.noArguments(line, cEnd)) {
+            println("Usage: set ROW COL");
+            return;
+        }
+
+        int row = 0;
+        int col = 0;
+        boolean ok = true;
+
+        Result<int, Text> rRes = this.parseIntegerToken(line, rStart, rEnd);
+        match (rRes) {
+            Ok(r) { row = r; }
+            Err(e) { this.reportError(e); ok = false; }
+        }
+        if (ok) {
+            Result<int, Text> cRes = this.parseIntegerToken(line, cStart, cEnd);
+            match (cRes) {
+                Ok(c) { col = c; }
+                Err(e) { this.reportError(e); ok = false; }
+            }
+        }
+        if (!ok) {
+            return;
+        }
+        if (!this.setCell(row, col, 1)) {
+            println("Coordinates out of range. Rows: 1-15, Cols: 1-30.");
+            return;
+        }
+        this.show();
+    }
+
+    private void handleClear(borrow Text line, int position) {
+        int rStart = this.skipSpaces(line, position);
+        int rEnd = this.tokenEnd(line, rStart);
+
+        if (rStart == rEnd) {
+            this.clear();
+            this.show();
+            return;
+        }
+
+        int cStart = this.skipSpaces(line, rEnd);
+        int cEnd = this.tokenEnd(line, cStart);
+
+        if (cStart == cEnd || !this.noArguments(line, cEnd)) {
+            println("Usage: clear [ROW COL]");
+            return;
+        }
+
+        int row = 0;
+        int col = 0;
+        boolean ok = true;
+
+        Result<int, Text> rRes = this.parseIntegerToken(line, rStart, rEnd);
+        match (rRes) {
+            Ok(r) { row = r; }
+            Err(e) { this.reportError(e); ok = false; }
+        }
+        if (ok) {
+            Result<int, Text> cRes = this.parseIntegerToken(line, cStart, cEnd);
+            match (cRes) {
+                Ok(c) { col = c; }
+                Err(e) { this.reportError(e); ok = false; }
+            }
+        }
+        if (!ok) {
+            return;
+        }
+        if (!this.setCell(row, col, 0)) {
+            println("Coordinates out of range. Rows: 1-15, Cols: 1-30.");
+            return;
+        }
+        this.show();
+    }
+
+    private void handlePreset(borrow Text line, int position) {
+        int nameStart = this.skipSpaces(line, position);
+        int nameEnd = this.tokenEnd(line, nameStart);
+
+        if (nameStart == nameEnd || !this.noArguments(line, nameEnd)) {
+            println("Usage: preset NAME");
+            println("Available presets: glider, blinker, toad, beacon, r-pentomino");
+            return;
+        }
+
+        Result<Text, Text> nameRes = line.sliceBytes(nameStart, nameEnd);
+        match (nameRes) {
+            Ok(name) {
+                if (this.loadPresetByName(name)) {
+                    println("Loaded preset.");
+                    this.show();
+                } else {
+                    println("Unknown preset. Choose from: glider, blinker, toad, beacon, r-pentomino.");
+                }
+            }
+            Err(e) { this.reportError(e); }
+        }
+    }
+
+    private boolean handleLine(Text line) {
+        int start = this.skipSpaces(line, 0);
+        if (start == line.byteLength()) {
+            println("Enter a command or type help.");
+            return false;
+        }
+        int end = this.tokenEnd(line, start);
+        int argsPos = this.skipSpaces(line, end);
+        Result<Text, Text> cmdRes = line.sliceBytes(start, end);
+        boolean quit = false;
+
+        match (cmdRes) {
+            Ok(cmd) {
+                if (cmd.equalsString("quit")) {
+                    if (this.noArguments(line, end)) {
+                        println("Goodbye.");
+                        quit = true;
+                    } else {
+                        println("Usage: quit");
+                    }
+                } else if (cmd.equalsString("help")) {
+                    if (this.noArguments(line, end)) {
+                        this.printHelp();
+                    } else {
+                        println("Usage: help");
+                    }
+                } else if (cmd.equalsString("show")) {
+                    if (this.noArguments(line, end)) {
+                        this.show();
+                    } else {
+                        println("Usage: show");
+                    }
+                } else if (cmd.equalsString("step")) {
+                    this.handleStep(line, argsPos);
+                } else if (cmd.equalsString("set")) {
+                    this.handleSet(line, argsPos);
+                } else if (cmd.equalsString("clear")) {
+                    this.handleClear(line, argsPos);
+                } else if (cmd.equalsString("preset")) {
+                    this.handlePreset(line, argsPos);
+                } else if (cmd.equalsString("reset")) {
+                    if (this.noArguments(line, end)) {
+                        this.loadGlider();
+                        this.show();
+                    } else {
+                        println("Usage: reset");
+                    }
+                } else {
+                    println("Unknown command. Type help for commands.");
+                }
+            }
+            Err(e) { this.reportError(e); }
+        }
+        return quit;
+    }
+
+    public void play() {
+        boolean running = true;
+        while (running) {
+            Console.print("> ");
+            Result<Option<Text>, Text> input = Console.readLine();
+            match (input) {
+                Ok(optLine) {
+                    match (optLine) {
+                        Some(line) {
+                            if (this.handleLine(line)) {
+                                running = false;
+                            }
+                        }
+                        None {
+                            running = false;
+                        }
+                    }
+                }
+                Err(e) {
+                    this.reportError(e);
+                    running = false;
+                }
+            }
+        }
+    }
+}
+
+void main() {
+    GameOfLife game = new GameOfLife(15, 30);
+    game.loadGlider();
+
+    int argCount = Args.count();
+    if (argCount > 2) {
+        println("Usage: nacre run examples/apps/game_of_life.ncr -- [preset] [steps]");
+        return;
+    }
+
+    if (argCount >= 1) {
+        Result<Text, Text> presetRes = Args.get(0);
+        match (presetRes) {
+            Ok(presetName) {
+                if (!game.loadPresetByName(presetName)) {
+                    Console.print("Unknown preset: ");
+                    Console.printText(presetName);
+                    println(". Using default glider.");
+                }
+            }
+            Err(e) {
+                Console.print("Error reading preset arg: ");
+                Console.printText(e);
+                println("");
+            }
+        }
+    }
+
+    if (argCount == 2) {
+        Result<Text, Text> stepsRes = Args.get(1);
+        int steps = 0;
+        match (stepsRes) {
+            Ok(stepsText) {
+                Result<int, Text> parseRes = stepsText.parseInt();
+                match (parseRes) {
+                    Ok(n) { steps = n; }
+                    Err(e) {
+                        Console.print("Invalid steps argument: ");
+                        Console.printText(e);
+                        println("");
+                    }
+                }
+            }
+            Err(e) {
+                Console.print("Error reading steps arg: ");
+                Console.printText(e);
+                println("");
+            }
+        }
+
+        if (steps > 0) {
+            int s = 0;
+            while (s < steps) {
+                game.step();
+                s = s + 1;
+            }
+            game.show();
+            return;
+        }
+    }
+
+    println("Conway's Game of Life (15x30 toroidal grid)");
+    println("Type 'help' for commands, or 'step' to advance.");
+    game.show();
+    game.play();
+}

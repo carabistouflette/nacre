@@ -426,6 +426,14 @@
     },
     {
       "category": "apps",
+      "source": "examples/apps/game_of_life.ncr",
+      "stdin": "preset blinker\nstep\nshow\nquit\n",
+      "args": [],
+      "expected_status": 0,
+      "meaningful_outputs": ["Conway's Game of Life (15x30 toroidal grid)", "Loaded preset.", "Generation: 1 | Live cells: 3", "Goodbye."]
+    },
+    {
+      "category": "apps",
       "source": "examples/apps/lending_desk",
       "stdin": "add-book\nThe Left Hand of Darkness\nUrsula K. Le Guin\n14\nadd-member\nAda Ω\nReader\nlend\n1\n1\nlist\nquit\n",
       "args": [],
