@@ -1,10 +1,10 @@
 /* Comparator-backed sorted contiguous storage shared by OrderedMap and OrderedSet. */
-static int32_t ncr_ordered_compare_@ID@(struct ncr_ordered_storage_@ID@ *table,
+static inline int32_t ncr_ordered_compare_@ID@(struct ncr_ordered_storage_@ID@ *table,
                                         @COMPARE_TYPE@ left, @COMPARE_TYPE@ right) {
     return table->comparator->vtable->m@COMPARE_SLOT@(table->comparator->data, left, right);
 }
 
-static int32_t ncr_ordered_lower_bound_@ID@(struct ncr_ordered_storage_@ID@ *table,
+static inline int32_t ncr_ordered_lower_bound_@ID@(struct ncr_ordered_storage_@ID@ *table,
                                             @COMPARE_TYPE@ key, bool *found) {
     int32_t low = 0;
     int32_t high = table->length;
@@ -20,7 +20,7 @@ static int32_t ncr_ordered_lower_bound_@ID@(struct ncr_ordered_storage_@ID@ *tab
     return low;
 }
 
-static int32_t ncr_ordered_lookup_@ID@(struct ncr_ordered_storage_@ID@ *table,
+static inline int32_t ncr_ordered_lookup_@ID@(struct ncr_ordered_storage_@ID@ *table,
                                        @COMPARE_TYPE@ key) {
     bool found = false;
     int32_t index = ncr_ordered_lower_bound_@ID@(table, key, &found);
@@ -29,31 +29,26 @@ static int32_t ncr_ordered_lookup_@ID@(struct ncr_ordered_storage_@ID@ *table,
 
 static void ncr_ordered_reserve_@ID@(struct ncr_ordered_storage_@ID@ *table,
                                      int32_t requested, size_t line, size_t column) {
-    if (requested < 0) { ncr_fail("OrderedMap capacity is too large", line, column); }
+    if (__builtin_expect(requested < 0, 0)) { ncr_fail("OrderedMap capacity is too large", line, column); }
     if (requested <= table->capacity) { return; }
     int64_t capacity = table->capacity == 0 ? 4 : table->capacity;
     while (capacity < requested) {
         capacity = capacity > INT32_MAX / 2 ? INT32_MAX : capacity * 2;
     }
-    if ((uint64_t)capacity > SIZE_MAX / sizeof(struct ncr_ordered_entry_@ID@)) {
+    if (__builtin_expect((uint64_t)capacity > SIZE_MAX / sizeof(struct ncr_ordered_entry_@ID@), 0)) {
         ncr_fail("OrderedMap capacity is too large", line, column);
     }
-    struct ncr_ordered_entry_@ID@ *items = ncr_allocate(
-        (size_t)capacity * sizeof(struct ncr_ordered_entry_@ID@), line, column);
-    if (table->length > 0) {
-        memcpy(items, table->items, (size_t)table->length * sizeof(struct ncr_ordered_entry_@ID@));
-    }
-    /* Raw relocation transfers all key and value owners without cloning. */
-    ncr_deallocate(table->items);
-    table->items = items;
+    table->items = ncr_reallocate(table->items, (size_t)capacity * sizeof(struct ncr_ordered_entry_@ID@), line, column);
     table->capacity = (int32_t)capacity;
 }
 
 static void ncr_ordered_insert_at_@ID@(struct ncr_ordered_storage_@ID@ *table,
                                        int32_t index, @KEY_TYPE@ key, @VALUE_TYPE@ value,
                                        size_t line, size_t column) {
-    if (table->length == INT32_MAX) { ncr_fail("OrderedMap is full", line, column); }
-    ncr_ordered_reserve_@ID@(table, table->length + 1, line, column);
+    if (__builtin_expect(table->length == INT32_MAX, 0)) { ncr_fail("OrderedMap is full", line, column); }
+    if (__builtin_expect(table->length >= table->capacity, 0)) {
+        ncr_ordered_reserve_@ID@(table, table->length + 1, line, column);
+    }
     int32_t remaining = table->length - index;
     if (remaining > 0) {
         memmove(&table->items[index + 1], &table->items[index],

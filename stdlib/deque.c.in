@@ -1,5 +1,5 @@
 /* Native Deque<@ELEMENT@>, with initialized ownership in logical [0,length). */
-static int32_t ncr_deque_physical_@ID@(ncr_obj_@ID@ *p, int32_t logical) {
+static inline int32_t ncr_deque_physical_@ID@(ncr_obj_@ID@ *p, int32_t logical) {
     int32_t until_end = p->capacity - p->head;
     return logical < until_end ? p->head + logical : logical - until_end;
 }
@@ -13,7 +13,7 @@ static void ncr_deque_reserve_@ID@(ncr_obj_@ID@ *p, int32_t requested, size_t li
     if ((uint64_t)capacity > SIZE_MAX / sizeof(@ELEMENT@)) {
         ncr_fail("Deque capacity is too large", line, column);
     }
-    @ELEMENT@ *items = ncr_allocate((size_t)capacity * sizeof(@ELEMENT@), line, column);
+    @ELEMENT@ *items = ncr_allocate_raw((size_t)capacity * sizeof(@ELEMENT@), line, column);
     int32_t first = p->capacity - p->head;
     if (first > p->length) { first = p->length; }
     if (first > 0) {
@@ -29,8 +29,8 @@ static void ncr_deque_reserve_@ID@(ncr_obj_@ID@ *p, int32_t requested, size_t li
     p->head = 0;
     p->capacity = (int32_t)capacity;
 }
-static void ncr_deque_check_@ID@(ncr_obj_@ID@ *p, int32_t index, size_t line, size_t column) {
-    if (index < 0 || index >= p->length) { ncr_fail("Deque index out of bounds", line, column); }
+static inline void ncr_deque_check_@ID@(ncr_obj_@ID@ *p, int32_t index, size_t line, size_t column) {
+    if (__builtin_expect(index < 0 || index >= p->length, 0)) { ncr_fail("Deque index out of bounds", line, column); }
 }
 static void @DEQUE_NEW@(ncr_obj_@ID@ *p, size_t line, size_t column) {
     (void)line; (void)column;
@@ -39,16 +39,20 @@ static void @DEQUE_NEW@(ncr_obj_@ID@ *p, size_t line, size_t column) {
     p->length = 0;
     p->capacity = 0;
 }
-static void @DEQUE_PUSH_FRONT@(ncr_obj_@ID@ *p, @ELEMENT@ value, size_t line, size_t column) {
-    if (p->length == INT32_MAX) { ncr_fail("Deque is full", line, column); }
-    ncr_deque_reserve_@ID@(p, p->length + 1, line, column);
+static inline void @DEQUE_PUSH_FRONT@(ncr_obj_@ID@ *p, @ELEMENT@ value, size_t line, size_t column) {
+    if (__builtin_expect(p->length >= p->capacity, 0)) {
+        if (__builtin_expect(p->length == INT32_MAX, 0)) { ncr_fail("Deque is full", line, column); }
+        ncr_deque_reserve_@ID@(p, p->length + 1, line, column);
+    }
     p->head = p->head == 0 ? p->capacity - 1 : p->head - 1;
     p->items[p->head] = value;
     ++p->length;
 }
-static void @DEQUE_PUSH_BACK@(ncr_obj_@ID@ *p, @ELEMENT@ value, size_t line, size_t column) {
-    if (p->length == INT32_MAX) { ncr_fail("Deque is full", line, column); }
-    ncr_deque_reserve_@ID@(p, p->length + 1, line, column);
+static inline void @DEQUE_PUSH_BACK@(ncr_obj_@ID@ *p, @ELEMENT@ value, size_t line, size_t column) {
+    if (__builtin_expect(p->length >= p->capacity, 0)) {
+        if (__builtin_expect(p->length == INT32_MAX, 0)) { ncr_fail("Deque is full", line, column); }
+        ncr_deque_reserve_@ID@(p, p->length + 1, line, column);
+    }
     int32_t physical = ncr_deque_physical_@ID@(p, p->length);
     p->items[physical] = value;
     ++p->length;
@@ -71,22 +75,22 @@ static @ELEMENT@ @DEQUE_POP_BACK@(ncr_obj_@ID@ *p, size_t line, size_t column) {
     if (p->length == 0) { p->head = 0; }
     return value;
 }
-static int32_t @DEQUE_SIZE@(ncr_obj_@ID@ *p, size_t line, size_t column) {
+static inline int32_t @DEQUE_SIZE@(ncr_obj_@ID@ *p, size_t line, size_t column) {
     (void)line; (void)column;
     return p->length;
 }
-static int32_t @DEQUE_CAPACITY@(ncr_obj_@ID@ *p, size_t line, size_t column) {
+static inline int32_t @DEQUE_CAPACITY@(ncr_obj_@ID@ *p, size_t line, size_t column) {
     (void)line; (void)column;
     return p->capacity;
 }
-static bool @DEQUE_IS_EMPTY@(ncr_obj_@ID@ *p, size_t line, size_t column) {
+static inline bool @DEQUE_IS_EMPTY@(ncr_obj_@ID@ *p, size_t line, size_t column) {
     (void)line; (void)column;
     return p->length == 0;
 }
 @GET_METHOD@
 @BORROWED_GETTERS@
 @TRY_GET_METHOD@
-static void @DEQUE_SET@(ncr_obj_@ID@ *p, int32_t logical, @ELEMENT@ value, size_t line, size_t column) {
+static inline void @DEQUE_SET@(ncr_obj_@ID@ *p, int32_t logical, @ELEMENT@ value, size_t line, size_t column) {
     ncr_deque_check_@ID@(p, logical, line, column);
     int32_t physical = ncr_deque_physical_@ID@(p, logical);
     @DROP_AT_INDEX@

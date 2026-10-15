@@ -1,6 +1,6 @@
-static @OPTION_TYPE@ @DEQUE_TRY_GET@(ncr_obj_@ID@ *p, @INDEX_TYPE@ logical, size_t line, size_t column) {
+static inline @OPTION_TYPE@ @DEQUE_TRY_GET@(ncr_obj_@ID@ *p, @INDEX_TYPE@ logical, size_t line, size_t column) {
     (void)line; (void)column;
-    if (logical < 0 || logical >= p->length) { return (@OPTION_TYPE@){ .tag = @NONE_TAG@ }; }
+    if (__builtin_expect(logical < 0 || logical >= p->length, 0)) { return (@OPTION_TYPE@){ .tag = @NONE_TAG@ }; }
     @ELEMENT@ value = p->items[ncr_deque_physical_@ID@(p, logical)];
     return (@OPTION_TYPE@){ .tag = @SOME_TAG@, .data.v@SOME_TAG@.f0 = value };
 }

@@ -6,22 +6,16 @@ static int32_t ncr_priority_compare_@ID@(ncr_obj_@COMPARATOR_ID@ comparator,
 
 static void ncr_priority_reserve_@ID@(ncr_obj_@ID@ *p, int32_t requested,
                                       size_t line, size_t column) {
-    if (requested < 0) { ncr_fail("PriorityQueue capacity is too large", line, column); }
+    if (__builtin_expect(requested < 0, 0)) { ncr_fail("PriorityQueue capacity is too large", line, column); }
     if (requested <= p->capacity) { return; }
     int64_t capacity = p->capacity == 0 ? 4 : p->capacity;
     while (capacity < requested) {
         capacity = capacity > INT32_MAX / 2 ? INT32_MAX : capacity * 2;
     }
-    if ((uint64_t)capacity > SIZE_MAX / sizeof(@ELEMENT@)) {
+    if (__builtin_expect((uint64_t)capacity > SIZE_MAX / sizeof(@ELEMENT@), 0)) {
         ncr_fail("PriorityQueue capacity is too large", line, column);
     }
-    @ELEMENT@ *items = ncr_allocate((size_t)capacity * sizeof(@ELEMENT@), line, column);
-    if (p->length > 0) {
-        memcpy(items, p->items, (size_t)p->length * sizeof(@ELEMENT@));
-    }
-    /* Raw relocation transfers owners; the old slots are not destroyed. */
-    ncr_deallocate(p->items);
-    p->items = items;
+    p->items = ncr_reallocate(p->items, (size_t)capacity * sizeof(@ELEMENT@), line, column);
     p->capacity = (int32_t)capacity;
 }
 
@@ -65,10 +59,12 @@ static void @PRIORITY_QUEUE_NEW@(ncr_obj_@ID@ *p, ncr_obj_@COMPARATOR_ID@ compar
     p->@COMPARATOR_FIELD@ = comparator;
 }
 
-static void @PRIORITY_QUEUE_ADD@(ncr_obj_@ID@ *p, @ELEMENT@ value,
+static inline void @PRIORITY_QUEUE_ADD@(ncr_obj_@ID@ *p, @ELEMENT@ value,
                                  size_t line, size_t column) {
-    if (p->length == INT32_MAX) { ncr_fail("PriorityQueue is full", line, column); }
-    ncr_priority_reserve_@ID@(p, p->length + 1, line, column);
+    if (__builtin_expect(p->length >= p->capacity, 0)) {
+        if (__builtin_expect(p->length == INT32_MAX, 0)) { ncr_fail("PriorityQueue is full", line, column); }
+        ncr_priority_reserve_@ID@(p, p->length + 1, line, column);
+    }
     int32_t index = p->length++;
     p->items[index] = value;
     while (index > 0) {
@@ -98,12 +94,12 @@ static @OPTION_TYPE@ @PRIORITY_QUEUE_TRY_POP@(ncr_obj_@ID@ *p,
 @TRY_PEEK_METHOD@
 @VALUE_AT_METHOD@
 
-static int32_t @PRIORITY_QUEUE_SIZE@(ncr_obj_@ID@ *p, size_t line, size_t column) {
+static inline int32_t @PRIORITY_QUEUE_SIZE@(ncr_obj_@ID@ *p, size_t line, size_t column) {
     (void)line; (void)column;
     return p->length;
 }
 
-static bool @PRIORITY_QUEUE_IS_EMPTY@(ncr_obj_@ID@ *p, size_t line, size_t column) {
+static inline bool @PRIORITY_QUEUE_IS_EMPTY@(ncr_obj_@ID@ *p, size_t line, size_t column) {
     (void)line; (void)column;
     return p->length == 0;
 }
