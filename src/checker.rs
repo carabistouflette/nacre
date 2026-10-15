@@ -1104,9 +1104,10 @@ impl Checker<'_> {
             _ => return Err(Diagnostic::new(collection.span,
                 "for-each collection must be a List, Array, Deque, Map, Set, OrderedMap, OrderedSet, PriorityQueue, or Iterator")),
         }
-        let readonly_slot = match native {
-            Some(t::NativeClass::OrderedSet(_)) => Some(t::MapSlotKind::Key),
-            Some(t::NativeClass::PriorityQueue(_)) => Some(t::MapSlotKind::Value),
+        let direct_slot = match native {
+            Some(t::NativeClass::OrderedSet(_)) => Some((t::MapSlotKind::Key, true)),
+            Some(t::NativeClass::PriorityQueue(_)) => Some((t::MapSlotKind::Value, true)),
+            Some(t::NativeClass::List(_) | t::NativeClass::Array(_)) => Some((t::MapSlotKind::Value, false)),
             _ => None,
         };
         let element_type = match native {
@@ -1115,7 +1116,7 @@ impl Checker<'_> {
                  t::NativeClass::PriorityQueue(element)) => element,
             _ => unreachable!("checked indexed collection traversal type"),
         };
-        let (binding_type, exclusive) = if readonly_slot.is_some() {
+        let (binding_type, exclusive) = if let Some((_, true)) = direct_slot {
             (self.readonly_traversal_binding(header, element_type, header_span)?, false)
         } else {
             self.traversal_binding(header, element_type, header_span)?
@@ -1157,7 +1158,7 @@ impl Checker<'_> {
             }, span);
             let condition = self.expression(&condition)?;
             self.require(Type::Boolean, condition.ty, condition.span)?;
-            if let Some(slot_kind) = readonly_slot {
+            if let Some((slot_kind, _)) = direct_slot {
                 let item_id = self.declare(name, binding_type, header_span)?;
                 let collection_place = Place { kind: PlaceKind::Var(collection_id), ty: collection_type };
                 let cursor_place = Place { kind: PlaceKind::Var(cursor_id), ty: Type::Int };

@@ -59,7 +59,7 @@ pub(super) fn map_slot_expression(
             format!("{map}->table.items[{index}].value"),
         (Some(t::NativeClass::OrderedSet(_)), t::MapSlotKind::Key) =>
             format!("{map}->table.items[{index}].key"),
-        (Some(t::NativeClass::PriorityQueue(_)), t::MapSlotKind::Value) =>
+        (Some(t::NativeClass::PriorityQueue(_) | t::NativeClass::List(_) | t::NativeClass::Array(_)), t::MapSlotKind::Value) =>
             format!("{map}->items[{index}]"),
         _ => unreachable!("slot kind matches its native collection storage"),
     };

@@ -136,10 +136,12 @@ pub fn compile_c_optimized(source: &str, optimization: &str, flags: &[&str]) -> 
     let output = Command::new(&compiler)
         .arg(optimization)
         .args(["-std=c11", "-pthread", "-fno-math-errno", "-Wall", "-Wextra", "-pedantic", "-Wno-unused-function", "-Wno-unused-variable", "-Wno-unused-parameter", "-Wno-unused-but-set-variable"])
+        .args(if cfg!(target_os = "linux") { &["-ffunction-sections", "-fdata-sections"][..] } else { &[][..] })
         .args(libraries.header_flags())
         .args(flags)
         .arg(&c_path).arg("-o").arg(&executable)
         .args(if cfg!(unix) { &["-lm"][..] } else { &[][..] })
+        .args(if cfg!(target_os = "linux") { &["-Wl,--gc-sections"][..] } else { &[][..] })
         .args(libraries.link_flags())
         .output().map_err(|e| format!("failed to start {compiler:?}: {e}"))?;
     if !output.status.success() {
