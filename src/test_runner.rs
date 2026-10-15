@@ -1,7 +1,6 @@
 //! Built-in test runner for Nacre (`nacre test`).
 //! Discovers parameterless void functions matching `test_*` or `test*` and runs them in isolation.
 
-use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 use std::time::Instant;
@@ -11,59 +10,34 @@ use crate::project::SourceBundle;
 
 pub fn run_tests(
     sources: &[PathBuf],
+    filter: Option<&str>,
     native_arch: bool,
     lto: bool,
     jemalloc: bool,
 ) -> Result<i32, String> {
-    let mut bundle_sources = Vec::new();
-    let mut explicit_main = false;
-
-    for path in sources {
-        if path.is_file() {
-            let content = fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
-            if content.contains("void main()") {
-                explicit_main = true;
-            }
-            bundle_sources.push((path.display().to_string(), content));
-        } else if path.is_dir() {
-            let bundle = SourceBundle::from_paths(&[path.clone()])?;
-            for file in bundle.paths() {
-                let content = fs::read_to_string(file).map_err(|e| format!("{}: {e}", file.display()))?;
-                if content.contains("void main()") {
-                    explicit_main = true;
-                }
-                bundle_sources.push((file.display().to_string(), content));
-            }
-        }
-    }
-
-    if bundle_sources.is_empty() {
-        return Err("no source files found".to_owned());
-    }
-
-    // If no main() is defined in the test sources, append a dummy main to pass validation
-    if !explicit_main {
-        bundle_sources.push(("__ncr_synthetic_main.ncr".to_owned(), "void main() {}\n".to_owned()));
-    }
-
-    let bundle = SourceBundle::from_sources(bundle_sources)?;
+    let bundle = SourceBundle::from_test_paths(sources)?;
     let typed = bundle.typed().map_err(|d| bundle.render(&d))?;
 
     // Discover test functions: void functions with no parameters starting with test
-    let mut test_cases = Vec::new();
+    let mut all_tests = Vec::new();
     for function in &typed.functions {
         if function.receiver.is_none()
             && function.params.is_empty()
             && function.return_type == Type::Void
             && (function.name.starts_with("test_") || (function.name.starts_with("test") && function.name != "test"))
         {
-            test_cases.push((function.name.clone(), function.id));
+            all_tests.push((function.name.clone(), function.id));
         }
     }
 
+    let (test_cases, filtered_out): (Vec<_>, Vec<_>) = all_tests
+        .into_iter()
+        .partition(|(name, _)| filter.map_or(true, |f| name.contains(f)));
+
+    let filtered_count = filtered_out.len();
     println!("\nrunning {} test(s)", test_cases.len());
     if test_cases.is_empty() {
-        println!("\ntest result: ok. 0 passed; 0 failed; finished in 0.00s\n");
+        println!("\ntest result: ok. 0 passed; 0 failed; {filtered_count} filtered out; finished in 0.00s\n");
         return Ok(0);
     }
 
@@ -124,7 +98,10 @@ pub fn run_tests(
 
     let suite_duration = suite_start.elapsed();
     let verdict = if failed == 0 { "ok" } else { "FAILED" };
-    println!("\ntest result: {verdict}. {passed} passed; {failed} failed; finished in {:.2?}\n", suite_duration);
+    println!(
+        "\ntest result: {verdict}. {passed} passed; {failed} failed; {filtered_count} filtered out; finished in {:.2?}\n",
+        suite_duration
+    );
 
     if failed > 0 {
         Ok(1)

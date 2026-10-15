@@ -11,8 +11,10 @@ const HELP: &str = "Nacre — experimental native compiler written in Rust
 
 Usage:
   nacre check  source.ncr ... | directory
-  nacre test   source.ncr ... | directory [--native] [--lto] [--jemalloc]
+  nacre test   source.ncr ... | directory [--native] [--lto] [--jemalloc] [-- filter]
+  nacre bench  source.ncr ... | directory [--native] [--lto] [--jemalloc] [-- filter]
   nacre fmt    source.ncr ... | directory [--check]
+  nacre doc    source.ncr ... | directory [-o output-dir]
   nacre run    source.ncr [--memory-stats] [--native] [--lto] [--jemalloc] [-O0|-O1|-O2|-O3|-Os] [-- arguments...]
   nacre build  source.ncr [-o executable] [--memory-stats] [--native] [--lto] [--jemalloc] [-O0|-O1|-O2|-O3|-Os]
   nacre emit-c source.ncr [-o output.c] [--memory-stats]
@@ -80,7 +82,7 @@ fn execute(args: Vec<OsString>) -> Result<i32, String> {
         if args.len() != 1 { return Err("usage: nacre doctor".to_owned()); }
         return doctor();
     }
-    if !matches!(command, "check" | "run" | "build" | "emit-c" | "emit-flow" | "emit-borrows" | "emit-types" | "emit-llvm" | "test" | "fmt") {
+    if !matches!(command, "check" | "run" | "build" | "emit-c" | "emit-flow" | "emit-borrows" | "emit-types" | "emit-llvm" | "test" | "bench" | "fmt" | "doc") {
         return Err(format!("unknown command: {command}\n\n{HELP}"));
     }
     let mut sources = Vec::new();
@@ -91,6 +93,7 @@ fn execute(args: Vec<OsString>) -> Result<i32, String> {
     let mut native_arch = false;
     let mut lto = false;
     let mut jemalloc = false;
+    let mut filter: Option<String> = None;
     let mut optimization = None;
     let mut program_args = &args[args.len()..];
     let mut i = 1;
@@ -98,7 +101,16 @@ fn execute(args: Vec<OsString>) -> Result<i32, String> {
         if args[i] == "--" && command == "run" {
             program_args = &args[i + 1..];
             break;
-        } else if args[i] == "-o" && matches!(command, "build" | "emit-c" | "emit-flow" | "emit-borrows" | "emit-types" | "emit-llvm") && output.is_none() {
+        } else if args[i] == "--" && matches!(command, "test" | "bench") {
+            if let Some(f) = args.get(i + 1) {
+                filter = Some(f.to_string_lossy().into_owned());
+            }
+            break;
+        } else if args[i] == "--filter" && matches!(command, "test" | "bench") {
+            let f = args.get(i + 1).ok_or("missing pattern after --filter")?;
+            filter = Some(f.to_string_lossy().into_owned());
+            i += 2;
+        } else if args[i] == "-o" && matches!(command, "build" | "emit-c" | "emit-flow" | "emit-borrows" | "emit-types" | "emit-llvm" | "doc") && output.is_none() {
             let path = args.get(i + 1).ok_or("missing path after -o")?;
             output = Some(PathBuf::from(path));
             i += 2;
@@ -109,13 +121,13 @@ fn execute(args: Vec<OsString>) -> Result<i32, String> {
             && args[i].to_str().is_some_and(|s| matches!(s, "-O0" | "-O1" | "-O2" | "-O3" | "-Os")) {
             optimization = args[i].to_str();
             i += 1;
-        } else if args[i] == "--sanitize" && matches!(command, "run" | "build" | "test") && !sanitize {
+        } else if args[i] == "--sanitize" && matches!(command, "run" | "build" | "test" | "bench") && !sanitize {
             sanitize = true; i += 1;
-        } else if args[i] == "--native" && matches!(command, "run" | "build" | "test") && !native_arch {
+        } else if args[i] == "--native" && matches!(command, "run" | "build" | "test" | "bench") && !native_arch {
             native_arch = true; i += 1;
-        } else if args[i] == "--lto" && matches!(command, "run" | "build" | "test") && !lto {
+        } else if args[i] == "--lto" && matches!(command, "run" | "build" | "test" | "bench") && !lto {
             lto = true; i += 1;
-        } else if args[i] == "--jemalloc" && matches!(command, "run" | "build" | "test") && !jemalloc {
+        } else if args[i] == "--jemalloc" && matches!(command, "run" | "build" | "test" | "bench") && !jemalloc {
             jemalloc = true; i += 1;
         } else if args[i] == "--check" && command == "fmt" && !check_only {
             check_only = true; i += 1;
@@ -125,10 +137,17 @@ fn execute(args: Vec<OsString>) -> Result<i32, String> {
     }
     let source_path = sources.first().ok_or_else(|| format!("missing source file\n\n{HELP}"))?;
     if command == "test" {
-        return nacre::test_runner::run_tests(&sources, native_arch, lto, jemalloc);
+        return nacre::test_runner::run_tests(&sources, filter.as_deref(), native_arch, lto, jemalloc);
+    }
+    if command == "bench" {
+        return nacre::bench_runner::run_benchmarks(&sources, filter.as_deref(), native_arch, lto, jemalloc);
     }
     if command == "fmt" {
         return nacre::fmt::format_files(&sources, check_only);
+    }
+    if command == "doc" {
+        nacre::doc::generate_docs(&sources, output.as_deref())?;
+        return Ok(0);
     }
     let bundle = SourceBundle::from_paths(&sources)?;
     if command == "check" {

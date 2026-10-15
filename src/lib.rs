@@ -23,6 +23,8 @@ mod stdlib_codegen;
 pub mod lsp;
 pub mod project;
 pub mod test_runner;
+pub mod bench_runner;
+pub mod doc;
 pub mod fmt;
 mod type_report;
 

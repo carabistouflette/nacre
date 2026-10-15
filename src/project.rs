@@ -31,11 +31,23 @@ impl SourceBundle {
     /// Recursively collect .ncr files, sorted within each requested directory.
     /// Symlinks are rejected; hidden directories, target and out are excluded.
     pub fn from_paths(paths: &[PathBuf]) -> Result<Self, String> {
+        Self::collect_and_build(paths, false)
+    }
+
+    /// Loads source units from paths, injecting a synthetic `void main() {}` if no entry point exists.
+    /// All boundary limits (`MAX_SOURCE_BYTES`, `MAX_FILES`) are strictly verified across all units.
+    pub fn from_test_paths(paths: &[PathBuf]) -> Result<Self, String> {
+        Self::collect_and_build(paths, true)
+    }
+
+    fn collect_and_build(paths: &[PathBuf], is_test: bool) -> Result<Self, String> {
         let mut files = Vec::new();
         for path in paths { collect(path, 0, &mut files)?; }
         let mut seen = HashSet::new();
         let mut remaining = MAX_SOURCE_BYTES;
-        Self::from_units(files.into_iter().map(|path| {
+        let mut explicit_main = false;
+        let mut units = Vec::new();
+        for path in files {
             let canonical = path.canonicalize().map_err(|e| format!("{}: {e}", path.display()))?;
             if !seen.insert(canonical) { return Err(format!("duplicate source: {}", path.display())); }
             let mut data = Vec::new();
@@ -45,8 +57,15 @@ impl SourceBundle {
             if data.len() >= remaining { return Err("combined source exceeds the 1 MiB limit".to_owned()); }
             remaining -= data.len() + 1;
             let text = String::from_utf8(data).map_err(|e| format!("{}: expected UTF-8 ({e})", path.display()))?;
-            Ok((path, text))
-        }))
+            if text.contains("void main()") {
+                explicit_main = true;
+            }
+            units.push(Ok((path, text)));
+        }
+        if is_test && !explicit_main {
+            units.push(Ok((PathBuf::from("__ncr_synthetic_main.ncr"), "void main() {}\n".to_owned())));
+        }
+        Self::from_units(units.into_iter())
     }
 
     fn from_units(

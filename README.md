@@ -271,7 +271,11 @@ runtime failures remain fatal; no exception unwinding is provided.
 
 ```text
 nacre check source.ncr ... | directory
-nacre run sources [--memory-stats] [--sanitize] [--native] [--lto] [--jemalloc] [-O0|-O1|-O2|-O3|-Os] [-- arguments...]
+nacre test  sources [--native] [--lto] [--jemalloc] [-- filter]
+nacre bench sources [--native] [--lto] [--jemalloc] [-- filter]
+nacre fmt   sources [--check]
+nacre doc   sources [-o output-dir]
+nacre run   sources [--memory-stats] [--sanitize] [--native] [--lto] [--jemalloc] [-O0|-O1|-O2|-O3|-Os] [-- arguments...]
 nacre build sources [-o executable] [--memory-stats] [--sanitize] [--native] [--lto] [--jemalloc] [-O0|-O1|-O2|-O3|-Os]
 nacre emit-c sources [-o output.c] [--memory-stats]
 nacre emit-flow sources [-o output.flow]
@@ -282,7 +286,6 @@ nacre init new-directory
 nacre doctor
 nacre lsp
 ```
-
 Commands accept multiple sources or recursively collected directories, resolving
 their module namespaces together as one whole-program compilation. `init` refuses
 an existing path. Existing outputs are replaced except the input source.

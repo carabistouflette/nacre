@@ -80,8 +80,100 @@ void test_second() {
 "#,
     ).unwrap();
 
-    let exit_code = nacre::test_runner::run_tests(&[test_file], false, false, false).unwrap();
+    let exit_code = nacre::test_runner::run_tests(&[test_file.clone()], None, false, false, false).unwrap();
     assert_eq!(exit_code, 0);
+
+    // Test filtering: only run test_first
+    let exit_code = nacre::test_runner::run_tests(&[test_file], Some("first"), false, false, false).unwrap();
+    assert_eq!(exit_code, 0);
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[test]
+fn bench_runner_measures_benchmarks() {
+    let temp_dir = std::env::temp_dir().join(format!("ncr_bench_test_{}", std::process::id()));
+    let _ = fs::create_dir_all(&temp_dir);
+    let bench_file = temp_dir.join("benches.ncr");
+
+    fs::write(
+        &bench_file,
+        r#"
+void bench_simple_math() {
+    int x = 1;
+    int y = 2;
+    int z = x + y;
+}
+"#,
+    ).unwrap();
+
+    let exit_code = nacre::bench_runner::run_benchmarks(&[bench_file], None, false, false, false).unwrap();
+    assert_eq!(exit_code, 0);
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[test]
+fn from_test_paths_enforces_boundaries() {
+    use nacre::project::SourceBundle;
+    let temp_dir = std::env::temp_dir().join(format!("ncr_boundary_test_{}", std::process::id()));
+    let _ = fs::create_dir_all(&temp_dir);
+
+    // 1. Verify MAX_FILES limit (64)
+    let mut paths = Vec::new();
+    for i in 0..64 {
+        let p = temp_dir.join(format!("file_{i}.ncr"));
+        fs::write(&p, format!("void test_{i}() {{}}\n")).unwrap();
+        paths.push(p);
+    }
+    // 64 files with synthetic main -> 65 files -> exceeds MAX_FILES (64)
+    let err = SourceBundle::from_test_paths(&paths).unwrap_err();
+    assert!(err.contains("source file limit is 64"), "{err}");
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[test]
+fn doc_generator_produces_searchable_html() {
+    let temp_dir = std::env::temp_dir().join(format!("ncr_doc_test_{}", std::process::id()));
+    let _ = fs::create_dir_all(&temp_dir);
+    let src_file = temp_dir.join("library.ncr");
+    let out_dir = temp_dir.join("html_doc");
+
+    fs::write(
+        &src_file,
+        r#"
+/// A simple math calculator class.
+/// Supports arithmetic operations.
+class Calculator {
+    private int base;
+
+    /// Creates a new Calculator with the given base.
+    public Calculator(int base) {
+        this.base = base;
+    }
+
+    /// Adds an amount to the base and returns the result.
+    public readonly int add(int amount) {
+        return this.base + amount;
+    }
+}
+
+/// Standalone helper function.
+void main() {}
+"#,
+    ).unwrap();
+
+    nacre::doc::generate_docs(&[src_file], Some(&out_dir)).unwrap();
+    let index_html = fs::read_to_string(out_dir.join("index.html")).unwrap();
+
+    assert!(index_html.contains("Nacre API Documentation"));
+    assert!(index_html.contains("Calculator"));
+    assert!(index_html.contains("A simple math calculator class."));
+    assert!(index_html.contains("Supports arithmetic operations."));
+    assert!(index_html.contains("Creates a new Calculator"));
+    assert!(index_html.contains("Adds an amount to the base"));
+    assert!(index_html.contains("filterItems()")); // Client-side search JS
 
     let _ = fs::remove_dir_all(&temp_dir);
 }
