@@ -63,23 +63,58 @@ pub fn resolve(program: &mut a::Program) -> Result<(), Diagnostic> {
 
     let mut trait_map = HashMap::new();
     for tr in &program.traits {
-        trait_map.insert(tr.qualified_name.clone(), tr);
-        trait_map.insert(tr.name.clone(), tr);
+        let module = &program.units[tr.unit].module;
+        let key = (module.clone(), tr.name.clone());
+        if trait_map.insert(key, tr).is_some() {
+            return Err(Diagnostic::new(tr.span, format!("duplicate trait `{}` in module `{}`", tr.name, module)));
+        }
     }
 
     for imp in &program.impls {
         let imp_module = &program.units[imp.unit].module;
-        let qualified_tr = qualify(imp_module, &imp.trait_name);
-        let tr = trait_map.get(&qualified_tr)
-            .or_else(|| trait_map.get(&imp.trait_name))
-            .copied()
-            .ok_or_else(|| {
-                Diagnostic::new(imp.span, format!("unknown trait `{}`", imp.trait_name))
-            })?;
-        let qualified_class = qualify(imp_module, &imp.target_class);
-        let class = program.classes.iter_mut().find(|c| c.qualified_name == qualified_class || c.name == imp.target_class).ok_or_else(|| {
-            Diagnostic::new(imp.span, format!("unknown class `{}` in impl block", imp.target_class))
+        let mut tr = trait_map.get(&(imp_module.clone(), imp.trait_name.clone()))
+            .or_else(|| trait_map.get(&(String::new(), imp.trait_name.clone())))
+            .copied();
+        if tr.is_none() {
+            for import in &program.units[imp.unit].imports {
+                if import.wildcard {
+                    if let Some(found) = trait_map.get(&(import.path.clone(), imp.trait_name.clone())) {
+                        tr = Some(*found);
+                        break;
+                    }
+                } else if let Some((mod_path, name)) = import.path.rsplit_once('.') {
+                    if name == imp.trait_name {
+                        if let Some(found) = trait_map.get(&(mod_path.to_string(), imp.trait_name.clone())) {
+                            tr = Some(*found);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        let tr = tr.ok_or_else(|| {
+            Diagnostic::new(imp.span, format!("unknown trait `{}`", imp.trait_name))
         })?;
+        let qualified_class = qualify(imp_module, &imp.target_class);
+        let mut class_candidates = Vec::new();
+        for (i, c) in program.classes.iter().enumerate() {
+            if c.unit == imp.unit && c.name == imp.target_class {
+                class_candidates.push((1, i));
+            } else if c.qualified_name == qualified_class {
+                class_candidates.push((2, i));
+            } else if program.units[c.unit].module.is_empty() && c.name == imp.target_class {
+                class_candidates.push((3, i));
+            }
+        }
+        class_candidates.sort_by_key(|(p, _)| *p);
+        let target_idx = match class_candidates.as_slice() {
+            [] => return Err(Diagnostic::new(imp.span, format!("unknown class `{}` in impl block", imp.target_class))),
+            [(p1, _), (p2, _), ..] if p1 == p2 => {
+                return Err(Diagnostic::new(imp.span, format!("ambiguous class `{}` in impl block", imp.target_class)));
+            }
+            [(_, idx), ..] => *idx,
+        };
+        let class = &mut program.classes[target_idx];
         for req in &tr.methods {
             let imp_method = imp.methods.iter().find(|m| m.name == req.name).ok_or_else(|| {
                 Diagnostic::new(imp.span, format!("missing method `{}` required by trait `{}`", req.name, tr.name))

@@ -311,6 +311,45 @@ void main() {
 }
 
 #[test]
+fn multi_module_trait_and_impl_resolution() {
+    let source_a = r#"
+module geometry.traits;
+
+public trait Scalable {
+    int scale(int factor);
+}
+"#;
+    let source_b = r#"
+module geometry.shapes;
+
+import geometry.traits.*;
+
+public class Rectangle {
+    private int width;
+    public Rectangle(int w) { this.width = w; }
+}
+
+impl Scalable for Rectangle {
+    int scale(int factor) {
+        return this.width * factor;
+    }
+}
+
+public void main() {
+    Rectangle r = new Rectangle(5);
+    assert(r.scale(3) == 15);
+}
+"#;
+    let bundle = nacre::project::SourceBundle::from_sources(vec![
+        ("traits.ncr".to_owned(), source_a.to_owned()),
+        ("shapes.ncr".to_owned(), source_b.to_owned()),
+    ]).unwrap();
+    let c = bundle.compile_to_c().unwrap();
+    let program = native::compile_c(&c).unwrap();
+    assert!(program.output().unwrap().status.success());
+}
+
+#[test]
 fn async_await_syntax_and_execution() {
     let source = "async int fetch() { return 42; }\nvoid main() {\n    int x = await fetch();\n    assert(x == 42);\n    int y = fetch().await;\n    assert(y == 42);\n}\n";
     let c = compile_to_c(source).unwrap();
