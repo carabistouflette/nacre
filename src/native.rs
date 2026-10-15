@@ -2,6 +2,7 @@
 use std::env;
 use std::ffi::OsString;
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Output};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -80,6 +81,15 @@ pub fn compile_c(source: &str) -> Result<NativeProgram, String> {
 pub fn compile_c_with_flags(source: &str, flags: &[&str]) -> Result<NativeProgram, String> {
     compile_c_optimized(source, "-O2", flags)
 }
+
+fn pgo_directory<'a>(flags: &[&'a str]) -> Option<&'a str> {
+    flags.iter().find_map(|flag| {
+        flag.strip_prefix("-fprofile-generate=")
+            .or_else(|| flag.strip_prefix("-fprofile-use="))
+            .or_else(|| matches!(*flag, "-fprofile-generate" | "-fprofile-use").then_some("."))
+    })
+}
+
 fn cache_dir() -> Option<PathBuf> {
     if env::var_os("NACRE_NO_CACHE").is_some() || (env::var_os("CARGO_MANIFEST_DIR").is_some() && env::var_os("NACRE_ENABLE_TEST_CACHE").is_none()) {
         return None;
@@ -121,7 +131,9 @@ pub fn compile_c_optimized(source: &str, optimization: &str, flags: &[&str]) -> 
     let directory = TempDir::new()?;
     let executable = directory.0.join(if cfg!(windows) { "program.exe" } else { "program" });
 
-    let cache = cache_dir();
+    let profile_directory = pgo_directory(flags);
+    // Profiles are mutable external inputs, not part of the executable cache key.
+    let cache = profile_directory.is_none().then(cache_dir).flatten();
     let cache_entry = cache.as_ref().map(|c| c.join(compute_cache_key(&compiler, optimization, flags, source)));
     if let Some(cached_path) = &cache_entry
         && cached_path.is_file()
@@ -138,14 +150,30 @@ pub fn compile_c_optimized(source: &str, optimization: &str, flags: &[&str]) -> 
     }
 
     let c_path = directory.0.join("program.c");
-    fs::write(&c_path, source).map_err(|e| format!("failed to write temporary C source: {e}"))?;
+    let written = if profile_directory.is_some() {
+        fs::File::create(&c_path).and_then(|mut file| {
+            // GCC includes source locations in its profile checksums.
+            file.write_all(b"#line 1 \"program.c\"\n")?;
+            file.write_all(source.as_bytes())
+        })
+    } else {
+        fs::write(&c_path, source)
+    };
+    written.map_err(|e| format!("failed to write temporary C source: {e}"))?;
     let libraries = NativeLibraries::from_source(source);
-    let output = Command::new(&compiler)
+    let mut command = Command::new(&compiler);
+    command
         .arg(optimization)
         .args(["-std=c11", "-pthread", "-g", "-fno-math-errno", "-Wall", "-Wextra", "-pedantic", "-Wno-unused-function", "-Wno-unused-variable", "-Wno-unused-parameter", "-Wno-unused-but-set-variable"])
         .args(if cfg!(target_os = "linux") { &["-ffunction-sections", "-fdata-sections"][..] } else { &[][..] })
         .args(libraries.header_flags())
-        .args(flags)
+        .args(flags);
+    if let Some(profile_directory) = profile_directory {
+        // Keep GCC's auxiliary identity stable across separate temporary builds.
+        command.arg("-dumpdir").arg(Path::new(profile_directory).join("nacre-"))
+            .args(["-dumpbase", "program.c"]);
+    }
+    let output = command
         .arg(&c_path).arg("-o").arg(&executable)
         .args(if cfg!(unix) { &["-lm"][..] } else { &[][..] })
         .args(if cfg!(target_os = "linux") { &["-Wl,--gc-sections"][..] } else { &[][..] })

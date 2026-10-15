@@ -236,6 +236,14 @@ code. Measured comparisons and their limits belong in [VALIDATION.md](VALIDATION
 direct LLVM backend written in Rust. `NACRE_CLANG` selects that Clang executable;
 `NACRE_CC`/`CC` separately select the compiler used by `run` and `build`.
 
+For GCC-backed C builds, `--pgo-generate=DIR` instruments the executable; run it
+on representative inputs before rebuilding the same sources with
+`--pgo-use=DIR`. Native compilation stabilizes GCC's auxiliary filenames and
+generated-C source identity across temporary directories, including the source
+locations used in profile checksums. Profile builds bypass executable and
+runtime-bitcode caches because training data is mutable external input.
+
+
 The private `native/dependencies.rs` module owns the fixed catalog for exact
 standalone dependency markers, trusted header/linker arguments, dependency
 closure, and stable linker order. The driver sees only an opaque dependency set

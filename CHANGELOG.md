@@ -3,6 +3,9 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Fix GCC PGO training/use identity across native temporary directories. Keep
+  generated-C source locations and auxiliary profile names stable, and bypass
+  executable/bitcode caches for builds with mutable profile inputs.
 - Build canonical generic-specialization names directly in their final buffer.
   One argument writer owns separators and nested type spelling, eliminating
   temporary argument strings, vectors, and joins while preserving names,

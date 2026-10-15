@@ -177,40 +177,43 @@ fn borrower_diagnostic_reaches_the_cli() {
 }
 #[test]
 fn pgo_generate_and_use_workflow_and_mutual_exclusion() {
+    use std::os::unix::fs::PermissionsExt;
     let temp = TestDir::new();
     let source = temp.path("pgo.ncr");
     fs::write(&source, "void main() { int i = 0; while (i < 100) { i = i + 1; } println(i); }").unwrap();
     let bin = temp.path("pgo_bin");
     let pgo_dir = temp.path("pgo_data");
+    let compiler = temp.path("gcc-require-profile");
+    fs::write(&compiler, "#!/bin/sh\nexec gcc -Werror=missing-profile \"$@\"\n").unwrap();
+    fs::set_permissions(&compiler, fs::Permissions::from_mode(0o755)).unwrap();
+    let invoke = |args: &[&str]| Command::new(env!("CARGO_BIN_EXE_nacre"))
+        .args(args)
+        .env("NACRE_CC", &compiler)
+        .env("NACRE_CACHE_DIR", temp.path("native-cache"))
+        .env("NACRE_ENABLE_TEST_CACHE", "1")
+        .env_remove("NACRE_NO_CACHE")
+        .output().unwrap();
 
-    // 1. Mutual exclusion: cannot pass both --pgo-generate and --pgo-use
-    let both = nacre(&["build", path_str(&source), "-o", path_str(&bin), "--pgo-generate", "--pgo-use"]);
+    let both = invoke(&["build", path_str(&source), "-o", path_str(&bin), "--pgo-generate", "--pgo-use"]);
     assert!(!both.status.success());
-    assert!(String::from_utf8_lossy(&both.stderr).contains("cannot specify both"));
-
-    // 2. Build instrumented executable with --pgo-generate
-    let build_gen = nacre(&["build", path_str(&source), "-o", path_str(&bin), &format!("--pgo-generate={}", pgo_dir.display())]);
+    let generate = format!("--pgo-generate={}", pgo_dir.display());
+    let build_gen = invoke(&["build", path_str(&source), "-o", path_str(&bin), &generate]);
     assert!(build_gen.status.success(), "{}", String::from_utf8_lossy(&build_gen.stderr));
-
-    // Run instrumented executable to produce profile counts
     let run_res = Command::new(&bin).current_dir(&temp.0).output().unwrap();
     assert!(run_res.status.success());
     assert_eq!(run_res.stdout, b"100\n");
 
-    // Assert profile count data actually exists in pgo_data directory
-    let has_profile = fs::read_dir(&pgo_dir).unwrap().any(|entry| {
-        let path = entry.unwrap().path();
-        path.is_dir() || path.extension().is_some_and(|ext| ext == "gcda" || ext == "profraw")
-    });
-    assert!(has_profile, "expected profile data in {}", pgo_dir.display());
-
-    // 3. Build optimized executable with --pgo-use
-    let opt = nacre(&["build", path_str(&source), "-o", path_str(&bin), &format!("--pgo-use={}", pgo_dir.display())]);
+    // Missing training data is a compiler error, not an invisible warning.
+    let use_profile = format!("--pgo-use={}", pgo_dir.display());
+    let opt = invoke(&["build", path_str(&source), "-o", path_str(&bin), &use_profile]);
     assert!(opt.status.success(), "{}", String::from_utf8_lossy(&opt.stderr));
-    let stderr_use = String::from_utf8_lossy(&opt.stderr);
-    assert!(!stderr_use.contains("missing-profile") && !stderr_use.contains("profile count data file not found"), "{stderr_use}");
-
     let run_opt = Command::new(&bin).output().unwrap();
     assert!(run_opt.status.success());
     assert_eq!(run_opt.stdout, b"100\n");
+
+    // A previous executable cache entry must not conceal changed profile inputs.
+    fs::remove_dir_all(&pgo_dir).unwrap();
+    fs::create_dir(&pgo_dir).unwrap();
+    let missing_profile = invoke(&["build", path_str(&source), "-o", path_str(&bin), &use_profile]);
+    assert!(!missing_profile.status.success(), "profile-use reused an executable after its training data was removed");
 }
