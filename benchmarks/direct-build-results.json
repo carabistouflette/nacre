@@ -1,0 +1,207 @@
+{
+  "schema_version": 1,
+  "source_commit": "0de4be4",
+  "scope": "One matched-compiler native build consumer, not whole-suite compiler throughput",
+  "compiler": {
+    "nacre_profile": "debug",
+    "binary": "target/debug/nacre",
+    "native_optimization": "-O2",
+    "c_backend_compiler": "Clang 22.1.8",
+    "direct_backend_compiler": "Clang 22.1.8",
+    "llvm_link": "22.1.0"
+  },
+  "base_nacre_source": "\nclass Emit implements Mapper<int, long> {\n    public long apply(int value) { println(value); return value * 2L; }\n}\nclass AtLeastFour implements Predicate<long> {\n    public readonly boolean test(long value) { println(value); return value >= 4L; }\n}\nclass AddLong implements Folder<long, long> {\n    public long apply(long total, long value) { return total + value; }\n}\nvoid main() {\n    List<int> values = new List<int>();\n    values.add(1); values.add(2); values.add(3); values.add(4); values.add(5); values.add(6);\n\n    long total = values.iter().map(new Emit()).filter(new AtLeastFour()).take(2L).fold(0L, new AddLong());\n    println(total);\n    long empty = values.iter().map(new Emit()).filter(new AtLeastFour()).take(0L).fold(9L, new AddLong());\n    println(empty);\n}\n",
+  "source_sha256": "f21310a0b5647d795f34065b96c0133f7979ef9da4f75e2bd05f3eb18f8fca9d",
+  "source_variant": "Replace .fold(0L, with .fold(<accumulator_seed>L, using the recorded sample seed.",
+  "commands": {
+    "c": "target/debug/nacre build consumer.ncr -O2 -o consumer",
+    "direct": "target/debug/nacre build consumer.ncr -O2 -o consumer --direct",
+    "run": "./consumer"
+  },
+  "cache_protocol": {
+    "cold": "Five fresh NACRE_CACHE_DIR directories per backend; OS filesystem caches are not flushed",
+    "warm": "One prewarm build at sample 0, then four new-source builds in the same NACRE_CACHE_DIR",
+    "executable_cache_hits": "Avoided by changing the source accumulator seed for every build in a cache directory",
+    "direct_runtime_cache": "Runtime layout and compiler flags remain identical across changed-source builds"
+  },
+  "validation": "Each build and executable succeeded; stdout ended with 10 + accumulator_seed followed by 9.",
+  "limits": [
+    "Sequential backend batches, not interleaved",
+    "No CPU affinity or power-state controls",
+    "Debug Nacre frontend; do not compare these times to the release-frontend whole-workload benchmark",
+    "One consumer does not establish general compiler speed or a causal optimization delta",
+    "Direct LLVM remains slower than generated C in this measurement"
+  ],
+  "summary_seconds": {
+    "c": {
+      "cold_median": 0.37369196297368035,
+      "warm_changed_source_median": 0.3497724244953133
+    },
+    "direct": {
+      "cold_median": 1.0572163210017607,
+      "warm_changed_source_median": 0.6656218639982399
+    }
+  },
+  "measurements": [
+    {
+      "backend": "c",
+      "cache": "cold",
+      "sample": 0,
+      "accumulator_seed": 0,
+      "build_seconds": 0.37369196297368035,
+      "stdout": "1\n2\n2\n4\n3\n6\n10\n9\n"
+    },
+    {
+      "backend": "c",
+      "cache": "cold",
+      "sample": 1,
+      "accumulator_seed": 1,
+      "build_seconds": 0.3453815539833158,
+      "stdout": "1\n2\n2\n4\n3\n6\n11\n9\n"
+    },
+    {
+      "backend": "c",
+      "cache": "cold",
+      "sample": 2,
+      "accumulator_seed": 2,
+      "build_seconds": 0.38693482597591355,
+      "stdout": "1\n2\n2\n4\n3\n6\n12\n9\n"
+    },
+    {
+      "backend": "c",
+      "cache": "cold",
+      "sample": 3,
+      "accumulator_seed": 3,
+      "build_seconds": 0.33359343302436173,
+      "stdout": "1\n2\n2\n4\n3\n6\n13\n9\n"
+    },
+    {
+      "backend": "c",
+      "cache": "cold",
+      "sample": 4,
+      "accumulator_seed": 4,
+      "build_seconds": 0.37960012099938467,
+      "stdout": "1\n2\n2\n4\n3\n6\n14\n9\n"
+    },
+    {
+      "backend": "c",
+      "cache": "warm",
+      "sample": 0,
+      "accumulator_seed": 10,
+      "build_seconds": 0.37141944997711107,
+      "stdout": "1\n2\n2\n4\n3\n6\n20\n9\n"
+    },
+    {
+      "backend": "c",
+      "cache": "warm",
+      "sample": 1,
+      "accumulator_seed": 11,
+      "build_seconds": 0.3318110459949821,
+      "stdout": "1\n2\n2\n4\n3\n6\n21\n9\n"
+    },
+    {
+      "backend": "c",
+      "cache": "warm",
+      "sample": 2,
+      "accumulator_seed": 12,
+      "build_seconds": 0.3394754769979045,
+      "stdout": "1\n2\n2\n4\n3\n6\n22\n9\n"
+    },
+    {
+      "backend": "c",
+      "cache": "warm",
+      "sample": 3,
+      "accumulator_seed": 13,
+      "build_seconds": 0.3752854510094039,
+      "stdout": "1\n2\n2\n4\n3\n6\n23\n9\n"
+    },
+    {
+      "backend": "c",
+      "cache": "warm",
+      "sample": 4,
+      "accumulator_seed": 14,
+      "build_seconds": 0.36006937199272215,
+      "stdout": "1\n2\n2\n4\n3\n6\n24\n9\n"
+    },
+    {
+      "backend": "direct",
+      "cache": "cold",
+      "sample": 0,
+      "accumulator_seed": 0,
+      "build_seconds": 1.0572163210017607,
+      "stdout": "1\n2\n2\n4\n3\n6\n10\n9\n"
+    },
+    {
+      "backend": "direct",
+      "cache": "cold",
+      "sample": 1,
+      "accumulator_seed": 1,
+      "build_seconds": 1.1427534220274538,
+      "stdout": "1\n2\n2\n4\n3\n6\n11\n9\n"
+    },
+    {
+      "backend": "direct",
+      "cache": "cold",
+      "sample": 2,
+      "accumulator_seed": 2,
+      "build_seconds": 1.0367321039666422,
+      "stdout": "1\n2\n2\n4\n3\n6\n12\n9\n"
+    },
+    {
+      "backend": "direct",
+      "cache": "cold",
+      "sample": 3,
+      "accumulator_seed": 3,
+      "build_seconds": 1.0366097500082105,
+      "stdout": "1\n2\n2\n4\n3\n6\n13\n9\n"
+    },
+    {
+      "backend": "direct",
+      "cache": "cold",
+      "sample": 4,
+      "accumulator_seed": 4,
+      "build_seconds": 1.101423699001316,
+      "stdout": "1\n2\n2\n4\n3\n6\n14\n9\n"
+    },
+    {
+      "backend": "direct",
+      "cache": "warm",
+      "sample": 0,
+      "accumulator_seed": 10,
+      "build_seconds": 1.0792936430079862,
+      "stdout": "1\n2\n2\n4\n3\n6\n20\n9\n"
+    },
+    {
+      "backend": "direct",
+      "cache": "warm",
+      "sample": 1,
+      "accumulator_seed": 11,
+      "build_seconds": 0.6603898049797863,
+      "stdout": "1\n2\n2\n4\n3\n6\n21\n9\n"
+    },
+    {
+      "backend": "direct",
+      "cache": "warm",
+      "sample": 2,
+      "accumulator_seed": 12,
+      "build_seconds": 0.6720964419655502,
+      "stdout": "1\n2\n2\n4\n3\n6\n22\n9\n"
+    },
+    {
+      "backend": "direct",
+      "cache": "warm",
+      "sample": 3,
+      "accumulator_seed": 13,
+      "build_seconds": 0.6708539230166934,
+      "stdout": "1\n2\n2\n4\n3\n6\n23\n9\n"
+    },
+    {
+      "backend": "direct",
+      "cache": "warm",
+      "sample": 4,
+      "accumulator_seed": 14,
+      "build_seconds": 0.6164513159892522,
+      "stdout": "1\n2\n2\n4\n3\n6\n24\n9\n"
+    }
+  ]
+}

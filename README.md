@@ -29,6 +29,11 @@ C11 headers and a linker; Windows and macOS are not supported targets.
 and CI runtimes are pinned in `.node-version` (26.12.0), `.npm-version` (12.2.0),
 and `.python-version` (3.15.0). Nightly is used only for sanitizer-backed fuzzing.
 
+The full Rust test suite also exercises direct LLVM and requires matching-major
+Clang and `llvm-link`, even when `NACRE_CC=gcc`. Set `NACRE_CLANG` and
+`NACRE_LLVM_LINK` to tools from the same LLVM installation. CI selects both
+from the directory reported by `/usr/bin/llvm-config --bindir`.
+
 Optional native library APIs require their development headers and libraries:
 OpenSSL 3 for `Crypto`, zlib for `Compression`/`Checksums`, GMP for arbitrary
 precision, ICU for Unicode/calendar APIs, PCRE2 10.30+ 8-bit for Regex,

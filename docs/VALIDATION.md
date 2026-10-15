@@ -4,6 +4,53 @@ Nacre is experimental pre-1.0. Executed checks are evidence, not a safety certif
 [validation-0.12.0.json](validation-0.12.0.json) records portable local results.
 Historical reports retain their original release labels; they are not current-release proof.
 
+## Iterator, pattern, LLVM, and package integration
+
+The integration run used matching LLVM 22 tools (Clang 22.1.8 and `llvm-link`
+22.1.0), plus the corrected libarchive 3.8.10 built by
+`scripts/build_libarchive.py`. The system Clang 23 / `llvm-link` 22 combination
+failed to read runtime bitcode; matching LLVM major versions are required.
+
+| Executed check | Observed result |
+| --- | --- |
+| `cargo test --offline --locked --features fuzzing -- --include-ignored --test-threads=4` | 1,342 passed across 68 suites; normally ignored LLVM cases executed |
+| Isolated replay of 40 existing runtime suites | 523 tests passed; 503 exact-source native compilations used direct LLVM; 18 C-only helpers or injected-C fixtures remained C |
+| `cargo clippy --offline --locked --all-targets --features fuzzing -- -D warnings` | Passed without lint suppressions |
+| Tree-sitter 0.27.1 corpus | All seven cases passed |
+| Actual recursive-pattern and fused-pipeline editor inputs | Parsed without errors; updated Zed highlights query executed |
+| Package creation, local dependency addition, implicit manifest discovery, release build/run | Generated projects coexisted; C and direct LLVM printed `42` |
+| Updated CI workflow | YAML parsed locally; matching LLVM tool selection configured; remote workflow not executed here |
+
+Cache-disabled actual CLI runs produced identical stdout and allocation counters
+for both backends. Every consumer finished with zero live allocations.
+
+| Consumer | Stdout | Allocations | Frees |
+| --- | --- | ---: | ---: |
+| Nonescaping counter | `42` | 0 | 0 |
+| Lazy filtered/taken pipeline | `1 2 2 4 3 6 10 9` in callback/output order | 9 | 9 |
+| Recursive patterns | `patterns-ok` | 7 | 7 |
+| Propagated owned error | `7` / `preserved` | 1 | 1 |
+
+The full suite caught a checker stack overflow on a long boolean expression.
+Boxing the large iterator-plan payloads restored the existing expression's
+behavior without increasing thread stacks. Direct object replay also exposed
+missing stack promotion; sharing the C eligibility analysis restored all 41
+object tests' original outputs and allocation counts.
+
+The isolated replay used a temporary adapter that mapped exact generated C back
+to its original Nacre source and invoked the direct compiler. Modified C and
+standalone helpers were counted separately rather than claimed as LLVM proof.
+Address/undefined sanitizer flags and existing allocation expectations were
+preserved. This is observed runtime coverage, not a claim that C was eliminated
+from the standard-library implementation.
+
+The final direct link reads textual user IR, imports only needed runtime
+symbols, internalizes those imports, and optimizes the combined module once.
+Cached runtime bitcode avoids repeated C parsing, but the measured direct build
+still took longer than the C build for the recorded small consumer. See
+[the build comparison](BENCHMARKS.md#direct-llvm-build-comparison).
+
+
 ## Canonical generic-name construction
 
 Graphify located the generic-name formatter and its expander caller; live

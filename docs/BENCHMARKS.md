@@ -136,3 +136,28 @@ also exposed missing profile data caused by changing temporary paths. Commit
 inputs. Its isolated CLI regression requires `-Werror=missing-profile`; an actual
 training/use smoke printed `49995011` in both executables. Those checks establish
 profile consumption, not a newly measured speedup from the fix.
+
+## Direct LLVM build comparison
+
+This separate integration measurement uses commit `0de4be4`, the debug Nacre
+compiler, and Clang 22.1.8 for both native backends at `-O2`; direct linking uses
+`llvm-link` 22.1.0. It is not comparable to the release-compiler whole-workload
+suite timing above. [direct-build-results.json](../benchmarks/direct-build-results.json)
+retains the exact consumer source, sample seeds, outputs, and build durations.
+
+Each build changes the initial accumulator literal, preventing executable-cache
+hits while retaining the same runtime layout. Cold values are medians of five
+independent cache directories. Warm values are medians of four changed-source
+builds after one excluded prewarm build; only direct LLVM reuses runtime
+bitcode. Every resulting executable was run and its output checked.
+
+| Backend | Cold build milliseconds | Runtime-cache-warm changed-source milliseconds |
+| --- | ---: | ---: |
+| Generated C / Clang | 373.692 | 349.772 |
+| Direct LLVM / Clang | 1,057.216 | 665.622 |
+
+The runtime cache removes repeated C frontend work, but this consumer does
+**not** demonstrate a total-build speedup over generated C. These sequential,
+unpinned batches measure one small pipeline program, not universal compiler
+throughput or an isolated causal optimization delta.
+

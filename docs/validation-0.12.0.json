@@ -2,6 +2,18 @@
   "release": "0.12.0",
   "status": "passed",
   "scope": "Observed local compiler, generated programs, fuzz campaigns and editor source/package checks; desktop and remote CI recorded separately",
+  "compiler_integration": {
+    "source_commit": "0de4be4",
+    "rust_suite": {"passed": 1342, "suites": 68, "ignored": 0, "include_ignored": true, "features": ["fuzzing"], "locked": true, "offline": true},
+    "direct_runtime_replay": {"passed": 523, "runtime_suites": 40, "exact_source_direct_compilations": 503, "separate_c_helper_compilations": 18},
+    "clippy": {"status": "passed", "all_targets": true, "features": ["fuzzing"], "deny_warnings": true},
+    "tools": {"clang": "22.1.8", "llvm_link": "22.1.0", "libarchive": "3.8.10 with repository ZIP boundary patch"},
+    "editors": {"tree_sitter": "0.27.1", "corpus_passed": 7, "actual_pattern_pipeline_inputs_parsed": 2, "updated_highlights_query_executed": true},
+    "cli_smokes": ["paired cache-disabled C/direct counter, fused pipeline, recursive patterns and owned-error propagation", "new/add/check/run/release build and manifest-selected direct release run"],
+    "package_audit": {"status": "passed", "include_str_paths": 219, "declared_tests": 1342},
+    "build_measurement": "../benchmarks/direct-build-results.json",
+    "limits": ["Direct builds remain slower than generated C for the measured small consumer", "Runtime C templates and ABI/layout support remain part of the trusted implementation", "Historical verification fields below retain their original observations"]
+  },
   "rust_suite": {"passed": 1111, "suites": 45, "ignored": 2, "features": ["fuzzing"], "toolchain": "1.99.0-nightly"},
   "msrv_suite": {"passed": 1106, "suites": 45, "ignored": 2, "toolchain": "1.74.0", "locked": true, "offline": true},
   "clippy": {"status": "passed", "all_targets": true, "features": ["fuzzing"], "deny_warnings": true},
