@@ -12,14 +12,14 @@ static void ncr_list_reserve_@ID@(ncr_obj_@ID@ *p, int32_t requested, size_t lin
     p->items = ncr_reallocate(p->items, (size_t)capacity * sizeof(@ELEMENT@), line, column);
     p->capacity = (int32_t)capacity;
 }
-static inline void ncr_list_check_@ID@(ncr_obj_@ID@ *p, int32_t index, size_t line, size_t column) {
+static inline void ncr_list_check_@ID@(const ncr_obj_@ID@ *restrict p, int32_t index, size_t line, size_t column) {
     if (__builtin_expect(index < 0 || index >= p->length, 0)) { ncr_fail("List index out of bounds", line, column); }
 }
 static void @LIST_NEW@(ncr_obj_@ID@ *p, size_t line, size_t column) {
     (void)line; (void)column;
     p->items = NULL; p->length = 0; p->capacity = 0;
 }
-static inline void @LIST_ADD@(ncr_obj_@ID@ *p, @ELEMENT@ value, size_t line, size_t column) {
+static inline void @LIST_ADD@(ncr_obj_@ID@ *restrict p, @ELEMENT@ value, size_t line, size_t column) {
     if (__builtin_expect(p->length >= p->capacity, 0)) {
         if (__builtin_expect(p->length == INT32_MAX, 0)) { ncr_fail("List is full", line, column); }
         ncr_list_reserve_@ID@(p, p->length + 1, line, column);

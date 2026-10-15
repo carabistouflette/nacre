@@ -93,7 +93,14 @@ fn zero_value(program: &t::Program, ty: Type) -> String {
 
 fn signature(program: &t::Program, function: &t::Function) -> String {
     let mut params = Vec::new();
-    if let Some(class) = function.receiver { params.push(format!("{} ncr_self", ctype(program, Type::Object(class)))); }
+    if let Some(class) = function.receiver {
+        let receiver_ty = if program.classes[class].is_interface || program.classes[class].variants.is_some() {
+            format!("{} ncr_self", ctype(program, Type::Object(class)))
+        } else {
+            format!("ncr_obj_{class} *restrict ncr_self")
+        };
+        params.push(receiver_ty);
+    }
     for (id, ty) in &function.params { params.push(format!("{} ncr_v_{id}", ctype_param(program, *ty))); }
     if function.native.is_some() { params.extend(["size_t ncr_line".to_owned(), "size_t ncr_column".to_owned()]); }
     let params = if params.is_empty() { "void".to_owned() } else { params.join(", ") };
