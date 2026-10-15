@@ -183,14 +183,14 @@ static inline int64_t ncr_long_mul(int64_t a, int64_t b) {
 static inline int64_t ncr_long_neg(int64_t value) {
     return ncr_i64_from_bits(UINT64_C(0) - (uint64_t)value);
 }
-static int64_t ncr_long_div(int64_t a, int64_t b, size_t line, size_t column) {
-    if (b == 0) { ncr_fail("[E6103] division by zero", line, column); }
-    if (a == INT64_MIN && b == -1) { return INT64_MIN; }
+static inline int64_t ncr_long_div(int64_t a, int64_t b, size_t line, size_t column) {
+    if (__builtin_expect(b == 0, 0)) { ncr_fail("[E6103] division by zero", line, column); }
+    if (__builtin_expect(a == INT64_MIN && b == -1, 0)) { return INT64_MIN; }
     return a / b;
 }
-static int64_t ncr_long_rem(int64_t a, int64_t b, size_t line, size_t column) {
-    if (b == 0) { ncr_fail("[E6103] division by zero", line, column); }
-    if (a == INT64_MIN && b == -1) { return 0; }
+static inline int64_t ncr_long_rem(int64_t a, int64_t b, size_t line, size_t column) {
+    if (__builtin_expect(b == 0, 0)) { ncr_fail("[E6103] division by zero", line, column); }
+    if (__builtin_expect(a == INT64_MIN && b == -1, 0)) { return 0; }
     return a % b;
 }
 static inline int32_t ncr_i32_and(int32_t a, int32_t b) { return ncr_i32_from_bits((uint32_t)a & (uint32_t)b); }
@@ -201,24 +201,24 @@ static inline int64_t ncr_i64_and(int64_t a, int64_t b) { return ncr_i64_from_bi
 static inline int64_t ncr_i64_or(int64_t a, int64_t b) { return ncr_i64_from_bits((uint64_t)a | (uint64_t)b); }
 static inline int64_t ncr_i64_xor(int64_t a, int64_t b) { return ncr_i64_from_bits((uint64_t)a ^ (uint64_t)b); }
 static inline int64_t ncr_i64_not(int64_t value) { return ncr_i64_from_bits(~(uint64_t)value); }
-static int32_t ncr_i32_shl(int32_t value, int32_t count, size_t line, size_t column) {
-    if (count < 0 || count >= 32) { ncr_fail("[E6104] shift count must be within the operand width", line, column); }
+static inline int32_t ncr_i32_shl(int32_t value, int32_t count, size_t line, size_t column) {
+    if (__builtin_expect(count < 0 || count >= 32, 0)) { ncr_fail("[E6104] shift count must be within the operand width", line, column); }
     return ncr_i32_from_bits((uint32_t)value << (uint32_t)count);
 }
-static int32_t ncr_i32_shr(int32_t value, int32_t count, size_t line, size_t column) {
-    if (count < 0 || count >= 32) { ncr_fail("[E6104] shift count must be within the operand width", line, column); }
+static inline int32_t ncr_i32_shr(int32_t value, int32_t count, size_t line, size_t column) {
+    if (__builtin_expect(count < 0 || count >= 32, 0)) { ncr_fail("[E6104] shift count must be within the operand width", line, column); }
     if (count == 0) { return value; }
     uint32_t bits = (uint32_t)value;
     uint32_t shifted = bits >> (uint32_t)count;
     if (value < 0) { shifted |= UINT32_MAX << (32u - (uint32_t)count); }
     return ncr_i32_from_bits(shifted);
 }
-static int64_t ncr_i64_shl(int64_t value, int32_t count, size_t line, size_t column) {
-    if (count < 0 || count >= 64) { ncr_fail("[E6104] shift count must be within the operand width", line, column); }
+static inline int64_t ncr_i64_shl(int64_t value, int32_t count, size_t line, size_t column) {
+    if (__builtin_expect(count < 0 || count >= 64, 0)) { ncr_fail("[E6104] shift count must be within the operand width", line, column); }
     return ncr_i64_from_bits((uint64_t)value << (uint32_t)count);
 }
-static int64_t ncr_i64_shr(int64_t value, int32_t count, size_t line, size_t column) {
-    if (count < 0 || count >= 64) { ncr_fail("[E6104] shift count must be within the operand width", line, column); }
+static inline int64_t ncr_i64_shr(int64_t value, int32_t count, size_t line, size_t column) {
+    if (__builtin_expect(count < 0 || count >= 64, 0)) { ncr_fail("[E6104] shift count must be within the operand width", line, column); }
     if (count == 0) { return value; }
     uint64_t bits = (uint64_t)value;
     uint64_t shifted = bits >> (uint32_t)count;
@@ -269,14 +269,14 @@ static int64_t ncr_cast_i64_f64(double value, size_t line, size_t column) {
     if (!isfinite(value) || value < -9223372036854775808.0 || value >= 9223372036854775808.0) { ncr_numeric_cast_fail(line, column); }
     return (int64_t)value;
 }
-static int32_t ncr_div(int32_t a, int32_t b, size_t line, size_t column) {
-    if (b == 0) { ncr_fail("division by zero", line, column); }
-    if (a == INT32_MIN && b == -1) { return INT32_MIN; }
+static inline int32_t ncr_div(int32_t a, int32_t b, size_t line, size_t column) {
+    if (__builtin_expect(b == 0, 0)) { ncr_fail("division by zero", line, column); }
+    if (__builtin_expect(a == INT32_MIN && b == -1, 0)) { return INT32_MIN; }
     return a / b;
 }
-static int32_t ncr_rem(int32_t a, int32_t b, size_t line, size_t column) {
-    if (b == 0) { ncr_fail("modulo by zero", line, column); }
-    if (a == INT32_MIN && b == -1) { return 0; }
+static inline int32_t ncr_rem(int32_t a, int32_t b, size_t line, size_t column) {
+    if (__builtin_expect(b == 0, 0)) { ncr_fail("modulo by zero", line, column); }
+    if (__builtin_expect(a == INT32_MIN && b == -1, 0)) { return 0; }
     return a % b;
 }
 static void ncr_print_int(int32_t value) { printf("%" PRId32 "\n", value); }
@@ -325,6 +325,25 @@ static void *ncr_allocate_raw(size_t size, size_t line, size_t column) {
     }
 #ifdef NACRE_MEMORY_STATS
     atomic_fetch_add_explicit(&ncr_allocations, 1, memory_order_relaxed);
+#endif
+    return p;
+}
+static void *ncr_reallocate(void *ptr, size_t size, size_t line, size_t column) {
+    if (size == 0) {
+        ncr_deallocate(ptr);
+        return NULL;
+    }
+    if (ptr == NULL) {
+        return ncr_allocate_raw(size, line, column);
+    }
+    void *p = realloc(ptr, size);
+    if (p == NULL) {
+        fprintf(stderr, "runtime error [%zu:%zu]: allocation failed\n", line, column);
+        exit(70);
+    }
+#ifdef NACRE_MEMORY_STATS
+    atomic_fetch_add_explicit(&ncr_allocations, 1, memory_order_relaxed);
+    atomic_fetch_add_explicit(&ncr_frees, 1, memory_order_relaxed);
 #endif
     return p;
 }

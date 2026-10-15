@@ -1,19 +1,15 @@
 /* Native List<@ELEMENT@>. Only initialized [0,length) slots own elements. */
 static void ncr_list_reserve_@ID@(ncr_obj_@ID@ *p, int32_t requested, size_t line, size_t column) {
-    if (requested < 0) { ncr_fail("negative List capacity", line, column); }
+    if (__builtin_expect(requested < 0, 0)) { ncr_fail("negative List capacity", line, column); }
     if (requested <= p->capacity) { return; }
     int64_t capacity = p->capacity == 0 ? 4 : p->capacity;
     while (capacity < requested) {
         capacity = capacity > INT32_MAX / 2 ? INT32_MAX : capacity * 2;
     }
-    if ((uint64_t)capacity > SIZE_MAX / sizeof(@ELEMENT@)) {
+    if (__builtin_expect((uint64_t)capacity > SIZE_MAX / sizeof(@ELEMENT@), 0)) {
         ncr_fail("List capacity is too large", line, column);
     }
-    @ELEMENT@ *items = ncr_allocate_raw((size_t)capacity * sizeof(@ELEMENT@), line, column);
-    if (p->length > 0) { memcpy(items, p->items, (size_t)p->length * sizeof(@ELEMENT@)); }
-    /* Raw relocation transfers ownership; do NOT destroy the old slots. */
-    ncr_deallocate(p->items);
-    p->items = items;
+    p->items = ncr_reallocate(p->items, (size_t)capacity * sizeof(@ELEMENT@), line, column);
     p->capacity = (int32_t)capacity;
 }
 static inline void ncr_list_check_@ID@(ncr_obj_@ID@ *p, int32_t index, size_t line, size_t column) {
