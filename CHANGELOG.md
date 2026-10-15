@@ -37,6 +37,11 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   with Rust checksum preflight, alternating runs, per-child RSS, and separate
   allocation checks. Raise both workload drivers' repetition limit to support
   stable batches for fast kernels.
+- Make generated direct-LLVM native ABI adapters transparent to optimization
+  with `always_inline`, exposing caller constants across erased-pointer slots.
+  User functions and underlying standard-library functions keep their existing
+  attributes; runtime optimization flags are unchanged. Preserve dynamic UTF-8
+  validation, Unicode/NUL behavior, allocation balance, and source debugging.
 - Add optional `nacre doctor --direct` and `--zip` checks. Report selected LLVM
   tool versions and reject incompatible majors before compiling bitcode; verify
   native allocation balance and real binary/empty ZIP archive round-trips.

@@ -235,9 +235,9 @@ python3 benchmarks/profile_builds.py --compiler target/release/nacre \
 
 ## C/direct LLVM runtime comparison
 
-The 2026-10-15 runtime comparison uses the same six existing Nacre workloads
-before and after making whole-program-only LLVM functions private. The baseline
-compiler is an independently built `0bede0f`; compiler hashes, source hashes,
+The 2026-10-15 runtime comparison at `2e4e1ad` uses the same six existing Nacre
+workloads before and after making whole-program-only LLVM functions private.
+The baseline compiler is an independently built `0bede0f`; compiler hashes, source hashes,
 tool versions, calibration runs, individual samples, allocation counts, and
 per-child RSS are retained in
 [backend-runtime-baseline.json](../benchmarks/backend-runtime-baseline.json) and
@@ -330,4 +330,88 @@ python3 benchmarks/run_suite.py --compare-backends --repeats 5 \
 Pass `--compiler /path/to/another/revision/target/release/nacre` to measure a
 separately built revision against the same current workload sources. Without
 `--compare-backends`, the existing Nacre/Rust benchmark mode is unchanged.
+
+
+## JSON native-boundary optimization
+
+The JSON-focused follow-up reuses the preceding `2e4e1ad` results as its
+baseline rather than repeating an unchanged compiler run. The new
+[json-runtime-optimized.json](../benchmarks/json-runtime-optimized.json) uses
+the same Nacre/Rust workload source hashes, Clang 22.1.8 at `-O3 --native`,
+`llvm-link` 22.1.0, CPU 0 affinity, five alternating fresh-process samples per
+backend/workload, and separate allocation builds. The compiler identities are
+recorded in the reports; workload algorithms and inputs did not change.
+
+### Profile and retained change
+
+Ten fresh processes each executed two million JSON calls under `perf` at
+999 Hz. All returned the same checksum. The original direct executable
+collected 6,559 CPU samples, including the following hotspots:
+
+| Symbol | Role | Sampled cycles % |
+| --- | --- | ---: |
+| `ncr_llvm_fn_7` | Workload dispatcher with inlined parser work | 40.08 |
+| `ncr_llvm_native_140` | Native Text-from-String ABI adapter | 28.01 |
+| `ncr_llvm_fn_19` | `JsonParser.key` | 14.94 |
+
+The Text adapter contained the UTF-8 validator but hid caller constants behind
+erased-pointer argument slots. Inlining that boundary allowed LLVM to optimize
+the native operation in its caller's context. Production now marks generated
+native ABI adapters `always_inline`; user functions and underlying standard
+library functions receive no new attributes. Dynamic UTF-8 validation is not
+removed or special-cased, and runtime optimization flags remain unchanged.
+
+Native-adapter `inlinehint` alone did not materially improve JSON. Deferring
+runtime LLVM passes also did not help by itself; combining deferred passes
+with early adapter removal slowed Life in the controlled experiment, so that
+pipeline change was rejected. Three rotating same-count comparisons across
+all six workloads supported retaining the adapter-only change.
+
+### Runtime medians after native-adapter transparency
+
+Microseconds per call, with the same process-scope timing limitations as the
+preceding comparison. The baseline column comes from the existing report;
+the two current-backend columns were measured together.
+
+| Workload | LLVM baseline | LLVM after | C current control |
+| --- | ---: | ---: | ---: |
+| JSON | 0.324 | 0.234 | 0.186 |
+| String | 0.515 | 0.463 | 0.469 |
+| Binary | 45.939 | 45.623 | 34.577 |
+| Hash map | 81.903 | 53.894 | 62.823 |
+| Sudoku | 455.227 | 464.815 | 411.022 |
+| Game of Life | 4,057.852 | 4,217.976 | 6,224.098 |
+
+JSON and map improvements were reproduced in the isolated adapter experiment.
+Small cross-run movements must not be treated as causal: additional five-pair,
+same-count comparisons of the actual before/after Sudoku and Life executables
+did not reproduce the apparent slowdowns in this sequential report comparison.
+Map and Life favor LLVM in the current run, String is near parity, and JSON,
+binary, and Sudoku still favor C. No universal backend speedup is claimed.
+
+### Footprint and validation limits
+
+The optimization increases code footprint in this consumer. GNU `size` reports:
+
+| Build | Text-category bytes | Data bytes | BSS bytes |
+| --- | ---: | ---: | ---: |
+| Before | 39,170 | 712 | 16 |
+| After | 40,946 | 712 | 16 |
+
+The text category includes read-only sections, not just the `.text` section.
+Inlining adapters can duplicate already-expanded native implementation code;
+this measured footprint cost is not a claim that inlining is free.
+
+Tracked allocation/free counts remained identical to the baseline for every
+workload, with zero live allocations. Per-process RSS samples remain in the new
+report; their small differences do not establish a memory improvement. Separate
+`-O3` before/after checks retained malformed UTF-8 rejection and valid
+Unicode/NUL behavior, and `-O0` source breakpoints and scalar locals still worked.
+
+Reproduce the current run with matching LLVM tools and dependency paths:
+
+```sh
+python3 benchmarks/run_suite.py --compare-backends --repeats 5 \
+  --output /tmp/nacre-json-runtime.json
+```
 

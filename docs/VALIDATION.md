@@ -4,6 +4,40 @@ Nacre is experimental pre-1.0. Executed checks are evidence, not a safety certif
 [validation-0.12.0.json](validation-0.12.0.json) records portable local results.
 Historical reports retain their original release labels; they are not current-release proof.
 
+## JSON native-adapter optimization
+
+The JSON investigation reused `2e4e1ad`'s existing runtime report as the
+unchanged baseline. The final comparison retained identical Nacre/Rust workload
+source hashes and matching LLVM 22 tools. [Profile, runtime results, rejected
+experiments, and footprint cost](BENCHMARKS.md#json-native-boundary-optimization)
+are recorded separately from the earlier private-linkage measurements.
+
+| Executed check | Observed result |
+| --- | --- |
+| Final LLVM full suite, `--offline --locked --features fuzzing -- --include-ignored --test-threads=4` | 1,348 passed across 68 suites |
+| Final all-target Clippy with `--features fuzzing -- -D warnings` | Passed without lint suppressions |
+| Final six-workload C/direct comparison | All 60 timed fresh-process samples, calibration samples, and separate allocation runs matched Rust checksums; tracked allocations/frees balanced with zero live allocations |
+| Additional five-pair Sudoku/Life comparisons | Same-count before/after production executables did not reproduce apparent slowdowns from the sequential historical comparison |
+| Actual `-O3 --native --memory-stats` UTF-8 file-boundary runs: before-direct, after-direct, current C | All rejected four malformed encodings, accepted Unicode plus embedded NUL as 7 bytes / 3 scalars with NUL at offset 0, and reported 35 allocations / 35 frees / live 0 |
+| GDB 18.1 after the change, direct `-O0` with Text construction and byte-length calls | Original-source line-4 breakpoint verified; `input=4`, `changed=9`; exit 0 |
+
+The change annotates only generated native ABI adapters, not user functions or
+underlying standard-library functions. UTF-8 checks and runtime optimization
+flags remain in place. The runtime cache already hashes generated C, so changed
+adapter attributes invalidate old runtime bitcode without a separate cache shim.
+
+### Separately observed generated-C warning debt
+
+Manual replay of the captured baseline runtime C emitted 21 existing Clang
+`-Wincompatible-pointer-types-discards-qualifiers` warnings. In
+`src/codegen.rs::direct_user_adapters`, addresses of `restrict`-qualified pointer
+locals are passed to erased `void *` slots. Targeted follow-up: explicitly erase
+slot-address qualifiers at that ABI boundary while preserving payload
+qualifiers, then compile affected interface consumers with the warning promoted
+to an error. This is separate from native-adapter performance; no warning
+suppression was introduced.
+
+
 ## Runtime backend comparison and private LLVM linkage
 
 The runtime investigation compared an independently built `0bede0f` compiler

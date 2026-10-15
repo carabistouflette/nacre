@@ -530,11 +530,13 @@ fn direct_runtime_helpers(
             format!("*({} *)ncr_arg_{i}", ctype(program, *ty))));
         args.extend(["(size_t)ncr_line".to_owned(), "(size_t)ncr_column".to_owned()]);
         let call = format!("ncr_fn_{}({})", function.id, args.join(", "));
+        // These are ABI adapters, not independent algorithm entry points.
+        // Keep caller constants visible across the erased-pointer boundary.
         if function.return_type == Type::Void {
-            writeln!(out, "void ncr_llvm_native_{}({}) {{ (void)ncr_result; {}; }}",
+            writeln!(out, "__attribute__((always_inline)) void ncr_llvm_native_{}({}) {{ (void)ncr_result; {}; }}",
                 function.id, params.join(", "), call).unwrap();
         } else {
-            writeln!(out, "void ncr_llvm_native_{}({}) {{ *({} *)ncr_result = {}; }}",
+            writeln!(out, "__attribute__((always_inline)) void ncr_llvm_native_{}({}) {{ *({} *)ncr_result = {}; }}",
                 function.id, params.join(", "), ctype(program, function.return_type), call).unwrap();
         }
     }
