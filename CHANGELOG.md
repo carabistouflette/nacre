@@ -27,9 +27,16 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   selector. CI covers GCC/C, Clang/C, and Clang/LLVM; injected-C fault fixtures
   and standalone C helpers remain explicitly backend-specific.
 - Profile release-compiler builds on scalar, collection, and transitive-package
-  consumers. Allow unused direct-LLVM functions to be discarded before native
-  optimization, retaining strong symbols for concrete interface implementations
+  consumers. Make unused direct-LLVM functions discardable instead of keeping
+  them externally live, retaining strong symbols for concrete interface implementations
   referenced by C vtables. Record cold and changed-source warm measurements.
+- Give whole-program-only LLVM functions private linkage so interprocedural
+  optimization can change their pointer calling conventions and inline callers.
+  Interface implementations referenced by C vtables remain externally visible.
+  Add matched C/direct-LLVM runtime comparisons to the existing benchmark runner,
+  with Rust checksum preflight, alternating runs, per-child RSS, and separate
+  allocation checks. Raise both workload drivers' repetition limit to support
+  stable batches for fast kernels.
 - Add optional `nacre doctor --direct` and `--zip` checks. Report selected LLVM
   tool versions and reject incompatible majors before compiling bitcode; verify
   native allocation balance and real binary/empty ZIP archive round-trips.

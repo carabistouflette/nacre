@@ -715,7 +715,7 @@ void main() {
             }
         }
     }
-    if (repetitions < 1 || repetitions > 20000) {
+    if (repetitions < 1 || repetitions > 2000000) {
         println("INVALID_ARGUMENTS");
         return;
     }

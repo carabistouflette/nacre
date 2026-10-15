@@ -640,7 +640,7 @@ fn main() {
             }
         } else {
             let repetitions = args.next().map(|value| value.parse::<usize>().expect("invalid repetition count")).unwrap_or(1);
-            assert!((1..=20_000).contains(&repetitions));
+            assert!((1..=2_000_000).contains(&repetitions));
             report_results(&first, repetitions);
         }
     } else {

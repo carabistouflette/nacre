@@ -1,0 +1,795 @@
+{
+  "methodology": "Clang -O3 --native for both backends; pinned where supported; alternating fresh child processes; shared repetition count calibrated toward 0.2 seconds for the faster backend, capped at the workload's 2000000-call limit. Timing includes startup, dispatch, output and shutdown. RSS is wait4 peak RSS of those uninstrumented children. Allocation counts use separate instrumented one-call processes, including CLI setup.",
+  "platform": "Linux-7.2.8-arch1-1-x86_64-with-glibc2.44",
+  "cpu_affinity": 0,
+  "nacre_version": "nacre 0.12.0",
+  "compiler": "/tmp/nacre-runtime-profile-fshymeqh/baseline/target/release/nacre",
+  "clang_path": "/home/arobin/Downloads/nacre/target/native-deps/llvm22/usr/bin/clang-22",
+  "rustc": "rustc 1.99.0 (b940084d7 2026-09-28)",
+  "compiler_sha256": "7d43121f19768b4dfb05b290a453a373c154d82dd90991cb4aba7b931381c42f",
+  "source_sha256": "7a9855e57db5f5c54022d01e73a4c4aeab2fc5b567ce735114aff0e294000ab1",
+  "rust_source_sha256": "190b6fa061b059844a2dd7176fdcbcfad7bf59875b2f89ef5f0f690f19dfd4d0",
+  "clang": "clang version 22.1.8",
+  "llvm_link": "LLVM (http://llvm.org/):\n  LLVM version 22.1.0\n  Optimized build.\n",
+  "repeats": 5,
+  "workloads": {
+    "json": {
+      "definition": {
+        "work_units_per_call": 3,
+        "unit": "JSON records parsed",
+        "input": "Three fixed ASCII objects with id, name, and active fields; varied spaces/tabs/newlines plus escaped quote, newline, and Unicode code point in names; parses array/object structure, ordered keys, integers, and booleans."
+      },
+      "checksum": 73665,
+      "calls_per_process": 1175794,
+      "calibration": [
+        {
+          "backend": "c",
+          "calls": 1,
+          "elapsed_seconds": 0.00052613
+        },
+        {
+          "backend": "llvm",
+          "calls": 1,
+          "elapsed_seconds": 0.000574014
+        },
+        {
+          "backend": "c",
+          "calls": 418,
+          "elapsed_seconds": 0.000689518
+        },
+        {
+          "backend": "llvm",
+          "calls": 418,
+          "elapsed_seconds": 0.000824643
+        },
+        {
+          "backend": "c",
+          "calls": 133368,
+          "elapsed_seconds": 0.024954162
+        },
+        {
+          "backend": "llvm",
+          "calls": 133368,
+          "elapsed_seconds": 0.04460128
+        },
+        {
+          "backend": "c",
+          "calls": 1175794,
+          "elapsed_seconds": 0.214036553
+        },
+        {
+          "backend": "llvm",
+          "calls": 1175794,
+          "elapsed_seconds": 0.384412775
+        }
+      ],
+      "samples": [
+        {
+          "backend": "c",
+          "trial": 0,
+          "elapsed_seconds": 0.220180226,
+          "peak_rss_bytes": 2236416
+        },
+        {
+          "backend": "llvm",
+          "trial": 0,
+          "elapsed_seconds": 0.404266745,
+          "peak_rss_bytes": 2252800
+        },
+        {
+          "backend": "llvm",
+          "trial": 1,
+          "elapsed_seconds": 0.383492511,
+          "peak_rss_bytes": 2338816
+        },
+        {
+          "backend": "c",
+          "trial": 1,
+          "elapsed_seconds": 0.222483292,
+          "peak_rss_bytes": 2330624
+        },
+        {
+          "backend": "c",
+          "trial": 2,
+          "elapsed_seconds": 0.219542626,
+          "peak_rss_bytes": 2310144
+        },
+        {
+          "backend": "llvm",
+          "trial": 2,
+          "elapsed_seconds": 0.409547967,
+          "peak_rss_bytes": 2297856
+        },
+        {
+          "backend": "llvm",
+          "trial": 3,
+          "elapsed_seconds": 0.383930704,
+          "peak_rss_bytes": 2322432
+        },
+        {
+          "backend": "c",
+          "trial": 3,
+          "elapsed_seconds": 0.221996664,
+          "peak_rss_bytes": 2338816
+        },
+        {
+          "backend": "c",
+          "trial": 4,
+          "elapsed_seconds": 0.223325598,
+          "peak_rss_bytes": 2289664
+        },
+        {
+          "backend": "llvm",
+          "trial": 4,
+          "elapsed_seconds": 0.407224734,
+          "peak_rss_bytes": 2252800
+        }
+      ],
+      "summary": {
+        "c": {
+          "median_ns_per_call": 188.80574658486094,
+          "median_peak_rss_bytes": 2310144,
+          "single_call_process_allocations": {
+            "allocations": 10,
+            "frees": 10,
+            "live": 0
+          }
+        },
+        "llvm": {
+          "median_ns_per_call": 343.82446670079963,
+          "median_peak_rss_bytes": 2297856,
+          "single_call_process_allocations": {
+            "allocations": 10,
+            "frees": 10,
+            "live": 0
+          }
+        }
+      }
+    },
+    "string": {
+      "definition": {
+        "work_units_per_call": 66,
+        "unit": "input bytes transformed, split, and searched",
+        "input": "Fixed ASCII string; replace '::' with '|', split, search each field for 'nacre'."
+      },
+      "checksum": 160602,
+      "calls_per_process": 452271,
+      "calibration": [
+        {
+          "backend": "c",
+          "calls": 1,
+          "elapsed_seconds": 0.000577453
+        },
+        {
+          "backend": "llvm",
+          "calls": 1,
+          "elapsed_seconds": 0.000588466
+        },
+        {
+          "backend": "c",
+          "calls": 380,
+          "elapsed_seconds": 0.00075655
+        },
+        {
+          "backend": "llvm",
+          "calls": 380,
+          "elapsed_seconds": 0.000804141
+        },
+        {
+          "backend": "c",
+          "calls": 110501,
+          "elapsed_seconds": 0.053751374
+        },
+        {
+          "backend": "llvm",
+          "calls": 110501,
+          "elapsed_seconds": 0.058307335
+        },
+        {
+          "backend": "c",
+          "calls": 452271,
+          "elapsed_seconds": 0.210345397
+        },
+        {
+          "backend": "llvm",
+          "calls": 452271,
+          "elapsed_seconds": 0.235836787
+        }
+      ],
+      "samples": [
+        {
+          "backend": "c",
+          "trial": 0,
+          "elapsed_seconds": 0.226519021,
+          "peak_rss_bytes": 2347008
+        },
+        {
+          "backend": "llvm",
+          "trial": 0,
+          "elapsed_seconds": 0.242943229,
+          "peak_rss_bytes": 2252800
+        },
+        {
+          "backend": "llvm",
+          "trial": 1,
+          "elapsed_seconds": 0.238847098,
+          "peak_rss_bytes": 2347008
+        },
+        {
+          "backend": "c",
+          "trial": 1,
+          "elapsed_seconds": 0.222329521,
+          "peak_rss_bytes": 2289664
+        },
+        {
+          "backend": "c",
+          "trial": 2,
+          "elapsed_seconds": 0.220939132,
+          "peak_rss_bytes": 2330624
+        },
+        {
+          "backend": "llvm",
+          "trial": 2,
+          "elapsed_seconds": 0.242625345,
+          "peak_rss_bytes": 2330624
+        },
+        {
+          "backend": "llvm",
+          "trial": 3,
+          "elapsed_seconds": 0.246833717,
+          "peak_rss_bytes": 2236416
+        },
+        {
+          "backend": "c",
+          "trial": 3,
+          "elapsed_seconds": 0.215084054,
+          "peak_rss_bytes": 2244608
+        },
+        {
+          "backend": "c",
+          "trial": 4,
+          "elapsed_seconds": 0.217110142,
+          "peak_rss_bytes": 2347008
+        },
+        {
+          "backend": "llvm",
+          "trial": 4,
+          "elapsed_seconds": 0.255423073,
+          "peak_rss_bytes": 2244608
+        }
+      ],
+      "summary": {
+        "c": {
+          "median_ns_per_call": 488.51049923607746,
+          "median_peak_rss_bytes": 2330624,
+          "single_call_process_allocations": {
+            "allocations": 22,
+            "frees": 22,
+            "live": 0
+          }
+        },
+        "llvm": {
+          "median_ns_per_call": 537.162959818339,
+          "median_peak_rss_bytes": 2252800,
+          "single_call_process_allocations": {
+            "allocations": 22,
+            "frees": 22,
+            "live": 0
+          }
+        }
+      }
+    },
+    "binary": {
+      "definition": {
+        "work_units_per_call": 4096,
+        "unit": "payload bytes streamed and round-tripped",
+        "input": "4096 deterministic bytes; 257-byte in-memory stream chunks; lowercase hex encode/decode."
+      },
+      "checksum": 2457183,
+      "calls_per_process": 6000,
+      "calibration": [
+        {
+          "backend": "c",
+          "calls": 1,
+          "elapsed_seconds": 0.000685095
+        },
+        {
+          "backend": "llvm",
+          "calls": 1,
+          "elapsed_seconds": 0.000701965
+        },
+        {
+          "backend": "c",
+          "calls": 321,
+          "elapsed_seconds": 0.011769206
+        },
+        {
+          "backend": "llvm",
+          "calls": 321,
+          "elapsed_seconds": 0.015877295
+        },
+        {
+          "backend": "c",
+          "calls": 6000,
+          "elapsed_seconds": 0.202562582
+        },
+        {
+          "backend": "llvm",
+          "calls": 6000,
+          "elapsed_seconds": 0.280627427
+        }
+      ],
+      "samples": [
+        {
+          "backend": "c",
+          "trial": 0,
+          "elapsed_seconds": 0.202515852,
+          "peak_rss_bytes": 2260992
+        },
+        {
+          "backend": "llvm",
+          "trial": 0,
+          "elapsed_seconds": 0.285606571,
+          "peak_rss_bytes": 2379776
+        },
+        {
+          "backend": "llvm",
+          "trial": 1,
+          "elapsed_seconds": 0.294200706,
+          "peak_rss_bytes": 2478080
+        },
+        {
+          "backend": "c",
+          "trial": 1,
+          "elapsed_seconds": 0.213818867,
+          "peak_rss_bytes": 2478080
+        },
+        {
+          "backend": "c",
+          "trial": 2,
+          "elapsed_seconds": 0.20149633,
+          "peak_rss_bytes": 2453504
+        },
+        {
+          "backend": "llvm",
+          "trial": 2,
+          "elapsed_seconds": 0.280786843,
+          "peak_rss_bytes": 2256896
+        },
+        {
+          "backend": "llvm",
+          "trial": 3,
+          "elapsed_seconds": 0.296065686,
+          "peak_rss_bytes": 2379776
+        },
+        {
+          "backend": "c",
+          "trial": 3,
+          "elapsed_seconds": 0.203435064,
+          "peak_rss_bytes": 2371584
+        },
+        {
+          "backend": "c",
+          "trial": 4,
+          "elapsed_seconds": 0.204827178,
+          "peak_rss_bytes": 2478080
+        },
+        {
+          "backend": "llvm",
+          "trial": 4,
+          "elapsed_seconds": 0.279305429,
+          "peak_rss_bytes": 2461696
+        }
+      ],
+      "summary": {
+        "c": {
+          "median_ns_per_call": 33905.844,
+          "median_peak_rss_bytes": 2453504,
+          "single_call_process_allocations": {
+            "allocations": 21,
+            "frees": 21,
+            "live": 0
+          }
+        },
+        "llvm": {
+          "median_ns_per_call": 47601.095166666666,
+          "median_peak_rss_bytes": 2379776,
+          "single_call_process_allocations": {
+            "allocations": 21,
+            "frees": 21,
+            "live": 0
+          }
+        }
+      }
+    },
+    "hashmap": {
+      "definition": {
+        "work_units_per_call": 10240,
+        "unit": "map operations",
+        "input": "2048 i32 keys: insert, lookup, replace, lookup, remove (five operations per entry)."
+      },
+      "checksum": 100941824,
+      "calls_per_process": 3087,
+      "calibration": [
+        {
+          "backend": "c",
+          "calls": 1,
+          "elapsed_seconds": 0.000845255
+        },
+        {
+          "backend": "llvm",
+          "calls": 1,
+          "elapsed_seconds": 0.000913633
+        },
+        {
+          "backend": "c",
+          "calls": 260,
+          "elapsed_seconds": 0.024188288
+        },
+        {
+          "backend": "llvm",
+          "calls": 260,
+          "elapsed_seconds": 0.04053771
+        },
+        {
+          "backend": "c",
+          "calls": 2364,
+          "elapsed_seconds": 0.168440868
+        },
+        {
+          "backend": "llvm",
+          "calls": 2364,
+          "elapsed_seconds": 0.222450523
+        },
+        {
+          "backend": "c",
+          "calls": 3087,
+          "elapsed_seconds": 0.215254029
+        },
+        {
+          "backend": "llvm",
+          "calls": 3087,
+          "elapsed_seconds": 0.269235686
+        }
+      ],
+      "samples": [
+        {
+          "backend": "c",
+          "trial": 0,
+          "elapsed_seconds": 0.207231898,
+          "peak_rss_bytes": 2478080
+        },
+        {
+          "backend": "llvm",
+          "trial": 0,
+          "elapsed_seconds": 0.2547128,
+          "peak_rss_bytes": 2371584
+        },
+        {
+          "backend": "llvm",
+          "trial": 1,
+          "elapsed_seconds": 0.256802864,
+          "peak_rss_bytes": 2441216
+        },
+        {
+          "backend": "c",
+          "trial": 1,
+          "elapsed_seconds": 0.192468497,
+          "peak_rss_bytes": 2363392
+        },
+        {
+          "backend": "c",
+          "trial": 2,
+          "elapsed_seconds": 0.195346789,
+          "peak_rss_bytes": 2367488
+        },
+        {
+          "backend": "llvm",
+          "trial": 2,
+          "elapsed_seconds": 0.264184391,
+          "peak_rss_bytes": 2469888
+        },
+        {
+          "backend": "llvm",
+          "trial": 3,
+          "elapsed_seconds": 0.252986864,
+          "peak_rss_bytes": 2265088
+        },
+        {
+          "backend": "c",
+          "trial": 3,
+          "elapsed_seconds": 0.189481619,
+          "peak_rss_bytes": 2461696
+        },
+        {
+          "backend": "c",
+          "trial": 4,
+          "elapsed_seconds": 0.194597149,
+          "peak_rss_bytes": 2367488
+        },
+        {
+          "backend": "llvm",
+          "trial": 4,
+          "elapsed_seconds": 0.281970692,
+          "peak_rss_bytes": 2363392
+        }
+      ],
+      "summary": {
+        "c": {
+          "median_ns_per_call": 63037.62520246194,
+          "median_peak_rss_bytes": 2367488,
+          "single_call_process_allocations": {
+            "allocations": 15,
+            "frees": 15,
+            "live": 0
+          }
+        },
+        "llvm": {
+          "median_ns_per_call": 83188.48850016198,
+          "median_peak_rss_bytes": 2371584,
+          "single_call_process_allocations": {
+            "allocations": 15,
+            "frees": 15,
+            "live": 0
+          }
+        }
+      }
+    },
+    "sudoku": {
+      "definition": {
+        "work_units_per_call": 1,
+        "unit": "Sudoku puzzles solved",
+        "input": "Fixed 9x9 puzzle copied from examples/apps/sudoku.ncr; backtracking solver."
+      },
+      "checksum": 16605,
+      "calls_per_process": 537,
+      "calibration": [
+        {
+          "backend": "c",
+          "calls": 1,
+          "elapsed_seconds": 0.002052205
+        },
+        {
+          "backend": "llvm",
+          "calls": 1,
+          "elapsed_seconds": 0.002228775
+        },
+        {
+          "backend": "c",
+          "calls": 107,
+          "elapsed_seconds": 0.055043009
+        },
+        {
+          "backend": "llvm",
+          "calls": 107,
+          "elapsed_seconds": 0.061264405
+        },
+        {
+          "backend": "c",
+          "calls": 427,
+          "elapsed_seconds": 0.174864714
+        },
+        {
+          "backend": "llvm",
+          "calls": 427,
+          "elapsed_seconds": 0.21341467
+        },
+        {
+          "backend": "c",
+          "calls": 537,
+          "elapsed_seconds": 0.219752193
+        },
+        {
+          "backend": "llvm",
+          "calls": 537,
+          "elapsed_seconds": 0.254130232
+        }
+      ],
+      "samples": [
+        {
+          "backend": "c",
+          "trial": 0,
+          "elapsed_seconds": 0.220619203,
+          "peak_rss_bytes": 2453504
+        },
+        {
+          "backend": "llvm",
+          "trial": 0,
+          "elapsed_seconds": 0.269763075,
+          "peak_rss_bytes": 2125824
+        },
+        {
+          "backend": "llvm",
+          "trial": 1,
+          "elapsed_seconds": 0.267059693,
+          "peak_rss_bytes": 2297856
+        },
+        {
+          "backend": "c",
+          "trial": 1,
+          "elapsed_seconds": 0.233929225,
+          "peak_rss_bytes": 2441216
+        },
+        {
+          "backend": "c",
+          "trial": 2,
+          "elapsed_seconds": 0.224213528,
+          "peak_rss_bytes": 2400256
+        },
+        {
+          "backend": "llvm",
+          "trial": 2,
+          "elapsed_seconds": 0.271067558,
+          "peak_rss_bytes": 2347008
+        },
+        {
+          "backend": "llvm",
+          "trial": 3,
+          "elapsed_seconds": 0.272997319,
+          "peak_rss_bytes": 2330624
+        },
+        {
+          "backend": "c",
+          "trial": 3,
+          "elapsed_seconds": 0.227918536,
+          "peak_rss_bytes": 2441216
+        },
+        {
+          "backend": "c",
+          "trial": 4,
+          "elapsed_seconds": 0.239894383,
+          "peak_rss_bytes": 2420736
+        },
+        {
+          "backend": "llvm",
+          "trial": 4,
+          "elapsed_seconds": 0.25948646,
+          "peak_rss_bytes": 2236416
+        }
+      ],
+      "summary": {
+        "c": {
+          "median_ns_per_call": 424429.30353817507,
+          "median_peak_rss_bytes": 2441216,
+          "single_call_process_allocations": {
+            "allocations": 7,
+            "frees": 7,
+            "live": 0
+          }
+        },
+        "llvm": {
+          "median_ns_per_call": 502352.09497206705,
+          "median_peak_rss_bytes": 2297856,
+          "single_call_process_allocations": {
+            "allocations": 7,
+            "frees": 7,
+            "live": 0
+          }
+        }
+      }
+    },
+    "game_of_life": {
+      "definition": {
+        "work_units_per_call": 1000000,
+        "unit": "cell transitions",
+        "input": "Deterministic 100x100 toroidal grid, 100 B3/S23 generations."
+      },
+      "checksum": 45,
+      "calls_per_process": 37,
+      "calibration": [
+        {
+          "backend": "c",
+          "calls": 1,
+          "elapsed_seconds": 0.006781126
+        },
+        {
+          "backend": "llvm",
+          "calls": 1,
+          "elapsed_seconds": 0.0144392
+        },
+        {
+          "backend": "c",
+          "calls": 32,
+          "elapsed_seconds": 0.188199245
+        },
+        {
+          "backend": "llvm",
+          "calls": 32,
+          "elapsed_seconds": 0.384999752
+        },
+        {
+          "backend": "c",
+          "calls": 37,
+          "elapsed_seconds": 0.224625245
+        },
+        {
+          "backend": "llvm",
+          "calls": 37,
+          "elapsed_seconds": 0.462387143
+        }
+      ],
+      "samples": [
+        {
+          "backend": "c",
+          "trial": 0,
+          "elapsed_seconds": 0.216156973,
+          "peak_rss_bytes": 2420736
+        },
+        {
+          "backend": "llvm",
+          "trial": 0,
+          "elapsed_seconds": 0.464331807,
+          "peak_rss_bytes": 2260992
+        },
+        {
+          "backend": "llvm",
+          "trial": 1,
+          "elapsed_seconds": 0.43962176,
+          "peak_rss_bytes": 2453504
+        },
+        {
+          "backend": "c",
+          "trial": 1,
+          "elapsed_seconds": 0.219315882,
+          "peak_rss_bytes": 2367488
+        },
+        {
+          "backend": "c",
+          "trial": 2,
+          "elapsed_seconds": 0.240909498,
+          "peak_rss_bytes": 2367488
+        },
+        {
+          "backend": "llvm",
+          "trial": 2,
+          "elapsed_seconds": 0.445568551,
+          "peak_rss_bytes": 2478080
+        },
+        {
+          "backend": "llvm",
+          "trial": 3,
+          "elapsed_seconds": 0.452893358,
+          "peak_rss_bytes": 2383872
+        },
+        {
+          "backend": "c",
+          "trial": 3,
+          "elapsed_seconds": 0.221871745,
+          "peak_rss_bytes": 2441216
+        },
+        {
+          "backend": "c",
+          "trial": 4,
+          "elapsed_seconds": 0.231454196,
+          "peak_rss_bytes": 2379776
+        },
+        {
+          "backend": "llvm",
+          "trial": 4,
+          "elapsed_seconds": 0.443048773,
+          "peak_rss_bytes": 2367488
+        }
+      ],
+      "summary": {
+        "c": {
+          "median_ns_per_call": 5996533.6486486485,
+          "median_peak_rss_bytes": 2379776,
+          "single_call_process_allocations": {
+            "allocations": 7,
+            "frees": 7,
+            "live": 0
+          }
+        },
+        "llvm": {
+          "median_ns_per_call": 12042393.27027027,
+          "median_peak_rss_bytes": 2383872,
+          "single_call_process_allocations": {
+            "allocations": 7,
+            "frees": 7,
+            "live": 0
+          }
+        }
+      }
+    }
+  }
+}

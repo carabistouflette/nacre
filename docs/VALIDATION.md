@@ -4,6 +4,26 @@ Nacre is experimental pre-1.0. Executed checks are evidence, not a safety certif
 [validation-0.12.0.json](validation-0.12.0.json) records portable local results.
 Historical reports retain their original release labels; they are not current-release proof.
 
+## Runtime backend comparison and private LLVM linkage
+
+The runtime investigation compared an independently built `0bede0f` compiler
+with whole-program-private LLVM linkage, using identical current workload
+sources, Clang 22.1.8 at `-O3 --native`, `llvm-link` 22.1.0, and CPU 0 affinity.
+[Runtime measurements and controlled linkage evidence](BENCHMARKS.md#cdirect-llvm-runtime-comparison)
+record all six workloads, compiler/source hashes, RSS, allocation counts, and
+measurement limits. Life improved substantially; the other five workloads
+still favored C, and no allocation reduction is claimed.
+
+| Executed check | Observed result |
+| --- | --- |
+| Final `NACRE_TEST_BACKEND=llvm cargo test --offline --locked --features fuzzing -- --include-ignored --test-threads=4` | 1,348 tests passed across 68 suites, including interface/vtable consumers |
+| Final `cargo clippy --offline --locked --all-targets --features fuzzing -- -D warnings` | Passed |
+| C/direct runtime comparison, baseline and final compiler | Five alternating fresh-process samples per workload/backend; all 60 timed samples per revision and all calibration samples matched Rust checksums |
+| Separate allocation builds, both revisions/backends | All six workloads had balanced tracked allocations/frees and zero live allocations |
+| Existing Nacre/Rust mode with `--repeats 1 --rss-repeats 1` | Actual build, preflight, timing, RSS, and allocation paths completed |
+| GDB 18.1, final private-function build at `-O0` | Original-source line-3 breakpoint verified; argument `input=4` and initialized local `changed=6` inspected; executable exited 0 |
+
+
 ## Native backend parity, diagnostics, and source debugging
 
 The 2026-10-15 run used Clang 22.1.8, `llvm-link` 22.1.0, and the corrected

@@ -163,8 +163,8 @@ throughput or an isolated causal optimization delta.
 
 ## Release compiler build-stage profile
 
-The 2026-10-15 profile compares release compiler baseline `a81f2fc` with the
-backend-hardening changes, on Linux x86-64, pinned to CPU 0. Both backends use
+The 2026-10-15 profile compares release compiler baseline `a81f2fc` with
+backend-hardening commit `0bede0f`, on Linux x86-64, pinned to CPU 0. Both backends use
 Clang 22.1.8 at `-O2`; direct LLVM uses `llvm-link` 22.1.0. Compiler SHA-256
 identities, tool output, individual samples, stdout, and allocation counters are
 retained in [the baseline report](../benchmarks/build-profile-baseline.json)
@@ -231,4 +231,103 @@ cargo build --offline --locked --release --bin nacre
 python3 benchmarks/profile_builds.py --compiler target/release/nacre \
   --label local-release --repeats 3 --output /tmp/nacre-build-profile.json
 ```
+
+
+## C/direct LLVM runtime comparison
+
+The 2026-10-15 runtime comparison uses the same six existing Nacre workloads
+before and after making whole-program-only LLVM functions private. The baseline
+compiler is an independently built `0bede0f`; compiler hashes, source hashes,
+tool versions, calibration runs, individual samples, allocation counts, and
+per-child RSS are retained in
+[backend-runtime-baseline.json](../benchmarks/backend-runtime-baseline.json) and
+[backend-runtime-optimized.json](../benchmarks/backend-runtime-optimized.json).
+
+Both backends use Clang 22.1.8, `-O3`, and `--native`; direct LLVM also uses
+`llvm-link` 22.1.0. The runner pins CPU 0 and alternates backend order over five
+fresh child processes per workload/backend. Calibration chooses one shared
+repetition count per workload within each revision, targeting 0.2 seconds for
+the faster backend. Both workload drivers now allow up to two million calls:
+the previous 20,000-call ceiling produced excessively short fast-workload
+samples. Kernel inputs and algorithms are unchanged.
+
+Rust supplies the independent one-call checksum oracle. Every calibration,
+timing, and allocation run checks its expected aggregate checksum. Timing and
+RSS use uninstrumented executables; separate one-call processes collect tracked
+Nacre allocations. All six workloads matched Rust for both revisions/backends,
+with balanced allocation/free counts and zero live tracked allocations.
+
+### Runtime medians
+
+Microseconds per kernel call, including amortized process startup, argument
+handling, workload dispatch, result formatting, and shutdown. These are not the
+built-in `nacre bench` timer's isolated function measurements.
+
+| Workload | C baseline | C after | LLVM baseline | LLVM after |
+| --- | ---: | ---: | ---: | ---: |
+| JSON | 0.189 | 0.183 | 0.344 | 0.324 |
+| String | 0.489 | 0.494 | 0.537 | 0.515 |
+| Binary | 33.906 | 33.740 | 47.601 | 45.939 |
+| Hash map | 63.038 | 66.084 | 83.188 | 81.903 |
+| Sudoku | 424.429 | 422.285 | 502.352 | 455.227 |
+| Game of Life | 5,996.534 | 5,965.678 | 12,042.393 | 4,057.852 |
+
+### Memory observations after the change
+
+RSS is median fresh-process peak RSS from `wait4`, including loader, stack,
+runtime, arguments, and workload—not a heap-only or per-call measurement.
+Tracked allocation counts include one-call process setup and output. Counts
+were identical across both backends and both revisions; no allocation reduction
+or meaningful RSS improvement is claimed.
+
+| Workload | C peak RSS KiB | LLVM peak RSS KiB | Allocations / frees, both backends |
+| --- | ---: | ---: | --- |
+| JSON | 2,244 | 2,236 | 10 / 10 |
+| String | 2,196 | 2,256 | 22 / 22 |
+| Binary | 2,320 | 2,384 | 21 / 21 |
+| Hash map | 2,372 | 2,296 | 15 / 15 |
+| Sudoku | 2,324 | 2,328 | 7 / 7 |
+| Game of Life | 2,312 | 2,396 | 7 / 7 |
+
+### Localized cause and controlled experiment
+
+`perf` 7.2.9 at 499 Hz collected 2,992 samples from the original direct Life
+executable. The C build inlined this work into `lifeKernel`; Clang's inline
+remarks rejected both direct calls as too costly.
+
+| Function | Sampled cycles % | Inline cost | Inline threshold |
+| --- | ---: | ---: | ---: |
+| `LifeSim.neighbors` | 71.76 | 655 | 525 |
+| `LifeSim.step` | 27.97 | 425 | 250 |
+
+Adding `inlinehint` alone did not materially improve three paired runs and was
+not retained. Changing only the linked user functions' `linkonce_odr` linkage
+to `internal` improved three alternating, CPU-pinned 100-call Life runs, all
+with the same checksum:
+
+| Trial | Original seconds | Internal-linkage seconds |
+| --- | ---: | ---: |
+| 1 | 1.211878 | 0.407242 |
+| 2 | 1.187465 | 0.407028 |
+| 3 | 1.189199 | 0.406820 |
+
+Production now gives whole-program-only functions private linkage so LLVM can
+optimize their calling conventions and inline them.
+Concrete interface implementations remain external for imported C vtable thunks.
+
+Life is now faster than the matched C build on this machine; the other five
+workloads still favor C. Smaller before/after movements are not isolated causal
+claims, and the C controls also varied. No universal backend speedup is claimed.
+
+With matching LLVM tools and native dependency paths configured:
+
+```sh
+cargo build --offline --locked --release --bin nacre
+python3 benchmarks/run_suite.py --compare-backends --repeats 5 \
+  --output /tmp/nacre-backend-runtime.json
+```
+
+Pass `--compiler /path/to/another/revision/target/release/nacre` to measure a
+separately built revision against the same current workload sources. Without
+`--compare-backends`, the existing Nacre/Rust benchmark mode is unchanged.
 

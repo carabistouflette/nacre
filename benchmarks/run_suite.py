@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import platform
@@ -69,9 +70,13 @@ def parse_args() -> argparse.Namespace:
         description="Compare six matched native Nacre and Rust workloads; emit JSON."
     )
     parser.add_argument("--repeats", type=int, default=5, help="fresh benchmark command runs per implementation (1..20)")
-    parser.add_argument("--rss-repeats", type=int, default=3, help="fresh per-workload child processes for RSS (1..20)")
+    parser.add_argument("--rss-repeats", type=int, default=3, help="fresh RSS processes per workload in Rust comparison mode (1..20)")
     parser.add_argument("--deadline-seconds", type=float, default=120.0, help="deadline for each build/child process")
     parser.add_argument("--output", type=Path, help="write JSON here instead of stdout")
+    parser.add_argument("--compiler", type=Path, default=ROOT / "target/release/nacre",
+                        help="release Nacre compiler to measure")
+    parser.add_argument("--compare-backends", action="store_true",
+                        help="compare C and direct LLVM execution, with Rust checksum preflight")
     args = parser.parse_args()
     if not 1 <= args.repeats <= 20:
         parser.error("--repeats must be between 1 and 20")
@@ -194,6 +199,7 @@ def build_nacre(
     deadline_seconds: float,
     *,
     memory_stats: bool,
+    direct: bool = False,
 ) -> float:
     command = [
         str(nacre),
@@ -206,6 +212,8 @@ def build_nacre(
     ]
     if memory_stats:
         command.append("--memory-stats")
+    if direct:
+        command.append("--direct")
     return timed_command(command, deadline_seconds)
 
 
@@ -250,6 +258,130 @@ def run_rust_bench(
     return parse_rust_bench(result.stdout), result
 
 
+def compare_backends(
+    args: argparse.Namespace, nacre: Path, rustc: str,
+    c_compiler: str, nacre_version: str,
+) -> int:
+    """Measure fresh matched workload processes, not compiler or cache latency."""
+    cpu = None
+    if hasattr(os, "sched_getaffinity"):
+        cpu = min(os.sched_getaffinity(0))
+        os.sched_setaffinity(0, {cpu})
+    report = {
+        "methodology": (
+            "Clang -O3 --native for both backends; pinned where supported; "
+            "alternating fresh child processes; shared repetition count calibrated "
+            "toward 0.2 seconds for the faster backend, capped at the workload's "
+            "2000000-call limit. Timing includes startup, dispatch, output and shutdown. "
+            "RSS is wait4 peak RSS of those uninstrumented children. Allocation "
+            "counts use separate instrumented one-call processes, including CLI setup."
+        ),
+        "platform": platform.platform(), "cpu_affinity": cpu,
+        "nacre_version": nacre_version,
+        "compiler": str(nacre), "clang_path": c_compiler,
+        "rustc": process_harness.version_line(rustc, args.deadline_seconds),
+        "compiler_sha256": hashlib.sha256(nacre.read_bytes()).hexdigest(),
+        "source_sha256": hashlib.sha256(NACRE_SOURCE.read_bytes()).hexdigest(),
+        "rust_source_sha256": hashlib.sha256(RUST_SOURCE.read_bytes()).hexdigest(),
+        "clang": process_harness.version_line(c_compiler, args.deadline_seconds),
+        "llvm_link": process_harness.checked_command(
+            [os.environ.get("NACRE_LLVM_LINK", "llvm-link"), "--version"],
+            args.deadline_seconds,
+        ).decode("utf-8", errors="replace"),
+        "repeats": args.repeats, "workloads": {},
+    }
+    with tempfile.TemporaryDirectory(prefix="nacre-backend-runtime-") as temporary:
+        directory = Path(temporary)
+        supervisor = directory / "wait4-supervisor"
+        process_harness.supervisor_build(c_compiler, supervisor, args.deadline_seconds)
+        binaries = {}
+        stats_binaries = {}
+        for backend in ("c", "llvm"):
+            binaries[backend] = directory / backend
+            stats_binaries[backend] = directory / f"{backend}-stats"
+            build_nacre(nacre, binaries[backend], args.deadline_seconds,
+                        memory_stats=False, direct=backend == "llvm")
+            build_nacre(nacre, stats_binaries[backend], args.deadline_seconds,
+                        memory_stats=True, direct=backend == "llvm")
+        oracle = directory / "rust-oracle"
+        build_rust(rustc, oracle, args.deadline_seconds, allocation_stats=False)
+        for name in WORKLOADS:
+            oracle_result = process_harness.run_child(
+                supervisor, oracle, [name, "1"], args.deadline_seconds
+            )
+            if oracle_result.returncode != 0:
+                raise RuntimeError(f"Rust preflight {name} failed: {oracle_result.stderr!r}")
+            checksum = parse_results(oracle_result.stdout, {name})[name]
+            if checksum < 0:
+                raise RuntimeError(f"Rust preflight {name} returned a failure checksum")
+            allocations = {}
+            for backend in ("c", "llvm"):
+                result = checked_run(
+                    supervisor, stats_binaries[backend], [name, "1"],
+                    args.deadline_seconds, implementation=backend,
+                    expected_stdout=expected_line(name, checksum, 1),
+                )
+                counts = process_harness.parse_memory_report("nacre", result.stderr)
+                if counts["live"] != 0 or counts["allocations"] != counts["frees"]:
+                    raise RuntimeError(f"{backend} {name} allocation imbalance: {counts}")
+                allocations[backend] = counts
+            repetitions = 1
+            calibration = []
+            while True:
+                elapsed = []
+                for backend in ("c", "llvm"):
+                    result = checked_run(
+                        supervisor, binaries[backend], [name, str(repetitions)],
+                        args.deadline_seconds, implementation=backend,
+                        expected_stdout=expected_line(name, checksum, repetitions),
+                    )
+                    elapsed.append(result.elapsed_seconds)
+                    calibration.append({"backend": backend, "calls": repetitions,
+                                        "elapsed_seconds": result.elapsed_seconds})
+                if min(elapsed) >= 0.2 or repetitions == 2_000_000:
+                    break
+                repetitions = min(2_000_000, max(
+                    repetitions + 1, int(repetitions * 0.22 / max(min(elapsed), 1e-9))
+                ))
+            rows = []
+            for trial in range(args.repeats):
+                order = ("c", "llvm") if trial % 2 == 0 else ("llvm", "c")
+                for backend in order:
+                    result = checked_run(
+                        supervisor, binaries[backend], [name, str(repetitions)],
+                        args.deadline_seconds, implementation=backend,
+                        expected_stdout=expected_line(name, checksum, repetitions),
+                    )
+                    rows.append({"backend": backend, "trial": trial,
+                                 "elapsed_seconds": result.elapsed_seconds,
+                                 "peak_rss_bytes": result.peak_rss_bytes})
+            summary = {}
+            for backend in ("c", "llvm"):
+                samples = [row for row in rows if row["backend"] == backend]
+                summary[backend] = {
+                    "median_ns_per_call": statistics.median(
+                        row["elapsed_seconds"] * 1e9 / repetitions for row in samples
+                    ),
+                    "median_peak_rss_bytes": statistics.median(
+                        row["peak_rss_bytes"] for row in samples
+                    ),
+                    "single_call_process_allocations": allocations[backend],
+                }
+            report["workloads"][name] = {
+                "definition": WORKLOAD_DEFINITIONS[name], "checksum": checksum,
+                "calls_per_process": repetitions, "calibration": calibration,
+                "samples": rows, "summary": summary,
+            }
+            print(f"{name}: {json.dumps(summary)}", file=sys.stderr, flush=True)
+    serialized = json.dumps(report, indent=2) + "\n"
+    if args.output:
+        output_path = args.output if args.output.is_absolute() else ROOT / args.output
+        output_path.write_text(serialized, encoding="utf-8")
+    else:
+        print(serialized, end="")
+    return 0
+
+
 def main() -> int:
     args = parse_args()
     # Measure compilation, not Nacre's executable-cache lookup/copy path.
@@ -257,12 +389,16 @@ def main() -> int:
     if os.name != "posix" or not (sys.platform.startswith("linux") or sys.platform == "darwin"):
         raise RuntimeError("the wait4 supervisor requires POSIX Linux or macOS")
 
-    nacre = ROOT / "target" / "release" / "nacre"
+    nacre = args.compiler.resolve()
     if not nacre.is_file():
-        raise RuntimeError("target/release/nacre is required; this runner does not rebuild the compiler")
+        raise RuntimeError(f"{nacre} is required; this runner does not rebuild the compiler")
     rustc = shutil.which("rustc")
     if rustc is None:
         raise RuntimeError("rustc is not available on PATH")
+    if args.compare_backends:
+        # Direct compilation selects NACRE_CLANG, not NACRE_CC. Match that
+        # exact compiler for C rather than comparing GCC with LLVM/Clang.
+        os.environ["NACRE_CC"] = os.environ.get("NACRE_CLANG", "clang")
     cc_name, cc_version, c_compiler = process_harness.find_c_compiler(
         os.environ.copy(), args.deadline_seconds
     )
@@ -277,6 +413,8 @@ def main() -> int:
         (line.partition(":")[2].strip() for line in rust_details.splitlines() if line.startswith("host:")),
         "unknown",
     )
+    if args.compare_backends:
+        return compare_backends(args, nacre, rustc, c_compiler, nacre_version)
 
     with tempfile.TemporaryDirectory(prefix="nacre-option1-") as temporary:
         temporary_dir = Path(temporary)

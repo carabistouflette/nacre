@@ -688,11 +688,12 @@ impl<'a> LlvmEmitter<'a> {
         let body = Self::materialize_debug_body(&self.body, implicit_location);
         let debug_scope = subprogram.map_or_else(String::new, |id| format!(" !dbg !{id}"));
         // Runtime vtable thunks can introduce references after this module is
-        // linked. Keep their concrete implementations available to llvm-link.
+        // linked. Keep those implementations external; all other functions are
+        // whole-program private so LLVM can promote pointer ABI arguments.
         let linkage = if function.receiver.is_some_and(|class| {
             self.program.classes[class].implementations.iter()
                 .any(|(_, methods)| methods.contains(&function.id))
-        }) { "" } else { "linkonce_odr " };
+        }) { "" } else { "internal " };
         writeln!(self.output,
             "define {linkage}void @{}({}){} {{\nentry:\n{}{}}}\n",
             direct_function_symbol(function.id),
