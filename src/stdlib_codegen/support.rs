@@ -1,5 +1,5 @@
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
-pub(super) const TEXT_INLINE_CAPACITY: usize = 16;
+pub(super) const TEXT_INLINE_CAPACITY: usize = 23;
 pub(super) fn marker(method: M) -> &'static str {
     match method {
         M::ListNew => "@LIST_NEW@", M::ListAdd => "@LIST_ADD@",

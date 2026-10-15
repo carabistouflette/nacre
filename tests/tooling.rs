@@ -604,3 +604,36 @@ void main() {
     let stderr3 = String::from_utf8_lossy(&output3.stderr);
     assert!(stderr3.contains("allocations=2 frees=2 live=0"), "expected heap allocation: {stderr3}");
 }
+
+#[test]
+fn small_string_optimization_inline_capacity_23_bytes() {
+    // 23 bytes fits inline in Text storage: 1 allocation (the Text object itself), 0 for backing buffer
+    let source_inline = r#"
+void main() {
+    Text t = new Text("12345678901234567890123");
+    assert(t.byteLength() == 23);
+    assert(t.equalsString("12345678901234567890123"));
+}
+"#;
+    let c = compile_to_c(source_inline).unwrap();
+    let program = native::compile_c_with_flags(&c, &["-DNACRE_MEMORY_STATS"]).unwrap();
+    let output = program.output().unwrap();
+    assert!(output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("allocations=1 frees=1 live=0"), "expected 1 allocation: {stderr}");
+
+    // 24 bytes exceeds 23-byte inline capacity: allocates heap backing buffer (2 allocations)
+    let source_heap = r#"
+void main() {
+    Text t = new Text("123456789012345678901234");
+    assert(t.byteLength() == 24);
+    assert(t.equalsString("123456789012345678901234"));
+}
+"#;
+    let c2 = compile_to_c(source_heap).unwrap();
+    let program2 = native::compile_c_with_flags(&c2, &["-DNACRE_MEMORY_STATS"]).unwrap();
+    let output2 = program2.output().unwrap();
+    assert!(output2.status.success());
+    let stderr2 = String::from_utf8_lossy(&output2.stderr);
+    assert!(stderr2.contains("allocations=2 frees=2 live=0"), "expected 2 allocations: {stderr2}");
+}
