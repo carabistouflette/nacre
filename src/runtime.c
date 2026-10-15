@@ -328,6 +328,13 @@ static void *ncr_allocate_raw(size_t size, size_t line, size_t column) {
 #endif
     return p;
 }
+static void ncr_deallocate(void *p) {
+    if (p == NULL) { return; }
+#ifdef NACRE_MEMORY_STATS
+    atomic_fetch_add_explicit(&ncr_frees, 1, memory_order_relaxed);
+#endif
+    free(p);
+}
 static void *ncr_reallocate(void *ptr, size_t size, size_t line, size_t column) {
     if (size == 0) {
         ncr_deallocate(ptr);
@@ -346,13 +353,6 @@ static void *ncr_reallocate(void *ptr, size_t size, size_t line, size_t column) 
     atomic_fetch_add_explicit(&ncr_frees, 1, memory_order_relaxed);
 #endif
     return p;
-}
-static void ncr_deallocate(void *p) {
-    if (p == NULL) { return; }
-#ifdef NACRE_MEMORY_STATS
-    atomic_fetch_add_explicit(&ncr_frees, 1, memory_order_relaxed);
-#endif
-    free(p);
 }
 static void ncr_memory_report(void) {
 #ifdef NACRE_MEMORY_STATS

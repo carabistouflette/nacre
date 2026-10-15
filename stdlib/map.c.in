@@ -10,6 +10,7 @@ static inline int32_t ncr_map_find_slot_@ID@(struct ncr_hash_table_@ID@ *table, 
     }
     uint32_t mask = (uint32_t)table->capacity - UINT32_C(1);
     uint32_t index = ncr_map_bucket_@ID@(hash) & mask;
+#pragma GCC unroll 4
     for (int32_t probes = 0; probes < table->capacity; ++probes) {
         @ENTRY_TYPE@ *entry = &table->entries[index];
         if (entry->hash == 0) {
