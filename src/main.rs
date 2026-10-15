@@ -11,8 +11,8 @@ const HELP: &str = "Nacre — experimental native compiler written in Rust
 
 Usage:
   nacre check  source.ncr ... | directory
-  nacre run    source.ncr [--memory-stats] [-O0|-O1|-O2|-O3|-Os] [-- arguments...]
-  nacre build  source.ncr [-o executable] [--memory-stats] [-O0|-O1|-O2|-O3|-Os]
+  nacre run    source.ncr [--memory-stats] [--native] [--lto] [-O0|-O1|-O2|-O3|-Os] [-- arguments...]
+  nacre build  source.ncr [-o executable] [--memory-stats] [--native] [--lto] [-O0|-O1|-O2|-O3|-Os]
   nacre emit-c source.ncr [-o output.c] [--memory-stats]
   nacre emit-flow source.ncr [-o output.flow]
   nacre emit-borrows source.ncr [-o output.borrows]
@@ -33,6 +33,8 @@ Examples with Cargo:
 Multiple files or a .ncr directory are accepted by all commands.
 Source files may declare modules and import public names; all requested inputs are compiled together.
 --sanitize (run/build): AddressSanitizer + UndefinedBehaviorSanitizer.
+--native (run/build): enable host CPU native instructions (-march=native).
+--lto (run/build): enable link-time optimization (-flto).
 init: create a new project; refuse an existing path.
 doctor: compile and run an end-to-end test with List and Text.
 build: default output is out/<source-name>.
@@ -82,6 +84,8 @@ fn execute(args: Vec<OsString>) -> Result<i32, String> {
     let mut output = None;
     let mut memory_stats = false;
     let mut sanitize = false;
+    let mut native_arch = false;
+    let mut lto = false;
     let mut optimization = None;
     let mut program_args = &args[args.len()..];
     let mut i = 1;
@@ -102,6 +106,10 @@ fn execute(args: Vec<OsString>) -> Result<i32, String> {
             i += 1;
         } else if args[i] == "--sanitize" && matches!(command, "run" | "build") && !sanitize {
             sanitize = true; i += 1;
+        } else if args[i] == "--native" && matches!(command, "run" | "build") && !native_arch {
+            native_arch = true; i += 1;
+        } else if args[i] == "--lto" && matches!(command, "run" | "build") && !lto {
+            lto = true; i += 1;
         } else if !args[i].to_string_lossy().starts_with('-') {
             sources.push(PathBuf::from(&args[i])); i += 1;
         } else { return Err(format!("invalid arguments for {command}\n\n{HELP}")); }
@@ -141,6 +149,8 @@ fn execute(args: Vec<OsString>) -> Result<i32, String> {
         flags.extend(["-fsanitize=address,undefined", "-fno-sanitize-recover=all", "-fno-omit-frame-pointer", "-g"]);
         if cfg!(target_os = "linux") { flags.extend(["-fno-pie", "-no-pie"]); }
     }
+    if native_arch { flags.push("-march=native"); }
+    if lto { flags.push("-flto"); }
     let program = native::compile_c_optimized(&c_source, optimization.unwrap_or("-O2"), &flags)?;
     if command == "run" { return Ok(program.run(program_args)?.code().unwrap_or(1)); }
     let path = output.unwrap_or_else(|| {

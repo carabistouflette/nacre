@@ -91,6 +91,7 @@ static inline @OPTION_TYPE@ ncr_map_put_@ID@(struct ncr_hash_table_@ID@ *table, 
     @STORE_HASH@
     table->entries[target].value = value;
     ++table->length;
+    return (@OPTION_TYPE@){ .tag = @NONE_TAG@ };
 }
 
 static inline @OPTION_TYPE@ ncr_map_remove_@ID@(struct ncr_hash_table_@ID@ *table, @QUERY_TYPE@ key) {
