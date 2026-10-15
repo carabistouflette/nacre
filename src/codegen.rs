@@ -672,7 +672,7 @@ impl Emitter<'_> {
                     return result;
                 }
                 let right_value = self.expression(right);
-                self.binary_operation(expr, *op, &left_value, &right_value)
+                self.binary_operation(expr, *op, &left_value, &right_value, right)
             }
             E::Call { target, receiver, args } => {
                 // Borrow receiver first, then evaluate arguments in source order.
@@ -718,8 +718,7 @@ impl Emitter<'_> {
         }
     }
 
-    // Keep formatting temporaries out of the recursive operand-evaluation frame.
-    fn binary_operation(&mut self, expr: &t::Expr, op: B, left_value: &str, right_value: &str) -> String {
+    fn binary_operation(&mut self, expr: &t::Expr, op: B, left_value: &str, right_value: &str, right: &t::Expr) -> String {
         let (line, column) = line_column(self.source, expr.span.start);
         let operation = match op {
             B::Add | B::Sub | B::Mul | B::Div | B::Rem => match expr.ty {
@@ -735,16 +734,40 @@ impl Emitter<'_> {
                     B::Add => format!("ncr_long_add({left_value}, {right_value})"),
                     B::Sub => format!("ncr_long_sub({left_value}, {right_value})"),
                     B::Mul => format!("ncr_long_mul({left_value}, {right_value})"),
-                    B::Div => format!("ncr_long_div({left_value}, {right_value}, {line}, {column})"),
-                    B::Rem => format!("ncr_long_rem({left_value}, {right_value}, {line}, {column})"),
+                    B::Div => {
+                        if let t::ExprKind::Long(c) = right.kind && c > 0 {
+                            format!("({left_value} / INT64_C({c}))")
+                        } else {
+                            format!("ncr_long_div({left_value}, {right_value}, {line}, {column})")
+                        }
+                    }
+                    B::Rem => {
+                        if let t::ExprKind::Long(c) = right.kind && c > 0 {
+                            format!("({left_value} % INT64_C({c}))")
+                        } else {
+                            format!("ncr_long_rem({left_value}, {right_value}, {line}, {column})")
+                        }
+                    }
                     _ => unreachable!("long arithmetic operation"),
                 },
                 Type::Int => match op {
                     B::Add => format!("ncr_add({left_value}, {right_value})"),
                     B::Sub => format!("ncr_sub({left_value}, {right_value})"),
                     B::Mul => format!("ncr_mul({left_value}, {right_value})"),
-                    B::Div => format!("ncr_div({left_value}, {right_value}, {line}, {column})"),
-                    B::Rem => format!("ncr_rem({left_value}, {right_value}, {line}, {column})"),
+                    B::Div => {
+                        if let t::ExprKind::Int(c) = right.kind && c > 0 {
+                            format!("({left_value} / INT32_C({c}))")
+                        } else {
+                            format!("ncr_div({left_value}, {right_value}, {line}, {column})")
+                        }
+                    }
+                    B::Rem => {
+                        if let t::ExprKind::Int(c) = right.kind && c > 0 {
+                            format!("({left_value} % INT32_C({c}))")
+                        } else {
+                            format!("ncr_rem({left_value}, {right_value}, {line}, {column})")
+                        }
+                    }
                     _ => unreachable!("integer arithmetic operation"),
                 },
                 _ => unreachable!("checked arithmetic result type"),

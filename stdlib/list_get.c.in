@@ -1,4 +1,4 @@
-static inline @ELEMENT@ @LIST_GET@(const ncr_obj_@ID@ *restrict p, int32_t index, size_t line, size_t column) {
+static inline @ELEMENT@ @LIST_GET@(ncr_obj_@ID@ *restrict p, int32_t index, size_t line, size_t column) {
     ncr_list_check_@ID@(p, index, line, column);
     return p->items[index];
 }
