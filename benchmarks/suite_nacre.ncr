@@ -1,0 +1,311 @@
+long nowNs() {
+    match (Time.monotonicNanos()) {
+        Ok(t) { return t; }
+        Err(e) { return 0L; }
+    }
+}
+
+// 1. Pure Floating-Point Compute: Mandelbrot escape time calculation
+int mandelbrot(int width, int height, int maxIter) {
+    int totalIterations = 0;
+    int y = 0;
+    while (y < height) {
+        double ci = (double)y * 2.0 / (double)height - 1.0;
+        int x = 0;
+        while (x < width) {
+            double cr = (double)x * 3.0 / (double)width - 2.1;
+            double zr = 0.0;
+            double zi = 0.0;
+            int iter = 0;
+            while (zr * zr + zi * zi <= 4.0 && iter < maxIter) {
+                double temp = zr * zr - zi * zi + cr;
+                zi = 2.0 * zr * zi + ci;
+                zr = temp;
+                iter = iter + 1;
+            }
+            totalIterations = totalIterations + iter;
+            x = x + 1;
+        }
+        y = y + 1;
+    }
+    return totalIterations;
+}
+
+// 2. Discrete Math & Backtracking: N-Queens (N=14)
+class NQueens {
+    public int count = 0;
+
+    public void solve(int row, int ld, int rd, int allMask) {
+        if (row == allMask) {
+            this.count = this.count + 1;
+            return;
+        }
+        int pos = allMask & (~(row | ld | rd));
+        while (pos != 0) {
+            int p = pos & (-pos);
+            pos = pos - p;
+            this.solve(row | p, (ld | p) << 1, (rd | p) >> 1, allMask);
+        }
+    }
+}
+
+// 3. Sorting & Dynamic Memory Access: Quicksort on 200,000 integers
+class Sorter {
+    private static void swap(borrow mut List<int> list, int a, int b) {
+        int temp = list.get(a);
+        list.set(a, list.get(b));
+        list.set(b, temp);
+    }
+
+    public static void quicksort(borrow mut List<int> list, int low, int high) {
+        if (low < high) {
+            int pivot = list.get(high);
+            int i = low - 1;
+            int j = low;
+            while (j < high) {
+                if (list.get(j) <= pivot) {
+                    i = i + 1;
+                    Sorter.swap(list, i, j);
+                }
+                j = j + 1;
+            }
+            Sorter.swap(list, i + 1, high);
+            int p = i + 1;
+            Sorter.quicksort(list, low, p - 1);
+            Sorter.quicksort(list, p + 1, high);
+        }
+    }
+}
+
+// 4. Cellular Automaton Simulation: Game of Life (100x100 grid, 200 generations)
+class LifeSim {
+    private int rows = 100;
+    private int cols = 100;
+    private List<int> grid = new List<int>();
+    private List<int> next = new List<int>();
+
+    LifeSim() {
+        int total = 100 * 100;
+        this.grid.reserve(total);
+        this.next.reserve(total);
+        int i = 0;
+        while (i < total) {
+            // Seed pattern
+            int val = 0;
+            if ((i * 17 + 11) % 7 == 0 || (i * 31 + 5) % 11 == 0) {
+                val = 1;
+            }
+            this.grid.add(val);
+            this.next.add(0);
+            i = i + 1;
+        }
+    }
+
+    private readonly int countNeighbors(int r, int c) {
+        int count = 0;
+        int dr = -1;
+        while (dr <= 1) {
+            int dc = -1;
+            while (dc <= 1) {
+                if (dr != 0 || dc != 0) {
+                    int nr = (r + dr + 100) % 100;
+                    int nc = (c + dc + 100) % 100;
+                    if (this.grid.get(nr * 100 + nc) != 0) {
+                        count = count + 1;
+                    }
+                }
+                dc = dc + 1;
+            }
+            dr = dr + 1;
+        }
+        return count;
+    }
+
+    public void step() {
+        int r = 0;
+        while (r < 100) {
+            int c = 0;
+            while (c < 100) {
+                int idx = r * 100 + c;
+                int current = this.grid.get(idx);
+                int neighbors = this.countNeighbors(r, c);
+                int nextVal = 0;
+                if (current != 0) {
+                    if (neighbors == 2 || neighbors == 3) {
+                        nextVal = 1;
+                    }
+                } else {
+                    if (neighbors == 3) {
+                        nextVal = 1;
+                    }
+                }
+                this.next.set(idx, nextVal);
+                c = c + 1;
+            }
+            r = r + 1;
+        }
+        int i = 0;
+        while (i < 10000) {
+            this.grid.set(i, this.next.get(i));
+            i = i + 1;
+        }
+    }
+
+    public readonly int liveCount() {
+        int count = 0;
+        int i = 0;
+        while (i < 10000) {
+            if (this.grid.get(i) != 0) {
+                count = count + 1;
+            }
+            i = i + 1;
+        }
+        return count;
+    }
+}
+
+// 5. Text & Hash Table Churn: 50,000 words mapped, modified, and queried
+int benchTextMap(int count) {
+    Map<Text, int> map = new Map<Text, int>();
+    int i = 0;
+    while (i < count) {
+        Text k = new Text("key-prefix-segment-");
+        k.appendInt(i % 10000);
+        map.put(k, i);
+        i = i + 1;
+    }
+    int sum = 0;
+    i = 0;
+    while (i < count) {
+        Text q = new Text("key-prefix-segment-");
+        q.appendInt(i % 10000);
+        match (map.tryGet(q)) {
+            Some(v) { sum = sum + (v & 1); }
+            None {}
+        }
+        i = i + 1;
+    }
+    return sum;
+}
+
+// 6. Tree / Recursive Data Structures: Binary Tree sum and size
+class Node {
+    public int value;
+    private List<Node> children = new List<Node>();
+
+    Node(int val) {
+        this.value = val;
+    }
+
+    public void addChild(Node child) {
+        this.children.add(child);
+    }
+
+    public static Node build(int depth, int val) {
+        Node node = new Node(val);
+        if (depth > 0) {
+            node.addChild(Node.build(depth - 1, val * 2));
+            node.addChild(Node.build(depth - 1, val * 2 + 1));
+        }
+        return node;
+    }
+
+    public readonly int sum() {
+        int total = this.value;
+        for (borrow Node child : this.children) {
+            total = total + child.sum();
+        }
+        return total;
+    }
+}
+
+void main() {
+    // Warmup / Header
+    println("BENCHMARK_SUITE_START");
+
+    // 1. Mandelbrot (700x700, 200 iter)
+    long t0 = nowNs();
+    int mandelRes = mandelbrot(700, 700, 200);
+    long mandelMs = (nowNs() - t0) / 1000000L;
+    Text out1 = new Text("RESULT mandelbrot: ");
+    out1.appendLong(mandelMs);
+    out1.append(" ms (checksum: ");
+    out1.appendInt(mandelRes);
+    out1.append(")");
+    out1.print();
+
+    // 2. N-Queens (N=14)
+    t0 = nowNs();
+    NQueens nq = new NQueens();
+    nq.solve(0, 0, 0, (1 << 14) - 1);
+    long nqMs = (nowNs() - t0) / 1000000L;
+    Text out2 = new Text("RESULT n_queens: ");
+    out2.appendLong(nqMs);
+    out2.append(" ms (solutions: ");
+    out2.appendInt(nq.count);
+    out2.append(")");
+    out2.print();
+
+    // 3. Quicksort (100,000 pseudo-random numbers)
+    List<int> numbers = new List<int>();
+    numbers.reserve(100000);
+    int seed = 1234567;
+    int i = 0;
+    while (i < 100000) {
+        seed = (seed * 1103515245 + 12345) & 2147483647;
+        numbers.add(seed % 1000000);
+        i = i + 1;
+    }
+    int totalNumbers = numbers.size();
+    t0 = nowNs();
+    Sorter.quicksort(numbers, 0, totalNumbers - 1);
+    long sortMs = (nowNs() - t0) / 1000000L;
+    Text out3 = new Text("RESULT quicksort: ");
+    out3.appendLong(sortMs);
+    out3.append(" ms (min: ");
+    out3.appendInt(numbers.get(0));
+    out3.append(", max: ");
+    out3.appendInt(numbers.get(totalNumbers - 1));
+    out3.append(")");
+    out3.print();
+
+    // 4. Game of Life (100x100 grid, 100 generations)
+    LifeSim sim = new LifeSim();
+    t0 = nowNs();
+    int gen = 0;
+    while (gen < 100) {
+        sim.step();
+        gen = gen + 1;
+    }
+    long lifeMs = (nowNs() - t0) / 1000000L;
+    Text out4 = new Text("RESULT game_of_life: ");
+    out4.appendLong(lifeMs);
+    out4.append(" ms (live cells: ");
+    out4.appendInt(sim.liveCount());
+    out4.append(")");
+    out4.print();
+
+    // 5. Text & Hash Map churn (50,000 operations)
+    t0 = nowNs();
+    int textMapRes = benchTextMap(50000);
+    long mapMs = (nowNs() - t0) / 1000000L;
+    Text out5 = new Text("RESULT text_map: ");
+    out5.appendLong(mapMs);
+    out5.append(" ms (checksum: ");
+    out5.appendInt(textMapRes);
+    out5.append(")");
+    out5.print();
+
+    // 6. Binary Tree recursion (depth=18, 2^19 - 1 = 524,287 nodes)
+    t0 = nowNs();
+    Node tree = Node.build(18, 1);
+    int treeSum = tree.sum();
+    long treeMs = (nowNs() - t0) / 1000000L;
+    Text out6 = new Text("RESULT binary_tree: ");
+    out6.appendLong(treeMs);
+    out6.append(" ms (tree sum: ");
+    out6.appendInt(treeSum);
+    out6.append(")");
+    out6.print();
+    println("BENCHMARK_SUITE_END");
+}
