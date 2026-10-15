@@ -75,11 +75,11 @@ pub(super) fn implementation(
         let (next_name, drop_name) = iterators::callback_names(drain.id);
         let entry = format!("struct ncr_map_entry_{}", map_class.id);
         let next_body = format!(
-            "    {entry} *entries = raw;\n    while (*cursor < length) {{\n        int32_t index = (*cursor)++;\n        if (!entries[index].occupied) {{ continue; }}\n        *value = entries[index].key;\n        entries[index].key = {};\n        entries[index].value = UINT8_C(0);\n        entries[index].occupied = false;\n        *available = true;\n        return;\n    }}\n    *available = false;",
+            "    {entry} *entries = raw;\n    while (*cursor < length) {{\n        int32_t index = (*cursor)++;\n        if (entries[index].hash == 0) {{ continue; }}\n        *value = entries[index].key;\n        entries[index].key = {};\n        entries[index].value = UINT8_C(0);\n        entries[index].hash = 0;\n        *available = true;\n        return;\n    }}\n    *available = false;",
             zero(program, key),
         );
         let drop_body = format!(
-            "    {entry} *entries = raw;\n    for (int32_t index = cursor; index < length; ++index) {{\n        if (entries[index].occupied) {{\n            {}\n        }}\n    }}\n    ncr_deallocate(entries);",
+            "    {entry} *entries = raw;\n    for (int32_t index = cursor; index < length; ++index) {{\n        if (entries[index].hash != 0) {{\n            {}\n        }}\n    }}\n    ncr_deallocate(entries);",
             drop_element(key, "entries[index].key"),
         );
         body.push_str(&iterators::drain_callbacks(program, drain.id, key, &next_body, &drop_body));

@@ -12,7 +12,7 @@ static inline int32_t ncr_map_find_slot_@ID@(struct ncr_hash_table_@ID@ *table, 
     uint32_t index = ncr_map_bucket_@ID@(hash) & mask;
     for (int32_t probes = 0; probes < table->capacity; ++probes) {
         @ENTRY_TYPE@ *entry = &table->entries[index];
-        if (!entry->occupied) {
+        if (entry->hash == 0) {
             if (empty_slot != NULL) { *empty_slot = (int32_t)index; }
             return -1;
         }
@@ -54,16 +54,15 @@ static void ncr_map_grow_@ID@(struct ncr_hash_table_@ID@ *table, size_t line, si
     @ENTRY_TYPE@ *entries = ncr_allocate(bytes, line, column);
     uint32_t mask = (uint32_t)capacity - UINT32_C(1);
     for (int32_t index = 0; index < table->capacity; ++index) {
-        if (!table->entries[index].occupied) { continue; }
+        if (table->entries[index].hash == 0) { continue; }
         @ENTRY_TYPE@ *old = &table->entries[index];
         uint32_t target = ncr_map_bucket_@ID@(old->hash) & mask;
-        while (entries[target].occupied) {
+        while (entries[target].hash != 0) {
             target = (target + UINT32_C(1)) & mask;
         }
         entries[target] = *old;
-        old->occupied = false;
+        old->hash = 0;
     }
-    /* Raw relocation transfers each owner; cached hashes avoid policy callbacks. */
     ncr_deallocate(table->entries);
     table->entries = entries;
     table->capacity = capacity;
@@ -84,16 +83,14 @@ static inline @OPTION_TYPE@ ncr_map_put_@ID@(struct ncr_hash_table_@ID@ *table, 
         ncr_map_grow_@ID@(table, line, column);
         uint32_t mask = (uint32_t)table->capacity - UINT32_C(1);
         target = (int32_t)(ncr_map_bucket_@ID@(hash) & mask);
-        while (table->entries[target].occupied) {
+        while (table->entries[target].hash != 0) {
             target = (int32_t)((target + 1) & mask);
         }
     }
     table->entries[target].key = key;
     @STORE_HASH@
     table->entries[target].value = value;
-    table->entries[target].occupied = true;
     ++table->length;
-    return (@OPTION_TYPE@){ .tag = @NONE_TAG@ };
 }
 
 static @OPTION_TYPE@ ncr_map_remove_@ID@(struct ncr_hash_table_@ID@ *table, @QUERY_TYPE@ key) {
@@ -104,7 +101,7 @@ static @OPTION_TYPE@ ncr_map_remove_@ID@(struct ncr_hash_table_@ID@ *table, @QUE
     uint32_t mask = (uint32_t)table->capacity - UINT32_C(1);
     uint32_t hole = (uint32_t)index;
     uint32_t scan = (hole + UINT32_C(1)) & mask;
-    while (table->entries[scan].occupied) {
+    while (table->entries[scan].hash != 0) {
         @ENTRY_TYPE@ *entry = &table->entries[scan];
         uint32_t home = ncr_map_bucket_@ID@(entry->hash) & mask;
         if (((hole - home) & mask) < ((scan - home) & mask)) {
@@ -113,17 +110,17 @@ static @OPTION_TYPE@ ncr_map_remove_@ID@(struct ncr_hash_table_@ID@ *table, @QUE
         }
         scan = (scan + UINT32_C(1)) & mask;
     }
-    table->entries[hole].occupied = false;
+    table->entries[hole].hash = 0;
     --table->length;
     return (@OPTION_TYPE@){ .tag = @SOME_TAG@, .data.v@SOME_TAG@.f0 = value };
 }
 
 static void ncr_map_clear_@ID@(struct ncr_hash_table_@ID@ *table) {
     for (int32_t index = 0; index < table->capacity; ++index) {
-        if (!table->entries[index].occupied) { continue; }
+        if (table->entries[index].hash == 0) { continue; }
         @DROP_KEY_AT_INDEX@
         @DROP_VALUE@
-        table->entries[index].occupied = false;
+        table->entries[index].hash = 0;
     }
     table->length = 0;
 }

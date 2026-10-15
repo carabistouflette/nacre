@@ -20,14 +20,14 @@ const MAP_HASH_FINALIZER: &str = concat!(
     "    value ^= value >> 27;\n",
     "    value *= UINT64_C(0x94d049bb133111eb);\n",
     "    value ^= value >> 31;\n",
-    "    return value;\n",
+    "    return value == 0 ? 1 : value;\n",
 );
 fn is_text_key(program: &t::Program, key: Type) -> bool {
     matches!(key, Type::Object(id) if matches!(program.classes[id].native, Some(C::Text)))
 }
 pub(super) fn map_entry_definition(program: &t::Program, class_id: usize, key: Type, value: Type) -> String {
     format!(
-        "struct ncr_map_entry_{class_id} {{\n    {} key;\n    uint64_t hash;\n    {} value;\n    bool occupied;\n}};\n",
+        "struct ncr_map_entry_{class_id} {{\n    uint64_t hash;\n    {} key;\n    {} value;\n}};\n",
         ctype(program, key), ctype(program, value),
     )
 }
@@ -48,7 +48,7 @@ pub(super) fn map_slot_expression(
 ) -> String {
     let stored = match (program.classes[map_class].native, kind) {
         (Some(t::NativeClass::Map { .. } | t::NativeClass::Set { .. }), t::MapSlotKind::Occupied) =>
-            format!("{map}->table.entries[{index}].occupied"),
+            format!("({map}->table.entries[{index}].hash != 0)"),
         (Some(t::NativeClass::Map { .. } | t::NativeClass::Set { .. }), t::MapSlotKind::Key) =>
             format!("{map}->table.entries[{index}].key"),
         (Some(t::NativeClass::Map { .. }), t::MapSlotKind::Value) =>
@@ -83,7 +83,7 @@ pub(super) fn drop_hash_table_fields(key: Type, value: Type, hasher: Option<Type
         None => String::new(),
     };
     format!(
-        "    for (int32_t index = 0; index < {table}.capacity; ++index) {{\n        if ({entries}[index].occupied) {{\n            {}\n            {}\n        }}\n    }}\n    ncr_deallocate({entries});\n    {drop_policy}\n",
+        "    for (int32_t index = 0; index < {table}.capacity; ++index) {{\n        if ({entries}[index].hash != 0) {{\n            {}\n            {}\n        }}\n    }}\n    ncr_deallocate({entries});\n    {drop_policy}\n",
         drop_element(key, &format!("{entries}[index].key")),
         drop_element(value, &format!("{entries}[index].value")))
 }
@@ -325,18 +325,18 @@ fn map_drain_implementation(
         ("value", "key", key)
     };
     let next_body = format!(
-        "    {entry} *entries = raw;\n    while (*cursor < length) {{\n        int32_t index = (*cursor)++;\n        if (!entries[index].occupied) {{ continue; }}\n        *value = entries[index].{field};\n        entries[index].{field} = {};\n        entries[index].occupied = false;\n        *available = true;\n        return;\n    }}\n    *available = false;",
+        "    {entry} *entries = raw;\n    while (*cursor < length) {{\n        int32_t index = (*cursor)++;\n        if (entries[index].hash == 0) {{ continue; }}\n        *value = entries[index].{field};\n        entries[index].{field} = {};\n        entries[index].hash = 0;\n        *available = true;\n        return;\n    }}\n    *available = false;",
         zero(program, element),
     );
     let drop_body = format!(
-        "    {entry} *entries = raw;\n    for (int32_t index = cursor; index < length; ++index) {{\n        if (entries[index].occupied) {{\n            {}\n        }}\n    }}\n    ncr_deallocate(entries);",
+        "    {entry} *entries = raw;\n    for (int32_t index = cursor; index < length; ++index) {{\n        if (entries[index].hash != 0) {{\n            {}\n        }}\n    }}\n    ncr_deallocate(entries);",
         drop_element(element, &format!("entries[index].{field}")),
     );
     // The iterator owns only its yielded type; discard hidden owners on the calling thread.
     let discard_unused = if matches!(unused, Type::Object(_)) {
         let slot = format!("p->table.entries[index].{unused_field}");
         format!(
-            "for (int32_t index = 0; index < p->table.capacity; ++index) {{\n    if (p->table.entries[index].occupied) {{\n        {}\n        {slot} = {};\n    }}\n}}\n",
+            "for (int32_t index = 0; index < p->table.capacity; ++index) {{\n    if (p->table.entries[index].hash != 0) {{\n        {}\n        {slot} = {};\n    }}\n}}\n",
             drop_element(unused, &slot), zero(program, unused),
         )
     } else {
