@@ -11,7 +11,7 @@
     "tests/borrowing_diagnostics.rs": 8,
     "tests/borrowing_frontend.rs": 132,
     "tests/borrowing_native.rs": 46,
-    "tests/cli.rs": 25,
+    "tests/cli.rs": 26,
     "tests/collections_core.rs": 10,
     "tests/collections_lists.rs": 2,
     "tests/collections_maps.rs": 13,
@@ -70,5 +70,5 @@
     "src/ownership.rs": 4,
     "src/project.rs": 1
   },
-  "total": 1286
+  "total": 1287
 }

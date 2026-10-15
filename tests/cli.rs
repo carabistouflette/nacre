@@ -175,3 +175,31 @@ fn borrower_diagnostic_reaches_the_cli() {
     let text = String::from_utf8_lossy(&out.stderr);
     assert!(text.contains("E3002") && text.contains("note:"));
 }
+#[test]
+fn pgo_generate_and_use_workflow_and_mutual_exclusion() {
+    let temp = TestDir::new();
+    let source = temp.path("pgo.ncr");
+    fs::write(&source, "void main() { int i = 0; while (i < 100) { i = i + 1; } println(i); }").unwrap();
+    let bin = temp.path("pgo_bin");
+
+    // 1. Mutual exclusion: cannot pass both --pgo-generate and --pgo-use
+    let both = nacre(&["build", path_str(&source), "-o", path_str(&bin), "--pgo-generate", "--pgo-use"]);
+    assert!(!both.status.success());
+    assert!(String::from_utf8_lossy(&both.stderr).contains("cannot specify both"));
+
+    // 2. Build instrumented executable with --pgo-generate
+    let build_gen = nacre(&["build", path_str(&source), "-o", path_str(&bin), "--pgo-generate"]);
+    assert!(build_gen.status.success(), "{}", String::from_utf8_lossy(&build_gen.stderr));
+
+    // Run instrumented executable to produce profile counts
+    let run_res = Command::new(&bin).current_dir(&temp.0).output().unwrap();
+    assert!(run_res.status.success());
+    assert_eq!(run_res.stdout, b"100\n");
+
+    // 3. Build optimized executable with --pgo-use
+    let opt = nacre(&["build", path_str(&source), "-o", path_str(&bin), "--pgo-use"]);
+    assert!(opt.status.success(), "{}", String::from_utf8_lossy(&opt.stderr));
+    let run_opt = Command::new(&bin).output().unwrap();
+    assert!(run_opt.status.success());
+    assert_eq!(run_opt.stdout, b"100\n");
+}

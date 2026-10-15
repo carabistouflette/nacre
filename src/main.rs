@@ -40,6 +40,8 @@ Source files may declare modules and import public names; all requested inputs a
 --native (run/build): enable host CPU native instructions (-march=native).
 --lto (run/build): enable link-time optimization (-flto).
 --jemalloc (run/build): link high-performance jemalloc allocator (-ljemalloc).
+--pgo-generate (run/build): enable Profile-Guided Optimization instrumentation (-fprofile-generate).
+--pgo-use (run/build): compile using collected PGO profile data (-fprofile-use).
 init: create a new project; refuse an existing path.
 doctor: compile and run an end-to-end test with List and Text.
 build: default output is out/<source-name>.
@@ -93,6 +95,8 @@ fn execute(args: Vec<OsString>) -> Result<i32, String> {
     let mut native_arch = false;
     let mut lto = false;
     let mut jemalloc = false;
+    let mut pgo_generate = false;
+    let mut pgo_use = false;
     let mut filter: Option<String> = None;
     let mut direct_llvm = false;
     let mut optimization = None;
@@ -130,6 +134,10 @@ fn execute(args: Vec<OsString>) -> Result<i32, String> {
             lto = true; i += 1;
         } else if args[i] == "--jemalloc" && matches!(command, "run" | "build" | "test" | "bench") && !jemalloc {
             jemalloc = true; i += 1;
+        } else if args[i] == "--pgo-generate" && matches!(command, "run" | "build") && !pgo_generate {
+            pgo_generate = true; i += 1;
+        } else if args[i] == "--pgo-use" && matches!(command, "run" | "build") && !pgo_use {
+            pgo_use = true; i += 1;
         } else if args[i] == "--check" && command == "fmt" && !check_only {
             check_only = true; i += 1;
         } else if args[i] == "--direct" && command == "emit-llvm" && !direct_llvm {
@@ -181,6 +189,9 @@ fn execute(args: Vec<OsString>) -> Result<i32, String> {
         }
         return Ok(0);
     }
+    if pgo_generate && pgo_use {
+        return Err("cannot specify both --pgo-generate and --pgo-use".to_owned());
+    }
     let mut c_source = bundle.compile_to_c().map_err(|d| bundle.render(&d))?;
     if memory_stats { c_source.insert_str(0, "#define NACRE_MEMORY_STATS 1\n"); }
     if command == "emit-c" || command == "emit-llvm" {
@@ -201,6 +212,11 @@ fn execute(args: Vec<OsString>) -> Result<i32, String> {
     if native_arch { flags.push("-march=native"); }
     if lto { flags.push("-flto"); }
     if jemalloc { flags.push("-ljemalloc"); }
+    if pgo_generate { flags.push("-fprofile-generate"); }
+    if pgo_use {
+        flags.push("-fprofile-use");
+        flags.push("-fprofile-correction");
+    }
     let program = native::compile_c_optimized(&c_source, optimization.unwrap_or("-O2"), &flags)?;
     if command == "run" { return Ok(program.run(program_args)?.code().unwrap_or(1)); }
     let path = output.unwrap_or_else(|| {
