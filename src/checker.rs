@@ -231,7 +231,79 @@ fn numeric_common(left: Type, right: Type) -> Option<Type> {
 fn coerce_numeric(value: t::Expr, target: Type) -> t::Expr {
     if value.ty == target { return value; }
     let span = value.span;
-    t::Expr { kind: t::ExprKind::Cast { value: Box::new(value) }, ty: target, span }
+    match (value.kind, target) {
+        (t::ExprKind::Int(v), Type::Long) => t::Expr { kind: t::ExprKind::Long(v as i64), ty: target, span },
+        (t::ExprKind::Int(v), Type::Double) => t::Expr { kind: t::ExprKind::Double(v as f64), ty: target, span },
+        (t::ExprKind::Long(v), Type::Double) => t::Expr { kind: t::ExprKind::Double(v as f64), ty: target, span },
+        (kind, _) => t::Expr { kind: t::ExprKind::Cast { value: Box::new(t::Expr { kind, ty: value.ty, span }) }, ty: target, span },
+    }
+}
+
+fn fold_binary(op: B, left: &t::Expr, right: &t::Expr) -> Option<t::ExprKind> {
+    use t::ExprKind as K;
+    match (&left.kind, &right.kind) {
+        (K::Int(a), K::Int(b)) => match op {
+            B::Add => Some(K::Int(a.wrapping_add(*b))),
+            B::Sub => Some(K::Int(a.wrapping_sub(*b))),
+            B::Mul => Some(K::Int(a.wrapping_mul(*b))),
+            B::Div if *b != 0 => Some(K::Int(if *a == i32::MIN && *b == -1 { i32::MIN } else { a / b })),
+            B::Rem if *b != 0 => Some(K::Int(if *a == i32::MIN && *b == -1 { 0 } else { a % b })),
+            B::BitAnd => Some(K::Int(a & b)),
+            B::BitOr => Some(K::Int(a | b)),
+            B::BitXor => Some(K::Int(a ^ b)),
+            B::ShiftLeft if (0..32).contains(b) => Some(K::Int(a.wrapping_shl(*b as u32))),
+            B::ShiftRight if (0..32).contains(b) => Some(K::Int(a.wrapping_shr(*b as u32))),
+            B::Eq => Some(K::Boolean(a == b)),
+            B::Ne => Some(K::Boolean(a != b)),
+            B::Lt => Some(K::Boolean(a < b)),
+            B::Le => Some(K::Boolean(a <= b)),
+            B::Gt => Some(K::Boolean(a > b)),
+            B::Ge => Some(K::Boolean(a >= b)),
+            _ => None,
+        },
+        (K::Long(a), K::Long(b)) => match op {
+            B::Add => Some(K::Long(a.wrapping_add(*b))),
+            B::Sub => Some(K::Long(a.wrapping_sub(*b))),
+            B::Mul => Some(K::Long(a.wrapping_mul(*b))),
+            B::Div if *b != 0 => Some(K::Long(if *a == i64::MIN && *b == -1 { i64::MIN } else { a / b })),
+            B::Rem if *b != 0 => Some(K::Long(if *a == i64::MIN && *b == -1 { 0 } else { a % b })),
+            B::BitAnd => Some(K::Long(a & b)),
+            B::BitOr => Some(K::Long(a | b)),
+            B::BitXor => Some(K::Long(a ^ b)),
+            B::Eq => Some(K::Boolean(a == b)),
+            B::Ne => Some(K::Boolean(a != b)),
+            B::Lt => Some(K::Boolean(a < b)),
+            B::Le => Some(K::Boolean(a <= b)),
+            B::Gt => Some(K::Boolean(a > b)),
+            B::Ge => Some(K::Boolean(a >= b)),
+            _ => None,
+        },
+        (K::Long(a), K::Int(b)) => match op {
+            B::ShiftLeft if (0..64).contains(b) => Some(K::Long(a.wrapping_shl(*b as u32))),
+            B::ShiftRight if (0..64).contains(b) => Some(K::Long(a.wrapping_shr(*b as u32))),
+            _ => None,
+        },
+        (K::Boolean(a), K::Boolean(b)) => match op {
+            B::And => Some(K::Boolean(*a && *b)),
+            B::Or => Some(K::Boolean(*a || *b)),
+            B::Eq => Some(K::Boolean(a == b)),
+            B::Ne => Some(K::Boolean(a != b)),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn fold_unary(op: UnaryOp, inner: &t::Expr) -> Option<t::ExprKind> {
+    use t::ExprKind as K;
+    match (&inner.kind, op) {
+        (K::Boolean(b), UnaryOp::Not) => Some(K::Boolean(!b)),
+        (K::Int(v), UnaryOp::Neg) => Some(K::Int(v.wrapping_neg())),
+        (K::Long(v), UnaryOp::Neg) => Some(K::Long(v.wrapping_neg())),
+        (K::Int(v), UnaryOp::BitNot) => Some(K::Int(!v)),
+        (K::Long(v), UnaryOp::BitNot) => Some(K::Long(!v)),
+        _ => None,
+    }
 }
 
 // Factory-only native owners can be returned inside specialized result/option
@@ -2079,9 +2151,11 @@ impl Checker<'_> {
             UnaryOp::Not => return Err(Diagnostic::new(span, "[E6105] logical not requires a boolean operand")),
         };
         let inner = if target.is_numeric() { coerce_numeric(inner, target) } else { inner };
+        if let Some(folded) = fold_unary(op, &inner) {
+            return Ok((folded, target));
+        }
         Ok((t::ExprKind::Unary { op, expr: Box::new(inner) }, target))
     }
-
     fn try_expression(&mut self, inner: &a::Expr, span: Span) -> Result<(t::ExprKind, Type), Diagnostic> {
         let value = self.expression(inner)?;
         let Type::Object(source_class) = value.ty else {
@@ -2153,6 +2227,9 @@ impl Checker<'_> {
                 }
             }
         };
+        if let Some(folded) = fold_binary(op, &left, &right) {
+            return Ok((folded, ty));
+        }
         Ok((t::ExprKind::Binary { op, left: Box::new(left), right: Box::new(right) }, ty))
     }
 }
