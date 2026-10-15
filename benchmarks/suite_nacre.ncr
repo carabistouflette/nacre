@@ -101,24 +101,19 @@ class LifeSim {
         }
     }
 
-    private readonly int countNeighbors(int r, int c) {
-        int count = 0;
-        int dr = -1;
-        while (dr <= 1) {
-            int dc = -1;
-            while (dc <= 1) {
-                if (dr != 0 || dc != 0) {
-                    int nr = (r + dr + 100) % 100;
-                    int nc = (c + dc + 100) % 100;
-                    if (this.grid.get(nr * 100 + nc) != 0) {
-                        count = count + 1;
-                    }
-                }
-                dc = dc + 1;
-            }
-            dr = dr + 1;
-        }
-        return count;
+    private static int countNeighbors(borrow List<int> grid, int r, int c) {
+        int rUp = (r + 99) % 100;
+        int rDown = (r + 101) % 100;
+        int cLeft = (c + 99) % 100;
+        int cRight = (c + 101) % 100;
+        return grid.get(rUp * 100 + cLeft)
+            + grid.get(rUp * 100 + c)
+            + grid.get(rUp * 100 + cRight)
+            + grid.get(r * 100 + cLeft)
+            + grid.get(r * 100 + cRight)
+            + grid.get(rDown * 100 + cLeft)
+            + grid.get(rDown * 100 + c)
+            + grid.get(rDown * 100 + cRight);
     }
 
     public void step() {
@@ -128,7 +123,7 @@ class LifeSim {
             while (c < 100) {
                 int idx = r * 100 + c;
                 int current = this.grid.get(idx);
-                int neighbors = this.countNeighbors(r, c);
+                int neighbors = LifeSim.countNeighbors(this.grid, r, c);
                 int nextVal = 0;
                 if (current != 0) {
                     if (neighbors == 2 || neighbors == 3) {
