@@ -1,21 +1,21 @@
 /* Set composes the Map<K, Unit> table core; keys have one storage/hash policy. */
 @SET_INITIALIZER_METHODS@
-static void @SET_ADD@(ncr_obj_@ID@ *p, @KEY_TYPE@ key, size_t line, size_t column) {
+static inline void @SET_ADD@(ncr_obj_@ID@ *p, @KEY_TYPE@ key, size_t line, size_t column) {
     (void)ncr_map_put_@TABLE_ID@(&p->table, key, UINT8_C(0), line, column);
 }
-static bool @SET_CONTAINS@(ncr_obj_@ID@ *p, @QUERY_TYPE@ key, size_t line, size_t column) {
+static inline bool @SET_CONTAINS@(ncr_obj_@ID@ *p, @QUERY_TYPE@ key, size_t line, size_t column) {
     (void)line; (void)column;
     return ncr_map_query_@TABLE_ID@(&p->table, key) >= 0;
 }
-static int32_t @SET_SIZE@(ncr_obj_@ID@ *p, size_t line, size_t column) {
+static inline int32_t @SET_SIZE@(ncr_obj_@ID@ *p, size_t line, size_t column) {
     (void)line; (void)column;
     return p->table.length;
 }
-static bool @SET_IS_EMPTY@(ncr_obj_@ID@ *p, size_t line, size_t column) {
+static inline bool @SET_IS_EMPTY@(ncr_obj_@ID@ *p, size_t line, size_t column) {
     (void)line; (void)column;
     return p->table.length == 0;
 }
-static bool @SET_REMOVE@(ncr_obj_@ID@ *p, @QUERY_TYPE@ key, size_t line, size_t column) {
+static inline bool @SET_REMOVE@(ncr_obj_@ID@ *p, @QUERY_TYPE@ key, size_t line, size_t column) {
     (void)line; (void)column;
     @OPTION_TYPE@ removed = ncr_map_remove_@TABLE_ID@(&p->table, key);
     return removed.tag == @SOME_TAG@;

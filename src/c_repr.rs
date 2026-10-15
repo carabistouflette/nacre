@@ -15,11 +15,18 @@ pub(crate) fn ctype(program: &t::Program, ty: Type) -> Cow<'static, str> {
                 Cow::Owned(format!("ncr_obj_{id} *"))
             }
         }
-        Type::Borrow { class: id, mutable } => {
+        Type::Borrow { class: id, .. } => {
             if program.classes[id].is_interface { Cow::Owned(format!("ncr_obj_{id}")) }
-            else if mutable { Cow::Owned(format!("ncr_obj_{id} *restrict")) }
             else { Cow::Owned(format!("ncr_obj_{id} *")) }
         }
+    }
+}
+pub(crate) fn ctype_param(program: &t::Program, ty: Type) -> Cow<'static, str> {
+    match ty {
+        Type::Borrow { class: id, mutable: true } if !program.classes[id].is_interface => {
+            Cow::Owned(format!("ncr_obj_{id} *restrict"))
+        }
+        _ => ctype(program, ty),
     }
 }
 pub(crate) fn object_zero(program: &t::Program, id: usize) -> String {

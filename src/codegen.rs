@@ -3,7 +3,7 @@
 use crate::ast::{BinaryOp as B, UnaryOp};
 use crate::diagnostic::line_column;
 use crate::ir::{self as t, CallTarget, Place, PlaceKind, Type};
-use crate::c_repr::{ctype, object_zero};
+use crate::c_repr::{ctype, ctype_param, object_zero};
 use std::fmt::Write;
 
 const TEMPORARY_PREFIX: &str = "ncr_t_";
@@ -94,7 +94,7 @@ fn zero_value(program: &t::Program, ty: Type) -> String {
 fn signature(program: &t::Program, function: &t::Function) -> String {
     let mut params = Vec::new();
     if let Some(class) = function.receiver { params.push(format!("{} ncr_self", ctype(program, Type::Object(class)))); }
-    for (id, ty) in &function.params { params.push(format!("{} ncr_v_{id}", ctype(program, *ty))); }
+    for (id, ty) in &function.params { params.push(format!("{} ncr_v_{id}", ctype_param(program, *ty))); }
     if function.native.is_some() { params.extend(["size_t ncr_line".to_owned(), "size_t ncr_column".to_owned()]); }
     let params = if params.is_empty() { "void".to_owned() } else { params.join(", ") };
     format!("static {} ncr_fn_{}({params})", ctype(program, function.return_type), function.id)
