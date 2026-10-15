@@ -935,6 +935,9 @@ fn check_escape_stmt(stmt: &t::Stmt, escaping: &mut HashSet<usize>) {
             }
         }
         t::Stmt::Assign { target, value } => {
+            if let Some(root) = target.root_var() {
+                escaping.insert(root);
+            }
             if matches!(target.kind, PlaceKind::Field { .. }) {
                 collect_moved_vars(value, escaping);
             }

@@ -39,7 +39,7 @@ jobs:
       - run: python3 scripts/test_stdlib_support.py --cc ${{ matrix.cc }}
       - run: python3 scripts/validate.py --cc ${{ matrix.cc }} --sanitizers --report docs/ci-validation.json
       - if: matrix.cc == 'clang'
-        run: cargo test --locked --offline --test features_v4_tools -- --ignored
+        run: cargo test --locked --offline --test interfaces_generics_tools -- --ignored
   editors:
     runs-on: ubuntu-latest
     steps:
