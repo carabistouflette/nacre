@@ -637,3 +637,47 @@ void main() {
     let stderr2 = String::from_utf8_lossy(&output2.stderr);
     assert!(stderr2.contains("allocations=2 frees=2 live=0"), "expected 2 allocations: {stderr2}");
 }
+
+#[test]
+fn monomorphic_interface_devirtualization_and_polymorphic_fallback() {
+    // Single implementation: devirtualized to direct static thunk call
+    let monomorphic = r#"
+interface Greeter {
+    int greet();
+}
+class Friendly implements Greeter {
+    public int greet() { return 100; }
+}
+void main() {
+    Greeter g = new Friendly();
+    assert(g.greet() == 100);
+}
+"#;
+    let c_mono = compile_to_c(monomorphic).unwrap();
+    assert!(c_mono.contains("ncr_thunk_"), "expected direct static thunk dispatch: {c_mono}");
+    let prog_mono = native::compile_c(&c_mono).unwrap();
+    assert!(prog_mono.output().unwrap().status.success());
+
+    // Multiple implementations: polymorphic fallback to vtable dispatch
+    let polymorphic = r#"
+interface Calculator {
+    int compute();
+}
+class Adder implements Calculator {
+    public int compute() { return 1; }
+}
+class Multiplier implements Calculator {
+    public int compute() { return 2; }
+}
+void main() {
+    Calculator c1 = new Adder();
+    Calculator c2 = new Multiplier();
+    assert(c1.compute() == 1);
+    assert(c2.compute() == 2);
+}
+"#;
+    let c_poly = compile_to_c(polymorphic).unwrap();
+    assert!(c_poly.contains("vtable->m0"), "expected dynamic vtable dispatch for polymorphic interface: {c_poly}");
+    let prog_poly = native::compile_c(&c_poly).unwrap();
+    assert!(prog_poly.output().unwrap().status.success());
+}

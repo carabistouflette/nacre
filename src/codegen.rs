@@ -419,8 +419,22 @@ impl Emitter<'_> {
             self.line(&format!("{} {{", signature(self.program, function)));
             let mut args = vec!["ncr_self.data".to_owned()];
             args.extend(function.params.iter().map(|(id, _)| format!("ncr_v_{id}")));
-            self.line(&format!("    {}ncr_self.vtable->m{slot}({});",
-                if function.return_type == Type::Void { "" } else { "return " }, args.join(", ")));
+            let interface_id = function.receiver.expect("virtual method must have receiver");
+            let single_impl = {
+                let mut iter = self.program.classes.iter()
+                    .filter(|c| c.implementations.iter().any(|(iface, _)| *iface == interface_id));
+                match (iter.next(), iter.next()) {
+                    (Some(first), None) => Some(first.id),
+                    _ => None,
+                }
+            };
+            if let Some(cid) = single_impl {
+                self.line(&format!("    {}ncr_thunk_{cid}_{interface_id}_{slot}({});",
+                    if function.return_type == Type::Void { "" } else { "return " }, args.join(", ")));
+            } else {
+                self.line(&format!("    {}ncr_self.vtable->m{slot}({});",
+                    if function.return_type == Type::Void { "" } else { "return " }, args.join(", ")));
+            }
             self.line("}\n");
             return;
         }
