@@ -120,6 +120,8 @@ impl SourceBundle {
                 for method in &mut class.methods { method.unit = unit_id; }
                 if let Some(constructor) = &mut class.constructor { constructor.unit = unit_id; }
             }
+            for tr in &mut parsed.traits { tr.unit = unit_id; }
+            for imp in &mut parsed.impls { imp.unit = unit_id; }
             program.units.append(&mut parsed.units);
             program.functions.extend(parsed.functions);
             program.classes.extend(parsed.classes);
@@ -139,6 +141,11 @@ impl SourceBundle {
             (line, Some(loc.path.to_string_lossy().into_owned()))
         }));
         Ok(result)
+    }
+    pub fn emit_llvm_direct(&self) -> Result<String, Diagnostic> {
+        let typed = self.typed()?;
+        crate::llvm_codegen::generate_direct_llvm(&typed, &self.text)
+            .map_err(|e| Diagnostic::new(Span::default(), e))
     }
     pub fn emit_flow(&self) -> Result<String, Diagnostic> {
         crate::ownership::dump(&self.typed()?, &self.text)

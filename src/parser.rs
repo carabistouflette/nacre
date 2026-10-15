@@ -313,7 +313,7 @@ impl Parser {
             });
         }
         let end = self.expect(&K::RBrace, "`}`")?.span;
-        Ok(Trait { name, span: start.join(end), methods, visibility })
+        Ok(Trait { name, span: start.join(end), methods, visibility, qualified_name: String::new(), unit: 0 })
     }
 
     fn impl_block(&mut self, start: Span) -> Result<Impl, Diagnostic> {
@@ -333,7 +333,7 @@ impl Parser {
             methods.push(self.function_tail(method_name, return_type, visibility, false, readonly, is_async, member_start)?);
         }
         let end = self.expect(&K::RBrace, "`}`")?.span;
-        Ok(Impl { trait_name, target_class, span: start.join(end), methods })
+        Ok(Impl { trait_name, target_class, span: start.join(end), methods, unit: 0 })
     }
     fn ty(&mut self, allow_void: bool) -> Result<Type, Diagnostic> {
         let token = self.bump();

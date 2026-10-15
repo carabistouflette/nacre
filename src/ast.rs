@@ -25,6 +25,8 @@ pub struct Trait {
     pub span: Span,
     pub methods: Vec<Function>,
     pub visibility: Visibility,
+    pub qualified_name: String,
+    pub unit: usize,
 }
 #[derive(Debug, Clone)]
 pub struct Impl {
@@ -32,6 +34,7 @@ pub struct Impl {
     pub target_class: String,
     pub span: Span,
     pub methods: Vec<Function>,
+    pub unit: usize,
 }
 #[derive(Debug, Clone)]
 pub struct SourceUnit { pub module: String, pub imports: Vec<Import> }

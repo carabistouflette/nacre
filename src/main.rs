@@ -170,7 +170,7 @@ fn execute(args: Vec<OsString>) -> Result<i32, String> {
         return Ok(0);
     }
     if command == "emit-llvm" && direct_llvm {
-        let llvm_ir = nacre::emit_llvm_direct(bundle.combined_source()).map_err(|d| bundle.render(&d))?;
+        let llvm_ir = bundle.emit_llvm_direct().map_err(|d| bundle.render(&d))?;
         if let Some(path) = output {
             for source in bundle.paths() { protect_source(source, &path)?; }
             native::create_parent(&path)?;

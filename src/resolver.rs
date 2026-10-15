@@ -56,21 +56,30 @@ pub fn resolve(program: &mut a::Program) -> Result<(), Diagnostic> {
         }
     }
 
+    for tr in &mut program.traits {
+        let module = &program.units[tr.unit].module;
+        tr.qualified_name = qualify(module, &tr.name);
+    }
+
     let mut trait_map = HashMap::new();
     for tr in &program.traits {
-        if trait_map.insert(&tr.name, tr).is_some() {
-            return Err(Diagnostic::new(tr.span, format!("duplicate trait `{}`", tr.name)));
-        }
+        trait_map.insert(tr.qualified_name.clone(), tr);
+        trait_map.insert(tr.name.clone(), tr);
     }
 
     for imp in &program.impls {
-        let tr = trait_map.get(&imp.trait_name).ok_or_else(|| {
-            Diagnostic::new(imp.span, format!("unknown trait `{}`", imp.trait_name))
-        })?;
-        let class = program.classes.iter_mut().find(|c| c.name == imp.target_class).ok_or_else(|| {
+        let imp_module = &program.units[imp.unit].module;
+        let qualified_tr = qualify(imp_module, &imp.trait_name);
+        let tr = trait_map.get(&qualified_tr)
+            .or_else(|| trait_map.get(&imp.trait_name))
+            .copied()
+            .ok_or_else(|| {
+                Diagnostic::new(imp.span, format!("unknown trait `{}`", imp.trait_name))
+            })?;
+        let qualified_class = qualify(imp_module, &imp.target_class);
+        let class = program.classes.iter_mut().find(|c| c.qualified_name == qualified_class || c.name == imp.target_class).ok_or_else(|| {
             Diagnostic::new(imp.span, format!("unknown class `{}` in impl block", imp.target_class))
         })?;
-
         for req in &tr.methods {
             let imp_method = imp.methods.iter().find(|m| m.name == req.name).ok_or_else(|| {
                 Diagnostic::new(imp.span, format!("missing method `{}` required by trait `{}`", req.name, tr.name))
