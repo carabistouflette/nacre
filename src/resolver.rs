@@ -100,7 +100,7 @@ impl Resolver {
             let Some(module) = unit_modules.get(function.unit) else {
                 return Err(Diagnostic::new(function.span, "function belongs to an unknown source unit"));
             };
-            if matches!(function.name.as_str(), "println" | "move" | "drop") {
+            if matches!(function.name.as_str(), "println" | "move" | "drop" | "assert") {
                 return Err(Diagnostic::new(function.span, format!("`{}` is a reserved built-in function", function.name)));
             }
             let key = (module.clone(), function.name.clone());
@@ -246,7 +246,7 @@ impl Resolver {
             if crate::stdlib::is_builtin_type_name(parameter)
                 || self.classes.contains_key(&(module.clone(), parameter.clone()))
                 || self.imports[unit].types.contains_key(parameter)
-                || matches!(parameter.as_str(), "System" | "println" | "move" | "drop") {
+                || matches!(parameter.as_str(), "System" | "println" | "move" | "drop" | "assert") {
                 return Err(Diagnostic::new(span, format!("[E4101] type parameter `{parameter}` shadows a type or reserved name")));
             }
         }
@@ -439,7 +439,7 @@ impl Resolver {
                 for argument in args { self.expression(argument, context)?; }
             }
             E::Call { name, args } => {
-                if !matches!(name.as_str(), "println" | "move" | "drop")
+                if !matches!(name.as_str(), "println" | "move" | "drop" | "assert")
                     && !context.owner_methods.contains(name.as_str()) {
                     match self.lookup_function(context.unit, name, expression.span)? {
                         Some(target) => *name = target,

@@ -98,7 +98,7 @@ pub fn expand(mut program: a::Program) -> Result<(a::Program, Vec<String>), Diag
     for class in &program.classes {
         if class.is_builtin { continue; }
         for name in &class.type_params {
-            if expander.definitions.contains_key(name) || matches!(name.as_str(), "System" | "println" | "move" | "drop") {
+            if expander.definitions.contains_key(name) || matches!(name.as_str(), "System" | "println" | "move" | "drop" | "assert") {
                 return Err(Diagnostic::new(class.span, format!("[E4101] type parameter `{name}` shadows a type name or reserved name")));
             }
         }

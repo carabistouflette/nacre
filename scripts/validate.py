@@ -178,7 +178,7 @@ def main():
     if args.llvm:
         if not shutil.which(os.environ.get('NACRE_CLANG', 'clang')):
             raise SystemExit('Clang is required for --llvm')
-        command(['cargo', 'test', '--offline', '--locked', '--test', 'features_v4_tools', '--', '--ignored'])
+        command(['cargo', 'test', '--offline', '--locked', '--test', 'interfaces_generics_tools', '--', '--ignored'])
         with tempfile.TemporaryDirectory(prefix='nacre-llvm-') as temp:
             directory = Path(temp)
             for name in list(json.loads((ROOT/'tests/v4-examples.json').read_text())) + list(json.loads((ROOT/'tests/v5-examples.json').read_text())):

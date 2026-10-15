@@ -81,7 +81,7 @@ pub fn compile_c_with_flags(source: &str, flags: &[&str]) -> Result<NativeProgra
     compile_c_optimized(source, "-O2", flags)
 }
 fn cache_dir() -> Option<PathBuf> {
-    if env::var_os("NACRE_NO_CACHE").is_some() {
+    if env::var_os("NACRE_NO_CACHE").is_some() || (env::var_os("CARGO_MANIFEST_DIR").is_some() && env::var_os("NACRE_ENABLE_TEST_CACHE").is_none()) {
         return None;
     }
     if let Some(dir) = env::var_os("NACRE_CACHE_DIR") {
@@ -125,9 +125,16 @@ pub fn compile_c_optimized(source: &str, optimization: &str, flags: &[&str]) -> 
     let cache_entry = cache.as_ref().map(|c| c.join(compute_cache_key(&compiler, optimization, flags, source)));
     if let Some(cached_path) = &cache_entry
         && cached_path.is_file()
-        && fs::copy(cached_path, &executable).is_ok()
     {
-        return Ok(NativeProgram { executable, _directory: directory });
+        let _ = fs::remove_file(&executable);
+        if fs::copy(cached_path, &executable).is_ok() {
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = fs::set_permissions(&executable, fs::Permissions::from_mode(0o755));
+            }
+            return Ok(NativeProgram { executable, _directory: directory });
+        }
     }
 
     let c_path = directory.0.join("program.c");
@@ -151,7 +158,14 @@ pub fn compile_c_optimized(source: &str, optimization: &str, flags: &[&str]) -> 
         if let Some(parent) = cached_path.parent() {
             let _ = fs::create_dir_all(parent);
         }
-        let _ = fs::copy(&executable, cached_path);
+        let tmp_cached = cached_path.with_file_name(format!(
+            "{}.tmp.{}",
+            cached_path.file_name().unwrap_or_default().to_string_lossy(),
+            std::process::id()
+        ));
+        if fs::copy(&executable, &tmp_cached).is_ok() {
+            let _ = fs::rename(&tmp_cached, cached_path);
+        }
     }
     Ok(NativeProgram { executable, _directory: directory })
 }

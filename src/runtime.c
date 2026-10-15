@@ -297,6 +297,12 @@ static void ncr_print_string(ncr_string value) {
     (void)fwrite(value.data, 1, value.length, stdout);
     (void)fputc('\n', stdout);
 }
+static inline void ncr_assert(bool condition, const unsigned char *msg, size_t msg_len, size_t line, size_t column) {
+    if (__builtin_expect(!condition, 0)) {
+        fprintf(stderr, "assertion failed [%zu:%zu]: %.*s\n", line, column, (int)msg_len, (const char *)msg);
+        exit(70);
+    }
+}
 
 /* Object allocation. No tracing, reference counting, or object registry.
    The frontend enforces unique ownership; generated lexical drops do the work.

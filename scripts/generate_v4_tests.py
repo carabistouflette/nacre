@@ -43,7 +43,7 @@ def sources():
                        '    assert!(result.status.success(), "{}", String::from_utf8_lossy(&result.stderr));\n',
                        f'    assert_eq!(result.stdout, {quoted(c["stdout"])}.as_bytes());\n',
                        '    assert_memory_balanced(&result.stderr);\n', '}\n']
-    return {'features_v4_frontend.rs': ''.join(frontend), 'features_v4_native.rs': ''.join(native)}
+    return {'interfaces_generics_frontend.rs': ''.join(frontend), 'interfaces_generics_native.rs': ''.join(native)}
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)

@@ -98,7 +98,7 @@ impl SourceBundle {
         }
         Ok(program)
     }
-    fn typed(&self) -> Result<crate::ir::Program, Diagnostic> { crate::check_parsed(self.parse()?) }
+    pub fn typed(&self) -> Result<crate::ir::Program, Diagnostic> { crate::check_parsed(self.parse()?) }
     pub fn validate(&self) -> Result<(), Diagnostic> { self.typed().map(|_| ()) }
     pub fn compile_to_c(&self) -> Result<String, Diagnostic> {
         let typed = self.typed()?;
@@ -125,8 +125,14 @@ impl SourceBundle {
         );
         for (span, note) in &diagnostic.notes {
             let location = self.locate(*span);
-            let (line, column) = line_column(location.source, location.span.start);
-            result.push_str(&format!("  = note: {note} ({}:{line}:{column})\n", location.path.display()));
+            if location.span.end > location.span.start && location.span.end <= location.source.len() {
+                result.push_str(&diagnostic.render_secondary(
+                    &location.path.to_string_lossy(), location.source, location.span, note,
+                ));
+            } else {
+                let (line, column) = line_column(location.source, location.span.start);
+                result.push_str(&format!("  = note: {note} ({}:{line}:{column})\n", location.path.display()));
+            }
         }
         if let Some(help) = &diagnostic.help { result.push_str(&format!("  = help: {help}\n")); }
         result

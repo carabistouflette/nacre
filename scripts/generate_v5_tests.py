@@ -52,7 +52,7 @@ def sources():
                        '    let result = program.output().unwrap();\n',
                        '    assert_eq!(result.status.code(), Some(70));\n',
                        '    assert!(String::from_utf8_lossy(&result.stderr).contains("[1:"));\n', '}\n']
-    return {'features_v5_frontend.rs': ''.join(frontend), 'features_v5_native.rs': ''.join(native)}
+    return {'multi_source_frontend.rs': ''.join(frontend), 'multi_source_native.rs': ''.join(native)}
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)

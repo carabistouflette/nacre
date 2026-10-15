@@ -22,6 +22,8 @@ mod stdlib;
 mod stdlib_codegen;
 pub mod lsp;
 pub mod project;
+pub mod test_runner;
+pub mod fmt;
 mod type_report;
 
 use diagnostic::{Diagnostic, Span};

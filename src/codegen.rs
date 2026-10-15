@@ -701,6 +701,16 @@ impl Emitter<'_> {
                         };
                         format!("{name}({})", values[0])
                     }
+                    CallTarget::Assert => {
+                        let cond_val = &values[0];
+                        let (line, column) = line_column(self.source, expr.span.start);
+                        if values.len() == 2 {
+                            let msg_val = &values[1];
+                            format!("ncr_assert({cond_val}, {msg_val}.data, {msg_val}.length, {line}, {column})")
+                        } else {
+                            format!("ncr_assert({cond_val}, (const unsigned char *)\"assertion failed\", 16, {line}, {column})")
+                        }
+                    }
                 };
                 let receiver_args = if receiver.is_some() { 1 } else { 0 };
                 for (arg, value) in args.iter().zip(values.iter().skip(receiver_args)) {

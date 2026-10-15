@@ -233,6 +233,7 @@ impl Builder {
                 match target {
                     t::CallTarget::Function(function) => self.step(at, Op::Call { function: *function, span: expr.span }),
                     t::CallTarget::Println => self.step(at, Op::Nop("println")),
+                    t::CallTarget::Assert => self.step(at, Op::Nop("assert")),
                 }
             }
             E::Unary { expr, .. } | E::Cast { value: expr, .. } | E::Upcast { value: expr, .. } => self.expression(expr, at),

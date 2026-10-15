@@ -136,8 +136,7 @@ pub enum ExprKind {
 #[derive(Debug, Clone, Copy)]
 pub enum MapSlotKind { Occupied, Key, Value }
 #[derive(Debug, Clone, Copy)]
-pub enum CallTarget { Function(usize), Println }
-
+pub enum CallTarget { Function(usize), Println, Assert }
 /// Trusted standard-library storage, never exposed as source fields.
 #[derive(Debug, Clone, Copy)]
 pub enum NativeClass {

@@ -11,6 +11,8 @@ const HELP: &str = "Nacre — experimental native compiler written in Rust
 
 Usage:
   nacre check  source.ncr ... | directory
+  nacre test   source.ncr ... | directory [--native] [--lto] [--jemalloc]
+  nacre fmt    source.ncr ... | directory [--check]
   nacre run    source.ncr [--memory-stats] [--native] [--lto] [--jemalloc] [-O0|-O1|-O2|-O3|-Os] [-- arguments...]
   nacre build  source.ncr [-o executable] [--memory-stats] [--native] [--lto] [--jemalloc] [-O0|-O1|-O2|-O3|-Os]
   nacre emit-c source.ncr [-o output.c] [--memory-stats]
@@ -78,12 +80,13 @@ fn execute(args: Vec<OsString>) -> Result<i32, String> {
         if args.len() != 1 { return Err("usage: nacre doctor".to_owned()); }
         return doctor();
     }
-    if !matches!(command, "check" | "run" | "build" | "emit-c" | "emit-flow" | "emit-borrows" | "emit-types" | "emit-llvm") {
+    if !matches!(command, "check" | "run" | "build" | "emit-c" | "emit-flow" | "emit-borrows" | "emit-types" | "emit-llvm" | "test" | "fmt") {
         return Err(format!("unknown command: {command}\n\n{HELP}"));
     }
     let mut sources = Vec::new();
     let mut output = None;
     let mut memory_stats = false;
+    let mut check_only = false;
     let mut sanitize = false;
     let mut native_arch = false;
     let mut lto = false;
@@ -106,19 +109,27 @@ fn execute(args: Vec<OsString>) -> Result<i32, String> {
             && args[i].to_str().is_some_and(|s| matches!(s, "-O0" | "-O1" | "-O2" | "-O3" | "-Os")) {
             optimization = args[i].to_str();
             i += 1;
-        } else if args[i] == "--sanitize" && matches!(command, "run" | "build") && !sanitize {
+        } else if args[i] == "--sanitize" && matches!(command, "run" | "build" | "test") && !sanitize {
             sanitize = true; i += 1;
-        } else if args[i] == "--native" && matches!(command, "run" | "build") && !native_arch {
+        } else if args[i] == "--native" && matches!(command, "run" | "build" | "test") && !native_arch {
             native_arch = true; i += 1;
-        } else if args[i] == "--lto" && matches!(command, "run" | "build") && !lto {
+        } else if args[i] == "--lto" && matches!(command, "run" | "build" | "test") && !lto {
             lto = true; i += 1;
-        } else if args[i] == "--jemalloc" && matches!(command, "run" | "build") && !jemalloc {
+        } else if args[i] == "--jemalloc" && matches!(command, "run" | "build" | "test") && !jemalloc {
             jemalloc = true; i += 1;
+        } else if args[i] == "--check" && command == "fmt" && !check_only {
+            check_only = true; i += 1;
         } else if !args[i].to_string_lossy().starts_with('-') {
             sources.push(PathBuf::from(&args[i])); i += 1;
         } else { return Err(format!("invalid arguments for {command}\n\n{HELP}")); }
     }
     let source_path = sources.first().ok_or_else(|| format!("missing source file\n\n{HELP}"))?;
+    if command == "test" {
+        return nacre::test_runner::run_tests(&sources, native_arch, lto, jemalloc);
+    }
+    if command == "fmt" {
+        return nacre::fmt::format_files(&sources, check_only);
+    }
     let bundle = SourceBundle::from_paths(&sources)?;
     if command == "check" {
         bundle.validate().map_err(|d| bundle.render(&d))?;

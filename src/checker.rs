@@ -203,7 +203,7 @@ impl Tables {
         }
     }
     fn add_signature(&mut self, f: &a::Function, owner: Option<usize>, kind: Kind) -> Result<usize, Diagnostic> {
-        if matches!(f.name.as_str(), "println" | "move" | "drop") { return Err(Diagnostic::new(f.span, format!("`{}` is a reserved built-in function", f.name))); }
+        if matches!(f.name.as_str(), "println" | "move" | "drop" | "assert") { return Err(Diagnostic::new(f.span, format!("`{}` is a reserved built-in function", f.name))); }
         let params: Vec<Type> = f.params.iter().map(|p| self.resolve_type(&p.ty, p.span)).collect::<Result<_, _>>()?;
         let return_type = self.resolve_type(&f.return_type, f.span)?;
         if return_type.is_borrow() && !matches!(kind, Kind::Instance | Kind::Interface) {
@@ -2094,6 +2094,22 @@ impl Checker<'_> {
 
     fn call_expression(&mut self, name: &str, args: &[a::Expr], span: Span) -> Result<(t::ExprKind, Type), Diagnostic> {
         if name == "println" { self.builtin(args, span) }
+        else if name == "assert" {
+            if args.is_empty() || args.len() > 2 {
+                return Err(Diagnostic::new(span, "assert expects 1 or 2 arguments: assert(boolean condition) or assert(boolean condition, String message)"));
+            }
+            let condition = self.expression(&args[0])?;
+            self.require(Type::Boolean, condition.ty, condition.span)?;
+            let mut checked_args = vec![condition];
+            if args.len() == 2 {
+                let message = self.expression(&args[1])?;
+                if !matches!(message.ty, Type::String) {
+                    return Err(Diagnostic::new(message.span, "assertion message must be a String literal"));
+                }
+                checked_args.push(message);
+            }
+            Ok((t::ExprKind::Call { target: CallTarget::Assert, receiver: None, args: checked_args }, Type::Void))
+        }
         else if name == "move" || name == "drop" {
             if args.len() != 1 { return Err(Diagnostic::new(span, format!("{name} expects exactly one argument"))); }
             let value = self.expression(&args[0])?;
