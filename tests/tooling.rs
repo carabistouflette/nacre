@@ -503,3 +503,104 @@ void main() {
         assert_eq!(output.stdout, b"40\n");
     }
 }
+
+#[test]
+fn escape_analysis_stack_promotes_local_objects_and_heap_allocates_escaping() {
+    // 1. Non-escaping local object is stack promoted (0 heap allocations)
+    let non_escaping_source = r#"
+class Point {
+    public int x;
+    public int y;
+    public Point(int x, int y) {
+        this.x = x;
+        this.y = y;
+    }
+    public readonly int sum() {
+        return this.x + this.y;
+    }
+}
+
+void main() {
+    Point p = new Point(10, 20);
+    assert(p.sum() == 30);
+}
+"#;
+    let c = compile_to_c(non_escaping_source).unwrap();
+    let program = native::compile_c_with_flags(&c, &["-DNACRE_MEMORY_STATS"]).unwrap();
+    let output = program.output().unwrap();
+    assert!(output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("allocations=0 frees=0 live=0"), "expected stack promotion: {stderr}");
+
+    // 2. Escaping object moved into a heap holder is heap allocated (does not dangle)
+    let escaping_source = r#"
+class Item {
+    public int value;
+    public Item(int v) { this.value = v; }
+}
+
+class Holder {
+    public Item item;
+    public Holder(Item i) { this.item = i; }
+    public readonly int getValue() { return this.item.value; }
+}
+
+Holder makeHolder() {
+    Item it = new Item(42);
+    Holder h = new Holder(it);
+    return h;
+}
+
+void main() {
+    Holder h = makeHolder();
+    assert(h.getValue() == 42);
+}
+"#;
+    let c2 = compile_to_c(escaping_source).unwrap();
+    let program2 = native::compile_c_with_flags(&c2, &["-DNACRE_MEMORY_STATS"]).unwrap();
+    let output2 = program2.output().unwrap();
+    assert!(output2.status.success());
+    let stderr2 = String::from_utf8_lossy(&output2.stderr);
+    assert!(stderr2.contains("allocations=2 frees=2 live=0"), "expected clean heap allocation: {stderr2}");
+
+    // 3. Candidate moved into a returned holder via Try (?) expression escapes and is heap-allocated
+    let try_escape_source = r#"
+class Data {
+    public int n;
+    public Data(int n) { this.n = n; }
+}
+
+class Wrapper {
+    public Data data;
+    public Wrapper(Data d) { this.data = d; }
+}
+
+Result<Wrapper, Text> wrapData(Data d) {
+    return new Result<Wrapper, Text>.Ok(new Wrapper(d));
+}
+
+Result<Wrapper, Text> tryWrap() {
+    Data d = new Data(99);
+    return wrapData(d);
+}
+
+Result<Unit, Text> runTryTest() {
+    Wrapper w = tryWrap()?;
+    assert(w.data.n == 99);
+    return new Result<Unit, Text>.Ok(());
+}
+
+void main() {
+    match (runTryTest()) {
+        Ok(u) {}
+        Err(e) { assert(false, "try test failed"); }
+    }
+}
+"#;
+    let c3 = compile_to_c(try_escape_source).unwrap();
+    let program3 = native::compile_c_with_flags(&c3, &["-DNACRE_MEMORY_STATS"]).unwrap();
+    let output3 = program3.output().unwrap();
+    assert!(output3.status.success());
+    let stderr3 = String::from_utf8_lossy(&output3.stderr);
+    assert!(stderr3.contains("allocations=2 frees=2 live=0"), "expected heap allocation: {stderr3}");
+}
