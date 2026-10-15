@@ -142,7 +142,7 @@ pub fn compile_c_optimized(source: &str, optimization: &str, flags: &[&str]) -> 
     let libraries = NativeLibraries::from_source(source);
     let output = Command::new(&compiler)
         .arg(optimization)
-        .args(["-std=c11", "-pthread", "-fno-math-errno", "-Wall", "-Wextra", "-pedantic", "-Wno-unused-function", "-Wno-unused-variable", "-Wno-unused-parameter", "-Wno-unused-but-set-variable"])
+        .args(["-std=c11", "-pthread", "-g", "-fno-math-errno", "-Wall", "-Wextra", "-pedantic", "-Wno-unused-function", "-Wno-unused-variable", "-Wno-unused-parameter", "-Wno-unused-but-set-variable"])
         .args(if cfg!(target_os = "linux") { &["-ffunction-sections", "-fdata-sections"][..] } else { &[][..] })
         .args(libraries.header_flags())
         .args(flags)

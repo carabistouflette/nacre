@@ -182,3 +182,24 @@ void main() {}
 
     let _ = fs::remove_dir_all(&temp_dir);
 }
+
+#[test]
+fn dwarf_debug_line_directives_map_to_ncr_files() {
+    let source = "void main() {\n    int a = 1;\n    int b = 2;\n    int c = a + b;\n    assert(c == 3);\n}\n";
+    let c = compile_to_c(source).unwrap();
+    assert!(c.contains("#line 2"), "missing line 2 directive");
+    assert!(c.contains("#line 3"), "missing line 3 directive");
+    assert!(c.contains("#line 4"), "missing line 4 directive");
+    assert!(c.contains("#line 5"), "missing line 5 directive");
+
+    // Also verify multi-source bundle compiles with filename in #line directive
+    let bundle = nacre::project::SourceBundle::from_sources(vec![
+        ("entry.ncr".to_owned(), source.to_owned()),
+    ]).unwrap();
+    let bundle_c = bundle.compile_to_c().unwrap();
+    assert!(bundle_c.contains("#line 2 \"entry.ncr\""), "missing file in line directive");
+
+    let program = native::compile_c(&bundle_c).unwrap();
+    let output = program.output().unwrap();
+    assert!(output.status.success());
+}

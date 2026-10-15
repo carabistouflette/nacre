@@ -131,7 +131,11 @@ impl SourceBundle {
     pub fn compile_to_c(&self) -> Result<String, Diagnostic> {
         let typed = self.typed()?;
         let mut result = self.runtime_source_map();
-        result.push_str(&crate::codegen::generate(&typed, &self.text));
+        result.push_str(&crate::codegen::generate_mapped(&typed, &self.text, |span| {
+            let loc = self.locate(span);
+            let (line, _) = crate::diagnostic::line_column(loc.source, loc.span.start);
+            (line, Some(loc.path.to_string_lossy().into_owned()))
+        }));
         Ok(result)
     }
     pub fn emit_flow(&self) -> Result<String, Diagnostic> {
