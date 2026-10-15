@@ -6,7 +6,7 @@ static void ncr_text_append_@ID@(ncr_obj_@ID@ *p, const unsigned char *data, siz
         int64_t capacity = p->capacity;
         while (capacity < required) { capacity = capacity > INT32_MAX / 2 ? INT32_MAX : capacity * 2; }
         if ((uint64_t)capacity > SIZE_MAX) { ncr_fail("Text is too large", line, column); }
-        unsigned char *bytes = ncr_allocate((size_t)capacity, line, column);
+        unsigned char *bytes = ncr_allocate_raw((size_t)capacity, line, column);
         if (p->length > 0) { memcpy(bytes, p->bytes, (size_t)p->length); }
         if (p->bytes != p->inline_storage) { ncr_deallocate(p->bytes); }
         p->bytes = bytes; p->capacity = (int32_t)capacity;

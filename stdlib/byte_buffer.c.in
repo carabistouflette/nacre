@@ -12,7 +12,7 @@ static bool ncr_byte_buffer_reserve_limited_@ID@(@BUFFER_TYPE@ buffer, size_t re
         grown *= 2;
     }
     if (grown < required_size) { return false; }
-    unsigned char *next = ncr_allocate(grown, line, column);
+    unsigned char *next = ncr_allocate_raw(grown, line, column);
     if (buffer->length > 0) { memcpy(next, buffer->bytes, buffer->length); }
     ncr_deallocate(buffer->bytes);
     buffer->bytes = next;

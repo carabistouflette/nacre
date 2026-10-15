@@ -135,7 +135,7 @@ pub fn compile_c_optimized(source: &str, optimization: &str, flags: &[&str]) -> 
     let libraries = NativeLibraries::from_source(source);
     let output = Command::new(&compiler)
         .arg(optimization)
-        .args(["-std=c11", "-pthread", "-Wall", "-Wextra", "-pedantic", "-Wno-unused-function", "-Wno-unused-variable", "-Wno-unused-parameter", "-Wno-unused-but-set-variable"])
+        .args(["-std=c11", "-pthread", "-fno-math-errno", "-Wall", "-Wextra", "-pedantic", "-Wno-unused-function", "-Wno-unused-variable", "-Wno-unused-parameter", "-Wno-unused-but-set-variable"])
         .args(libraries.header_flags())
         .args(flags)
         .arg(&c_path).arg("-o").arg(&executable)
