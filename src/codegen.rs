@@ -3,7 +3,7 @@
 use crate::ast::{BinaryOp as B, UnaryOp};
 use crate::diagnostic::{line_column, Span};
 use crate::ir::{self as t, CallTarget, Place, PlaceKind, Type};
-use crate::c_repr::{ctype, ctype_param, object_zero};
+use crate::c_repr::{ctype, ctype_param, direct_input_abi, object_zero, DirectInputAbi};
 use std::collections::HashSet;
 use std::fmt::Write;
 
@@ -80,7 +80,7 @@ pub(crate) fn generate_direct_runtime(program: &t::Program) -> String {
         if function.native.is_none() && function.virtual_slot.is_none() {
             writeln!(out, "extern void {}({});",
                 direct_function_symbol(function.id),
-                direct_slot_parameters(function)).unwrap();
+                direct_input_parameters(program, function)).unwrap();
         }
     }
 
@@ -296,10 +296,13 @@ fn direct_function_symbol(id: usize) -> String {
     format!("ncr_llvm_fn_{id}")
 }
 
-fn direct_slot_parameters(function: &t::Function) -> String {
+fn direct_input_parameters(program: &t::Program, function: &t::Function) -> String {
     let mut params = vec!["void *ncr_result".to_owned()];
     if function.receiver.is_some() { params.push("void *ncr_self".to_owned()); }
-    params.extend(function.params.iter().map(|(id, _)| format!("void *ncr_arg_{id}")));
+    params.extend(function.params.iter().map(|(id, ty)| match direct_input_abi(program, *ty) {
+        DirectInputAbi::Value => format!("{} ncr_arg_{id}", ctype_param(program, *ty)),
+        DirectInputAbi::Address => format!("void *ncr_arg_{id}"),
+    }));
     params.join(", ")
 }
 
@@ -345,8 +348,11 @@ fn direct_user_adapters(program: &t::Program) -> String {
                 "ncr_self".to_owned()
             });
         }
-        // Erase the address of each ABI slot, not its qualified pointer payload.
-        call_args.extend(function.params.iter().map(|(id, _)| format!("(void *)&ncr_v_{id}")));
+        // Erase only address-ABI inputs; thin pointers and scalars stay typed values.
+        call_args.extend(function.params.iter().map(|(id, ty)| match direct_input_abi(program, *ty) {
+            DirectInputAbi::Value => format!("ncr_v_{id}"),
+            DirectInputAbi::Address => format!("(void *)&ncr_v_{id}"),
+        }));
         let params = c_params_signature(program, function);
         let return_type = ctype(program, function.return_type);
         if function.return_type == Type::Void {

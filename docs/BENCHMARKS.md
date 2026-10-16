@@ -506,3 +506,107 @@ GNU `size` on the actual uninstrumented `-O3 --native` suite executables:
 The text category includes read-only sections, not just `.text`. This consumer's
 small footprint changes do not establish a general code-size improvement.
 
+## Typed direct-LLVM argument transport
+
+The 2026-10-16 cutover changes user-function inputs, not returns. The baseline is
+`d02be8b`; compiler identities, input hashes, commands, raw samples, hardware
+counters, and checks are recorded in
+[typed-arguments-controlled.json](../benchmarks/typed-arguments-controlled.json).
+The original captured IR/runtime reproduces the baseline executable byte-for-byte.
+
+### ABI contract
+
+`c_repr::direct_input_abi` is the authoritative policy for LLVM definitions,
+direct calls, constructors, C bridge declarations, and C bridge calls:
+
+| Input | Internal transport |
+| --- | --- |
+| Boolean, byte, char, int, long, double | Scalar value |
+| Thin owned object references and thin borrows, including borrowed sums | Pointer value |
+| Unit, String, inline sum values, owned/borrowed interface values | Address of value storage |
+
+Transport does not duplicate ownership. Callees place incoming values in local,
+addressable homes; moved objects remain single-owner and borrows never become
+owners. Existing cleanup and argument-consumption order is retained. These homes
+also provide scalar debug locations without the old incoming-pointer debug spill.
+Result slots, including Boolean results, are unchanged. Native/virtual erased
+entry paths and C interface method contracts retain their existing signatures;
+their internal user-function bridges use the shared input policy. C aggregate
+argument/return classification remains Clang's responsibility.
+
+### Argument versus return ablation
+
+Only `MemorySink.write` and the necessary runtime declaration/adapter were changed
+in these scratch controls. Both implementations remain out of line. Twenty
+balanced fresh-process rounds used the same binary workload, repetition count,
+Clang 22.1.8, `llvm-link` 22.1.0, CPU 0, and `-O3 --native` flags.
+Negative paired elapsed change means faster:
+
+| Lowering | Paired elapsed change | Faster pairs / 20 | Median cycles/call | Median instructions/call |
+| --- | ---: | ---: | ---: | ---: |
+| Original erased inputs and result slot | — | — | 80,274 | 490,442 |
+| Typed inputs only | -4.59% | 16 | 77,295 | 478,001 |
+| Typed return only | -1.17% | 11 | 80,736 | 490,332 |
+| Typed inputs and return | -5.18% | 17 | 75,835 | 477,920 |
+
+Inputs account for most of the instruction reduction and measured elapsed gain.
+Return-only lowering did not improve median cycle counts. The permanent change
+therefore preserves result slots instead of introducing target-specific aggregate
+return rules. Separate invalid-offset controls returned the failure checksum and
+balanced allocations, exercising the owned Text error payload.
+
+### Production six-workload recheck
+
+[typed-arguments-runtime-optimized.json](../benchmarks/typed-arguments-runtime-optimized.json)
+records the existing runner's ten C/direct samples per workload, Rust checksum
+preflight, calibration, RSS, and separate allocation runs. An additional twelve
+balanced rounds compared the actual baseline, production LLVM, and C executables
+using a shared count for each workload. Production LLVM versus baseline:
+
+| Workload | Median paired elapsed change | Faster pairs / 12 |
+| --- | ---: | ---: |
+| JSON | +2.01% | 2 |
+| String | -1.45% | 7 |
+| Binary | -6.43% | 12 |
+| Hash map | -8.52% | 8 |
+| Sudoku | +0.74% | 5 |
+| Game of Life | -0.21% | 6 |
+
+Binary's separate hardware counters decreased from 80,634 to 76,594 cycles/call
+and from 490,442 to 478,001 retired instructions/call. LLVM still trails C for
+binary; this is not a claim that argument transport explains the whole gap.
+
+JSON's small cost is recorded, not dismissed as noise: its median cycles increased
+from 654.2 to 668.6 despite one fewer retired instruction per call. Other small
+elapsed changes are not universal gains or regressions; an earlier identical-binary
+control moved by about 1.3%, and hash-map samples have substantial process-to-process
+variation. No causal map speedup is claimed. Life's retired instruction count
+decreased, while elapsed time and cycle counts remained near baseline. No alignment
+workaround, function-name exception, new inlining attribute, or runtime flag was added.
+
+Every workload preserved its checksum and tracked allocation count for both
+backends, with balanced frees and `live=0`. A mixed scalar/owned/borrowed/aggregate
+interface consumer passed `-O0` sanitizers and release CLI checks at `-O0`/`-O3`.
+GDB inspected its constructor argument, all six scalar parameters, and computed
+full-width digest at original-source breakpoints.
+
+### Footprint and limits
+
+GNU `size` on the actual uninstrumented suite executables:
+
+| Build | Text-category bytes | Data bytes | BSS bytes |
+| --- | ---: | ---: | ---: |
+| C baseline and final | 38,805 | 720 | 16 |
+| LLVM baseline | 40,962 | 712 | 16 |
+| LLVM typed inputs | 40,830 | 712 | 16 |
+
+The C control's `.text` and `.rodata` are byte-identical. The text category includes
+read-only sections; tracked allocation counts are not allocator-byte measurements.
+These results cover one Linux x86-64 host, not a cross-target performance guarantee.
+Reproduce the current C/direct report with matching SDK paths and LLVM tools:
+
+```sh
+python3 benchmarks/run_suite.py --compare-backends --repeats 10 \
+  --output /tmp/nacre-typed-arguments-runtime.json
+```
+

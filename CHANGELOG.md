@@ -48,6 +48,11 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 - Avoid calling the ByteBuffer reserve helper for single-byte appends within
   existing capacity. Preserve overflow checks and growth policy; record binary
   CPU profiles, matched six-workload measurements, and executable footprint.
+- Pass direct-LLVM user-function scalar and thin-reference inputs by value using
+  one shared C/LLVM transport policy. Preserve aggregate input addresses, result
+  slots, native/interface contracts, ownership cleanup, and source debugging.
+  Verify mixed arguments and early-error cleanup under sanitizers; record the
+  argument/return ablation, all six workloads, JSON cost, and executable footprint.
 - Add optional `nacre doctor --direct` and `--zip` checks. Report selected LLVM
   tool versions and reject incompatible majors before compiling bitcode; verify
   native allocation balance and real binary/empty ZIP archive round-trips.

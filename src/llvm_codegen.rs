@@ -9,6 +9,7 @@ use std::fmt::Write;
 use crate::ast::{BinaryOp as B, UnaryOp as U};
 use crate::diagnostic::{line_column, Span};
 use crate::ir::{self as t, Place, PlaceKind, Type};
+use crate::c_repr::{direct_input_abi, DirectInputAbi};
 use std::path::Path;
 
 pub(crate) struct DirectDebugSource<'a> {
@@ -634,8 +635,15 @@ impl<'a> LlvmEmitter<'a> {
         self.current_receiver = function.receiver;
 
         self.local_slots.resize(function.locals.len(), String::new());
-        for (id, _) in &function.params {
-            self.local_slots[*id] = format!("%ncr_arg_{id}");
+        for (id, ty) in &function.params {
+            let incoming = format!("%ncr_arg_{id}");
+            if direct_input_abi(self.program, *ty) == DirectInputAbi::Value {
+                let home = self.alloc_slot(*ty);
+                self.store_scalar(*ty, &home, &incoming);
+                self.local_slots[*id] = home;
+            } else {
+                self.local_slots[*id] = incoming;
+            }
         }
         for (id, local) in function.locals.iter().enumerate() {
             if self.local_slots[id].is_empty() {
@@ -681,9 +689,18 @@ impl<'a> LlvmEmitter<'a> {
             }
         }
 
-        let mut params = vec!["ptr %ncr_result".to_owned()];
+        let mut params = Vec::with_capacity(
+            function.params.len() + 1 + usize::from(function.receiver.is_some()),
+        );
+        params.push("ptr %ncr_result".to_owned());
         if function.receiver.is_some() { params.push("ptr %ncr_self".to_owned()); }
-        params.extend(function.params.iter().map(|(id, _)| format!("ptr %ncr_arg_{id}")));
+        params.extend(function.params.iter().map(|(id, ty)| {
+            let input_type = match direct_input_abi(self.program, *ty) {
+                DirectInputAbi::Value => llvm_type(*ty),
+                DirectInputAbi::Address => "ptr",
+            };
+            format!("{input_type} %ncr_arg_{id}")
+        }));
         let allocas = Self::materialize_debug_body(&self.allocas, implicit_location);
         let body = Self::materialize_debug_body(&self.body, implicit_location);
         let debug_scope = subprogram.map_or_else(String::new, |id| format!(" !dbg !{id}"));
@@ -715,20 +732,12 @@ impl<'a> LlvmEmitter<'a> {
         let Some(location) = self.debug.source_location(local.span) else { return; };
         let Some(variable) = self.debug.local_variable(local, scope, location, argument) else { return; };
         let debug_location = self.debug.location(scope, location);
-        // Incoming ABI pointers otherwise lose their debug location when their
-        // machine registers are reused, even at -O0. Optimizers can elide this
-        // address spill; unoptimized debugging retains it for the whole frame.
-        let argument_address = argument.map(|_| format!("%ncr_debug_arg_{id}"));
-        let (address, expression) = if let Some(address) = argument_address.as_deref() {
-            writeln!(self.allocas, "    {address} = alloca ptr, align 8").unwrap();
-            writeln!(self.body, "    store ptr {}, ptr {address}", self.local_slots[id]).unwrap();
-            (address, "DW_OP_deref")
-        } else {
-            (self.local_slots[id].as_str(), "")
-        };
+        // Only scalar debug types are supported. Their parameters now have
+        // frame-local value homes, just like locals; no pointer spill is needed.
+        let address = self.local_slots[id].as_str();
         writeln!(
             self.body,
-            "    call void @llvm.dbg.declare(metadata ptr {address}, metadata !{variable}, metadata !DIExpression({expression})), !dbg !{debug_location}",
+            "    call void @llvm.dbg.declare(metadata ptr {address}, metadata !{variable}, metadata !DIExpression()), !dbg !{debug_location}",
         ).unwrap();
     }
 
@@ -1302,15 +1311,34 @@ impl<'a> LlvmEmitter<'a> {
         column: usize,
     ) {
         let mut call_args = vec!["ptr null".to_owned(), format!("ptr {object}")];
-        call_args.extend(argument_slots.iter().map(|slot| format!("ptr {slot}")));
         if self.program.functions[constructor].native.is_some() {
+            call_args.extend(argument_slots.iter().map(|slot| format!("ptr {slot}")));
             call_args.extend([format!("i64 {line}"), format!("i64 {column}")]);
             self.body.push_str(&format!(
                 "    call void @ncr_llvm_native_{constructor}({})\n", call_args.join(", ")));
         } else {
+            self.append_direct_input_arguments(constructor, argument_slots, &mut call_args);
             self.body.push_str(&format!(
                 "    call void @{}({})\n",
                 direct_function_symbol(constructor), call_args.join(", ")));
+        }
+    }
+
+    fn append_direct_input_arguments(
+        &mut self,
+        function: usize,
+        slots: &[String],
+        arguments: &mut Vec<String>,
+    ) {
+        for (index, slot) in slots.iter().enumerate() {
+            let ty = self.program.functions[function].params[index].1;
+            match direct_input_abi(self.program, ty) {
+                DirectInputAbi::Value => {
+                    let value = self.load_scalar(ty, slot);
+                    arguments.push(format!("{} {value}", llvm_type(ty)));
+                }
+                DirectInputAbi::Address => arguments.push(format!("ptr {slot}")),
+            }
         }
     }
 
@@ -1518,7 +1546,11 @@ impl<'a> LlvmEmitter<'a> {
                     call_args.push(format!("ptr {}", receiver_slot.as_ref().ok_or_else(||
                         "instance call has no receiver".to_owned())?));
                 }
-                call_args.extend(arg_slots.iter().map(|slot| format!("ptr {slot}")));
+                if is_native || is_virtual {
+                    call_args.extend(arg_slots.iter().map(|slot| format!("ptr {slot}")));
+                } else {
+                    self.append_direct_input_arguments(*id, &arg_slots, &mut call_args);
+                }
                 if is_native {
                     let (line, column) = line_column(self.source, expression.span.start);
                     call_args.push(format!("i64 {line}"));

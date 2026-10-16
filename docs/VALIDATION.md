@@ -4,6 +4,33 @@ Nacre is experimental pre-1.0. Executed checks are evidence, not a safety certif
 [validation-0.12.0.json](validation-0.12.0.json) records portable local results.
 Historical reports retain their original release labels; they are not current-release proof.
 
+## Typed direct-LLVM argument transport
+
+The shared `c_repr::direct_input_abi` policy passes scalars and thin references by
+value, while Unit, String, inline sums, and interface values retain storage
+addresses. Ownership is unchanged; parameter value homes remain addressable for
+assignment, cleanup, and debugging. Result slots and Boolean returns are unchanged.
+Native/virtual dispatch contracts are preserved through matching C bridges.
+
+| Executed check | Observed result |
+| --- | --- |
+| Argument-only/return-only captured-IR ablation, 20 balanced rounds | Argument-only binary paired elapsed -4.59%; combined -5.18%; return-only did not improve median hardware cycles |
+| Permanent mixed interface regression, `-O0`, ASan/UBSan and strict qualifier diagnostics | Passed mixed six-width scalars, owned Text, a surviving shared borrow, owned sum payload, String input, constructor input, and success/early-error cleanup |
+| Actual release C/direct CLI consumer, `-O0` and `-O3` | All four runs output `go!#?`, `disabled`, `!`; 8 allocations / 8 frees / live 0 |
+| GDB original-source constructor/method breakpoints, direct `-O0` | Exact constructor `long`, byte 255, U+1F9EA char, int -17, full-width long, double 1.25, boolean true, and computed long digest inspected; exit 0 |
+| Full C suite, offline/locked/fuzzing, all ignored tests included | 1,350 passed across 68 suites |
+| Full LLVM suite under the same options, explicit LLVM 22 and corrected ZIP SDK, cache disabled | 1,350 passed across 68 suites |
+| All-target Clippy with fuzzing and `-D warnings` | Passed without suppressions |
+| Current runner: 120 C/direct timed samples plus calibration/allocation checks and Rust preflight | All checksums matched; tracked allocations/frees unchanged and live 0 |
+| Additional production baseline/LLVM/C comparison: 216 timed samples | All checksums matched; binary paired elapsed -6.43% in 12/12 pairs; small JSON cost explicitly retained in the report |
+| Captured final IR/runtime compiled with the exact native pipeline | Reproduced the actual timed production executable byte-for-byte |
+
+[Ablation, shared ABI contract, six-workload results, measured JSON cost, and
+footprint](BENCHMARKS.md#typed-direct-llvm-argument-transport) are recorded together.
+The design uses one exhaustive transport policy rather than separate C/LLVM
+decisions, and removes obsolete pointer-debug spills instead of retaining a
+second path for supported scalar debug types.
+
 ## User-thunk qualifier boundary and binary append hot path
 
 The user-thunk change erases only slot-address qualifiers at the `void *` ABI

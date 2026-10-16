@@ -1,0 +1,5752 @@
+{
+  "methodology": "Reused saved d02be8b raw LLVM/runtime and native baseline; separate args-only/return-only ablation then production general typed-input compiler. No Boolean return changes, alignment workaround, new inline attributes or runtime optimization flags. Timings pinnedCPU0 balanced cyclic/reverse Latin-square; all stdout checked.",
+  "baseline_compiler_sha256": "714a677cde6f349fdb2f56ecb9d5082386de4bbaa8b6f6c8cc2a60ff80199eca",
+  "compiler_sha256": "1f161df28cd67bd3ecfd5d6a5718c8d3b30b35f893d3f3930e82916839ec28c9",
+  "source_sha256": "7a9855e57db5f5c54022d01e73a4c4aeab2fc5b567ce735114aff0e294000ab1",
+  "ablation": {
+    "methodology": "Pinned CPU0, exact shared captured runtime and per-variant LLVM IR as recorded; same calls per workload; cyclic Latin-square order then reversed Latin square; fresh processes; all stdout checked; elapsed includes amortized startup/shutdown. Negative paired change means faster.",
+    "rounds": 20,
+    "cpu_affinity": 0,
+    "source_sha256": "7a9855e57db5f5c54022d01e73a4c4aeab2fc5b567ce735114aff0e294000ab1",
+    "executables": {
+      "baseline": {
+        "path": "/tmp/nacre-typed-arguments-6q_wmddm/baseline",
+        "sha256": "fff67130c7f5eef35740321ba49d48ff8a4f884f79155173c9d747c253df5325"
+      },
+      "arguments_only": {
+        "path": "/tmp/nacre-typed-arguments-6q_wmddm/split/arguments-only/executable",
+        "sha256": "054cfc4b671a001ccd103b3b993e277d07d99b541df31daa3cc2afcdeaaf77c4"
+      },
+      "return_only": {
+        "path": "/tmp/nacre-typed-arguments-6q_wmddm/split/return-only/executable",
+        "sha256": "73c8e49e8866f98a336d321eb64ba6af6cb1fbaaae88beab22281bb8ebc91b28"
+      },
+      "combined": {
+        "path": "/tmp/nacre-typed-arguments-6q_wmddm/binary/candidate",
+        "sha256": "d7082aeda98815ecc143801f0ed846928644af265106009f8fa26b459590b814"
+      },
+      "c": {
+        "path": "/tmp/nacre-typed-arguments-6q_wmddm/c",
+        "sha256": "35e51b236938b58e47a6161363e8d95c5684ac655551524aa5a9f982997c52cb"
+      }
+    },
+    "samples": [
+      {
+        "workload": "binary",
+        "variant": "baseline",
+        "trial": 0,
+        "position": 0,
+        "calls": 11849,
+        "elapsed_seconds": 0.223663622,
+        "peak_rss_bytes": 2256896,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "arguments_only",
+        "trial": 0,
+        "position": 1,
+        "calls": 11849,
+        "elapsed_seconds": 0.212593515,
+        "peak_rss_bytes": 2265088,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "return_only",
+        "trial": 0,
+        "position": 2,
+        "calls": 11849,
+        "elapsed_seconds": 0.215635174,
+        "peak_rss_bytes": 2265088,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "combined",
+        "trial": 0,
+        "position": 3,
+        "calls": 11849,
+        "elapsed_seconds": 0.209838904,
+        "peak_rss_bytes": 2469888,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "c",
+        "trial": 0,
+        "position": 4,
+        "calls": 11849,
+        "elapsed_seconds": 0.169073128,
+        "peak_rss_bytes": 2441216,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "arguments_only",
+        "trial": 1,
+        "position": 0,
+        "calls": 11849,
+        "elapsed_seconds": 0.213653577,
+        "peak_rss_bytes": 2469888,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "return_only",
+        "trial": 1,
+        "position": 1,
+        "calls": 11849,
+        "elapsed_seconds": 0.215845021,
+        "peak_rss_bytes": 2379776,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "combined",
+        "trial": 1,
+        "position": 2,
+        "calls": 11849,
+        "elapsed_seconds": 0.225028298,
+        "peak_rss_bytes": 2453504,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "c",
+        "trial": 1,
+        "position": 3,
+        "calls": 11849,
+        "elapsed_seconds": 0.169267674,
+        "peak_rss_bytes": 2371584,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "baseline",
+        "trial": 1,
+        "position": 4,
+        "calls": 11849,
+        "elapsed_seconds": 0.236016965,
+        "peak_rss_bytes": 2478080,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "return_only",
+        "trial": 2,
+        "position": 0,
+        "calls": 11849,
+        "elapsed_seconds": 0.215487737,
+        "peak_rss_bytes": 2461696,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "combined",
+        "trial": 2,
+        "position": 1,
+        "calls": 11849,
+        "elapsed_seconds": 0.211229739,
+        "peak_rss_bytes": 2420736,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "c",
+        "trial": 2,
+        "position": 2,
+        "calls": 11849,
+        "elapsed_seconds": 0.169508543,
+        "peak_rss_bytes": 2383872,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "baseline",
+        "trial": 2,
+        "position": 3,
+        "calls": 11849,
+        "elapsed_seconds": 0.233006603,
+        "peak_rss_bytes": 2478080,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "arguments_only",
+        "trial": 2,
+        "position": 4,
+        "calls": 11849,
+        "elapsed_seconds": 0.207243961,
+        "peak_rss_bytes": 2383872,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "combined",
+        "trial": 3,
+        "position": 0,
+        "calls": 11849,
+        "elapsed_seconds": 0.206294911,
+        "peak_rss_bytes": 2367488,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "c",
+        "trial": 3,
+        "position": 1,
+        "calls": 11849,
+        "elapsed_seconds": 0.170297202,
+        "peak_rss_bytes": 2441216,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "baseline",
+        "trial": 3,
+        "position": 2,
+        "calls": 11849,
+        "elapsed_seconds": 0.216864342,
+        "peak_rss_bytes": 2379776,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "arguments_only",
+        "trial": 3,
+        "position": 3,
+        "calls": 11849,
+        "elapsed_seconds": 0.221331073,
+        "peak_rss_bytes": 2428928,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "return_only",
+        "trial": 3,
+        "position": 4,
+        "calls": 11849,
+        "elapsed_seconds": 0.230133318,
+        "peak_rss_bytes": 2265088,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "c",
+        "trial": 4,
+        "position": 0,
+        "calls": 11849,
+        "elapsed_seconds": 0.17218701,
+        "peak_rss_bytes": 2461696,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "baseline",
+        "trial": 4,
+        "position": 1,
+        "calls": 11849,
+        "elapsed_seconds": 0.227248044,
+        "peak_rss_bytes": 2441216,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "arguments_only",
+        "trial": 4,
+        "position": 2,
+        "calls": 11849,
+        "elapsed_seconds": 0.208016944,
+        "peak_rss_bytes": 2486272,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "return_only",
+        "trial": 4,
+        "position": 3,
+        "calls": 11849,
+        "elapsed_seconds": 0.222004687,
+        "peak_rss_bytes": 2256896,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "combined",
+        "trial": 4,
+        "position": 4,
+        "calls": 11849,
+        "elapsed_seconds": 0.207476994,
+        "peak_rss_bytes": 2441216,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "c",
+        "trial": 5,
+        "position": 0,
+        "calls": 11849,
+        "elapsed_seconds": 0.171823719,
+        "peak_rss_bytes": 2478080,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "combined",
+        "trial": 5,
+        "position": 1,
+        "calls": 11849,
+        "elapsed_seconds": 0.233289643,
+        "peak_rss_bytes": 2375680,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "return_only",
+        "trial": 5,
+        "position": 2,
+        "calls": 11849,
+        "elapsed_seconds": 0.225874537,
+        "peak_rss_bytes": 2338816,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "arguments_only",
+        "trial": 5,
+        "position": 3,
+        "calls": 11849,
+        "elapsed_seconds": 0.211323329,
+        "peak_rss_bytes": 2375680,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "baseline",
+        "trial": 5,
+        "position": 4,
+        "calls": 11849,
+        "elapsed_seconds": 0.216113733,
+        "peak_rss_bytes": 2461696,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "baseline",
+        "trial": 6,
+        "position": 0,
+        "calls": 11849,
+        "elapsed_seconds": 0.220608836,
+        "peak_rss_bytes": 2420736,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "c",
+        "trial": 6,
+        "position": 1,
+        "calls": 11849,
+        "elapsed_seconds": 0.193469555,
+        "peak_rss_bytes": 2461696,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "combined",
+        "trial": 6,
+        "position": 2,
+        "calls": 11849,
+        "elapsed_seconds": 0.208839696,
+        "peak_rss_bytes": 2453504,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "return_only",
+        "trial": 6,
+        "position": 3,
+        "calls": 11849,
+        "elapsed_seconds": 0.22113884,
+        "peak_rss_bytes": 2371584,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "arguments_only",
+        "trial": 6,
+        "position": 4,
+        "calls": 11849,
+        "elapsed_seconds": 0.211717448,
+        "peak_rss_bytes": 2363392,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "arguments_only",
+        "trial": 7,
+        "position": 0,
+        "calls": 11849,
+        "elapsed_seconds": 0.20747765,
+        "peak_rss_bytes": 2428928,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "baseline",
+        "trial": 7,
+        "position": 1,
+        "calls": 11849,
+        "elapsed_seconds": 0.218539244,
+        "peak_rss_bytes": 2256896,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "c",
+        "trial": 7,
+        "position": 2,
+        "calls": 11849,
+        "elapsed_seconds": 0.173289664,
+        "peak_rss_bytes": 2428928,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "combined",
+        "trial": 7,
+        "position": 3,
+        "calls": 11849,
+        "elapsed_seconds": 0.228238253,
+        "peak_rss_bytes": 2469888,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "return_only",
+        "trial": 7,
+        "position": 4,
+        "calls": 11849,
+        "elapsed_seconds": 0.223463153,
+        "peak_rss_bytes": 2363392,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "return_only",
+        "trial": 8,
+        "position": 0,
+        "calls": 11849,
+        "elapsed_seconds": 0.220946245,
+        "peak_rss_bytes": 2441216,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "arguments_only",
+        "trial": 8,
+        "position": 1,
+        "calls": 11849,
+        "elapsed_seconds": 0.231618242,
+        "peak_rss_bytes": 2379776,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "baseline",
+        "trial": 8,
+        "position": 2,
+        "calls": 11849,
+        "elapsed_seconds": 0.219152151,
+        "peak_rss_bytes": 2453504,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "c",
+        "trial": 8,
+        "position": 3,
+        "calls": 11849,
+        "elapsed_seconds": 0.173664846,
+        "peak_rss_bytes": 2265088,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "combined",
+        "trial": 8,
+        "position": 4,
+        "calls": 11849,
+        "elapsed_seconds": 0.206624429,
+        "peak_rss_bytes": 2265088,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "combined",
+        "trial": 9,
+        "position": 0,
+        "calls": 11849,
+        "elapsed_seconds": 0.205833028,
+        "peak_rss_bytes": 2469888,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "return_only",
+        "trial": 9,
+        "position": 1,
+        "calls": 11849,
+        "elapsed_seconds": 0.218981454,
+        "peak_rss_bytes": 2371584,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "arguments_only",
+        "trial": 9,
+        "position": 2,
+        "calls": 11849,
+        "elapsed_seconds": 0.226145595,
+        "peak_rss_bytes": 2383872,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "baseline",
+        "trial": 9,
+        "position": 3,
+        "calls": 11849,
+        "elapsed_seconds": 0.217119738,
+        "peak_rss_bytes": 2256896,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "c",
+        "trial": 9,
+        "position": 4,
+        "calls": 11849,
+        "elapsed_seconds": 0.173644115,
+        "peak_rss_bytes": 2453504,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "baseline",
+        "trial": 10,
+        "position": 0,
+        "calls": 11849,
+        "elapsed_seconds": 0.219781595,
+        "peak_rss_bytes": 2441216,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "arguments_only",
+        "trial": 10,
+        "position": 1,
+        "calls": 11849,
+        "elapsed_seconds": 0.214289881,
+        "peak_rss_bytes": 2461696,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "return_only",
+        "trial": 10,
+        "position": 2,
+        "calls": 11849,
+        "elapsed_seconds": 0.218081806,
+        "peak_rss_bytes": 2334720,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "combined",
+        "trial": 10,
+        "position": 3,
+        "calls": 11849,
+        "elapsed_seconds": 0.218186974,
+        "peak_rss_bytes": 2453504,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "c",
+        "trial": 10,
+        "position": 4,
+        "calls": 11849,
+        "elapsed_seconds": 0.185173899,
+        "peak_rss_bytes": 2256896,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "arguments_only",
+        "trial": 11,
+        "position": 0,
+        "calls": 11849,
+        "elapsed_seconds": 0.212573259,
+        "peak_rss_bytes": 2363392,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "return_only",
+        "trial": 11,
+        "position": 1,
+        "calls": 11849,
+        "elapsed_seconds": 0.218335929,
+        "peak_rss_bytes": 2383872,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "combined",
+        "trial": 11,
+        "position": 2,
+        "calls": 11849,
+        "elapsed_seconds": 0.217862089,
+        "peak_rss_bytes": 2461696,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "c",
+        "trial": 11,
+        "position": 3,
+        "calls": 11849,
+        "elapsed_seconds": 0.187485202,
+        "peak_rss_bytes": 2265088,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "baseline",
+        "trial": 11,
+        "position": 4,
+        "calls": 11849,
+        "elapsed_seconds": 0.224383486,
+        "peak_rss_bytes": 2260992,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "return_only",
+        "trial": 12,
+        "position": 0,
+        "calls": 11849,
+        "elapsed_seconds": 0.236119655,
+        "peak_rss_bytes": 2265088,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "combined",
+        "trial": 12,
+        "position": 1,
+        "calls": 11849,
+        "elapsed_seconds": 0.206442864,
+        "peak_rss_bytes": 2265088,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "c",
+        "trial": 12,
+        "position": 2,
+        "calls": 11849,
+        "elapsed_seconds": 0.171293209,
+        "peak_rss_bytes": 2260992,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "baseline",
+        "trial": 12,
+        "position": 3,
+        "calls": 11849,
+        "elapsed_seconds": 0.244474031,
+        "peak_rss_bytes": 2367488,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "arguments_only",
+        "trial": 12,
+        "position": 4,
+        "calls": 11849,
+        "elapsed_seconds": 0.215877768,
+        "peak_rss_bytes": 2371584,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "combined",
+        "trial": 13,
+        "position": 0,
+        "calls": 11849,
+        "elapsed_seconds": 0.207603698,
+        "peak_rss_bytes": 2379776,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "c",
+        "trial": 13,
+        "position": 1,
+        "calls": 11849,
+        "elapsed_seconds": 0.173423272,
+        "peak_rss_bytes": 2469888,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "baseline",
+        "trial": 13,
+        "position": 2,
+        "calls": 11849,
+        "elapsed_seconds": 0.244012689,
+        "peak_rss_bytes": 2383872,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "arguments_only",
+        "trial": 13,
+        "position": 3,
+        "calls": 11849,
+        "elapsed_seconds": 0.211287845,
+        "peak_rss_bytes": 2383872,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "return_only",
+        "trial": 13,
+        "position": 4,
+        "calls": 11849,
+        "elapsed_seconds": 0.221499034,
+        "peak_rss_bytes": 2441216,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "c",
+        "trial": 14,
+        "position": 0,
+        "calls": 11849,
+        "elapsed_seconds": 0.174375722,
+        "peak_rss_bytes": 2256896,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "baseline",
+        "trial": 14,
+        "position": 1,
+        "calls": 11849,
+        "elapsed_seconds": 0.238831701,
+        "peak_rss_bytes": 2371584,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "arguments_only",
+        "trial": 14,
+        "position": 2,
+        "calls": 11849,
+        "elapsed_seconds": 0.211374326,
+        "peak_rss_bytes": 2367488,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "return_only",
+        "trial": 14,
+        "position": 3,
+        "calls": 11849,
+        "elapsed_seconds": 0.220547181,
+        "peak_rss_bytes": 2383872,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "combined",
+        "trial": 14,
+        "position": 4,
+        "calls": 11849,
+        "elapsed_seconds": 0.209679355,
+        "peak_rss_bytes": 2375680,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "c",
+        "trial": 15,
+        "position": 0,
+        "calls": 11849,
+        "elapsed_seconds": 0.171755433,
+        "peak_rss_bytes": 2367488,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "combined",
+        "trial": 15,
+        "position": 1,
+        "calls": 11849,
+        "elapsed_seconds": 0.215657496,
+        "peak_rss_bytes": 2428928,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "return_only",
+        "trial": 15,
+        "position": 2,
+        "calls": 11849,
+        "elapsed_seconds": 0.237056619,
+        "peak_rss_bytes": 2453504,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "arguments_only",
+        "trial": 15,
+        "position": 3,
+        "calls": 11849,
+        "elapsed_seconds": 0.211787175,
+        "peak_rss_bytes": 2478080,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "baseline",
+        "trial": 15,
+        "position": 4,
+        "calls": 11849,
+        "elapsed_seconds": 0.219582279,
+        "peak_rss_bytes": 2420736,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "baseline",
+        "trial": 16,
+        "position": 0,
+        "calls": 11849,
+        "elapsed_seconds": 0.21963452,
+        "peak_rss_bytes": 2453504,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "c",
+        "trial": 16,
+        "position": 1,
+        "calls": 11849,
+        "elapsed_seconds": 0.177233423,
+        "peak_rss_bytes": 2453504,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "combined",
+        "trial": 16,
+        "position": 2,
+        "calls": 11849,
+        "elapsed_seconds": 0.209880316,
+        "peak_rss_bytes": 2363392,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "return_only",
+        "trial": 16,
+        "position": 3,
+        "calls": 11849,
+        "elapsed_seconds": 0.220165551,
+        "peak_rss_bytes": 2453504,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "arguments_only",
+        "trial": 16,
+        "position": 4,
+        "calls": 11849,
+        "elapsed_seconds": 0.213085924,
+        "peak_rss_bytes": 2256896,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "arguments_only",
+        "trial": 17,
+        "position": 0,
+        "calls": 11849,
+        "elapsed_seconds": 0.2127631,
+        "peak_rss_bytes": 2371584,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "baseline",
+        "trial": 17,
+        "position": 1,
+        "calls": 11849,
+        "elapsed_seconds": 0.222144618,
+        "peak_rss_bytes": 2371584,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "c",
+        "trial": 17,
+        "position": 2,
+        "calls": 11849,
+        "elapsed_seconds": 0.180051581,
+        "peak_rss_bytes": 2363392,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "combined",
+        "trial": 17,
+        "position": 3,
+        "calls": 11849,
+        "elapsed_seconds": 0.233633001,
+        "peak_rss_bytes": 2478080,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "return_only",
+        "trial": 17,
+        "position": 4,
+        "calls": 11849,
+        "elapsed_seconds": 0.23329497,
+        "peak_rss_bytes": 2461696,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "return_only",
+        "trial": 18,
+        "position": 0,
+        "calls": 11849,
+        "elapsed_seconds": 0.223591279,
+        "peak_rss_bytes": 2256896,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "arguments_only",
+        "trial": 18,
+        "position": 1,
+        "calls": 11849,
+        "elapsed_seconds": 0.242476686,
+        "peak_rss_bytes": 2371584,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "baseline",
+        "trial": 18,
+        "position": 2,
+        "calls": 11849,
+        "elapsed_seconds": 0.227162339,
+        "peak_rss_bytes": 2375680,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "c",
+        "trial": 18,
+        "position": 3,
+        "calls": 11849,
+        "elapsed_seconds": 0.174572569,
+        "peak_rss_bytes": 2420736,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "combined",
+        "trial": 18,
+        "position": 4,
+        "calls": 11849,
+        "elapsed_seconds": 0.215448801,
+        "peak_rss_bytes": 2375680,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "combined",
+        "trial": 19,
+        "position": 0,
+        "calls": 11849,
+        "elapsed_seconds": 0.212492572,
+        "peak_rss_bytes": 2478080,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "return_only",
+        "trial": 19,
+        "position": 1,
+        "calls": 11849,
+        "elapsed_seconds": 0.221257539,
+        "peak_rss_bytes": 2478080,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "arguments_only",
+        "trial": 19,
+        "position": 2,
+        "calls": 11849,
+        "elapsed_seconds": 0.215454532,
+        "peak_rss_bytes": 2260992,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "baseline",
+        "trial": 19,
+        "position": 3,
+        "calls": 11849,
+        "elapsed_seconds": 0.242990114,
+        "peak_rss_bytes": 2260992,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "c",
+        "trial": 19,
+        "position": 4,
+        "calls": 11849,
+        "elapsed_seconds": 0.178947981,
+        "peak_rss_bytes": 2441216,
+        "stdout": "RESULT binary 29115161367\n"
+      }
+    ],
+    "summary": {
+      "binary": {
+        "median_ns_per_call": {
+          "baseline": 18812.06177736518,
+          "arguments_only": 17949.05118575407,
+          "return_only": 18668.08924803781,
+          "combined": 17769.856316988775,
+          "c": 14645.42944552283
+        },
+        "comparisons": {
+          "arguments_only": {
+            "median_paired_change_percent": -4.586301239799589,
+            "faster_pairs": 16,
+            "pairs": 20,
+            "paired_changes_percent": [
+              -4.9494445726180665,
+              -9.475330724636677,
+              -11.056614562978718,
+              2.0596890013389046,
+              -8.462603092856547,
+              -2.2166124907943674,
+              -4.030386162773647,
+              -5.0616053197292015,
+              5.688327010762495,
+              4.157087275040827,
+              -2.498714234920363,
+              -5.26341185375826,
+              -11.697055463531015,
+              -13.41112387807013,
+              -11.496537053094135,
+              -3.549969531011199,
+              -2.9815877759106324,
+              -4.223157906981112,
+              6.741587125496196,
+              -11.331976246572728
+            ]
+          },
+          "return_only": {
+            "median_paired_change_percent": -1.1727145518995008,
+            "faster_pairs": 11,
+            "pairs": 20,
+            "paired_changes_percent": [
+              -3.5895189071023736,
+              -8.546819505114811,
+              -7.518613539033481,
+              6.118560514664972,
+              -2.3073276705519175,
+              4.516512608664236,
+              0.24024604345402878,
+              2.2531005918552616,
+              0.818652243116702,
+              0.8574605041205441,
+              -0.7733991556481357,
+              -2.695188094189771,
+              -3.4172856584509748,
+              -9.22642797481732,
+              -7.655817851416636,
+              7.957991910631379,
+              0.24177938877731897,
+              5.019411273785623,
+              -1.572029948150866,
+              -8.943810364235638
+            ]
+          },
+          "combined": {
+            "median_paired_change_percent": -5.177420850214326,
+            "faster_pairs": 17,
+            "pairs": 20,
+            "paired_changes_percent": [
+              -6.181031084259203,
+              -4.655880139802671,
+              -9.34602870460285,
+              -4.873752366352601,
+              -8.700206898150464,
+              7.9476254292456305,
+              -5.334845246180442,
+              4.438108608081404,
+              -5.716449481711905,
+              -5.198380443882078,
+              -0.7255480150646809,
+              -2.9063622801546063,
+              -15.556321808266006,
+              -14.920941672832432,
+              -12.206229691426095,
+              -1.7873860394717833,
+              -4.441106980815213,
+              5.1715783634245005,
+              -5.156461256546574,
+              -12.550939418053863
+            ]
+          },
+          "c": {
+            "median_paired_change_percent": -21.62688339149385,
+            "faster_pairs": 20,
+            "pairs": 20,
+            "paired_changes_percent": [
+              -24.407408550327425,
+              -28.281564844289896,
+              -27.25161398108533,
+              -21.472935370813506,
+              -24.22948643729581,
+              -20.49384524767799,
+              -12.301991838622461,
+              -20.705471096074625,
+              -20.75603857522712,
+              -20.023800415602942,
+              -15.746403150818878,
+              -16.444295726825466,
+              -29.93398591280233,
+              -28.928584529470935,
+              -26.9880333013246,
+              -21.780831412174194,
+              -19.305297272942347,
+              -18.948483820571337,
+              -23.15074331049214,
+              -26.355859481591914
+            ]
+          }
+        }
+      }
+    }
+  },
+  "ablation_perf": {
+    "samples": [
+      {
+        "variant": "baseline",
+        "trial": 0,
+        "calls": 11849,
+        "counters": {
+          "cycles:u": 954976088,
+          "instructions:u": 5811248450,
+          "branches:u": 1001941254,
+          "branch-misses:u": 1380019
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n954976088;;cpu_core/cycles/u;222083308;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n5811248450;;cpu_core/instructions/u;222083308;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n1001941254;;cpu_core/branches/u;222083308;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n1380019;;cpu_core/branch-misses/u;222083308;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/baseline",
+          "binary",
+          "11849"
+        ]
+      },
+      {
+        "variant": "arguments_only",
+        "trial": 0,
+        "calls": 11849,
+        "counters": {
+          "cycles:u": 918094206,
+          "instructions:u": 5663835038,
+          "branches:u": 1001562079,
+          "branch-misses:u": 1417437
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n918094206;;cpu_core/cycles/u;213519227;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n5663835038;;cpu_core/instructions/u;213519227;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n1001562079;;cpu_core/branches/u;213519227;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n1417437;;cpu_core/branch-misses/u;213519227;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/split/arguments-only/executable",
+          "binary",
+          "11849"
+        ]
+      },
+      {
+        "variant": "return_only",
+        "trial": 0,
+        "calls": 11849,
+        "counters": {
+          "cycles:u": 957481000,
+          "instructions:u": 5809945062,
+          "branches:u": 1001941252,
+          "branch-misses:u": 1401629
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n957481000;;cpu_core/cycles/u;222585161;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n5809945062;;cpu_core/instructions/u;222585161;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n1001941252;;cpu_core/branches/u;222585161;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n1401629;;cpu_core/branch-misses/u;222585161;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/split/return-only/executable",
+          "binary",
+          "11849"
+        ]
+      },
+      {
+        "variant": "combined",
+        "trial": 0,
+        "calls": 11849,
+        "counters": {
+          "cycles:u": 916014141,
+          "instructions:u": 5662875275,
+          "branches:u": 1001751665,
+          "branch-misses:u": 1250388
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n916014141;;cpu_core/cycles/u;213196003;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n5662875275;;cpu_core/instructions/u;213196003;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n1001751665;;cpu_core/branches/u;213196003;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n1250388;;cpu_core/branch-misses/u;213196003;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/binary/candidate",
+          "binary",
+          "11849"
+        ]
+      },
+      {
+        "variant": "arguments_only",
+        "trial": 1,
+        "calls": 11849,
+        "counters": {
+          "cycles:u": 913911532,
+          "instructions:u": 5663835034,
+          "branches:u": 1001562075,
+          "branch-misses:u": 1416281
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n913911532;;cpu_core/cycles/u;212756607;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n5663835034;;cpu_core/instructions/u;212756607;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n1001562075;;cpu_core/branches/u;212756607;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n1416281;;cpu_core/branch-misses/u;212756607;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/split/arguments-only/executable",
+          "binary",
+          "11849"
+        ]
+      },
+      {
+        "variant": "return_only",
+        "trial": 1,
+        "calls": 11849,
+        "counters": {
+          "cycles:u": 955809748,
+          "instructions:u": 5809945064,
+          "branches:u": 1001941254,
+          "branch-misses:u": 1377135
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n955809748;;cpu_core/cycles/u;222384925;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n5809945064;;cpu_core/instructions/u;222384925;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n1001941254;;cpu_core/branches/u;222384925;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n1377135;;cpu_core/branch-misses/u;222384925;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/split/return-only/executable",
+          "binary",
+          "11849"
+        ]
+      },
+      {
+        "variant": "combined",
+        "trial": 1,
+        "calls": 11849,
+        "counters": {
+          "cycles:u": 896352007,
+          "instructions:u": 5662875265,
+          "branches:u": 1001751655,
+          "branch-misses:u": 1290559
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n896352007;;cpu_core/cycles/u;208230829;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n5662875265;;cpu_core/instructions/u;208230829;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n1001751655;;cpu_core/branches/u;208230829;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n1290559;;cpu_core/branch-misses/u;208230829;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/binary/candidate",
+          "binary",
+          "11849"
+        ]
+      },
+      {
+        "variant": "baseline",
+        "trial": 1,
+        "calls": 11849,
+        "counters": {
+          "cycles:u": 949428314,
+          "instructions:u": 5811248446,
+          "branches:u": 1001941250,
+          "branch-misses:u": 1441181
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n949428314;;cpu_core/cycles/u;221629736;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n5811248446;;cpu_core/instructions/u;221629736;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n1001941250;;cpu_core/branches/u;221629736;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n1441181;;cpu_core/branch-misses/u;221629736;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/baseline",
+          "binary",
+          "11849"
+        ]
+      },
+      {
+        "variant": "return_only",
+        "trial": 2,
+        "calls": 11849,
+        "counters": {
+          "cycles:u": 954050527,
+          "instructions:u": 5809945064,
+          "branches:u": 1001941254,
+          "branch-misses:u": 1355636
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n954050527;;cpu_core/cycles/u;222388971;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n5809945064;;cpu_core/instructions/u;222388971;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n1001941254;;cpu_core/branches/u;222388971;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n1355636;;cpu_core/branch-misses/u;222388971;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/split/return-only/executable",
+          "binary",
+          "11849"
+        ]
+      },
+      {
+        "variant": "combined",
+        "trial": 2,
+        "calls": 11849,
+        "counters": {
+          "cycles:u": 898294829,
+          "instructions:u": 5662875269,
+          "branches:u": 1001751659,
+          "branch-misses:u": 1302506
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n898294829;;cpu_core/cycles/u;210219340;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n5662875269;;cpu_core/instructions/u;210219340;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n1001751659;;cpu_core/branches/u;210219340;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n1302506;;cpu_core/branch-misses/u;210219340;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/binary/candidate",
+          "binary",
+          "11849"
+        ]
+      },
+      {
+        "variant": "baseline",
+        "trial": 2,
+        "calls": 11849,
+        "counters": {
+          "cycles:u": 949228375,
+          "instructions:u": 5811248448,
+          "branches:u": 1001941252,
+          "branch-misses:u": 1357911
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n949228375;;cpu_core/cycles/u;221659920;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n5811248448;;cpu_core/instructions/u;221659920;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n1001941252;;cpu_core/branches/u;221659920;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n1357911;;cpu_core/branch-misses/u;221659920;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/baseline",
+          "binary",
+          "11849"
+        ]
+      },
+      {
+        "variant": "arguments_only",
+        "trial": 2,
+        "calls": 11849,
+        "counters": {
+          "cycles:u": 914333554,
+          "instructions:u": 5663835034,
+          "branches:u": 1001562075,
+          "branch-misses:u": 1404745
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n914333554;;cpu_core/cycles/u;213824351;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n5663835034;;cpu_core/instructions/u;213824351;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n1001562075;;cpu_core/branches/u;213824351;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n1404745;;cpu_core/branch-misses/u;213824351;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/split/arguments-only/executable",
+          "binary",
+          "11849"
+        ]
+      },
+      {
+        "variant": "combined",
+        "trial": 3,
+        "calls": 11849,
+        "counters": {
+          "cycles:u": 898700206,
+          "instructions:u": 5662875269,
+          "branches:u": 1001751659,
+          "branch-misses:u": 1294448
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n898700206;;cpu_core/cycles/u;209974266;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n5662875269;;cpu_core/instructions/u;209974266;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n1001751659;;cpu_core/branches/u;209974266;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n1294448;;cpu_core/branch-misses/u;209974266;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/binary/candidate",
+          "binary",
+          "11849"
+        ]
+      },
+      {
+        "variant": "baseline",
+        "trial": 3,
+        "calls": 11849,
+        "counters": {
+          "cycles:u": 952910748,
+          "instructions:u": 5811248450,
+          "branches:u": 1001941254,
+          "branch-misses:u": 1424254
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n952910748;;cpu_core/cycles/u;222515357;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n5811248450;;cpu_core/instructions/u;222515357;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n1001941254;;cpu_core/branches/u;222515357;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n1424254;;cpu_core/branch-misses/u;222515357;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/baseline",
+          "binary",
+          "11849"
+        ]
+      },
+      {
+        "variant": "arguments_only",
+        "trial": 3,
+        "calls": 11849,
+        "counters": {
+          "cycles:u": 917473738,
+          "instructions:u": 5663835035,
+          "branches:u": 1001562076,
+          "branch-misses:u": 1428914
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n917473738;;cpu_core/cycles/u;214478812;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n5663835035;;cpu_core/instructions/u;214478812;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n1001562076;;cpu_core/branches/u;214478812;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n1428914;;cpu_core/branch-misses/u;214478812;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/split/arguments-only/executable",
+          "binary",
+          "11849"
+        ]
+      },
+      {
+        "variant": "return_only",
+        "trial": 3,
+        "calls": 11849,
+        "counters": {
+          "cycles:u": 966881950,
+          "instructions:u": 5809945068,
+          "branches:u": 1001941259,
+          "branch-misses:u": 1386258
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n966881950;;cpu_core/cycles/u;226129526;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n5809945068;;cpu_core/instructions/u;226129526;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n1001941259;;cpu_core/branches/u;226129526;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n1386258;;cpu_core/branch-misses/u;226129526;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/split/return-only/executable",
+          "binary",
+          "11849"
+        ]
+      },
+      {
+        "variant": "baseline",
+        "trial": 4,
+        "calls": 11849,
+        "counters": {
+          "cycles:u": 945423755,
+          "instructions:u": 5811248444,
+          "branches:u": 1001941248,
+          "branch-misses:u": 1317387
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n945423755;;cpu_core/cycles/u;221117779;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n5811248444;;cpu_core/instructions/u;221117779;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n1001941248;;cpu_core/branches/u;221117779;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n1317387;;cpu_core/branch-misses/u;221117779;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/baseline",
+          "binary",
+          "11849"
+        ]
+      },
+      {
+        "variant": "arguments_only",
+        "trial": 4,
+        "calls": 11849,
+        "counters": {
+          "cycles:u": 917154300,
+          "instructions:u": 5663835035,
+          "branches:u": 1001562076,
+          "branch-misses:u": 1404742
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n917154300;;cpu_core/cycles/u;214477691;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n5663835035;;cpu_core/instructions/u;214477691;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n1001562076;;cpu_core/branches/u;214477691;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n1404742;;cpu_core/branch-misses/u;214477691;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/split/arguments-only/executable",
+          "binary",
+          "11849"
+        ]
+      },
+      {
+        "variant": "return_only",
+        "trial": 4,
+        "calls": 11849,
+        "counters": {
+          "cycles:u": 960066494,
+          "instructions:u": 5809945062,
+          "branches:u": 1001941252,
+          "branch-misses:u": 1290136
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n960066494;;cpu_core/cycles/u;224568792;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n5809945062;;cpu_core/instructions/u;224568792;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n1001941252;;cpu_core/branches/u;224568792;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n1290136;;cpu_core/branch-misses/u;224568792;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/split/return-only/executable",
+          "binary",
+          "11849"
+        ]
+      },
+      {
+        "variant": "combined",
+        "trial": 4,
+        "calls": 11849,
+        "counters": {
+          "cycles:u": 899614965,
+          "instructions:u": 5662875270,
+          "branches:u": 1001751660,
+          "branch-misses:u": 1353289
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n899614965;;cpu_core/cycles/u;210705274;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n5662875270;;cpu_core/instructions/u;210705274;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n1001751660;;cpu_core/branches/u;210705274;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n1353289;;cpu_core/branch-misses/u;210705274;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/binary/candidate",
+          "binary",
+          "11849"
+        ]
+      },
+      {
+        "variant": "arguments_only",
+        "trial": 5,
+        "calls": 11849,
+        "counters": {
+          "cycles:u": 914576588,
+          "instructions:u": 5663835034,
+          "branches:u": 1001562075,
+          "branch-misses:u": 1393639
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n914576588;;cpu_core/cycles/u;214029500;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n5663835034;;cpu_core/instructions/u;214029500;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n1001562075;;cpu_core/branches/u;214029500;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n1393639;;cpu_core/branch-misses/u;214029500;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/split/arguments-only/executable",
+          "binary",
+          "11849"
+        ]
+      },
+      {
+        "variant": "return_only",
+        "trial": 5,
+        "calls": 11849,
+        "counters": {
+          "cycles:u": 955748675,
+          "instructions:u": 5809945067,
+          "branches:u": 1001941257,
+          "branch-misses:u": 1365572
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n955748675;;cpu_core/cycles/u;223770994;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n5809945067;;cpu_core/instructions/u;223770994;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n1001941257;;cpu_core/branches/u;223770994;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n1365572;;cpu_core/branch-misses/u;223770994;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/split/return-only/executable",
+          "binary",
+          "11849"
+        ]
+      },
+      {
+        "variant": "combined",
+        "trial": 5,
+        "calls": 11849,
+        "counters": {
+          "cycles:u": 898433691,
+          "instructions:u": 5662875269,
+          "branches:u": 1001751659,
+          "branch-misses:u": 1265861
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n898433691;;cpu_core/cycles/u;210419052;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n5662875269;;cpu_core/instructions/u;210419052;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n1001751659;;cpu_core/branches/u;210419052;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n1265861;;cpu_core/branch-misses/u;210419052;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/binary/candidate",
+          "binary",
+          "11849"
+        ]
+      },
+      {
+        "variant": "baseline",
+        "trial": 5,
+        "calls": 11849,
+        "counters": {
+          "cycles:u": 957946599,
+          "instructions:u": 5811248448,
+          "branches:u": 1001941253,
+          "branch-misses:u": 1368884
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n957946599;;cpu_core/cycles/u;224754615;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n5811248448;;cpu_core/instructions/u;224754615;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n1001941253;;cpu_core/branches/u;224754615;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n1368884;;cpu_core/branch-misses/u;224754615;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/baseline",
+          "binary",
+          "11849"
+        ]
+      }
+    ],
+    "summary_per_call": {
+      "baseline": {
+        "cycles:u": 80274.24516836864,
+        "instructions:u": 490442.10043041606
+      },
+      "arguments_only": {
+        "cycles:u": 77294.74588572876,
+        "instructions:u": 478001.10005063715
+      },
+      "return_only": {
+        "cycles:u": 80736.38062283737,
+        "instructions:u": 490332.1009367879
+      },
+      "combined": {
+        "cycles:u": 75834.83403662757,
+        "instructions:u": 477920.1003460208
+      }
+    }
+  },
+  "ablation_artifacts": {
+    "experiment": "Fn31 isolated typed-argument and typed-return ABI effects",
+    "scope": "/tmp/nacre-typed-arguments-6q_wmddm/split only",
+    "controls": {
+      "archived_baseline_executable": {
+        "path": "/tmp/nacre-typed-arguments-6q_wmddm/baseline",
+        "sha256": "fff67130c7f5eef35740321ba49d48ff8a4f884f79155173c9d747c253df5325",
+        "rebuilt": false
+      },
+      "existing_combined_control_ir": {
+        "path": "/tmp/nacre-typed-arguments-6q_wmddm/binary/candidate.ll",
+        "sha256": "0c772f83ab51519e906b454132d734ff9b3c96ef9200881008decefcdb2400d6"
+      },
+      "existing_combined_control_executable": {
+        "path": "/tmp/nacre-typed-arguments-6q_wmddm/binary/candidate",
+        "sha256": "d7082aeda98815ecc143801f0ed846928644af265106009f8fa26b459590b814"
+      }
+    },
+    "input_captures": {
+      "ir": {
+        "path": "/tmp/nacre-typed-arguments-6q_wmddm/capture/program.ll",
+        "sha256": "ae43b22f869a1a5e13386b81f82513091d2581e6e915f7da0a74a2e2af3ab9c7"
+      },
+      "runtime_c": {
+        "path": "/tmp/nacre-typed-arguments-6q_wmddm/capture/runtime.c",
+        "sha256": "bafe57c66cf271a55ec637c4c9417a8c4ba37a3f445202c77050dac9219c3679"
+      }
+    },
+    "reproduction": {
+      "transform_script": {
+        "path": "/tmp/nacre-typed-arguments-6q_wmddm/split/reproduce.py",
+        "sha256": "0e8f5efab2356c62545b542fc9cd06c44464a26ef791e3284800cb7d2ad65049"
+      },
+      "error_probe_script": {
+        "path": "/tmp/nacre-typed-arguments-6q_wmddm/split/error_probe.py",
+        "sha256": "642a41c3de7ec62bab8db866cdccfe5c127423ef6ad64361d1501cbd4a5a3acb"
+      },
+      "build_commands": {
+        "path": "/tmp/nacre-typed-arguments-6q_wmddm/split/build-commands.json",
+        "sha256": "ad34590891dcf654ab4c7915ee67d6986f6de5e677808372277fd889d819f0c9"
+      },
+      "rootcaller_assembly": {
+        "path": "/tmp/nacre-typed-arguments-6q_wmddm/split/rootcaller-asm.txt",
+        "sha256": "e898a512fe9f564ef6c6878851c7acf0e13e827221add587c155575e4250e42a"
+      }
+    },
+    "variants": {
+      "arguments-only": {
+        "ir_signature": "void(ptr resultptr, ptr selfptr, ptr sourceobjectptr, i64 offset, i64 count)",
+        "runtime_adapter_contract": "Retains ncr_obj_30 result slot and copy helper; calls Fn31 with direct source pointer and i64 offset/count.",
+        "artifacts": {
+          "ir": {
+            "path": "/tmp/nacre-typed-arguments-6q_wmddm/split/arguments-only/program.ll",
+            "sha256": "78ab7fcbb1d0f83c0cf4d8f2bfb69022df3444b31c15cd90134b3b717ccfbd26"
+          },
+          "runtime_c": {
+            "path": "/tmp/nacre-typed-arguments-6q_wmddm/split/arguments-only/runtime.c",
+            "sha256": "19183ec3d618239a74bfda93a5ea8dce2e2580c728444faa4b8864f2cc5fa1f6"
+          },
+          "ir_diff": {
+            "path": "/tmp/nacre-typed-arguments-6q_wmddm/split/arguments-only/program.diff",
+            "sha256": "1174597b6073eb7af1770e07847cfeaf2d7ad60ded9b5db70c7bdbfd1a703b35"
+          },
+          "runtime_diff": {
+            "path": "/tmp/nacre-typed-arguments-6q_wmddm/split/arguments-only/runtime.diff",
+            "sha256": "6d7d2581535fc443687fa8aacaddd3bf18406a83d9e9151a48ceefbcd1729c9e"
+          },
+          "runtime_bitcode": {
+            "path": "/tmp/nacre-typed-arguments-6q_wmddm/split/arguments-only/runtime.bc",
+            "sha256": "410d95af8a5c56b089c5da890fd9c2116164e011ec1c91074480db2beaabbd77"
+          },
+          "linked_bitcode": {
+            "path": "/tmp/nacre-typed-arguments-6q_wmddm/split/arguments-only/linked.bc",
+            "sha256": "268b6592f665adbed8c8f4a2aa4fc943377cdd13aca15451516d8ec322c0e7fd"
+          },
+          "executable": {
+            "path": "/tmp/nacre-typed-arguments-6q_wmddm/split/arguments-only/executable",
+            "sha256": "054cfc4b671a001ccd103b3b993e277d07d99b541df31daa3cc2afcdeaaf77c4"
+          },
+          "instrumented_runtime_bitcode": {
+            "path": "/tmp/nacre-typed-arguments-6q_wmddm/split/arguments-only/runtime-stats.bc",
+            "sha256": "6ee115575bf82749b01f086caf993e55f6aace520b1992c42ff9e0e88a39db4c"
+          },
+          "instrumented_linked_bitcode": {
+            "path": "/tmp/nacre-typed-arguments-6q_wmddm/split/arguments-only/linked-stats.bc",
+            "sha256": "da9f4eabd8e4d46ca7232fccdab9dfdd14078bb0ac648b27a706742c03362a14"
+          },
+          "instrumented_executable": {
+            "path": "/tmp/nacre-typed-arguments-6q_wmddm/split/arguments-only/executable-stats",
+            "sha256": "de39d9531321f434d5c553550ea9323484f88b22fba21f0e11f2255541a9f7b3"
+          },
+          "error_probe_runtime_c": {
+            "path": "/tmp/nacre-typed-arguments-6q_wmddm/split/arguments-only/runtime-error.c",
+            "sha256": "a0869f783963204378c62d2e80bcefd1b78f39bb3808d407fe6aa6be6556eb69"
+          },
+          "error_probe_runtime_diff": {
+            "path": "/tmp/nacre-typed-arguments-6q_wmddm/split/arguments-only/runtime-error.diff",
+            "sha256": "83b89a082a3a8f8b3a34d8e72c2e8d92b44f1ae7c8dee14f2b6b7570e5e9b580"
+          },
+          "error_probe_runtime_bitcode": {
+            "path": "/tmp/nacre-typed-arguments-6q_wmddm/split/arguments-only/runtime-error.bc",
+            "sha256": "d1a62f3eceb2e3b574f1d2cef997de69e5c0792505a897099eb7738ad444d03c"
+          },
+          "error_probe_linked_bitcode": {
+            "path": "/tmp/nacre-typed-arguments-6q_wmddm/split/arguments-only/linked-error.bc",
+            "sha256": "e368ebfc0f187096023739e982b9e6a3562c7b588aaffb854c271cce4a3ef75f"
+          },
+          "error_probe_executable": {
+            "path": "/tmp/nacre-typed-arguments-6q_wmddm/split/arguments-only/executable-error",
+            "sha256": "1f980b0dc2fa5e017e4bcae69a854966a8ddb9cb79e7c733ccfe4ec07fddec25"
+          }
+        },
+        "static_changes_from_baseline": {
+          "ir_body_instructions": {
+            "baseline": 135,
+            "variant": 127,
+            "delta": -8
+          },
+          "ir_body_text_bytes": {
+            "baseline": 7464,
+            "variant": 7110,
+            "delta": -354
+          },
+          "native_instructions": {
+            "baseline": 108,
+            "variant": 100,
+            "delta": -8
+          },
+          "native_function_bytes": {
+            "baseline": 418,
+            "variant": 403,
+            "delta": -15
+          }
+        },
+        "smoke": {
+          "command": "/tmp/nacre-typed-arguments-6q_wmddm/split/arguments-only/executable",
+          "output": [
+            "RESULT json 73665",
+            "RESULT string 160602",
+            "RESULT binary 2457183",
+            "RESULT hashmap 100941824",
+            "RESULT sudoku 16605",
+            "RESULT game_of_life 45"
+          ],
+          "memory_stats_command": "/tmp/nacre-typed-arguments-6q_wmddm/split/arguments-only/executable-stats",
+          "memory_stats": "NACRE_MEMORY allocations=76 frees=76 live=0"
+        },
+        "err_probe": {
+          "offset": -1,
+          "command": "/tmp/nacre-typed-arguments-6q_wmddm/split/arguments-only/executable-error binary",
+          "exit_status": 0,
+          "output": "RESULT binary -1",
+          "memory_stats": "NACRE_MEMORY allocations=10 frees=10 live=0"
+        }
+      },
+      "return-only": {
+        "ir_signature": "{ i32, i64 }(ptr selfptr, ptr sourceSlotptr, ptr offsetSlotptr, ptr countSlotptr)",
+        "runtime_adapter_contract": "Preserves original pointer-slot argument ABI and loads; returns ncr_obj_30 by value with only the required Fn31 extern/adapter update.",
+        "artifacts": {
+          "ir": {
+            "path": "/tmp/nacre-typed-arguments-6q_wmddm/split/return-only/program.ll",
+            "sha256": "a6979ab01bad8f2d5cf4724759624b2d5397c4fc4a502955e43a5449e233c157"
+          },
+          "runtime_c": {
+            "path": "/tmp/nacre-typed-arguments-6q_wmddm/split/return-only/runtime.c",
+            "sha256": "a7d4a995bdcdbed4590a792fa84cf2b11feaba1e69bbd7da0944048b74842a26"
+          },
+          "ir_diff": {
+            "path": "/tmp/nacre-typed-arguments-6q_wmddm/split/return-only/program.diff",
+            "sha256": "003b384b81f9f40481cbffed593c6fec0282db01720efe9b1fd651418635b68c"
+          },
+          "runtime_diff": {
+            "path": "/tmp/nacre-typed-arguments-6q_wmddm/split/return-only/runtime.diff",
+            "sha256": "a51cbed52ad04b1225fab6e9c988da5621c2b5c974fd0245a73351bb27bc58ec"
+          },
+          "runtime_bitcode": {
+            "path": "/tmp/nacre-typed-arguments-6q_wmddm/split/return-only/runtime.bc",
+            "sha256": "c7e3db523dc11c4c04dcf6101e71e0ea02b6748b9f8df589991a3061eeedf7c2"
+          },
+          "linked_bitcode": {
+            "path": "/tmp/nacre-typed-arguments-6q_wmddm/split/return-only/linked.bc",
+            "sha256": "74d15c19610847d2bf87dda60db2fd776095ba1b9921e6cb27d9c5986d34066d"
+          },
+          "executable": {
+            "path": "/tmp/nacre-typed-arguments-6q_wmddm/split/return-only/executable",
+            "sha256": "73c8e49e8866f98a336d321eb64ba6af6cb1fbaaae88beab22281bb8ebc91b28"
+          },
+          "instrumented_runtime_bitcode": {
+            "path": "/tmp/nacre-typed-arguments-6q_wmddm/split/return-only/runtime-stats.bc",
+            "sha256": "804db9658f9d96bf942bdb2bd43445631a345bbaf5806484901dd393e1c40abc"
+          },
+          "instrumented_linked_bitcode": {
+            "path": "/tmp/nacre-typed-arguments-6q_wmddm/split/return-only/linked-stats.bc",
+            "sha256": "b2e77b7e77e2d452f065214490e519c215998d42c91ce79b86ff5690da8a44c1"
+          },
+          "instrumented_executable": {
+            "path": "/tmp/nacre-typed-arguments-6q_wmddm/split/return-only/executable-stats",
+            "sha256": "64419e4a9c4bd5c10875cb4f10ae172c35b7a130addad532f5df044bddef235c"
+          },
+          "error_probe_runtime_c": {
+            "path": "/tmp/nacre-typed-arguments-6q_wmddm/split/return-only/runtime-error.c",
+            "sha256": "a6a45c96566c18e31f0e768b1f621813b3223594b8b83c7116b39d0c948c3b68"
+          },
+          "error_probe_runtime_diff": {
+            "path": "/tmp/nacre-typed-arguments-6q_wmddm/split/return-only/runtime-error.diff",
+            "sha256": "aa560d3cbbc43c1e355a8e3c53b5f3ec8df20a5423fdab151dca4b29d53aecc3"
+          },
+          "error_probe_runtime_bitcode": {
+            "path": "/tmp/nacre-typed-arguments-6q_wmddm/split/return-only/runtime-error.bc",
+            "sha256": "977548a391821dbcd4fc31f8028d190d1f6a6078766e63e70917eb36876e8454"
+          },
+          "error_probe_linked_bitcode": {
+            "path": "/tmp/nacre-typed-arguments-6q_wmddm/split/return-only/linked-error.bc",
+            "sha256": "1f4edf04ced0168941dd091440d96f4465d0312bcc6fd36b5a0dce410b455a6d"
+          },
+          "error_probe_executable": {
+            "path": "/tmp/nacre-typed-arguments-6q_wmddm/split/return-only/executable-error",
+            "sha256": "623eab4e0d5e8ca1c4fc06b33cdd455fa34345fcd2153137784c39e3782dfdee"
+          }
+        },
+        "static_changes_from_baseline": {
+          "ir_body_instructions": {
+            "baseline": 135,
+            "variant": 135,
+            "delta": 0
+          },
+          "ir_body_text_bytes": {
+            "baseline": 7464,
+            "variant": 7438,
+            "delta": -26
+          },
+          "native_instructions": {
+            "baseline": 108,
+            "variant": 105,
+            "delta": -3
+          },
+          "native_function_bytes": {
+            "baseline": 418,
+            "variant": 397,
+            "delta": -21
+          }
+        },
+        "smoke": {
+          "command": "/tmp/nacre-typed-arguments-6q_wmddm/split/return-only/executable",
+          "output": [
+            "RESULT json 73665",
+            "RESULT string 160602",
+            "RESULT binary 2457183",
+            "RESULT hashmap 100941824",
+            "RESULT sudoku 16605",
+            "RESULT game_of_life 45"
+          ],
+          "memory_stats_command": "/tmp/nacre-typed-arguments-6q_wmddm/split/return-only/executable-stats",
+          "memory_stats": "NACRE_MEMORY allocations=76 frees=76 live=0"
+        },
+        "err_probe": {
+          "offset": -1,
+          "command": "/tmp/nacre-typed-arguments-6q_wmddm/split/return-only/executable-error binary",
+          "exit_status": 0,
+          "output": "RESULT binary -1",
+          "memory_stats": "NACRE_MEMORY allocations=10 frees=10 live=0"
+        }
+      }
+    },
+    "combined_control_static_changes_from_baseline": {
+      "ir_body_instructions": {
+        "baseline": 135,
+        "variant": 127,
+        "delta": -8
+      },
+      "ir_body_text_bytes": {
+        "baseline": 7464,
+        "variant": 7084,
+        "delta": -380
+      },
+      "native_instructions": {
+        "baseline": 108,
+        "variant": 99,
+        "delta": -9
+      },
+      "native_function_bytes": {
+        "baseline": 418,
+        "variant": 388,
+        "delta": -30
+      }
+    },
+    "rootcaller_register_evidence": {
+      "file": "/tmp/nacre-typed-arguments-6q_wmddm/split/rootcaller-asm.txt",
+      "caller": "ncr_llvm_fn_7",
+      "direct_call_references": {
+        "baseline": [
+          "0x46e7",
+          "0x4773"
+        ],
+        "arguments-only": [
+          "0x44e9",
+          "0x453c"
+        ],
+        "return-only": [
+          "0x4522",
+          "0x459e"
+        ],
+        "combined": [
+          "0x44c2",
+          "0x4507"
+        ]
+      },
+      "abi_observation": "Arguments-only retains RDI result-slot and reads tag/payload from memory while putting source/offset/count in RDX/RCX/R8. Return-only passes self/source-slot/offset-slot/count-slot in RDI/RSI/RDX/RCX and consumes tag/payload in EAX/RDX. Combined passes self/source/offset/count in RDI/RSI/RDX/RCX and consumes EAX/RDX."
+    },
+    "invariants": {
+      "source_function_body_changed_only_for_fn31": true,
+      "runtime_c_changes_per_primary_variant_only_fn31_extern_and_adapter": true,
+      "arguments_only_keeps_exact_resultcopy_slot_abi": true,
+      "return_only_keeps_original_argument_slot_loads": true,
+      "algorithm_checks_ownership_preserved": true,
+      "attributes_changed": false,
+      "forced_inlining": false,
+      "alignment_fixes": false,
+      "compiler_source_changes": false,
+      "repo_changes": false,
+      "timing_runs": false
+    },
+    "timings": null
+  },
+  "production_comparison": {
+    "methodology": "Pinned CPU0, exact shared captured runtime and per-variant LLVM IR as recorded; same calls per workload; cyclic Latin-square order then reversed Latin square; fresh processes; all stdout checked; elapsed includes amortized startup/shutdown. Negative paired change means faster.",
+    "rounds": 12,
+    "cpu_affinity": 0,
+    "source_sha256": "7a9855e57db5f5c54022d01e73a4c4aeab2fc5b567ce735114aff0e294000ab1",
+    "executables": {
+      "baseline": {
+        "path": "/tmp/nacre-typed-arguments-6q_wmddm/baseline",
+        "sha256": "fff67130c7f5eef35740321ba49d48ff8a4f884f79155173c9d747c253df5325"
+      },
+      "typed_arguments": {
+        "path": "/tmp/nacre-typed-arguments-6q_wmddm/production-typed/llvm",
+        "sha256": "985b0103d51fb946f5e2040e08f95d32112376a4bcd314129e8d247e4a3a8c7d"
+      },
+      "c": {
+        "path": "/tmp/nacre-typed-arguments-6q_wmddm/production-typed/c",
+        "sha256": "03a1c07f5c96ff76da12c81be4a29fc190ba153427982c1011ec0751634c215f"
+      }
+    },
+    "samples": [
+      {
+        "workload": "json",
+        "variant": "baseline",
+        "trial": 0,
+        "position": 0,
+        "calls": 1351390,
+        "elapsed_seconds": 0.265392386,
+        "peak_rss_bytes": 2289664,
+        "stdout": "RESULT json 99550144350\n"
+      },
+      {
+        "workload": "json",
+        "variant": "typed_arguments",
+        "trial": 0,
+        "position": 1,
+        "calls": 1351390,
+        "elapsed_seconds": 0.270875255,
+        "peak_rss_bytes": 2248704,
+        "stdout": "RESULT json 99550144350\n"
+      },
+      {
+        "workload": "json",
+        "variant": "c",
+        "trial": 0,
+        "position": 2,
+        "calls": 1351390,
+        "elapsed_seconds": 0.2147408,
+        "peak_rss_bytes": 2318336,
+        "stdout": "RESULT json 99550144350\n"
+      },
+      {
+        "workload": "json",
+        "variant": "typed_arguments",
+        "trial": 1,
+        "position": 0,
+        "calls": 1351390,
+        "elapsed_seconds": 0.27520671,
+        "peak_rss_bytes": 2330624,
+        "stdout": "RESULT json 99550144350\n"
+      },
+      {
+        "workload": "json",
+        "variant": "c",
+        "trial": 1,
+        "position": 1,
+        "calls": 1351390,
+        "elapsed_seconds": 0.223847383,
+        "peak_rss_bytes": 2347008,
+        "stdout": "RESULT json 99550144350\n"
+      },
+      {
+        "workload": "json",
+        "variant": "baseline",
+        "trial": 1,
+        "position": 2,
+        "calls": 1351390,
+        "elapsed_seconds": 0.26809307,
+        "peak_rss_bytes": 2207744,
+        "stdout": "RESULT json 99550144350\n"
+      },
+      {
+        "workload": "json",
+        "variant": "c",
+        "trial": 2,
+        "position": 0,
+        "calls": 1351390,
+        "elapsed_seconds": 0.216841453,
+        "peak_rss_bytes": 2310144,
+        "stdout": "RESULT json 99550144350\n"
+      },
+      {
+        "workload": "json",
+        "variant": "baseline",
+        "trial": 2,
+        "position": 1,
+        "calls": 1351390,
+        "elapsed_seconds": 0.288132304,
+        "peak_rss_bytes": 2134016,
+        "stdout": "RESULT json 99550144350\n"
+      },
+      {
+        "workload": "json",
+        "variant": "typed_arguments",
+        "trial": 2,
+        "position": 2,
+        "calls": 1351390,
+        "elapsed_seconds": 0.270776948,
+        "peak_rss_bytes": 2297856,
+        "stdout": "RESULT json 99550144350\n"
+      },
+      {
+        "workload": "json",
+        "variant": "c",
+        "trial": 3,
+        "position": 0,
+        "calls": 1351390,
+        "elapsed_seconds": 0.220833031,
+        "peak_rss_bytes": 2236416,
+        "stdout": "RESULT json 99550144350\n"
+      },
+      {
+        "workload": "json",
+        "variant": "typed_arguments",
+        "trial": 3,
+        "position": 1,
+        "calls": 1351390,
+        "elapsed_seconds": 0.28152509,
+        "peak_rss_bytes": 2240512,
+        "stdout": "RESULT json 99550144350\n"
+      },
+      {
+        "workload": "json",
+        "variant": "baseline",
+        "trial": 3,
+        "position": 2,
+        "calls": 1351390,
+        "elapsed_seconds": 0.28073555,
+        "peak_rss_bytes": 2244608,
+        "stdout": "RESULT json 99550144350\n"
+      },
+      {
+        "workload": "json",
+        "variant": "baseline",
+        "trial": 4,
+        "position": 0,
+        "calls": 1351390,
+        "elapsed_seconds": 0.265545853,
+        "peak_rss_bytes": 2338816,
+        "stdout": "RESULT json 99550144350\n"
+      },
+      {
+        "workload": "json",
+        "variant": "c",
+        "trial": 4,
+        "position": 1,
+        "calls": 1351390,
+        "elapsed_seconds": 0.231426796,
+        "peak_rss_bytes": 2240512,
+        "stdout": "RESULT json 99550144350\n"
+      },
+      {
+        "workload": "json",
+        "variant": "typed_arguments",
+        "trial": 4,
+        "position": 2,
+        "calls": 1351390,
+        "elapsed_seconds": 0.27074227,
+        "peak_rss_bytes": 2183168,
+        "stdout": "RESULT json 99550144350\n"
+      },
+      {
+        "workload": "json",
+        "variant": "typed_arguments",
+        "trial": 5,
+        "position": 0,
+        "calls": 1351390,
+        "elapsed_seconds": 0.272654523,
+        "peak_rss_bytes": 2297856,
+        "stdout": "RESULT json 99550144350\n"
+      },
+      {
+        "workload": "json",
+        "variant": "baseline",
+        "trial": 5,
+        "position": 1,
+        "calls": 1351390,
+        "elapsed_seconds": 0.265667105,
+        "peak_rss_bytes": 2347008,
+        "stdout": "RESULT json 99550144350\n"
+      },
+      {
+        "workload": "json",
+        "variant": "c",
+        "trial": 5,
+        "position": 2,
+        "calls": 1351390,
+        "elapsed_seconds": 0.219132408,
+        "peak_rss_bytes": 2248704,
+        "stdout": "RESULT json 99550144350\n"
+      },
+      {
+        "workload": "json",
+        "variant": "baseline",
+        "trial": 6,
+        "position": 0,
+        "calls": 1351390,
+        "elapsed_seconds": 0.259278921,
+        "peak_rss_bytes": 2289664,
+        "stdout": "RESULT json 99550144350\n"
+      },
+      {
+        "workload": "json",
+        "variant": "typed_arguments",
+        "trial": 6,
+        "position": 1,
+        "calls": 1351390,
+        "elapsed_seconds": 0.267992459,
+        "peak_rss_bytes": 2207744,
+        "stdout": "RESULT json 99550144350\n"
+      },
+      {
+        "workload": "json",
+        "variant": "c",
+        "trial": 6,
+        "position": 2,
+        "calls": 1351390,
+        "elapsed_seconds": 0.216716141,
+        "peak_rss_bytes": 2232320,
+        "stdout": "RESULT json 99550144350\n"
+      },
+      {
+        "workload": "json",
+        "variant": "typed_arguments",
+        "trial": 7,
+        "position": 0,
+        "calls": 1351390,
+        "elapsed_seconds": 0.27041921,
+        "peak_rss_bytes": 2310144,
+        "stdout": "RESULT json 99550144350\n"
+      },
+      {
+        "workload": "json",
+        "variant": "c",
+        "trial": 7,
+        "position": 1,
+        "calls": 1351390,
+        "elapsed_seconds": 0.229986569,
+        "peak_rss_bytes": 2236416,
+        "stdout": "RESULT json 99550144350\n"
+      },
+      {
+        "workload": "json",
+        "variant": "baseline",
+        "trial": 7,
+        "position": 2,
+        "calls": 1351390,
+        "elapsed_seconds": 0.261965734,
+        "peak_rss_bytes": 2347008,
+        "stdout": "RESULT json 99550144350\n"
+      },
+      {
+        "workload": "json",
+        "variant": "c",
+        "trial": 8,
+        "position": 0,
+        "calls": 1351390,
+        "elapsed_seconds": 0.21367736,
+        "peak_rss_bytes": 2240512,
+        "stdout": "RESULT json 99550144350\n"
+      },
+      {
+        "workload": "json",
+        "variant": "baseline",
+        "trial": 8,
+        "position": 1,
+        "calls": 1351390,
+        "elapsed_seconds": 0.270639825,
+        "peak_rss_bytes": 2125824,
+        "stdout": "RESULT json 99550144350\n"
+      },
+      {
+        "workload": "json",
+        "variant": "typed_arguments",
+        "trial": 8,
+        "position": 2,
+        "calls": 1351390,
+        "elapsed_seconds": 0.273300877,
+        "peak_rss_bytes": 2129920,
+        "stdout": "RESULT json 99550144350\n"
+      },
+      {
+        "workload": "json",
+        "variant": "c",
+        "trial": 9,
+        "position": 0,
+        "calls": 1351390,
+        "elapsed_seconds": 0.217065968,
+        "peak_rss_bytes": 2347008,
+        "stdout": "RESULT json 99550144350\n"
+      },
+      {
+        "workload": "json",
+        "variant": "typed_arguments",
+        "trial": 9,
+        "position": 1,
+        "calls": 1351390,
+        "elapsed_seconds": 0.266570718,
+        "peak_rss_bytes": 2248704,
+        "stdout": "RESULT json 99550144350\n"
+      },
+      {
+        "workload": "json",
+        "variant": "baseline",
+        "trial": 9,
+        "position": 2,
+        "calls": 1351390,
+        "elapsed_seconds": 0.264099242,
+        "peak_rss_bytes": 2310144,
+        "stdout": "RESULT json 99550144350\n"
+      },
+      {
+        "workload": "json",
+        "variant": "baseline",
+        "trial": 10,
+        "position": 0,
+        "calls": 1351390,
+        "elapsed_seconds": 0.277151323,
+        "peak_rss_bytes": 2310144,
+        "stdout": "RESULT json 99550144350\n"
+      },
+      {
+        "workload": "json",
+        "variant": "c",
+        "trial": 10,
+        "position": 1,
+        "calls": 1351390,
+        "elapsed_seconds": 0.245216964,
+        "peak_rss_bytes": 2338816,
+        "stdout": "RESULT json 99550144350\n"
+      },
+      {
+        "workload": "json",
+        "variant": "typed_arguments",
+        "trial": 10,
+        "position": 2,
+        "calls": 1351390,
+        "elapsed_seconds": 0.290444113,
+        "peak_rss_bytes": 2232320,
+        "stdout": "RESULT json 99550144350\n"
+      },
+      {
+        "workload": "json",
+        "variant": "typed_arguments",
+        "trial": 11,
+        "position": 0,
+        "calls": 1351390,
+        "elapsed_seconds": 0.278656378,
+        "peak_rss_bytes": 2338816,
+        "stdout": "RESULT json 99550144350\n"
+      },
+      {
+        "workload": "json",
+        "variant": "baseline",
+        "trial": 11,
+        "position": 1,
+        "calls": 1351390,
+        "elapsed_seconds": 0.284826577,
+        "peak_rss_bytes": 2232320,
+        "stdout": "RESULT json 99550144350\n"
+      },
+      {
+        "workload": "json",
+        "variant": "c",
+        "trial": 11,
+        "position": 2,
+        "calls": 1351390,
+        "elapsed_seconds": 0.226321735,
+        "peak_rss_bytes": 2252800,
+        "stdout": "RESULT json 99550144350\n"
+      },
+      {
+        "workload": "string",
+        "variant": "baseline",
+        "trial": 0,
+        "position": 0,
+        "calls": 559400,
+        "elapsed_seconds": 0.216663374,
+        "peak_rss_bytes": 2347008,
+        "stdout": "RESULT string 89840758800\n"
+      },
+      {
+        "workload": "string",
+        "variant": "typed_arguments",
+        "trial": 0,
+        "position": 1,
+        "calls": 559400,
+        "elapsed_seconds": 0.217860027,
+        "peak_rss_bytes": 2240512,
+        "stdout": "RESULT string 89840758800\n"
+      },
+      {
+        "workload": "string",
+        "variant": "c",
+        "trial": 0,
+        "position": 2,
+        "calls": 559400,
+        "elapsed_seconds": 0.232562753,
+        "peak_rss_bytes": 2355200,
+        "stdout": "RESULT string 89840758800\n"
+      },
+      {
+        "workload": "string",
+        "variant": "typed_arguments",
+        "trial": 1,
+        "position": 0,
+        "calls": 559400,
+        "elapsed_seconds": 0.213900518,
+        "peak_rss_bytes": 2207744,
+        "stdout": "RESULT string 89840758800\n"
+      },
+      {
+        "workload": "string",
+        "variant": "c",
+        "trial": 1,
+        "position": 1,
+        "calls": 559400,
+        "elapsed_seconds": 0.220753447,
+        "peak_rss_bytes": 2318336,
+        "stdout": "RESULT string 89840758800\n"
+      },
+      {
+        "workload": "string",
+        "variant": "baseline",
+        "trial": 1,
+        "position": 2,
+        "calls": 559400,
+        "elapsed_seconds": 0.215278407,
+        "peak_rss_bytes": 2240512,
+        "stdout": "RESULT string 89840758800\n"
+      },
+      {
+        "workload": "string",
+        "variant": "c",
+        "trial": 2,
+        "position": 0,
+        "calls": 559400,
+        "elapsed_seconds": 0.224840011,
+        "peak_rss_bytes": 2129920,
+        "stdout": "RESULT string 89840758800\n"
+      },
+      {
+        "workload": "string",
+        "variant": "baseline",
+        "trial": 2,
+        "position": 1,
+        "calls": 559400,
+        "elapsed_seconds": 0.21654374,
+        "peak_rss_bytes": 2289664,
+        "stdout": "RESULT string 89840758800\n"
+      },
+      {
+        "workload": "string",
+        "variant": "typed_arguments",
+        "trial": 2,
+        "position": 2,
+        "calls": 559400,
+        "elapsed_seconds": 0.211319603,
+        "peak_rss_bytes": 2134016,
+        "stdout": "RESULT string 89840758800\n"
+      },
+      {
+        "workload": "string",
+        "variant": "c",
+        "trial": 3,
+        "position": 0,
+        "calls": 559400,
+        "elapsed_seconds": 0.22083922,
+        "peak_rss_bytes": 2125824,
+        "stdout": "RESULT string 89840758800\n"
+      },
+      {
+        "workload": "string",
+        "variant": "typed_arguments",
+        "trial": 3,
+        "position": 1,
+        "calls": 559400,
+        "elapsed_seconds": 0.211950282,
+        "peak_rss_bytes": 2252800,
+        "stdout": "RESULT string 89840758800\n"
+      },
+      {
+        "workload": "string",
+        "variant": "baseline",
+        "trial": 3,
+        "position": 2,
+        "calls": 559400,
+        "elapsed_seconds": 0.21876515,
+        "peak_rss_bytes": 2134016,
+        "stdout": "RESULT string 89840758800\n"
+      },
+      {
+        "workload": "string",
+        "variant": "baseline",
+        "trial": 4,
+        "position": 0,
+        "calls": 559400,
+        "elapsed_seconds": 0.213332437,
+        "peak_rss_bytes": 2129920,
+        "stdout": "RESULT string 89840758800\n"
+      },
+      {
+        "workload": "string",
+        "variant": "c",
+        "trial": 4,
+        "position": 1,
+        "calls": 559400,
+        "elapsed_seconds": 0.221095151,
+        "peak_rss_bytes": 2236416,
+        "stdout": "RESULT string 89840758800\n"
+      },
+      {
+        "workload": "string",
+        "variant": "typed_arguments",
+        "trial": 4,
+        "position": 2,
+        "calls": 559400,
+        "elapsed_seconds": 0.214888621,
+        "peak_rss_bytes": 2289664,
+        "stdout": "RESULT string 89840758800\n"
+      },
+      {
+        "workload": "string",
+        "variant": "typed_arguments",
+        "trial": 5,
+        "position": 0,
+        "calls": 559400,
+        "elapsed_seconds": 0.219780126,
+        "peak_rss_bytes": 2129920,
+        "stdout": "RESULT string 89840758800\n"
+      },
+      {
+        "workload": "string",
+        "variant": "baseline",
+        "trial": 5,
+        "position": 1,
+        "calls": 559400,
+        "elapsed_seconds": 0.215175445,
+        "peak_rss_bytes": 2134016,
+        "stdout": "RESULT string 89840758800\n"
+      },
+      {
+        "workload": "string",
+        "variant": "c",
+        "trial": 5,
+        "position": 2,
+        "calls": 559400,
+        "elapsed_seconds": 0.222590705,
+        "peak_rss_bytes": 2338816,
+        "stdout": "RESULT string 89840758800\n"
+      },
+      {
+        "workload": "string",
+        "variant": "baseline",
+        "trial": 6,
+        "position": 0,
+        "calls": 559400,
+        "elapsed_seconds": 0.220770297,
+        "peak_rss_bytes": 2240512,
+        "stdout": "RESULT string 89840758800\n"
+      },
+      {
+        "workload": "string",
+        "variant": "typed_arguments",
+        "trial": 6,
+        "position": 1,
+        "calls": 559400,
+        "elapsed_seconds": 0.205899377,
+        "peak_rss_bytes": 2347008,
+        "stdout": "RESULT string 89840758800\n"
+      },
+      {
+        "workload": "string",
+        "variant": "c",
+        "trial": 6,
+        "position": 2,
+        "calls": 559400,
+        "elapsed_seconds": 0.214028952,
+        "peak_rss_bytes": 2232320,
+        "stdout": "RESULT string 89840758800\n"
+      },
+      {
+        "workload": "string",
+        "variant": "typed_arguments",
+        "trial": 7,
+        "position": 0,
+        "calls": 559400,
+        "elapsed_seconds": 0.212088066,
+        "peak_rss_bytes": 2314240,
+        "stdout": "RESULT string 89840758800\n"
+      },
+      {
+        "workload": "string",
+        "variant": "c",
+        "trial": 7,
+        "position": 1,
+        "calls": 559400,
+        "elapsed_seconds": 0.218857041,
+        "peak_rss_bytes": 2125824,
+        "stdout": "RESULT string 89840758800\n"
+      },
+      {
+        "workload": "string",
+        "variant": "baseline",
+        "trial": 7,
+        "position": 2,
+        "calls": 559400,
+        "elapsed_seconds": 0.225725179,
+        "peak_rss_bytes": 2129920,
+        "stdout": "RESULT string 89840758800\n"
+      },
+      {
+        "workload": "string",
+        "variant": "c",
+        "trial": 8,
+        "position": 0,
+        "calls": 559400,
+        "elapsed_seconds": 0.221237056,
+        "peak_rss_bytes": 2347008,
+        "stdout": "RESULT string 89840758800\n"
+      },
+      {
+        "workload": "string",
+        "variant": "baseline",
+        "trial": 8,
+        "position": 1,
+        "calls": 559400,
+        "elapsed_seconds": 0.214889724,
+        "peak_rss_bytes": 2240512,
+        "stdout": "RESULT string 89840758800\n"
+      },
+      {
+        "workload": "string",
+        "variant": "typed_arguments",
+        "trial": 8,
+        "position": 2,
+        "calls": 559400,
+        "elapsed_seconds": 0.218372625,
+        "peak_rss_bytes": 2330624,
+        "stdout": "RESULT string 89840758800\n"
+      },
+      {
+        "workload": "string",
+        "variant": "c",
+        "trial": 9,
+        "position": 0,
+        "calls": 559400,
+        "elapsed_seconds": 0.219853766,
+        "peak_rss_bytes": 2252800,
+        "stdout": "RESULT string 89840758800\n"
+      },
+      {
+        "workload": "string",
+        "variant": "typed_arguments",
+        "trial": 9,
+        "position": 1,
+        "calls": 559400,
+        "elapsed_seconds": 0.217632705,
+        "peak_rss_bytes": 2244608,
+        "stdout": "RESULT string 89840758800\n"
+      },
+      {
+        "workload": "string",
+        "variant": "baseline",
+        "trial": 9,
+        "position": 2,
+        "calls": 559400,
+        "elapsed_seconds": 0.224861646,
+        "peak_rss_bytes": 2240512,
+        "stdout": "RESULT string 89840758800\n"
+      },
+      {
+        "workload": "string",
+        "variant": "baseline",
+        "trial": 10,
+        "position": 0,
+        "calls": 559400,
+        "elapsed_seconds": 0.216958876,
+        "peak_rss_bytes": 2244608,
+        "stdout": "RESULT string 89840758800\n"
+      },
+      {
+        "workload": "string",
+        "variant": "c",
+        "trial": 10,
+        "position": 1,
+        "calls": 559400,
+        "elapsed_seconds": 0.221284644,
+        "peak_rss_bytes": 2338816,
+        "stdout": "RESULT string 89840758800\n"
+      },
+      {
+        "workload": "string",
+        "variant": "typed_arguments",
+        "trial": 10,
+        "position": 2,
+        "calls": 559400,
+        "elapsed_seconds": 0.212068943,
+        "peak_rss_bytes": 2289664,
+        "stdout": "RESULT string 89840758800\n"
+      },
+      {
+        "workload": "string",
+        "variant": "typed_arguments",
+        "trial": 11,
+        "position": 0,
+        "calls": 559400,
+        "elapsed_seconds": 0.189557691,
+        "peak_rss_bytes": 2232320,
+        "stdout": "RESULT string 89840758800\n"
+      },
+      {
+        "workload": "string",
+        "variant": "baseline",
+        "trial": 11,
+        "position": 1,
+        "calls": 559400,
+        "elapsed_seconds": 0.18656511,
+        "peak_rss_bytes": 2236416,
+        "stdout": "RESULT string 89840758800\n"
+      },
+      {
+        "workload": "string",
+        "variant": "c",
+        "trial": 11,
+        "position": 2,
+        "calls": 559400,
+        "elapsed_seconds": 0.184667854,
+        "peak_rss_bytes": 2129920,
+        "stdout": "RESULT string 89840758800\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "baseline",
+        "trial": 0,
+        "position": 0,
+        "calls": 11849,
+        "elapsed_seconds": 0.225297158,
+        "peak_rss_bytes": 2367488,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "typed_arguments",
+        "trial": 0,
+        "position": 1,
+        "calls": 11849,
+        "elapsed_seconds": 0.205865259,
+        "peak_rss_bytes": 2453504,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "c",
+        "trial": 0,
+        "position": 2,
+        "calls": 11849,
+        "elapsed_seconds": 0.165735255,
+        "peak_rss_bytes": 2379776,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "typed_arguments",
+        "trial": 1,
+        "position": 0,
+        "calls": 11849,
+        "elapsed_seconds": 0.213407662,
+        "peak_rss_bytes": 2461696,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "c",
+        "trial": 1,
+        "position": 1,
+        "calls": 11849,
+        "elapsed_seconds": 0.167031716,
+        "peak_rss_bytes": 2441216,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "baseline",
+        "trial": 1,
+        "position": 2,
+        "calls": 11849,
+        "elapsed_seconds": 0.228884694,
+        "peak_rss_bytes": 2375680,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "c",
+        "trial": 2,
+        "position": 0,
+        "calls": 11849,
+        "elapsed_seconds": 0.169208725,
+        "peak_rss_bytes": 2420736,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "baseline",
+        "trial": 2,
+        "position": 1,
+        "calls": 11849,
+        "elapsed_seconds": 0.22882294,
+        "peak_rss_bytes": 2338816,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "typed_arguments",
+        "trial": 2,
+        "position": 2,
+        "calls": 11849,
+        "elapsed_seconds": 0.207124108,
+        "peak_rss_bytes": 2428928,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "c",
+        "trial": 3,
+        "position": 0,
+        "calls": 11849,
+        "elapsed_seconds": 0.170111114,
+        "peak_rss_bytes": 2371584,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "typed_arguments",
+        "trial": 3,
+        "position": 1,
+        "calls": 11849,
+        "elapsed_seconds": 0.206699142,
+        "peak_rss_bytes": 2379776,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "baseline",
+        "trial": 3,
+        "position": 2,
+        "calls": 11849,
+        "elapsed_seconds": 0.216902244,
+        "peak_rss_bytes": 2445312,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "baseline",
+        "trial": 4,
+        "position": 0,
+        "calls": 11849,
+        "elapsed_seconds": 0.233311408,
+        "peak_rss_bytes": 2461696,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "c",
+        "trial": 4,
+        "position": 1,
+        "calls": 11849,
+        "elapsed_seconds": 0.1856367,
+        "peak_rss_bytes": 2420736,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "typed_arguments",
+        "trial": 4,
+        "position": 2,
+        "calls": 11849,
+        "elapsed_seconds": 0.217598362,
+        "peak_rss_bytes": 2371584,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "typed_arguments",
+        "trial": 5,
+        "position": 0,
+        "calls": 11849,
+        "elapsed_seconds": 0.229420461,
+        "peak_rss_bytes": 2420736,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "baseline",
+        "trial": 5,
+        "position": 1,
+        "calls": 11849,
+        "elapsed_seconds": 0.244370608,
+        "peak_rss_bytes": 2469888,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "c",
+        "trial": 5,
+        "position": 2,
+        "calls": 11849,
+        "elapsed_seconds": 0.20254247,
+        "peak_rss_bytes": 2441216,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "baseline",
+        "trial": 6,
+        "position": 0,
+        "calls": 11849,
+        "elapsed_seconds": 0.267650848,
+        "peak_rss_bytes": 2469888,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "typed_arguments",
+        "trial": 6,
+        "position": 1,
+        "calls": 11849,
+        "elapsed_seconds": 0.256014089,
+        "peak_rss_bytes": 2441216,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "c",
+        "trial": 6,
+        "position": 2,
+        "calls": 11849,
+        "elapsed_seconds": 0.208544876,
+        "peak_rss_bytes": 2260992,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "typed_arguments",
+        "trial": 7,
+        "position": 0,
+        "calls": 11849,
+        "elapsed_seconds": 0.2614197,
+        "peak_rss_bytes": 2375680,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "c",
+        "trial": 7,
+        "position": 1,
+        "calls": 11849,
+        "elapsed_seconds": 0.209527399,
+        "peak_rss_bytes": 2265088,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "baseline",
+        "trial": 7,
+        "position": 2,
+        "calls": 11849,
+        "elapsed_seconds": 0.26750531,
+        "peak_rss_bytes": 2371584,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "c",
+        "trial": 8,
+        "position": 0,
+        "calls": 11849,
+        "elapsed_seconds": 0.206386603,
+        "peak_rss_bytes": 2375680,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "baseline",
+        "trial": 8,
+        "position": 1,
+        "calls": 11849,
+        "elapsed_seconds": 0.261722629,
+        "peak_rss_bytes": 2478080,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "typed_arguments",
+        "trial": 8,
+        "position": 2,
+        "calls": 11849,
+        "elapsed_seconds": 0.254093868,
+        "peak_rss_bytes": 2265088,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "c",
+        "trial": 9,
+        "position": 0,
+        "calls": 11849,
+        "elapsed_seconds": 0.206665248,
+        "peak_rss_bytes": 2478080,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "typed_arguments",
+        "trial": 9,
+        "position": 1,
+        "calls": 11849,
+        "elapsed_seconds": 0.259566875,
+        "peak_rss_bytes": 2478080,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "baseline",
+        "trial": 9,
+        "position": 2,
+        "calls": 11849,
+        "elapsed_seconds": 0.26683716,
+        "peak_rss_bytes": 2383872,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "baseline",
+        "trial": 10,
+        "position": 0,
+        "calls": 11849,
+        "elapsed_seconds": 0.273643509,
+        "peak_rss_bytes": 2428928,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "c",
+        "trial": 10,
+        "position": 1,
+        "calls": 11849,
+        "elapsed_seconds": 0.206499054,
+        "peak_rss_bytes": 2371584,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "typed_arguments",
+        "trial": 10,
+        "position": 2,
+        "calls": 11849,
+        "elapsed_seconds": 0.252810412,
+        "peak_rss_bytes": 2371584,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "typed_arguments",
+        "trial": 11,
+        "position": 0,
+        "calls": 11849,
+        "elapsed_seconds": 0.260425227,
+        "peak_rss_bytes": 2256896,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "baseline",
+        "trial": 11,
+        "position": 1,
+        "calls": 11849,
+        "elapsed_seconds": 0.283655356,
+        "peak_rss_bytes": 2420736,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "binary",
+        "variant": "c",
+        "trial": 11,
+        "position": 2,
+        "calls": 11849,
+        "elapsed_seconds": 0.227793307,
+        "peak_rss_bytes": 2441216,
+        "stdout": "RESULT binary 29115161367\n"
+      },
+      {
+        "workload": "hashmap",
+        "variant": "baseline",
+        "trial": 0,
+        "position": 0,
+        "calls": 4851,
+        "elapsed_seconds": 0.332027043,
+        "peak_rss_bytes": 2420736,
+        "stdout": "RESULT hashmap 489668788224\n"
+      },
+      {
+        "workload": "hashmap",
+        "variant": "typed_arguments",
+        "trial": 0,
+        "position": 1,
+        "calls": 4851,
+        "elapsed_seconds": 0.254613602,
+        "peak_rss_bytes": 2478080,
+        "stdout": "RESULT hashmap 489668788224\n"
+      },
+      {
+        "workload": "hashmap",
+        "variant": "c",
+        "trial": 0,
+        "position": 2,
+        "calls": 4851,
+        "elapsed_seconds": 0.293187385,
+        "peak_rss_bytes": 2367488,
+        "stdout": "RESULT hashmap 489668788224\n"
+      },
+      {
+        "workload": "hashmap",
+        "variant": "typed_arguments",
+        "trial": 1,
+        "position": 0,
+        "calls": 4851,
+        "elapsed_seconds": 0.266981029,
+        "peak_rss_bytes": 2260992,
+        "stdout": "RESULT hashmap 489668788224\n"
+      },
+      {
+        "workload": "hashmap",
+        "variant": "c",
+        "trial": 1,
+        "position": 1,
+        "calls": 4851,
+        "elapsed_seconds": 0.281878379,
+        "peak_rss_bytes": 2469888,
+        "stdout": "RESULT hashmap 489668788224\n"
+      },
+      {
+        "workload": "hashmap",
+        "variant": "baseline",
+        "trial": 1,
+        "position": 2,
+        "calls": 4851,
+        "elapsed_seconds": 0.27756599,
+        "peak_rss_bytes": 2469888,
+        "stdout": "RESULT hashmap 489668788224\n"
+      },
+      {
+        "workload": "hashmap",
+        "variant": "c",
+        "trial": 2,
+        "position": 0,
+        "calls": 4851,
+        "elapsed_seconds": 0.308418122,
+        "peak_rss_bytes": 2371584,
+        "stdout": "RESULT hashmap 489668788224\n"
+      },
+      {
+        "workload": "hashmap",
+        "variant": "baseline",
+        "trial": 2,
+        "position": 1,
+        "calls": 4851,
+        "elapsed_seconds": 0.291257881,
+        "peak_rss_bytes": 2420736,
+        "stdout": "RESULT hashmap 489668788224\n"
+      },
+      {
+        "workload": "hashmap",
+        "variant": "typed_arguments",
+        "trial": 2,
+        "position": 2,
+        "calls": 4851,
+        "elapsed_seconds": 0.278526499,
+        "peak_rss_bytes": 2478080,
+        "stdout": "RESULT hashmap 489668788224\n"
+      },
+      {
+        "workload": "hashmap",
+        "variant": "c",
+        "trial": 3,
+        "position": 0,
+        "calls": 4851,
+        "elapsed_seconds": 0.347031339,
+        "peak_rss_bytes": 2441216,
+        "stdout": "RESULT hashmap 489668788224\n"
+      },
+      {
+        "workload": "hashmap",
+        "variant": "typed_arguments",
+        "trial": 3,
+        "position": 1,
+        "calls": 4851,
+        "elapsed_seconds": 0.320816913,
+        "peak_rss_bytes": 2367488,
+        "stdout": "RESULT hashmap 489668788224\n"
+      },
+      {
+        "workload": "hashmap",
+        "variant": "baseline",
+        "trial": 3,
+        "position": 2,
+        "calls": 4851,
+        "elapsed_seconds": 0.264338088,
+        "peak_rss_bytes": 2379776,
+        "stdout": "RESULT hashmap 489668788224\n"
+      },
+      {
+        "workload": "hashmap",
+        "variant": "baseline",
+        "trial": 4,
+        "position": 0,
+        "calls": 4851,
+        "elapsed_seconds": 0.248335373,
+        "peak_rss_bytes": 2338816,
+        "stdout": "RESULT hashmap 489668788224\n"
+      },
+      {
+        "workload": "hashmap",
+        "variant": "c",
+        "trial": 4,
+        "position": 1,
+        "calls": 4851,
+        "elapsed_seconds": 0.290919811,
+        "peak_rss_bytes": 2383872,
+        "stdout": "RESULT hashmap 489668788224\n"
+      },
+      {
+        "workload": "hashmap",
+        "variant": "typed_arguments",
+        "trial": 4,
+        "position": 2,
+        "calls": 4851,
+        "elapsed_seconds": 0.254037734,
+        "peak_rss_bytes": 2441216,
+        "stdout": "RESULT hashmap 489668788224\n"
+      },
+      {
+        "workload": "hashmap",
+        "variant": "typed_arguments",
+        "trial": 5,
+        "position": 0,
+        "calls": 4851,
+        "elapsed_seconds": 0.253825206,
+        "peak_rss_bytes": 2453504,
+        "stdout": "RESULT hashmap 489668788224\n"
+      },
+      {
+        "workload": "hashmap",
+        "variant": "baseline",
+        "trial": 5,
+        "position": 1,
+        "calls": 4851,
+        "elapsed_seconds": 0.329736829,
+        "peak_rss_bytes": 2265088,
+        "stdout": "RESULT hashmap 489668788224\n"
+      },
+      {
+        "workload": "hashmap",
+        "variant": "c",
+        "trial": 5,
+        "position": 2,
+        "calls": 4851,
+        "elapsed_seconds": 0.278258702,
+        "peak_rss_bytes": 2375680,
+        "stdout": "RESULT hashmap 489668788224\n"
+      },
+      {
+        "workload": "hashmap",
+        "variant": "baseline",
+        "trial": 6,
+        "position": 0,
+        "calls": 4851,
+        "elapsed_seconds": 0.290358432,
+        "peak_rss_bytes": 2260992,
+        "stdout": "RESULT hashmap 489668788224\n"
+      },
+      {
+        "workload": "hashmap",
+        "variant": "typed_arguments",
+        "trial": 6,
+        "position": 1,
+        "calls": 4851,
+        "elapsed_seconds": 0.253583594,
+        "peak_rss_bytes": 2260992,
+        "stdout": "RESULT hashmap 489668788224\n"
+      },
+      {
+        "workload": "hashmap",
+        "variant": "c",
+        "trial": 6,
+        "position": 2,
+        "calls": 4851,
+        "elapsed_seconds": 0.30319331,
+        "peak_rss_bytes": 2375680,
+        "stdout": "RESULT hashmap 489668788224\n"
+      },
+      {
+        "workload": "hashmap",
+        "variant": "typed_arguments",
+        "trial": 7,
+        "position": 0,
+        "calls": 4851,
+        "elapsed_seconds": 0.231977062,
+        "peak_rss_bytes": 2383872,
+        "stdout": "RESULT hashmap 489668788224\n"
+      },
+      {
+        "workload": "hashmap",
+        "variant": "c",
+        "trial": 7,
+        "position": 1,
+        "calls": 4851,
+        "elapsed_seconds": 0.290754717,
+        "peak_rss_bytes": 2478080,
+        "stdout": "RESULT hashmap 489668788224\n"
+      },
+      {
+        "workload": "hashmap",
+        "variant": "baseline",
+        "trial": 7,
+        "position": 2,
+        "calls": 4851,
+        "elapsed_seconds": 0.301254922,
+        "peak_rss_bytes": 2469888,
+        "stdout": "RESULT hashmap 489668788224\n"
+      },
+      {
+        "workload": "hashmap",
+        "variant": "c",
+        "trial": 8,
+        "position": 0,
+        "calls": 4851,
+        "elapsed_seconds": 0.282563254,
+        "peak_rss_bytes": 2260992,
+        "stdout": "RESULT hashmap 489668788224\n"
+      },
+      {
+        "workload": "hashmap",
+        "variant": "baseline",
+        "trial": 8,
+        "position": 1,
+        "calls": 4851,
+        "elapsed_seconds": 0.32562482,
+        "peak_rss_bytes": 2371584,
+        "stdout": "RESULT hashmap 489668788224\n"
+      },
+      {
+        "workload": "hashmap",
+        "variant": "typed_arguments",
+        "trial": 8,
+        "position": 2,
+        "calls": 4851,
+        "elapsed_seconds": 0.262299021,
+        "peak_rss_bytes": 2265088,
+        "stdout": "RESULT hashmap 489668788224\n"
+      },
+      {
+        "workload": "hashmap",
+        "variant": "c",
+        "trial": 9,
+        "position": 0,
+        "calls": 4851,
+        "elapsed_seconds": 0.249561354,
+        "peak_rss_bytes": 2371584,
+        "stdout": "RESULT hashmap 489668788224\n"
+      },
+      {
+        "workload": "hashmap",
+        "variant": "typed_arguments",
+        "trial": 9,
+        "position": 1,
+        "calls": 4851,
+        "elapsed_seconds": 0.233917172,
+        "peak_rss_bytes": 2265088,
+        "stdout": "RESULT hashmap 489668788224\n"
+      },
+      {
+        "workload": "hashmap",
+        "variant": "baseline",
+        "trial": 9,
+        "position": 2,
+        "calls": 4851,
+        "elapsed_seconds": 0.231298286,
+        "peak_rss_bytes": 2363392,
+        "stdout": "RESULT hashmap 489668788224\n"
+      },
+      {
+        "workload": "hashmap",
+        "variant": "baseline",
+        "trial": 10,
+        "position": 0,
+        "calls": 4851,
+        "elapsed_seconds": 0.314319948,
+        "peak_rss_bytes": 2256896,
+        "stdout": "RESULT hashmap 489668788224\n"
+      },
+      {
+        "workload": "hashmap",
+        "variant": "c",
+        "trial": 10,
+        "position": 1,
+        "calls": 4851,
+        "elapsed_seconds": 0.280037381,
+        "peak_rss_bytes": 2260992,
+        "stdout": "RESULT hashmap 489668788224\n"
+      },
+      {
+        "workload": "hashmap",
+        "variant": "typed_arguments",
+        "trial": 10,
+        "position": 2,
+        "calls": 4851,
+        "elapsed_seconds": 0.249629652,
+        "peak_rss_bytes": 2363392,
+        "stdout": "RESULT hashmap 489668788224\n"
+      },
+      {
+        "workload": "hashmap",
+        "variant": "typed_arguments",
+        "trial": 11,
+        "position": 0,
+        "calls": 4851,
+        "elapsed_seconds": 0.262653149,
+        "peak_rss_bytes": 2379776,
+        "stdout": "RESULT hashmap 489668788224\n"
+      },
+      {
+        "workload": "hashmap",
+        "variant": "baseline",
+        "trial": 11,
+        "position": 1,
+        "calls": 4851,
+        "elapsed_seconds": 0.221411023,
+        "peak_rss_bytes": 2371584,
+        "stdout": "RESULT hashmap 489668788224\n"
+      },
+      {
+        "workload": "hashmap",
+        "variant": "c",
+        "trial": 11,
+        "position": 2,
+        "calls": 4851,
+        "elapsed_seconds": 0.275080152,
+        "peak_rss_bytes": 2256896,
+        "stdout": "RESULT hashmap 489668788224\n"
+      },
+      {
+        "workload": "sudoku",
+        "variant": "baseline",
+        "trial": 0,
+        "position": 0,
+        "calls": 615,
+        "elapsed_seconds": 0.239960896,
+        "peak_rss_bytes": 2375680,
+        "stdout": "RESULT sudoku 10212075\n"
+      },
+      {
+        "workload": "sudoku",
+        "variant": "typed_arguments",
+        "trial": 0,
+        "position": 1,
+        "calls": 615,
+        "elapsed_seconds": 0.224621639,
+        "peak_rss_bytes": 2260992,
+        "stdout": "RESULT sudoku 10212075\n"
+      },
+      {
+        "workload": "sudoku",
+        "variant": "c",
+        "trial": 0,
+        "position": 2,
+        "calls": 615,
+        "elapsed_seconds": 0.200392354,
+        "peak_rss_bytes": 2461696,
+        "stdout": "RESULT sudoku 10212075\n"
+      },
+      {
+        "workload": "sudoku",
+        "variant": "typed_arguments",
+        "trial": 1,
+        "position": 0,
+        "calls": 615,
+        "elapsed_seconds": 0.226328429,
+        "peak_rss_bytes": 2383872,
+        "stdout": "RESULT sudoku 10212075\n"
+      },
+      {
+        "workload": "sudoku",
+        "variant": "c",
+        "trial": 1,
+        "position": 1,
+        "calls": 615,
+        "elapsed_seconds": 0.200654649,
+        "peak_rss_bytes": 2379776,
+        "stdout": "RESULT sudoku 10212075\n"
+      },
+      {
+        "workload": "sudoku",
+        "variant": "baseline",
+        "trial": 1,
+        "position": 2,
+        "calls": 615,
+        "elapsed_seconds": 0.223962713,
+        "peak_rss_bytes": 2428928,
+        "stdout": "RESULT sudoku 10212075\n"
+      },
+      {
+        "workload": "sudoku",
+        "variant": "c",
+        "trial": 2,
+        "position": 0,
+        "calls": 615,
+        "elapsed_seconds": 0.196957895,
+        "peak_rss_bytes": 2441216,
+        "stdout": "RESULT sudoku 10212075\n"
+      },
+      {
+        "workload": "sudoku",
+        "variant": "baseline",
+        "trial": 2,
+        "position": 1,
+        "calls": 615,
+        "elapsed_seconds": 0.22456299,
+        "peak_rss_bytes": 2469888,
+        "stdout": "RESULT sudoku 10212075\n"
+      },
+      {
+        "workload": "sudoku",
+        "variant": "typed_arguments",
+        "trial": 2,
+        "position": 2,
+        "calls": 615,
+        "elapsed_seconds": 0.223584524,
+        "peak_rss_bytes": 2363392,
+        "stdout": "RESULT sudoku 10212075\n"
+      },
+      {
+        "workload": "sudoku",
+        "variant": "c",
+        "trial": 3,
+        "position": 0,
+        "calls": 615,
+        "elapsed_seconds": 0.205471946,
+        "peak_rss_bytes": 2416640,
+        "stdout": "RESULT sudoku 10212075\n"
+      },
+      {
+        "workload": "sudoku",
+        "variant": "typed_arguments",
+        "trial": 3,
+        "position": 1,
+        "calls": 615,
+        "elapsed_seconds": 0.217226657,
+        "peak_rss_bytes": 2363392,
+        "stdout": "RESULT sudoku 10212075\n"
+      },
+      {
+        "workload": "sudoku",
+        "variant": "baseline",
+        "trial": 3,
+        "position": 2,
+        "calls": 615,
+        "elapsed_seconds": 0.231838254,
+        "peak_rss_bytes": 2371584,
+        "stdout": "RESULT sudoku 10212075\n"
+      },
+      {
+        "workload": "sudoku",
+        "variant": "baseline",
+        "trial": 4,
+        "position": 0,
+        "calls": 615,
+        "elapsed_seconds": 0.227272903,
+        "peak_rss_bytes": 2367488,
+        "stdout": "RESULT sudoku 10212075\n"
+      },
+      {
+        "workload": "sudoku",
+        "variant": "c",
+        "trial": 4,
+        "position": 1,
+        "calls": 615,
+        "elapsed_seconds": 0.206107047,
+        "peak_rss_bytes": 2236416,
+        "stdout": "RESULT sudoku 10212075\n"
+      },
+      {
+        "workload": "sudoku",
+        "variant": "typed_arguments",
+        "trial": 4,
+        "position": 2,
+        "calls": 615,
+        "elapsed_seconds": 0.230042313,
+        "peak_rss_bytes": 2453504,
+        "stdout": "RESULT sudoku 10212075\n"
+      },
+      {
+        "workload": "sudoku",
+        "variant": "typed_arguments",
+        "trial": 5,
+        "position": 0,
+        "calls": 615,
+        "elapsed_seconds": 0.231609324,
+        "peak_rss_bytes": 2478080,
+        "stdout": "RESULT sudoku 10212075\n"
+      },
+      {
+        "workload": "sudoku",
+        "variant": "baseline",
+        "trial": 5,
+        "position": 1,
+        "calls": 615,
+        "elapsed_seconds": 0.234914463,
+        "peak_rss_bytes": 2469888,
+        "stdout": "RESULT sudoku 10212075\n"
+      },
+      {
+        "workload": "sudoku",
+        "variant": "c",
+        "trial": 5,
+        "position": 2,
+        "calls": 615,
+        "elapsed_seconds": 0.199279937,
+        "peak_rss_bytes": 2453504,
+        "stdout": "RESULT sudoku 10212075\n"
+      },
+      {
+        "workload": "sudoku",
+        "variant": "baseline",
+        "trial": 6,
+        "position": 0,
+        "calls": 615,
+        "elapsed_seconds": 0.230424141,
+        "peak_rss_bytes": 2338816,
+        "stdout": "RESULT sudoku 10212075\n"
+      },
+      {
+        "workload": "sudoku",
+        "variant": "typed_arguments",
+        "trial": 6,
+        "position": 1,
+        "calls": 615,
+        "elapsed_seconds": 0.231421767,
+        "peak_rss_bytes": 2371584,
+        "stdout": "RESULT sudoku 10212075\n"
+      },
+      {
+        "workload": "sudoku",
+        "variant": "c",
+        "trial": 6,
+        "position": 2,
+        "calls": 615,
+        "elapsed_seconds": 0.20770501,
+        "peak_rss_bytes": 2265088,
+        "stdout": "RESULT sudoku 10212075\n"
+      },
+      {
+        "workload": "sudoku",
+        "variant": "typed_arguments",
+        "trial": 7,
+        "position": 0,
+        "calls": 615,
+        "elapsed_seconds": 0.231769165,
+        "peak_rss_bytes": 2453504,
+        "stdout": "RESULT sudoku 10212075\n"
+      },
+      {
+        "workload": "sudoku",
+        "variant": "c",
+        "trial": 7,
+        "position": 1,
+        "calls": 615,
+        "elapsed_seconds": 0.207083172,
+        "peak_rss_bytes": 2125824,
+        "stdout": "RESULT sudoku 10212075\n"
+      },
+      {
+        "workload": "sudoku",
+        "variant": "baseline",
+        "trial": 7,
+        "position": 2,
+        "calls": 615,
+        "elapsed_seconds": 0.226326432,
+        "peak_rss_bytes": 2420736,
+        "stdout": "RESULT sudoku 10212075\n"
+      },
+      {
+        "workload": "sudoku",
+        "variant": "c",
+        "trial": 8,
+        "position": 0,
+        "calls": 615,
+        "elapsed_seconds": 0.201748287,
+        "peak_rss_bytes": 2125824,
+        "stdout": "RESULT sudoku 10212075\n"
+      },
+      {
+        "workload": "sudoku",
+        "variant": "baseline",
+        "trial": 8,
+        "position": 1,
+        "calls": 615,
+        "elapsed_seconds": 0.227867108,
+        "peak_rss_bytes": 2428928,
+        "stdout": "RESULT sudoku 10212075\n"
+      },
+      {
+        "workload": "sudoku",
+        "variant": "typed_arguments",
+        "trial": 8,
+        "position": 2,
+        "calls": 615,
+        "elapsed_seconds": 0.231950137,
+        "peak_rss_bytes": 2256896,
+        "stdout": "RESULT sudoku 10212075\n"
+      },
+      {
+        "workload": "sudoku",
+        "variant": "c",
+        "trial": 9,
+        "position": 0,
+        "calls": 615,
+        "elapsed_seconds": 0.204399894,
+        "peak_rss_bytes": 2367488,
+        "stdout": "RESULT sudoku 10212075\n"
+      },
+      {
+        "workload": "sudoku",
+        "variant": "typed_arguments",
+        "trial": 9,
+        "position": 1,
+        "calls": 615,
+        "elapsed_seconds": 0.215230904,
+        "peak_rss_bytes": 2375680,
+        "stdout": "RESULT sudoku 10212075\n"
+      },
+      {
+        "workload": "sudoku",
+        "variant": "baseline",
+        "trial": 9,
+        "position": 2,
+        "calls": 615,
+        "elapsed_seconds": 0.219111636,
+        "peak_rss_bytes": 2338816,
+        "stdout": "RESULT sudoku 10212075\n"
+      },
+      {
+        "workload": "sudoku",
+        "variant": "baseline",
+        "trial": 10,
+        "position": 0,
+        "calls": 615,
+        "elapsed_seconds": 0.21182807,
+        "peak_rss_bytes": 2453504,
+        "stdout": "RESULT sudoku 10212075\n"
+      },
+      {
+        "workload": "sudoku",
+        "variant": "c",
+        "trial": 10,
+        "position": 1,
+        "calls": 615,
+        "elapsed_seconds": 0.182643319,
+        "peak_rss_bytes": 2420736,
+        "stdout": "RESULT sudoku 10212075\n"
+      },
+      {
+        "workload": "sudoku",
+        "variant": "typed_arguments",
+        "trial": 10,
+        "position": 2,
+        "calls": 615,
+        "elapsed_seconds": 0.217854768,
+        "peak_rss_bytes": 2469888,
+        "stdout": "RESULT sudoku 10212075\n"
+      },
+      {
+        "workload": "sudoku",
+        "variant": "typed_arguments",
+        "trial": 11,
+        "position": 0,
+        "calls": 615,
+        "elapsed_seconds": 0.210195795,
+        "peak_rss_bytes": 2338816,
+        "stdout": "RESULT sudoku 10212075\n"
+      },
+      {
+        "workload": "sudoku",
+        "variant": "baseline",
+        "trial": 11,
+        "position": 1,
+        "calls": 615,
+        "elapsed_seconds": 0.201909178,
+        "peak_rss_bytes": 2441216,
+        "stdout": "RESULT sudoku 10212075\n"
+      },
+      {
+        "workload": "sudoku",
+        "variant": "c",
+        "trial": 11,
+        "position": 2,
+        "calls": 615,
+        "elapsed_seconds": 0.178461859,
+        "peak_rss_bytes": 2363392,
+        "stdout": "RESULT sudoku 10212075\n"
+      },
+      {
+        "workload": "game_of_life",
+        "variant": "baseline",
+        "trial": 0,
+        "position": 0,
+        "calls": 62,
+        "elapsed_seconds": 0.181419611,
+        "peak_rss_bytes": 2441216,
+        "stdout": "RESULT game_of_life 2790\n"
+      },
+      {
+        "workload": "game_of_life",
+        "variant": "typed_arguments",
+        "trial": 0,
+        "position": 1,
+        "calls": 62,
+        "elapsed_seconds": 0.180055991,
+        "peak_rss_bytes": 2265088,
+        "stdout": "RESULT game_of_life 2790\n"
+      },
+      {
+        "workload": "game_of_life",
+        "variant": "c",
+        "trial": 0,
+        "position": 2,
+        "calls": 62,
+        "elapsed_seconds": 0.281387564,
+        "peak_rss_bytes": 2461696,
+        "stdout": "RESULT game_of_life 2790\n"
+      },
+      {
+        "workload": "game_of_life",
+        "variant": "typed_arguments",
+        "trial": 1,
+        "position": 0,
+        "calls": 62,
+        "elapsed_seconds": 0.192486283,
+        "peak_rss_bytes": 2371584,
+        "stdout": "RESULT game_of_life 2790\n"
+      },
+      {
+        "workload": "game_of_life",
+        "variant": "c",
+        "trial": 1,
+        "position": 1,
+        "calls": 62,
+        "elapsed_seconds": 0.268161338,
+        "peak_rss_bytes": 2469888,
+        "stdout": "RESULT game_of_life 2790\n"
+      },
+      {
+        "workload": "game_of_life",
+        "variant": "baseline",
+        "trial": 1,
+        "position": 2,
+        "calls": 62,
+        "elapsed_seconds": 0.186336819,
+        "peak_rss_bytes": 2453504,
+        "stdout": "RESULT game_of_life 2790\n"
+      },
+      {
+        "workload": "game_of_life",
+        "variant": "c",
+        "trial": 2,
+        "position": 0,
+        "calls": 62,
+        "elapsed_seconds": 0.272811224,
+        "peak_rss_bytes": 2461696,
+        "stdout": "RESULT game_of_life 2790\n"
+      },
+      {
+        "workload": "game_of_life",
+        "variant": "baseline",
+        "trial": 2,
+        "position": 1,
+        "calls": 62,
+        "elapsed_seconds": 0.188257915,
+        "peak_rss_bytes": 2260992,
+        "stdout": "RESULT game_of_life 2790\n"
+      },
+      {
+        "workload": "game_of_life",
+        "variant": "typed_arguments",
+        "trial": 2,
+        "position": 2,
+        "calls": 62,
+        "elapsed_seconds": 0.188870677,
+        "peak_rss_bytes": 2379776,
+        "stdout": "RESULT game_of_life 2790\n"
+      },
+      {
+        "workload": "game_of_life",
+        "variant": "c",
+        "trial": 3,
+        "position": 0,
+        "calls": 62,
+        "elapsed_seconds": 0.276774127,
+        "peak_rss_bytes": 2371584,
+        "stdout": "RESULT game_of_life 2790\n"
+      },
+      {
+        "workload": "game_of_life",
+        "variant": "typed_arguments",
+        "trial": 3,
+        "position": 1,
+        "calls": 62,
+        "elapsed_seconds": 0.192440075,
+        "peak_rss_bytes": 2334720,
+        "stdout": "RESULT game_of_life 2790\n"
+      },
+      {
+        "workload": "game_of_life",
+        "variant": "baseline",
+        "trial": 3,
+        "position": 2,
+        "calls": 62,
+        "elapsed_seconds": 0.185969023,
+        "peak_rss_bytes": 2367488,
+        "stdout": "RESULT game_of_life 2790\n"
+      },
+      {
+        "workload": "game_of_life",
+        "variant": "baseline",
+        "trial": 4,
+        "position": 0,
+        "calls": 62,
+        "elapsed_seconds": 0.192049618,
+        "peak_rss_bytes": 2314240,
+        "stdout": "RESULT game_of_life 2790\n"
+      },
+      {
+        "workload": "game_of_life",
+        "variant": "c",
+        "trial": 4,
+        "position": 1,
+        "calls": 62,
+        "elapsed_seconds": 0.276283368,
+        "peak_rss_bytes": 2453504,
+        "stdout": "RESULT game_of_life 2790\n"
+      },
+      {
+        "workload": "game_of_life",
+        "variant": "typed_arguments",
+        "trial": 4,
+        "position": 2,
+        "calls": 62,
+        "elapsed_seconds": 0.18698256,
+        "peak_rss_bytes": 2256896,
+        "stdout": "RESULT game_of_life 2790\n"
+      },
+      {
+        "workload": "game_of_life",
+        "variant": "typed_arguments",
+        "trial": 5,
+        "position": 0,
+        "calls": 62,
+        "elapsed_seconds": 0.184854223,
+        "peak_rss_bytes": 2363392,
+        "stdout": "RESULT game_of_life 2790\n"
+      },
+      {
+        "workload": "game_of_life",
+        "variant": "baseline",
+        "trial": 5,
+        "position": 1,
+        "calls": 62,
+        "elapsed_seconds": 0.194204068,
+        "peak_rss_bytes": 2383872,
+        "stdout": "RESULT game_of_life 2790\n"
+      },
+      {
+        "workload": "game_of_life",
+        "variant": "c",
+        "trial": 5,
+        "position": 2,
+        "calls": 62,
+        "elapsed_seconds": 0.27132202,
+        "peak_rss_bytes": 2379776,
+        "stdout": "RESULT game_of_life 2790\n"
+      },
+      {
+        "workload": "game_of_life",
+        "variant": "baseline",
+        "trial": 6,
+        "position": 0,
+        "calls": 62,
+        "elapsed_seconds": 0.185021788,
+        "peak_rss_bytes": 2461696,
+        "stdout": "RESULT game_of_life 2790\n"
+      },
+      {
+        "workload": "game_of_life",
+        "variant": "typed_arguments",
+        "trial": 6,
+        "position": 1,
+        "calls": 62,
+        "elapsed_seconds": 0.180361288,
+        "peak_rss_bytes": 2256896,
+        "stdout": "RESULT game_of_life 2790\n"
+      },
+      {
+        "workload": "game_of_life",
+        "variant": "c",
+        "trial": 6,
+        "position": 2,
+        "calls": 62,
+        "elapsed_seconds": 0.279642515,
+        "peak_rss_bytes": 2469888,
+        "stdout": "RESULT game_of_life 2790\n"
+      },
+      {
+        "workload": "game_of_life",
+        "variant": "typed_arguments",
+        "trial": 7,
+        "position": 0,
+        "calls": 62,
+        "elapsed_seconds": 0.193200405,
+        "peak_rss_bytes": 2375680,
+        "stdout": "RESULT game_of_life 2790\n"
+      },
+      {
+        "workload": "game_of_life",
+        "variant": "c",
+        "trial": 7,
+        "position": 1,
+        "calls": 62,
+        "elapsed_seconds": 0.275319936,
+        "peak_rss_bytes": 2383872,
+        "stdout": "RESULT game_of_life 2790\n"
+      },
+      {
+        "workload": "game_of_life",
+        "variant": "baseline",
+        "trial": 7,
+        "position": 2,
+        "calls": 62,
+        "elapsed_seconds": 0.184624814,
+        "peak_rss_bytes": 2469888,
+        "stdout": "RESULT game_of_life 2790\n"
+      },
+      {
+        "workload": "game_of_life",
+        "variant": "c",
+        "trial": 8,
+        "position": 0,
+        "calls": 62,
+        "elapsed_seconds": 0.266482555,
+        "peak_rss_bytes": 2478080,
+        "stdout": "RESULT game_of_life 2790\n"
+      },
+      {
+        "workload": "game_of_life",
+        "variant": "baseline",
+        "trial": 8,
+        "position": 1,
+        "calls": 62,
+        "elapsed_seconds": 0.180551364,
+        "peak_rss_bytes": 2428928,
+        "stdout": "RESULT game_of_life 2790\n"
+      },
+      {
+        "workload": "game_of_life",
+        "variant": "typed_arguments",
+        "trial": 8,
+        "position": 2,
+        "calls": 62,
+        "elapsed_seconds": 0.189693785,
+        "peak_rss_bytes": 2256896,
+        "stdout": "RESULT game_of_life 2790\n"
+      },
+      {
+        "workload": "game_of_life",
+        "variant": "c",
+        "trial": 9,
+        "position": 0,
+        "calls": 62,
+        "elapsed_seconds": 0.26805197,
+        "peak_rss_bytes": 2420736,
+        "stdout": "RESULT game_of_life 2790\n"
+      },
+      {
+        "workload": "game_of_life",
+        "variant": "typed_arguments",
+        "trial": 9,
+        "position": 1,
+        "calls": 62,
+        "elapsed_seconds": 0.185300312,
+        "peak_rss_bytes": 2379776,
+        "stdout": "RESULT game_of_life 2790\n"
+      },
+      {
+        "workload": "game_of_life",
+        "variant": "baseline",
+        "trial": 9,
+        "position": 2,
+        "calls": 62,
+        "elapsed_seconds": 0.178886466,
+        "peak_rss_bytes": 2383872,
+        "stdout": "RESULT game_of_life 2790\n"
+      },
+      {
+        "workload": "game_of_life",
+        "variant": "baseline",
+        "trial": 10,
+        "position": 0,
+        "calls": 62,
+        "elapsed_seconds": 0.195691485,
+        "peak_rss_bytes": 2367488,
+        "stdout": "RESULT game_of_life 2790\n"
+      },
+      {
+        "workload": "game_of_life",
+        "variant": "c",
+        "trial": 10,
+        "position": 1,
+        "calls": 62,
+        "elapsed_seconds": 0.267588559,
+        "peak_rss_bytes": 2478080,
+        "stdout": "RESULT game_of_life 2790\n"
+      },
+      {
+        "workload": "game_of_life",
+        "variant": "typed_arguments",
+        "trial": 10,
+        "position": 2,
+        "calls": 62,
+        "elapsed_seconds": 0.189637482,
+        "peak_rss_bytes": 2265088,
+        "stdout": "RESULT game_of_life 2790\n"
+      },
+      {
+        "workload": "game_of_life",
+        "variant": "typed_arguments",
+        "trial": 11,
+        "position": 0,
+        "calls": 62,
+        "elapsed_seconds": 0.185420527,
+        "peak_rss_bytes": 2359296,
+        "stdout": "RESULT game_of_life 2790\n"
+      },
+      {
+        "workload": "game_of_life",
+        "variant": "baseline",
+        "trial": 11,
+        "position": 1,
+        "calls": 62,
+        "elapsed_seconds": 0.200894392,
+        "peak_rss_bytes": 2260992,
+        "stdout": "RESULT game_of_life 2790\n"
+      },
+      {
+        "workload": "game_of_life",
+        "variant": "c",
+        "trial": 11,
+        "position": 2,
+        "calls": 62,
+        "elapsed_seconds": 0.276895368,
+        "peak_rss_bytes": 2260992,
+        "stdout": "RESULT game_of_life 2790\n"
+      }
+    ],
+    "summary": {
+      "json": {
+        "median_ns_per_call": {
+          "baseline": 197.48561666136348,
+          "typed_arguments": 201.10026639238117,
+          "c": 162.78255684887412
+        },
+        "comparisons": {
+          "typed_arguments": {
+            "median_paired_change_percent": 2.0114146818545953,
+            "faster_pairs": 2,
+            "pairs": 12,
+            "paired_changes_percent": [
+              2.065948116537153,
+              2.6534218135515486,
+              -6.023398195573371,
+              0.2812397646112075,
+              1.9568812471720376,
+              2.630140453406904,
+              3.360681217891992,
+              3.2269395966115333,
+              0.9832447977676573,
+              0.9358133636748533,
+              4.796221016054836,
+              -2.166300302797952
+            ]
+          },
+          "c": {
+            "median_paired_change_percent": -17.66255381368365,
+            "faster_pairs": 12,
+            "pairs": 12,
+            "paired_changes_percent": [
+              -19.085546033713253,
+              -16.50385330736075,
+              -24.74240132408062,
+              -21.337703400940843,
+              -12.848649909061095,
+              -17.516168213599503,
+              -16.415827339855372,
+              -12.207384726126048,
+              -21.047332926704332,
+              -17.8089394137678,
+              -11.52235488336456,
+              -20.540513675449613
+            ]
+          }
+        }
+      },
+      "string": {
+        "median_ns_per_call": {
+          "baseline": 387.2069306399714,
+          "typed_arguments": 380.75490168037186,
+          "c": 395.007482123704
+        },
+        "comparisons": {
+          "typed_arguments": {
+            "median_paired_change_percent": -1.4469511351931474,
+            "faster_pairs": 7,
+            "pairs": 12,
+            "paired_changes_percent": [
+              0.5523097780246067,
+              -0.6400497937538163,
+              -2.4125089000494815,
+              -3.1151524820109633,
+              0.729464314889916,
+              2.1399658311384018,
+              -6.73592426249262,
+              -6.041467354423946,
+              1.6207852731012773,
+              -3.21483949290311,
+              -2.2538524766324786,
+              1.6040410771338776
+            ]
+          },
+          "c": {
+            "median_paired_change_percent": 2.2685281400061763,
+            "faster_pairs": 4,
+            "pairs": 12,
+            "paired_changes_percent": [
+              7.338286442451514,
+              2.5432369536253496,
+              3.8312218122768193,
+              0.9480806243590489,
+              3.638787476092986,
+              3.4461460042524816,
+              -3.0535561584174586,
+              -3.0426991044716356,
+              2.953762460972764,
+              -2.2270938993304346,
+              1.993819326387003,
+              -1.0169404129207305
+            ]
+          }
+        }
+      },
+      "binary": {
+        "median_ns_per_call": {
+          "baseline": 21355.94721073508,
+          "typed_arguments": 20349.011435564178,
+          "c": 17255.847455481475
+        },
+        "comparisons": {
+          "typed_arguments": {
+            "median_paired_change_percent": -6.426306287645972,
+            "faster_pairs": 12,
+            "pairs": 12,
+            "paired_changes_percent": [
+              -8.625008487679198,
+              -6.761934024299587,
+              -9.48280447755806,
+              -4.704009424632782,
+              -6.734795411289962,
+              -6.117817164001982,
+              -4.347738513423282,
+              -2.2749492337180266,
+              -2.9148266732411554,
+              -2.724614892468513,
+              -7.613225351528441,
+              -8.189561208214958
+            ]
+          },
+          "c": {
+            "median_paired_change_percent": -21.878396263992588,
+            "faster_pairs": 12,
+            "pairs": 12,
+            "paired_changes_percent": [
+              -26.437041429523934,
+              -27.023640995408805,
+              -26.05255181145737,
+              -21.572450859475655,
+              -20.433937803847122,
+              -17.116681233612184,
+              -22.083237337622784,
+              -21.673555190362393,
+              -21.14300403118753,
+              -22.550049625771774,
+              -24.537199966983327,
+              -19.693634482262347
+            ]
+          }
+        }
+      },
+      "hashmap": {
+        "median_ns_per_call": {
+          "baseline": 59948.08420944135,
+          "typed_arguments": 52427.47227375799,
+          "c": 59092.761389404244
+        },
+        "comparisons": {
+          "typed_arguments": {
+            "median_paired_change_percent": -8.518248152694763,
+            "faster_pairs": 8,
+            "pairs": 12,
+            "paired_changes_percent": [
+              -23.31540235413897,
+              -3.813493504733778,
+              -4.371171676552854,
+              21.36613207249949,
+              2.2962338917380087,
+              -23.02188179288883,
+              -12.665324628836672,
+              -22.9964242708705,
+              -19.44747301510983,
+              1.1322548235398466,
+              -20.581034201494585,
+              18.6269524620732
+            ]
+          },
+          "c": {
+            "median_paired_change_percent": 2.987000577900656,
+            "faster_pairs": 5,
+            "pairs": 12,
+            "paired_changes_percent": [
+              -11.6977393314315,
+              1.553644594570125,
+              5.891768813630849,
+              31.28313881123328,
+              17.14795499552131,
+              -15.611882711469871,
+              4.420356561231187,
+              -3.485488280254545,
+              -13.224288615345724,
+              7.895894222060962,
+              -10.90690146080071,
+              24.23959217242766
+            ]
+          }
+        }
+      },
+      "sudoku": {
+        "median_ns_per_call": {
+          "baseline": 368779.94715447153,
+          "typed_arguments": 366626.07154471544,
+          "c": 327156.85853658535
+        },
+        "comparisons": {
+          "typed_arguments": {
+            "median_paired_change_percent": 0.7446255386709844,
+            "faster_pairs": 5,
+            "pairs": 12,
+            "paired_changes_percent": [
+              -6.392398618148176,
+              1.056299045636222,
+              -0.4357200623308355,
+              -6.302496135948299,
+              1.218539457825285,
+              -1.406954241042191,
+              0.4329520317057467,
+              2.404815448157649,
+              1.7918465880560452,
+              -1.7711209093432156,
+              2.845089416147717,
+              4.104130917713911
+            ]
+          },
+          "c": {
+            "median_paired_change_percent": -11.417510466837243,
+            "faster_pairs": 12,
+            "pairs": 12,
+            "paired_changes_percent": [
+              -16.489579202104665,
+              -10.407118081303125,
+              -12.292807020426654,
+              -11.372716773479496,
+              -9.312969439212038,
+              -15.169149461861785,
+              -9.859700854868326,
+              -8.502435985912593,
+              -11.462304160194991,
+              -6.714267789958905,
+              -13.77756545674046,
+              -11.612804941437583
+            ]
+          }
+        }
+      },
+      "game_of_life": {
+        "median_ns_per_call": {
+          "baseline": 3002466.4677419355,
+          "typed_arguments": 3031074.4919354836,
+          "c": 4420412.580645161
+        },
+        "comparisons": {
+          "typed_arguments": {
+            "median_paired_change_percent": -0.21307399985656117,
+            "faster_pairs": 6,
+            "pairs": 12,
+            "paired_changes_percent": [
+              -0.7516386968771549,
+              3.30018728075423,
+              0.32549069716403256,
+              3.479639724729844,
+              -2.6384108715071797,
+              -4.814443433800775,
+              -2.518892531727124,
+              4.6448745508282485,
+              5.063612258282357,
+              3.5854283129501896,
+              -3.0936466142101215,
+              -7.702487284961146
+            ]
+          },
+          "c": {
+            "median_paired_change_percent": 46.25365624991339,
+            "faster_pairs": 0,
+            "pairs": 12,
+            "paired_changes_percent": [
+              55.1031679811065,
+              43.912158337317145,
+              44.91354799079763,
+              48.82808036260962,
+              43.86041007381747,
+              39.70975108513175,
+              51.14031597186812,
+              49.124015366645125,
+              47.59376450902914,
+              49.84474566119494,
+              36.74001145221011,
+              37.831307904304246
+            ]
+          }
+        }
+      }
+    }
+  },
+  "production_perf": {
+    "samples": [
+      {
+        "variant": "baseline",
+        "trial": 0,
+        "calls": 1351390,
+        "counters": {
+          "cycles:u": 884174781,
+          "instructions:u": 6349008154,
+          "branches:u": 1509539584,
+          "branch-misses:u": 167418
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n884174781;;cpu_core/cycles/u;210778252;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n6349008154;;cpu_core/instructions/u;210778252;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n1509539584;;cpu_core/branches/u;210778252;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n167418;;cpu_core/branch-misses/u;210778252;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/baseline",
+          "json",
+          "1351390"
+        ],
+        "workload": "json"
+      },
+      {
+        "variant": "typed_arguments",
+        "trial": 0,
+        "calls": 1351390,
+        "counters": {
+          "cycles:u": 903112373,
+          "instructions:u": 6347656763,
+          "branches:u": 1508188192,
+          "branch-misses:u": 160001
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n903112373;;cpu_core/cycles/u;209792785;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n6347656763;;cpu_core/instructions/u;209792785;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n1508188192;;cpu_core/branches/u;209792785;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n160001;;cpu_core/branch-misses/u;209792785;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/production-typed/llvm",
+          "json",
+          "1351390"
+        ],
+        "workload": "json"
+      },
+      {
+        "variant": "typed_arguments",
+        "trial": 1,
+        "calls": 1351390,
+        "counters": {
+          "cycles:u": 903927944,
+          "instructions:u": 6347656762,
+          "branches:u": 1508188191,
+          "branch-misses:u": 221849
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n903927944;;cpu_core/cycles/u;209381020;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n6347656762;;cpu_core/instructions/u;209381020;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n1508188191;;cpu_core/branches/u;209381020;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n221849;;cpu_core/branch-misses/u;209381020;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/production-typed/llvm",
+          "json",
+          "1351390"
+        ],
+        "workload": "json"
+      },
+      {
+        "variant": "baseline",
+        "trial": 1,
+        "calls": 1351390,
+        "counters": {
+          "cycles:u": 884022172,
+          "instructions:u": 6349008148,
+          "branches:u": 1509539578,
+          "branch-misses:u": 229109
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n884022172;;cpu_core/cycles/u;205331986;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n6349008148;;cpu_core/instructions/u;205331986;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n1509539578;;cpu_core/branches/u;205331986;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n229109;;cpu_core/branch-misses/u;205331986;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/baseline",
+          "json",
+          "1351390"
+        ],
+        "workload": "json"
+      },
+      {
+        "variant": "baseline",
+        "trial": 2,
+        "calls": 1351390,
+        "counters": {
+          "cycles:u": 883354039,
+          "instructions:u": 6349008152,
+          "branches:u": 1509539582,
+          "branch-misses:u": 164053
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n883354039;;cpu_core/cycles/u;206940684;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n6349008152;;cpu_core/instructions/u;206940684;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n1509539582;;cpu_core/branches/u;206940684;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n164053;;cpu_core/branch-misses/u;206940684;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/baseline",
+          "json",
+          "1351390"
+        ],
+        "workload": "json"
+      },
+      {
+        "variant": "typed_arguments",
+        "trial": 2,
+        "calls": 1351390,
+        "counters": {
+          "cycles:u": 902974118,
+          "instructions:u": 6347656762,
+          "branches:u": 1508188191,
+          "branch-misses:u": 186118
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n902974118;;cpu_core/cycles/u;209271843;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n6347656762;;cpu_core/instructions/u;209271843;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n1508188191;;cpu_core/branches/u;209271843;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n186118;;cpu_core/branch-misses/u;209271843;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/production-typed/llvm",
+          "json",
+          "1351390"
+        ],
+        "workload": "json"
+      },
+      {
+        "variant": "typed_arguments",
+        "trial": 3,
+        "calls": 1351390,
+        "counters": {
+          "cycles:u": 902856155,
+          "instructions:u": 6347656762,
+          "branches:u": 1508188191,
+          "branch-misses:u": 156428
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n902856155;;cpu_core/cycles/u;209445657;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n6347656762;;cpu_core/instructions/u;209445657;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n1508188191;;cpu_core/branches/u;209445657;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n156428;;cpu_core/branch-misses/u;209445657;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/production-typed/llvm",
+          "json",
+          "1351390"
+        ],
+        "workload": "json"
+      },
+      {
+        "variant": "baseline",
+        "trial": 3,
+        "calls": 1351390,
+        "counters": {
+          "cycles:u": 887609635,
+          "instructions:u": 6349008147,
+          "branches:u": 1509539577,
+          "branch-misses:u": 217302
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n887609635;;cpu_core/cycles/u;207108925;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n6349008147;;cpu_core/instructions/u;207108925;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n1509539577;;cpu_core/branches/u;207108925;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n217302;;cpu_core/branch-misses/u;207108925;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/baseline",
+          "json",
+          "1351390"
+        ],
+        "workload": "json"
+      },
+      {
+        "variant": "baseline",
+        "trial": 4,
+        "calls": 1351390,
+        "counters": {
+          "cycles:u": 884899588,
+          "instructions:u": 6349008144,
+          "branches:u": 1509539574,
+          "branch-misses:u": 204836
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n884899588;;cpu_core/cycles/u;205995025;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n6349008144;;cpu_core/instructions/u;205995025;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n1509539574;;cpu_core/branches/u;205995025;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n204836;;cpu_core/branch-misses/u;205995025;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/baseline",
+          "json",
+          "1351390"
+        ],
+        "workload": "json"
+      },
+      {
+        "variant": "typed_arguments",
+        "trial": 4,
+        "calls": 1351390,
+        "counters": {
+          "cycles:u": 922672518,
+          "instructions:u": 6347656768,
+          "branches:u": 1508188197,
+          "branch-misses:u": 221942
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n922672518;;cpu_core/cycles/u;214021729;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n6347656768;;cpu_core/instructions/u;214021729;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n1508188197;;cpu_core/branches/u;214021729;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n221942;;cpu_core/branch-misses/u;214021729;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/production-typed/llvm",
+          "json",
+          "1351390"
+        ],
+        "workload": "json"
+      },
+      {
+        "variant": "typed_arguments",
+        "trial": 5,
+        "calls": 1351390,
+        "counters": {
+          "cycles:u": 906792655,
+          "instructions:u": 6347656815,
+          "branches:u": 1508188194,
+          "branch-misses:u": 145843
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n906792655;;cpu_core/cycles/u;211638010;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n6347656815;;cpu_core/instructions/u;211638010;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n1508188194;;cpu_core/branches/u;211638010;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n145843;;cpu_core/branch-misses/u;211638010;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/production-typed/llvm",
+          "json",
+          "1351390"
+        ],
+        "workload": "json"
+      },
+      {
+        "variant": "baseline",
+        "trial": 5,
+        "calls": 1351390,
+        "counters": {
+          "cycles:u": 882941826,
+          "instructions:u": 6349008143,
+          "branches:u": 1509539573,
+          "branch-misses:u": 151254
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n882941826;;cpu_core/cycles/u;206299790;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n6349008143;;cpu_core/instructions/u;206299790;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n1509539573;;cpu_core/branches/u;206299790;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n151254;;cpu_core/branch-misses/u;206299790;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/baseline",
+          "json",
+          "1351390"
+        ],
+        "workload": "json"
+      },
+      {
+        "variant": "baseline",
+        "trial": 0,
+        "calls": 11849,
+        "counters": {
+          "cycles:u": 958362971,
+          "instructions:u": 5811248451,
+          "branches:u": 1001941255,
+          "branch-misses:u": 1382001
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n958362971;;cpu_core/cycles/u;224510450;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n5811248451;;cpu_core/instructions/u;224510450;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n1001941255;;cpu_core/branches/u;224510450;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n1382001;;cpu_core/branch-misses/u;224510450;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/baseline",
+          "binary",
+          "11849"
+        ],
+        "workload": "binary"
+      },
+      {
+        "variant": "typed_arguments",
+        "trial": 0,
+        "calls": 11849,
+        "counters": {
+          "cycles:u": 917849152,
+          "instructions:u": 5663835035,
+          "branches:u": 1001562079,
+          "branch-misses:u": 1312745
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n917849152;;cpu_core/cycles/u;214582878;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n5663835035;;cpu_core/instructions/u;214582878;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n1001562079;;cpu_core/branches/u;214582878;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n1312745;;cpu_core/branch-misses/u;214582878;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/production-typed/llvm",
+          "binary",
+          "11849"
+        ],
+        "workload": "binary"
+      },
+      {
+        "variant": "typed_arguments",
+        "trial": 1,
+        "calls": 11849,
+        "counters": {
+          "cycles:u": 905789016,
+          "instructions:u": 5663835032,
+          "branches:u": 1001562076,
+          "branch-misses:u": 1423664
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n905789016;;cpu_core/cycles/u;211006360;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n5663835032;;cpu_core/instructions/u;211006360;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n1001562076;;cpu_core/branches/u;211006360;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n1423664;;cpu_core/branch-misses/u;211006360;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/production-typed/llvm",
+          "binary",
+          "11849"
+        ],
+        "workload": "binary"
+      },
+      {
+        "variant": "baseline",
+        "trial": 1,
+        "calls": 11849,
+        "counters": {
+          "cycles:u": 958113455,
+          "instructions:u": 5811248447,
+          "branches:u": 1001941251,
+          "branch-misses:u": 1322452
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n958113455;;cpu_core/cycles/u;221792408;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n5811248447;;cpu_core/instructions/u;221792408;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n1001941251;;cpu_core/branches/u;221792408;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n1322452;;cpu_core/branch-misses/u;221792408;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/baseline",
+          "binary",
+          "11849"
+        ],
+        "workload": "binary"
+      },
+      {
+        "variant": "baseline",
+        "trial": 2,
+        "calls": 11849,
+        "counters": {
+          "cycles:u": 953646960,
+          "instructions:u": 5811248497,
+          "branches:u": 1001941251,
+          "branch-misses:u": 1460725
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n953646960;;cpu_core/cycles/u;220937005;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n5811248497;;cpu_core/instructions/u;220937005;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n1001941251;;cpu_core/branches/u;220937005;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n1460725;;cpu_core/branch-misses/u;220937005;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/baseline",
+          "binary",
+          "11849"
+        ],
+        "workload": "binary"
+      },
+      {
+        "variant": "typed_arguments",
+        "trial": 2,
+        "calls": 11849,
+        "counters": {
+          "cycles:u": 907228145,
+          "instructions:u": 5663835028,
+          "branches:u": 1001562072,
+          "branch-misses:u": 1313512
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n907228145;;cpu_core/cycles/u;207558706;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n5663835028;;cpu_core/instructions/u;207558706;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n1001562072;;cpu_core/branches/u;207558706;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n1313512;;cpu_core/branch-misses/u;207558706;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/production-typed/llvm",
+          "binary",
+          "11849"
+        ],
+        "workload": "binary"
+      },
+      {
+        "variant": "typed_arguments",
+        "trial": 3,
+        "calls": 11849,
+        "counters": {
+          "cycles:u": 903027723,
+          "instructions:u": 5663835023,
+          "branches:u": 1001562067,
+          "branch-misses:u": 1309807
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n903027723;;cpu_core/cycles/u;206707934;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n5663835023;;cpu_core/instructions/u;206707934;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n1001562067;;cpu_core/branches/u;206707934;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n1309807;;cpu_core/branch-misses/u;206707934;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/production-typed/llvm",
+          "binary",
+          "11849"
+        ],
+        "workload": "binary"
+      },
+      {
+        "variant": "baseline",
+        "trial": 3,
+        "calls": 11849,
+        "counters": {
+          "cycles:u": 956272299,
+          "instructions:u": 5811248445,
+          "branches:u": 1001941249,
+          "branch-misses:u": 1282124
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n956272299;;cpu_core/cycles/u;218694315;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n5811248445;;cpu_core/instructions/u;218694315;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n1001941249;;cpu_core/branches/u;218694315;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n1282124;;cpu_core/branch-misses/u;218694315;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/baseline",
+          "binary",
+          "11849"
+        ],
+        "workload": "binary"
+      },
+      {
+        "variant": "baseline",
+        "trial": 4,
+        "calls": 11849,
+        "counters": {
+          "cycles:u": 954592706,
+          "instructions:u": 5811248440,
+          "branches:u": 1001941244,
+          "branch-misses:u": 1381774
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n954592706;;cpu_core/cycles/u;219047228;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n5811248440;;cpu_core/instructions/u;219047228;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n1001941244;;cpu_core/branches/u;219047228;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n1381774;;cpu_core/branch-misses/u;219047228;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/baseline",
+          "binary",
+          "11849"
+        ],
+        "workload": "binary"
+      },
+      {
+        "variant": "typed_arguments",
+        "trial": 4,
+        "calls": 11849,
+        "counters": {
+          "cycles:u": 907899193,
+          "instructions:u": 5663835025,
+          "branches:u": 1001562069,
+          "branch-misses:u": 1323146
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n907899193;;cpu_core/cycles/u;207600865;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n5663835025;;cpu_core/instructions/u;207600865;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n1001562069;;cpu_core/branches/u;207600865;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n1323146;;cpu_core/branch-misses/u;207600865;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/production-typed/llvm",
+          "binary",
+          "11849"
+        ],
+        "workload": "binary"
+      },
+      {
+        "variant": "typed_arguments",
+        "trial": 5,
+        "calls": 11849,
+        "counters": {
+          "cycles:u": 913605719,
+          "instructions:u": 5663835033,
+          "branches:u": 1001562077,
+          "branch-misses:u": 1248035
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n913605719;;cpu_core/cycles/u;210254202;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n5663835033;;cpu_core/instructions/u;210254202;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n1001562077;;cpu_core/branches/u;210254202;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n1248035;;cpu_core/branch-misses/u;210254202;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/production-typed/llvm",
+          "binary",
+          "11849"
+        ],
+        "workload": "binary"
+      },
+      {
+        "variant": "baseline",
+        "trial": 5,
+        "calls": 11849,
+        "counters": {
+          "cycles:u": 947160398,
+          "instructions:u": 5811248444,
+          "branches:u": 1001941248,
+          "branch-misses:u": 1333195
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n947160398;;cpu_core/cycles/u;217189734;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n5811248444;;cpu_core/instructions/u;217189734;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n1001941248;;cpu_core/branches/u;217189734;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n1333195;;cpu_core/branch-misses/u;217189734;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/baseline",
+          "binary",
+          "11849"
+        ],
+        "workload": "binary"
+      },
+      {
+        "variant": "baseline",
+        "trial": 0,
+        "calls": 62,
+        "counters": {
+          "cycles:u": 715051920,
+          "instructions:u": 4814212179,
+          "branches:u": 583146846,
+          "branch-misses:u": 23548
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n715051920;;cpu_core/cycles/u;165233580;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n4814212179;;cpu_core/instructions/u;165233580;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n583146846;;cpu_core/branches/u;165233580;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n23548;;cpu_core/branch-misses/u;165233580;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/baseline",
+          "game_of_life",
+          "62"
+        ],
+        "workload": "game_of_life"
+      },
+      {
+        "variant": "typed_arguments",
+        "trial": 0,
+        "calls": 62,
+        "counters": {
+          "cycles:u": 716168711,
+          "instructions:u": 4769479284,
+          "branches:u": 582526850,
+          "branch-misses:u": 16856
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n716168711;;cpu_core/cycles/u;164922189;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n4769479284;;cpu_core/instructions/u;164922189;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n582526850;;cpu_core/branches/u;164922189;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n16856;;cpu_core/branch-misses/u;164922189;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/production-typed/llvm",
+          "game_of_life",
+          "62"
+        ],
+        "workload": "game_of_life"
+      },
+      {
+        "variant": "typed_arguments",
+        "trial": 1,
+        "calls": 62,
+        "counters": {
+          "cycles:u": 714689321,
+          "instructions:u": 4769479230,
+          "branches:u": 582526846,
+          "branch-misses:u": 17067
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n714689321;;cpu_core/cycles/u;164905073;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n4769479230;;cpu_core/instructions/u;164905073;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n582526846;;cpu_core/branches/u;164905073;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n17067;;cpu_core/branch-misses/u;164905073;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/production-typed/llvm",
+          "game_of_life",
+          "62"
+        ],
+        "workload": "game_of_life"
+      },
+      {
+        "variant": "baseline",
+        "trial": 1,
+        "calls": 62,
+        "counters": {
+          "cycles:u": 717070470,
+          "instructions:u": 4814212183,
+          "branches:u": 583146850,
+          "branch-misses:u": 18089
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n717070470;;cpu_core/cycles/u;166083156;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n4814212183;;cpu_core/instructions/u;166083156;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n583146850;;cpu_core/branches/u;166083156;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n18089;;cpu_core/branch-misses/u;166083156;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/baseline",
+          "game_of_life",
+          "62"
+        ],
+        "workload": "game_of_life"
+      },
+      {
+        "variant": "baseline",
+        "trial": 2,
+        "calls": 62,
+        "counters": {
+          "cycles:u": 714735189,
+          "instructions:u": 4814212180,
+          "branches:u": 583146847,
+          "branch-misses:u": 17655
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n714735189;;cpu_core/cycles/u;165746098;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n4814212180;;cpu_core/instructions/u;165746098;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n583146847;;cpu_core/branches/u;165746098;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n17655;;cpu_core/branch-misses/u;165746098;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/baseline",
+          "game_of_life",
+          "62"
+        ],
+        "workload": "game_of_life"
+      },
+      {
+        "variant": "typed_arguments",
+        "trial": 2,
+        "calls": 62,
+        "counters": {
+          "cycles:u": 719120207,
+          "instructions:u": 4769479230,
+          "branches:u": 582526846,
+          "branch-misses:u": 16617
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n719120207;;cpu_core/cycles/u;165085744;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n4769479230;;cpu_core/instructions/u;165085744;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n582526846;;cpu_core/branches/u;165085744;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n16617;;cpu_core/branch-misses/u;165085744;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/production-typed/llvm",
+          "game_of_life",
+          "62"
+        ],
+        "workload": "game_of_life"
+      },
+      {
+        "variant": "typed_arguments",
+        "trial": 3,
+        "calls": 62,
+        "counters": {
+          "cycles:u": 714149801,
+          "instructions:u": 4769479229,
+          "branches:u": 582526845,
+          "branch-misses:u": 16721
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n714149801;;cpu_core/cycles/u;165337068;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n4769479229;;cpu_core/instructions/u;165337068;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n582526845;;cpu_core/branches/u;165337068;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n16721;;cpu_core/branch-misses/u;165337068;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/production-typed/llvm",
+          "game_of_life",
+          "62"
+        ],
+        "workload": "game_of_life"
+      },
+      {
+        "variant": "baseline",
+        "trial": 3,
+        "calls": 62,
+        "counters": {
+          "cycles:u": 718092419,
+          "instructions:u": 4814212189,
+          "branches:u": 583146856,
+          "branch-misses:u": 20022
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n718092419;;cpu_core/cycles/u;168699931;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n4814212189;;cpu_core/instructions/u;168699931;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n583146856;;cpu_core/branches/u;168699931;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n20022;;cpu_core/branch-misses/u;168699931;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/baseline",
+          "game_of_life",
+          "62"
+        ],
+        "workload": "game_of_life"
+      },
+      {
+        "variant": "baseline",
+        "trial": 4,
+        "calls": 62,
+        "counters": {
+          "cycles:u": 717911348,
+          "instructions:u": 4814212187,
+          "branches:u": 583146854,
+          "branch-misses:u": 19648
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n717911348;;cpu_core/cycles/u;168911582;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n4814212187;;cpu_core/instructions/u;168911582;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n583146854;;cpu_core/branches/u;168911582;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n19648;;cpu_core/branch-misses/u;168911582;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/baseline",
+          "game_of_life",
+          "62"
+        ],
+        "workload": "game_of_life"
+      },
+      {
+        "variant": "typed_arguments",
+        "trial": 4,
+        "calls": 62,
+        "counters": {
+          "cycles:u": 715196209,
+          "instructions:u": 4769479235,
+          "branches:u": 582526851,
+          "branch-misses:u": 16759
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n715196209;;cpu_core/cycles/u;168755660;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n4769479235;;cpu_core/instructions/u;168755660;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n582526851;;cpu_core/branches/u;168755660;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n16759;;cpu_core/branch-misses/u;168755660;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/production-typed/llvm",
+          "game_of_life",
+          "62"
+        ],
+        "workload": "game_of_life"
+      },
+      {
+        "variant": "typed_arguments",
+        "trial": 5,
+        "calls": 62,
+        "counters": {
+          "cycles:u": 718039359,
+          "instructions:u": 4769479239,
+          "branches:u": 582526855,
+          "branch-misses:u": 17078
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n718039359;;cpu_core/cycles/u;167367713;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n4769479239;;cpu_core/instructions/u;167367713;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n582526855;;cpu_core/branches/u;167367713;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n17078;;cpu_core/branch-misses/u;167367713;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/production-typed/llvm",
+          "game_of_life",
+          "62"
+        ],
+        "workload": "game_of_life"
+      },
+      {
+        "variant": "baseline",
+        "trial": 5,
+        "calls": 62,
+        "counters": {
+          "cycles:u": 719052700,
+          "instructions:u": 4814212181,
+          "branches:u": 583146848,
+          "branch-misses:u": 18972
+        },
+        "stderr": "<not counted>;;cpu_atom/cycles/u;0;0.00;;\n719052700;;cpu_core/cycles/u;166980050;100.00;;\n<not counted>;;cpu_atom/instructions/u;0;0.00;;\n4814212181;;cpu_core/instructions/u;166980050;100.00;;\n<not counted>;;cpu_atom/branches/u;0;0.00;;\n583146848;;cpu_core/branches/u;166980050;100.00;;\n<not counted>;;cpu_atom/branch-misses/u;0;0.00;;\n18972;;cpu_core/branch-misses/u;166980050;100.00;;\n",
+        "command": [
+          "perf",
+          "stat",
+          "-x",
+          ";",
+          "-e",
+          "cycles:u,instructions:u,branches:u,branch-misses:u",
+          "--",
+          "/tmp/nacre-typed-arguments-6q_wmddm/baseline",
+          "game_of_life",
+          "62"
+        ],
+        "workload": "game_of_life"
+      }
+    ],
+    "summary_per_call": {
+      "json": {
+        "baseline": {
+          "cycles:u": 654.2141620849644,
+          "instructions:u": 4698.13166258445
+        },
+        "typed_arguments": {
+          "cycles:u": 668.585795736242,
+          "instructions:u": 4697.131666284344
+        }
+      },
+      "binary": {
+        "baseline": {
+          "cycles:u": 80634.01995949025,
+          "instructions:u": 490442.1002616255
+        },
+        "typed_arguments": {
+          "cycles:u": 76594.11503080429,
+          "instructions:u": 478001.0996708583
+        }
+      },
+      "game_of_life": {
+        "baseline": {
+          "cycles:u": 11572434.016129032,
+          "instructions:u": 77648583.58064516
+        },
+        "typed_arguments": {
+          "cycles:u": 11543265.483870968,
+          "instructions:u": 76927084.3951613
+        }
+      }
+    }
+  },
+  "footprint": {
+    "baseline_c": {
+      "text_category_bytes": 38805,
+      "data_bytes": 720,
+      "bss_bytes": 16,
+      "executable_sha256": "35e51b236938b58e47a6161363e8d95c5684ac655551524aa5a9f982997c52cb",
+      ".text_sha256": "114c5e418fbd8413adfae5d70c93c59daee9d8bdfbb9ff5eb0dd576f27fc8872",
+      ".rodata_sha256": "8bc64de7663673c5c908e1547bf542bf57e4df280260777c1df09e392dbe1ca1"
+    },
+    "baseline_llvm": {
+      "text_category_bytes": 40962,
+      "data_bytes": 712,
+      "bss_bytes": 16,
+      "executable_sha256": "fff67130c7f5eef35740321ba49d48ff8a4f884f79155173c9d747c253df5325"
+    },
+    "typed_c": {
+      "text_category_bytes": 38805,
+      "data_bytes": 720,
+      "bss_bytes": 16,
+      "executable_sha256": "03a1c07f5c96ff76da12c81be4a29fc190ba153427982c1011ec0751634c215f",
+      ".text_sha256": "114c5e418fbd8413adfae5d70c93c59daee9d8bdfbb9ff5eb0dd576f27fc8872",
+      ".rodata_sha256": "8bc64de7663673c5c908e1547bf542bf57e4df280260777c1df09e392dbe1ca1"
+    },
+    "typed_llvm": {
+      "text_category_bytes": 40830,
+      "data_bytes": 712,
+      "bss_bytes": 16,
+      "executable_sha256": "985b0103d51fb946f5e2040e08f95d32112376a4bcd314129e8d247e4a3a8c7d"
+    }
+  },
+  "validation": [
+    {
+      "label": "typed-argument-regression",
+      "command": [
+        "cargo",
+        "test",
+        "--offline",
+        "--locked",
+        "--features",
+        "fuzzing",
+        "--test",
+        "llvm_native",
+        "direct_mixed_arguments_preserve_owned_error_cleanup_and_interface_values",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "backend": null,
+      "returncode": 101,
+      "seconds": 1.792255637992639,
+      "passed": 0,
+      "failed": 0,
+      "ignored": 0,
+      "suite_count": 0,
+      "log": "/tmp/nacre-typed-arguments-6q_wmddm/typed-argument-regression.log"
+    },
+    {
+      "label": "typed-argument-regression-fixed",
+      "command": [
+        "cargo",
+        "test",
+        "--offline",
+        "--locked",
+        "--features",
+        "fuzzing",
+        "--test",
+        "llvm_native",
+        "direct_mixed_arguments_preserve_owned_error_cleanup_and_interface_values",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "backend": null,
+      "returncode": 0,
+      "seconds": 4.175211530993693,
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0,
+      "suite_count": 1,
+      "log": "/tmp/nacre-typed-arguments-6q_wmddm/typed-argument-regression-fixed.log"
+    },
+    {
+      "label": "typed-argument-release-build",
+      "command": [
+        "cargo",
+        "build",
+        "--release",
+        "--offline",
+        "--locked"
+      ],
+      "backend": null,
+      "returncode": 0,
+      "seconds": 28.22770812996896,
+      "passed": 0,
+      "failed": 0,
+      "ignored": 0,
+      "suite_count": 0,
+      "log": "/tmp/nacre-typed-arguments-6q_wmddm/typed-argument-release-build.log"
+    },
+    {
+      "label": "typed-arguments-full-c",
+      "command": [
+        "cargo",
+        "test",
+        "--offline",
+        "--locked",
+        "--features",
+        "fuzzing",
+        "--",
+        "--include-ignored",
+        "--test-threads=4"
+      ],
+      "backend": "c",
+      "returncode": 0,
+      "seconds": 275.5704562930041,
+      "passed": 1350,
+      "failed": 0,
+      "ignored": 0,
+      "suite_count": 68,
+      "log": "/tmp/nacre-typed-arguments-6q_wmddm/typed-arguments-full-c.log"
+    },
+    {
+      "label": "typed-arguments-full-llvm",
+      "command": [
+        "cargo",
+        "test",
+        "--offline",
+        "--locked",
+        "--features",
+        "fuzzing",
+        "--",
+        "--include-ignored",
+        "--test-threads=4"
+      ],
+      "backend": "llvm",
+      "returncode": 0,
+      "seconds": 625.5264255410293,
+      "passed": 1350,
+      "failed": 0,
+      "ignored": 0,
+      "suite_count": 68,
+      "log": "/tmp/nacre-typed-arguments-6q_wmddm/typed-arguments-full-llvm.log"
+    },
+    {
+      "label": "typed-arguments-clippy",
+      "command": [
+        "cargo",
+        "clippy",
+        "--offline",
+        "--locked",
+        "--all-targets",
+        "--features",
+        "fuzzing",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "backend": null,
+      "returncode": 0,
+      "seconds": 11.069567819999065,
+      "passed": 0,
+      "failed": 0,
+      "ignored": 0,
+      "suite_count": 0,
+      "log": "/tmp/nacre-typed-arguments-6q_wmddm/typed-arguments-clippy.log"
+    }
+  ],
+  "mixed_consumer": {
+    "source": "enum Packet { Empty; TextValue(Text); }\ninterface Merger {\n    Result<Text, Text> merge(byte amount, char marker, int adjustment, long base, double factor, boolean enabled, Text value, borrow Text suffix, Packet packet, String label);\n}\nclass Worker implements Merger {\n    private long expected;\n    public Worker(long expected) { this.expected = expected; }\n    public Result<Text, Text> merge(byte amount, char marker, int adjustment, long base, double factor, boolean enabled, Text value, borrow Text suffix, Packet packet, String label) {\n        if (!enabled) { return new Result<Text, Text>.Err(new Text(\"disabled\")); }\n        long digest = base + (long)(int)((double)amount * factor) + (long)adjustment + (long)(int)marker;\n        if (digest != this.expected) { return new Result<Text, Text>.Err(new Text(\"bad values\")); }\n        value.appendText(suffix);\n        Text labelText = new Text(label);\n        value.appendText(labelText);\n        match (packet) {\n            Empty { return new Result<Text, Text>.Err(new Text(\"empty packet\")); }\n            TextValue(extra) { value.appendText(extra); }\n        }\n        return new Result<Text, Text>.Ok(value);\n    }\n}\nvoid main() {\n    Merger worker = new Worker(9223372036854129815L);\n    Text suffix = new Text(\"!\");\n    match (worker.merge((byte)255, '\ud83e\uddea', -17, 9223372036854000000L, 1.25, true, new Text(\"go\"), suffix, new Packet.TextValue(new Text(\"?\")), \"#\")) {\n        Ok(value) { value.print(); }\n        Err(error) { error.print(); }\n    }\n    match (worker.merge((byte)255, '\ud83e\uddea', -17, 9223372036854000000L, 1.25, false, new Text(\"discard\"), suffix, new Packet.TextValue(new Text(\"discard\")), \"#\")) {\n        Ok(value) { value.print(); }\n        Err(error) { error.print(); }\n    }\n    suffix.print();\n}\n",
+    "baseline": [
+      {
+        "backend": "c",
+        "stdout": "go!#?\ndisabled\n!\n",
+        "memory": {
+          "allocations": 8,
+          "frees": 8,
+          "live": 0
+        }
+      },
+      {
+        "backend": "llvm",
+        "stdout": "go!#?\ndisabled\n!\n",
+        "memory": {
+          "allocations": 8,
+          "frees": 8,
+          "live": 0
+        }
+      }
+    ],
+    "final": [
+      {
+        "backend": "c",
+        "optimization": "-O0",
+        "stdout": "go!#?\ndisabled\n!\n",
+        "memory": {
+          "allocations": 8,
+          "frees": 8,
+          "live": 0
+        }
+      },
+      {
+        "backend": "llvm",
+        "optimization": "-O0",
+        "stdout": "go!#?\ndisabled\n!\n",
+        "memory": {
+          "allocations": 8,
+          "frees": 8,
+          "live": 0
+        }
+      },
+      {
+        "backend": "c",
+        "optimization": "-O3",
+        "stdout": "go!#?\ndisabled\n!\n",
+        "memory": {
+          "allocations": 8,
+          "frees": 8,
+          "live": 0
+        }
+      },
+      {
+        "backend": "llvm",
+        "optimization": "-O3",
+        "stdout": "go!#?\ndisabled\n!\n",
+        "memory": {
+          "allocations": 8,
+          "frees": 8,
+          "live": 0
+        }
+      }
+    ],
+    "gdb_commands": [
+      "set pagination off",
+      "set startup-with-shell off",
+      "starti",
+      "break /tmp/nacre-typed-arguments-6q_wmddm/mixed-arguments.ncr:7",
+      "continue",
+      "print expected",
+      "delete breakpoints",
+      "break /tmp/nacre-typed-arguments-6q_wmddm/mixed-arguments.ncr:10",
+      "continue",
+      "print amount",
+      "print /x marker",
+      "print adjustment",
+      "print base",
+      "print factor",
+      "print enabled",
+      "next",
+      "print digest",
+      "delete breakpoints",
+      "continue"
+    ],
+    "gdb_stdout": "\nProgram stopped.\n0x00007ffff7fdf7e0 in ?? () from /lib64/ld-linux-x86-64.so.2\nBreakpoint 1 at 0x555555556514: file mixed-arguments.ncr, line 7.\n[Thread debugging using libthread_db enabled]\nUsing host libthread_db library \"/usr/lib/libthread_db.so.1\".\n\nBreakpoint 1, ncr_llvm_fn_3 (expected=9223372036854129815) at mixed-arguments.ncr:7\n7\t    public Worker(long expected) { this.expected = expected; }\n$1 = 9223372036854129815\nBreakpoint 2 at 0x555555555475: file mixed-arguments.ncr, line 10.\n\nBreakpoint 2, ncr_llvm_fn_2 (amount=255 '\\377', marker=129514 U'\ud83e\uddea', adjustment=-17, base=9223372036854000000, factor=1.25, enabled=true) at mixed-arguments.ncr:10\n10\t        long digest = base + (long)(int)((double)amount * factor) + (long)adjustment + (long)(int)marker;\n$2 = 255 '\\377'\n$3 = 0x1f9ea\n$4 = -17\n$5 = 9223372036854000000\n$6 = 1.25\n$7 = true\n11\t        if (digest != this.expected) { return new Result<Text, Text>.Err(new Text(\"bad values\")); }\n$8 = 9223372036854129815\ngo!#?\ndisabled\n!\n[Inferior 1 (process 3510489) exited normally]\n",
+    "gdb_stderr": "\nwarning: .debug_names not created by gdb; ignoring\nNACRE_MEMORY allocations=8 frees=8 live=0\n"
+  },
+  "design_review": {
+    "principles": "https://rust-unofficial.github.io/patterns/additional_resources/design-principles.html",
+    "single_choice_dry": "c_repr::direct_input_abi is the exhaustive authoritative transport policy shared by C and LLVM emitters.",
+    "srp_kiss": "Uses the existing representation module and one two-case transport enum; no new subsystem, function-name exceptions, aggregate-return classifier or fallback ABI.",
+    "contract": "By-value transport never duplicates ownership. Callee owns moved thin references in addressable local homes; borrows never become owners. Address-passed aggregates, result slots, native/virtual contracts retained.",
+    "corrected_in_scope": [
+      "Removed obsolete incoming-pointer debug spills now that all supported scalar debug parameters have local value homes.",
+      "Renamed slot-only signature helper to direct_input_parameters.",
+      "Documented ownership/transport invariants and replaced wildcard policy fallback with an exhaustive Type match."
+    ]
+  },
+  "limits": [
+    "Single Linux x86-64 host; not a universal speedup. JSON paired elapsed +2.01%, cycles approximately+2.20% despite one fewer instruction percall; record this cost, not noise.",
+    "Hash-map samples have high process-to-process variability; no causal attribution for their observed change.",
+    "GNU size text category includes readonly sections. Tracked allocation counts are not allocator byte measurements."
+  ]
+}

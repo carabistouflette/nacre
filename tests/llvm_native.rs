@@ -228,6 +228,54 @@ void main() {
 }
 
 #[test]
+fn direct_mixed_arguments_preserve_owned_error_cleanup_and_interface_values() {
+    let source = r##"
+enum Packet { Empty; TextValue(Text); }
+interface Merger {
+    Result<Text, Text> merge(byte amount, char marker, int adjustment, long base, double factor, boolean enabled, Text value, borrow Text suffix, Packet packet, String label);
+}
+class Worker implements Merger {
+    private long expected;
+    public Worker(long expected) { this.expected = expected; }
+    public Result<Text, Text> merge(byte amount, char marker, int adjustment, long base, double factor, boolean enabled, Text value, borrow Text suffix, Packet packet, String label) {
+        if (!enabled) { return new Result<Text, Text>.Err(new Text("disabled")); }
+        long digest = base + (long)(int)((double)amount * factor) + (long)adjustment + (long)(int)marker;
+        if (digest != this.expected) { return new Result<Text, Text>.Err(new Text("bad values")); }
+        value.appendText(suffix);
+        Text labelText = new Text(label);
+        value.appendText(labelText);
+        match (packet) {
+            Empty { return new Result<Text, Text>.Err(new Text("empty packet")); }
+            TextValue(extra) { value.appendText(extra); }
+        }
+        return new Result<Text, Text>.Ok(value);
+    }
+}
+void main() {
+    Merger worker = new Worker(9223372036854129815L);
+    Text suffix = new Text("!");
+    match (worker.merge((byte)255, '🧪', -17, 9223372036854000000L, 1.25, true, new Text("go"), suffix, new Packet.TextValue(new Text("?")), "#")) {
+        Ok(value) { value.print(); }
+        Err(error) { error.print(); }
+    }
+    match (worker.merge((byte)255, '🧪', -17, 9223372036854000000L, 1.25, false, new Text("discard"), suffix, new Packet.TextValue(new Text("discard")), "#")) {
+        Ok(value) { value.print(); }
+        Err(error) { error.print(); }
+    }
+    suffix.print();
+}
+"##;
+    assert_direct_matches_c(
+        source,
+        b"go!#?\ndisabled\n!\n",
+        &[
+            "-O0", "-DNACRE_MEMORY_STATS", "-fsanitize=address,undefined",
+            "-fno-omit-frame-pointer", "-Werror=incompatible-pointer-types-discards-qualifiers",
+        ],
+    );
+}
+
+#[test]
 fn direct_runtime_links_gmp_and_preserves_big_integer_results() {
     let source = r#"
 void main() {
