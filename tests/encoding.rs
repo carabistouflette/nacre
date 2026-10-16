@@ -152,6 +152,58 @@ void main() {
 }
 
 #[test]
+fn hex_preserves_all_byte_values_at_vector_and_tail_boundaries() {
+    let source = r#"
+boolean checkHex(long length) {
+    match (ByteBuffer.withCapacity(length)) {
+        Err(error) { return false; }
+        Ok(bytes) {
+            long index = 0L;
+            while (index < length) {
+                bytes.append((byte)(index % 256L));
+                index = index + 1L;
+            }
+            Text encoded = Encoding.hexEncode(bytes);
+            match (Encoding.hexDecode(encoded)) {
+                Err(error) { return false; }
+                Ok(decoded) {
+                    if (decoded.length() != length) { return false; }
+                    index = 0L;
+                    while (index < length) {
+                        if (decoded.get(index) != (byte)(index % 256L)) { return false; }
+                        index = index + 1L;
+                    }
+                    return true;
+                }
+            }
+        }
+    }
+}
+void main() {
+    println(checkHex(0L));
+    println(checkHex(1L));
+    println(checkHex(15L));
+    println(checkHex(16L));
+    println(checkHex(17L));
+    println(checkHex(31L));
+    println(checkHex(32L));
+    println(checkHex(33L));
+    println(checkHex(63L));
+    println(checkHex(64L));
+    println(checkHex(65L));
+    println(checkHex(255L));
+    println(checkHex(256L));
+    println(checkHex(257L));
+}
+"#;
+    let output = support::compile_optimized(source, "-O3", &["-DNACRE_MEMORY_STATS"])
+        .unwrap_or_else(|error| panic!("native compile failed: {error}"))
+        .output()
+        .unwrap_or_else(|error| panic!("native execution failed: {error}"));
+    assert_clean(&output, "true\n".repeat(14).as_bytes());
+}
+
+#[test]
 fn decoders_accept_hex_case_and_reject_noncanonical_or_invalid_data() {
     let source = r#"
 void expectHexError(String raw) {

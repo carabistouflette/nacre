@@ -53,6 +53,10 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   slots, native/interface contracts, ownership cleanup, and source debugging.
   Verify mixed arguments and early-error cleanup under sanitizers; record the
   argument/return ablation, all six workloads, JSON cost, and executable footprint.
+- Keep the fresh hex-decoder destination byte pointer loop-invariant in the shared
+  native implementation, enabling vectorized conversion without changing validation,
+  allocation order, ownership, or compiler flags. Verify SIMD tails and all byte
+  values; record matched six-workload timing, counters, and the code-size cost.
 - Add optional `nacre doctor --direct` and `--zip` checks. Report selected LLVM
   tool versions and reject incompatible majors before compiling bitcode; verify
   native allocation balance and real binary/empty ZIP archive round-trips.

@@ -77,10 +77,12 @@ static int ncr_encoding_hex_digit_@ID@(unsigned char byte) {
     }
     const size_t decoded_length = input_length / 2;
     ncr_obj_@BUFFER_ID@ *decoded = ncr_encoding_buffer_with_capacity_@ID@(decoded_length, ncr_line, ncr_column);
+    /* No resize occurs during conversion; keep the destination loop-invariant. */
+    unsigned char *output = decoded->bytes;
     for (size_t index = 0; index < decoded_length; ++index) {
         const unsigned int high = (unsigned int)ncr_encoding_hex_digit_@ID@(input[index * 2]);
         const unsigned int low = (unsigned int)ncr_encoding_hex_digit_@ID@(input[index * 2 + 1]);
-        decoded->bytes[index] = (unsigned char)((high << 4) | low);
+        output[index] = (unsigned char)((high << 4) | low);
     }
     decoded->length = decoded_length;
     return (ncr_obj_@HEX_DECODE_RESULT@){

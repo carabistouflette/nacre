@@ -610,3 +610,95 @@ python3 benchmarks/run_suite.py --compare-backends --repeats 10 \
   --output /tmp/nacre-typed-arguments-runtime.json
 ```
 
+## Hex decode destination invariant
+
+The 2026-10-16 follow-up starts from `26431d7`. Full identities, flags, raw samples,
+staging controls, hardware counters, and verification are recorded in
+[hex-decode-controlled.json](../benchmarks/hex-decode-controlled.json).
+Preserved baseline executables and captured IR were reused, not rebuilt.
+
+### Causal control and permanent change
+
+The captured LLVM runtime's hex conversion was scalar and unrolled; it did not
+already carry a vectorized-loop marker. Late optimization reported potentially
+faulting loads and unidentified array bounds. Suppressing early loop/SLP
+vectorization or compiling the runtime at `-O1` did not restore vectorized
+conversion. Disabling SLP alone reproduced the baseline executable byte-for-byte;
+disabling both vectorizers reproduced the loop-vectorizer-only control.
+
+The narrower control cached `decoded->bytes` immediately after capacity allocation
+and used that pointer throughout conversion. The output is fresh and private,
+and conversion neither resizes nor exposes it. This makes its stable storage
+explicit without new alias promises. Validation still precedes allocation; error
+results, allocation order, ownership, and the final length update are unchanged.
+The shared `stdlib/encoding.c.in` implementation serves both backends. There is no
+compiler function-name exception or new optimization, inlining, or alignment flag.
+
+Clang's runtime remarks now report a conversion width of 32 with interleave 1.
+The optimized decoder loads the output pointer before its loop, reads 64 input
+bytes, separates even/odd digits, and stores 32 output bytes. An eight-byte vector
+epilogue and scalar tail handle shorter remainders. The early-exit validation loop
+remains scalar; a missed-vectorization remark at the call site alone must not be
+mistaken for failure to vectorize conversion.
+
+The production LLVM executable is byte-identical to the cached-pointer scratch
+control, and its user IR is byte-identical to the captured baseline user IR.
+C's final `.text` and `.rodata` are byte-identical to its preserved baseline.
+
+### Matched production measurements
+
+Sixteen balanced cyclic/reversed rounds on CPU 0 compared preserved/final C and
+LLVM executables at the same per-workload call counts as the staging experiment.
+Each fresh child was measured by the `wait4` supervisor and checksum-checked.
+Timing includes startup, dispatch, output, and shutdown. Negative paired change
+means faster:
+
+| Workload | C paired elapsed change | LLVM paired elapsed change | LLVM faster pairs / 16 |
+| --- | ---: | ---: | ---: |
+| JSON | +0.27% | +0.11% | 7 |
+| String | -1.49% | +1.94% | 6 |
+| Binary | +1.08% | -11.73% | 16 |
+| Hash map | +2.19% | +7.01% | 5 |
+| Sudoku | -0.09% | -2.53% | 10 |
+| Game of Life | -0.48% | -1.33% | 10 |
+
+Separate six-round alternating pairs collected user-mode counters without
+multiplexing:
+
+| Workload | LLVM baseline cycles/call | LLVM final cycles/call | Baseline instructions/call | Final instructions/call |
+| --- | ---: | ---: | ---: | ---: |
+| Binary | 77,457 | 68,072 | 478,002 | 423,507 |
+| JSON | 669.2 | 672.1 | 4,697 | 4,697 |
+| Hash map | 186,629 | 205,633 | 655,451 | 655,451 |
+| Game of Life | 11,531,495 | 11,474,679 | 76,927,264 | 76,927,264 |
+
+Binary's consistent elapsed and instruction reduction supports the conversion
+change. The first hash-map timing/counter cost is retained above, not discarded.
+A follow-up used two labels for each exact executable in 32 balanced rounds:
+the two old/new paired comparisons moved -0.40% and +1.20%, while identical-byte
+label comparisons moved +1.03% and +1.21%. The map effect did not reproduce;
+neither a map gain nor a resolved universal regression is established.
+The other small elapsed movements are not attributed to hex conversion.
+Identical C code also moved between runs, demonstrating measurement variation.
+
+### Footprint and correctness
+
+| Backend | Baseline text-category bytes | Final text-category bytes | Unchanged data / BSS bytes |
+| --- | ---: | ---: | ---: |
+| C | 38,805 | 38,805 | 720 / 16 |
+| Direct LLVM | 40,830 | 42,110 | 712 / 16 |
+
+Additional vector code costs space. GNU `size` includes read-only sections in
+its text category; these measurements are not allocator-byte measurements.
+This is one Linux x86-64 host with Clang 22.1.8 and `llvm-link` 22.1.0, not a
+cross-target performance guarantee.
+
+Both backends matched the Rust oracle for all six checksums and reported
+76 allocations, 76 frees, and zero live allocations. Release-CLI ASan/UBSan
+consumers passed at `-O0` and `-O3` on both backends: empty and vector/tail
+boundaries, all byte values, uppercase hex, odd lengths, invalid digits, NUL,
+Unicode, and late invalid input. Each reported balanced allocation counters.
+The permanent optimized boundary test checks every decoded byte and length.
+Both complete fuzzing-enabled suites, including ignored tests, passed 1,351
+tests each; strict all-target/all-feature Clippy and the release build passed.
+
