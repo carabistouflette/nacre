@@ -74,6 +74,8 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 - Copy `Text.slice` (scalar), `Text.trim`, and `Text.split` results through
   the trusted owned-copy path, removing redundant UTF-8 validation of verified
   character boundaries across the `Text` substring API.
+- Use `ncr_reallocate` for contiguous `Deque` capacity growth when `head` is zero,
+  avoiding allocate-copy-free cycles when ring buffer elements do not wrap around.
 - Fast-path short UTF-8 validation and single-byte stores in `Text.append`,
   reducing serialization and append overhead for common delimiter and newline tokens.
 - Index active borrower counts in `DeskState` (`lending_desk`), replacing the

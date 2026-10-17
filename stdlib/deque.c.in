@@ -13,6 +13,11 @@ static void ncr_deque_reserve_@ID@(ncr_obj_@ID@ *p, int32_t requested, size_t li
     if ((uint64_t)capacity > SIZE_MAX / sizeof(@ELEMENT@)) {
         ncr_fail("Deque capacity is too large", line, column);
     }
+    if (p->head == 0) {
+        p->items = ncr_reallocate(p->items, (size_t)capacity * sizeof(@ELEMENT@), line, column);
+        p->capacity = (int32_t)capacity;
+        return;
+    }
     @ELEMENT@ *items = ncr_allocate_raw((size_t)capacity * sizeof(@ELEMENT@), line, column);
     int32_t first = p->capacity - p->head;
     if (first > p->length) { first = p->length; }
