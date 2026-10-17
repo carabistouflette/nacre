@@ -76,6 +76,9 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   character boundaries across the `Text` substring API.
 - Use `ncr_reallocate` for contiguous `Deque` capacity growth when `head` is zero,
   avoiding allocate-copy-free cycles when ring buffer elements do not wrap around.
+- Add explicit capacity pre-sizing for `Text`: `public void reserve(int capacity)`
+  and `public readonly int capacity()`, matching `List` and `Deque` conventions
+  to eliminate repeated geometric reallocations when building large text output.
 - Fast-path short UTF-8 validation and single-byte stores in `Text.append`,
   reducing serialization and append overhead for common delimiter and newline tokens.
 - Index active borrower counts in `DeskState` (`lending_desk`), replacing the

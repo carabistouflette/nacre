@@ -405,6 +405,8 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
         (C::Text, "appendText") => M::TextAppendText,
         (C::Text, "byteLength") => M::TextByteLength,
         (C::Text, "byteAt") => M::TextByteAt,
+        (C::Text, "capacity") => M::TextCapacity,
+        (C::Text, "reserve") => M::TextReserve,
         (C::Text, "isEmpty") => M::TextIsEmpty,
         (C::Text, "clear") => M::TextClear,
         (C::Text, "print") => M::TextPrint,

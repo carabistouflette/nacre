@@ -11,6 +11,8 @@ class Text {
     public void appendText(borrow Text other) {}
     public readonly int byteLength() {}
     public readonly int byteAt(int index) {}
+    public readonly int capacity() {}
+    public void reserve(int capacity) {}
     public readonly boolean isEmpty() {}
     public void clear() {}
     public readonly void print() {}

@@ -198,6 +198,7 @@ pub(super) fn marker(method: M) -> &'static str {
         M::TextAppendLong => "@TEXT_APPEND_LONG@", M::TextAppendDouble => "@TEXT_APPEND_DOUBLE@",
         M::TextAppendBoolean => "@TEXT_APPEND_BOOLEAN@", M::TextAppendText => "@TEXT_APPEND_TEXT@",
         M::TextByteLength => "@TEXT_BYTE_LENGTH@", M::TextByteAt => "@TEXT_BYTE_AT@",
+        M::TextCapacity => "@TEXT_CAPACITY@", M::TextReserve => "@TEXT_RESERVE@",
         M::TextIsEmpty => "@TEXT_IS_EMPTY@", M::TextClear => "@TEXT_CLEAR@",
         M::TextPrint => "@TEXT_PRINT@", M::TextClone => "@TEXT_CLONE@",
         M::TextEquals => "@TEXT_EQUALS@", M::TextEqualsString => "@TEXT_EQUALS_STRING@",

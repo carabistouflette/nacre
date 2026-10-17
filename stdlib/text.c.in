@@ -1,19 +1,24 @@
 /* Native owned UTF-8 byte text; no returned pointers or temporary String views. */
+static void ncr_text_reserve_@ID@(ncr_obj_@ID@ *p, int32_t requested, size_t line, size_t column) {
+    if (__builtin_expect(requested < 0, 0)) { ncr_fail("Text capacity is too large", line, column); }
+    if (requested <= p->capacity) { return; }
+    int64_t capacity = p->capacity;
+    while (capacity < requested) { capacity = capacity > INT32_MAX / 2 ? INT32_MAX : capacity * 2; }
+    if ((uint64_t)capacity > SIZE_MAX) { ncr_fail("Text is too large", line, column); }
+    unsigned char *bytes;
+    if (p->bytes == p->inline_storage) {
+        bytes = ncr_allocate_raw((size_t)capacity, line, column);
+        if (p->length > 0) { memcpy(bytes, p->bytes, (size_t)p->length); }
+    } else {
+        bytes = ncr_reallocate(p->bytes, (size_t)capacity, line, column);
+    }
+    p->bytes = bytes; p->capacity = (int32_t)capacity;
+}
 static void ncr_text_append_@ID@(ncr_obj_@ID@ *p, const unsigned char *data, size_t length, size_t line, size_t column) {
     if (length > (size_t)(INT32_MAX - p->length)) { ncr_fail("Text is too large", line, column); }
     int32_t required = p->length + (int32_t)length;
-    if (required > p->capacity) {
-        int64_t capacity = p->capacity;
-        while (capacity < required) { capacity = capacity > INT32_MAX / 2 ? INT32_MAX : capacity * 2; }
-        if ((uint64_t)capacity > SIZE_MAX) { ncr_fail("Text is too large", line, column); }
-        unsigned char *bytes;
-        if (p->bytes == p->inline_storage) {
-            bytes = ncr_allocate_raw((size_t)capacity, line, column);
-            if (p->length > 0) { memcpy(bytes, p->bytes, (size_t)p->length); }
-        } else {
-            bytes = ncr_reallocate(p->bytes, (size_t)capacity, line, column);
-        }
-        p->bytes = bytes; p->capacity = (int32_t)capacity;
+    if (__builtin_expect(required > p->capacity, 0)) {
+        ncr_text_reserve_@ID@(p, required, line, column);
     }
     /* The frontend forbids self-aliasing for appendText's retained argument. */
     if (length == 1) {
@@ -89,6 +94,12 @@ static int32_t @TEXT_BYTE_LENGTH@(ncr_obj_@ID@ *p, size_t line, size_t column) {
 static int32_t @TEXT_BYTE_AT@(ncr_obj_@ID@ *p, int32_t index, size_t line, size_t column) {
     if (index < 0 || index >= p->length) { ncr_fail("Text index out of bounds", line, column); }
     return p->bytes[index];
+}
+static inline int32_t @TEXT_CAPACITY@(ncr_obj_@ID@ *p, size_t line, size_t column) {
+    (void)line; (void)column; return p->capacity;
+}
+static void @TEXT_RESERVE@(ncr_obj_@ID@ *p, int32_t capacity, size_t line, size_t column) {
+    ncr_text_reserve_@ID@(p, capacity, line, column);
 }
 static bool @TEXT_IS_EMPTY@(ncr_obj_@ID@ *p, size_t line, size_t column) {
     (void)line; (void)column; return p->length == 0;

@@ -282,7 +282,7 @@ pub enum NativeMethod {
     IteratorsTake, IteratorsSkip,
     TextNew, TextAppend, TextAppendInt, TextAppendByte, TextAppendChar, TextAppendLong, TextAppendDouble,
     TextAppendBoolean, TextAppendText,
-    TextByteLength, TextByteAt, TextIsEmpty, TextClear, TextPrint,
+    TextByteLength, TextByteAt, TextCapacity, TextReserve, TextIsEmpty, TextClear, TextPrint,
     TextClone, TextEquals, TextEqualsString, TextParseInt, TextParseLong, TextParseDouble, TextSliceBytes,
     TextCharCount, TextCharAt, TextCompareTo, TextIndexOf, TextStartsWith, TextEndsWith,
     TextSlice, TextTrim, TextReplace, TextSplit,

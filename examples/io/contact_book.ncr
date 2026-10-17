@@ -501,6 +501,7 @@ class ContactBook {
 
     private readonly Text encode() {
         Text output = new Text("");
+        output.reserve(this.contacts.size() * 48);
         output.appendInt(1);
         output.append("\n");
         output.appendInt(this.contacts.size());

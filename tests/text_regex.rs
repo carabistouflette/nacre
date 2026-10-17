@@ -938,3 +938,22 @@ void main() {
 "#);
     assert_eq!(output.stdout, b"true\n".repeat(9));
 }
+
+#[test]
+fn text_reserve_preserves_content_and_increases_capacity() {
+    let output = execute(r#"
+void main() {
+    Text text = new Text("hello-é");
+    println(text.capacity() >= 23);
+    println(text.byteLength() == 8);
+    text.reserve(100);
+    println(text.capacity() >= 100);
+    println(text.equalsString("hello-é"));
+    text.append("-world");
+    println(text.equalsString("hello-é-world"));
+    println(text.capacity() >= 100);
+    drop(text);
+}
+"#);
+    assert_eq!(output.stdout, b"true\n".repeat(6));
+}
