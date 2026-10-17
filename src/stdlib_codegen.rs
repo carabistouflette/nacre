@@ -60,6 +60,7 @@ pub(crate) fn preamble(program: &t::Program) -> String {
 pub(crate) fn should_emit_prototype(program: &t::Program, function: &t::Function) -> bool {
     (!function.native.is_some_and(big_numbers::is_numeric_method) || big_numbers::is_used(program))
         && (!function.native.is_some_and(uuid::is_uuid_method) || uuid::is_used(program))
+        && (!function.native.is_some_and(crypto::is_crypto_method) || crypto::is_used(program))
 }
 
 pub fn fields(program: &t::Program, class: C, class_id: usize) -> String {
@@ -207,6 +208,15 @@ pub(crate) fn map_slot_expression(
 
 fn append_body(program: &t::Program, out: &mut String, class: &t::Class, native: C) {
     if matches!(native, C::DateTime) && !date_time::is_used(program) {
+        return;
+    }
+    if matches!(native, C::Temporal) && !temporal::is_used(program) {
+        return;
+    }
+    if matches!(native, C::Uuid) && !uuid::is_used(program) {
+        return;
+    }
+    if matches!(native, C::Crypto) && !crypto::is_used(program) {
         return;
     }
     let mut body = match native {

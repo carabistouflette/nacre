@@ -84,6 +84,10 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 - Index active borrower counts in `DeskState` (`lending_desk`), replacing the
   $O(N)$ full-catalog scan in `hasActiveLoanFor` with an $O(1)$ check and accelerating
   non-borrower member removals by ~45% without changing catalog or persistence invariants.
+- Add `--json` structured output support to `nacre bench`, emitting parseable
+  throughput (ops/sec, ns/iter, max diff) and suite execution summaries.
+- Prune unused `Crypto`, `Uuid`, and `Temporal` native implementation bodies and
+  prototypes in C code generation, reducing generated C translation unit size and compilation time.
 - Add optional `nacre doctor --direct` and `--zip` checks. Report selected LLVM
   tool versions and reject incompatible majors before compiling bitcode; verify
   native allocation balance and real binary/empty ZIP archive round-trips.

@@ -23,14 +23,14 @@ fn assert_parameters(function: &t::Function, expected: &[Type]) {
     }
 }
 
-fn is_crypto_method(method: M) -> bool {
+pub(crate) fn is_crypto_method(method: M) -> bool {
     matches!(method,
         M::CryptoRandomBytes | M::CryptoDigest | M::CryptoHmac | M::CryptoPbkdf2 |
         M::CryptoHkdf | M::CryptoAesGcmEncrypt | M::CryptoAesGcmDecrypt |
         M::CryptoConstantTimeEquals)
 }
 
-fn is_used(program: &t::Program) -> bool {
+pub(crate) fn is_used(program: &t::Program) -> bool {
     native_usage::any(program, is_crypto_method)
 }
 

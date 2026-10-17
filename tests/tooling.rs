@@ -106,8 +106,10 @@ void bench_simple_math() {
 "#,
     ).unwrap();
 
-    let exit_code = nacre::bench_runner::run_benchmarks(&[bench_file], None, false, false, false).unwrap();
+    let exit_code = nacre::bench_runner::run_benchmarks(std::slice::from_ref(&bench_file), None, false, false, false, false).unwrap();
     assert_eq!(exit_code, 0);
+    let exit_code_json = nacre::bench_runner::run_benchmarks(&[bench_file], None, false, false, false, true).unwrap();
+    assert_eq!(exit_code_json, 0);
 
     let _ = fs::remove_dir_all(&temp_dir);
 }

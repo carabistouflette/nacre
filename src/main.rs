@@ -15,7 +15,7 @@ const HELP: &str = "Nacre — experimental native compiler written in Rust
 Usage:
   nacre check  [source.ncr ... | directory | Nacre.toml]
   nacre test   source.ncr ... | directory [--native] [--lto] [--jemalloc] [-- filter]
-  nacre bench  source.ncr ... | directory [--native] [--lto] [--jemalloc] [-- filter]
+  nacre bench  source.ncr ... | directory [--native] [--lto] [--jemalloc] [--json] [-- filter]
   nacre fmt    source.ncr ... | directory [--check]
   nacre doc    source.ncr ... | directory [-o output-dir]
   nacre run    [source.ncr ... | directory | Nacre.toml] [--release] [--memory-stats] [--direct] [--native] [--lto] [--jemalloc] [-O0|-O1|-O2|-O3|-Os] [-- arguments...]
@@ -148,6 +148,7 @@ fn execute(args: Vec<OsString>) -> Result<i32, String> {
     let mut direct_llvm = false;
     let mut optimization = None;
     let mut program_args = &args[args.len()..];
+    let mut json_output = false;
     let mut i = 1;
     while i < args.len() {
         if args[i] == "--" && command == "run" {
@@ -184,6 +185,8 @@ fn execute(args: Vec<OsString>) -> Result<i32, String> {
             i += 1;
         } else if args[i] == "--jemalloc" && matches!(command, "run" | "build" | "test" | "bench") && !jemalloc {
             jemalloc = true; i += 1;
+        } else if args[i] == "--json" && command == "bench" && !json_output {
+            json_output = true; i += 1;
         } else if args[i].to_string_lossy().starts_with("--pgo-generate") && matches!(command, "run" | "build") && pgo_generate.is_none() {
             let path = if let Some(dir) = args[i].to_str().and_then(|s| s.strip_prefix("--pgo-generate=")) {
                 PathBuf::from(dir)
@@ -230,7 +233,7 @@ fn execute(args: Vec<OsString>) -> Result<i32, String> {
         return nacre::test_runner::run_tests(&sources, filter.as_deref(), native_arch, lto, jemalloc);
     }
     if command == "bench" {
-        return nacre::bench_runner::run_benchmarks(&sources, filter.as_deref(), native_arch, lto, jemalloc);
+        return nacre::bench_runner::run_benchmarks(&sources, filter.as_deref(), native_arch, lto, jemalloc, json_output);
     }
     if command == "fmt" {
         return nacre::fmt::format_files(&sources, check_only);

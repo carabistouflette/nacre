@@ -14,6 +14,7 @@ pub fn run_benchmarks(
     native_arch: bool,
     lto: bool,
     jemalloc: bool,
+    json_output: bool,
 ) -> Result<i32, String> {
     let bundle = SourceBundle::from_test_paths(sources)?;
     let typed = bundle.typed().map_err(|d| bundle.render(&d))?;
@@ -35,9 +36,23 @@ pub fn run_benchmarks(
         .partition(|(name, _)| filter.is_none_or(|f| name.contains(f)));
 
     let filtered_count = filtered_out.len();
-    println!("\nrunning {} benchmark(s)", bench_cases.len());
+    if !json_output {
+        println!("\nrunning {} benchmark(s)", bench_cases.len());
+    }
     if bench_cases.is_empty() {
-        println!("\ntest result: ok. 0 passed; 0 failed; {filtered_count} filtered out; finished in 0.00s\n");
+        if json_output {
+            let payload = serde_json::json!({
+                "type": "bench",
+                "benchmarks": [],
+                "passed": 0,
+                "failed": 0,
+                "filtered_out": filtered_count,
+                "duration_seconds": 0.0
+            });
+            println!("{}", serde_json::to_string_pretty(&payload).map_err(|e| e.to_string())?);
+        } else {
+            println!("\ntest result: ok. 0 passed; 0 failed; {filtered_count} filtered out; finished in 0.00s\n");
+        }
         return Ok(0);
     }
 
@@ -115,10 +130,13 @@ static void ncr_run_bench_{id}(const char *name) {{
 
     let mut passed = 0;
     let mut failed = 0;
+    let mut bench_results = Vec::new();
     let suite_start = Instant::now();
 
     for (name, _) in &bench_cases {
-        print!("test {name} ... ");
+        if !json_output {
+            print!("test {name} ... ");
+        }
         let output = Command::new(program.path()).arg(name).output()
             .map_err(|e| format!("failed to execute benchmark process: {e}"))?;
 
@@ -129,36 +147,66 @@ static void ncr_run_bench_{id}(const char *name) {{
                 if let Some(rest) = line.strip_prefix("BENCH_RESULT: ") {
                     let parts: Vec<&str> = rest.split_whitespace().collect();
                     if parts.len() >= 4 {
-                        let ns = parts[1];
-                        let diff = parts[2];
-                        let ops = parts[3];
-                        let formatted_ops = format_with_commas(ops);
-                        println!("bench: {:>8} ns/iter (+/- {:>4}) ({} ops/sec)", ns, diff, formatted_ops);
+                        let ns: u64 = parts[1].parse().unwrap_or(0);
+                        let diff: u64 = parts[2].parse().unwrap_or(0);
+                        let ops: u64 = parts[3].parse().unwrap_or(0);
+                        if json_output {
+                            bench_results.push(serde_json::json!({
+                                "name": name,
+                                "ns_per_iter": ns,
+                                "max_diff_ns": diff,
+                                "ops_per_sec": ops,
+                                "status": "ok"
+                            }));
+                        } else {
+                            let formatted_ops = format_with_commas(parts[3]);
+                            println!("bench: {:>8} ns/iter (+/- {:>4}) ({} ops/sec)", ns, diff, formatted_ops);
+                        }
                         reported = true;
                         break;
                     }
                 }
             }
             if !reported {
-                println!("ok");
+                if json_output {
+                    bench_results.push(serde_json::json!({ "name": name, "status": "ok" }));
+                } else {
+                    println!("ok");
+                }
             }
             passed += 1;
         } else {
-            println!("FAILED");
-            failed += 1;
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            for line in stderr.lines() {
-                eprintln!("    {line}");
+            if json_output {
+                bench_results.push(serde_json::json!({ "name": name, "status": "failed" }));
+            } else {
+                println!("FAILED");
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                for line in stderr.lines() {
+                    eprintln!("    {line}");
+                }
             }
+            failed += 1;
         }
     }
 
     let suite_duration = suite_start.elapsed();
-    let verdict = if failed == 0 { "ok" } else { "FAILED" };
-    println!(
-        "\ntest result: {verdict}. {passed} passed; {failed} failed; {filtered_count} filtered out; finished in {:.2?}\n",
-        suite_duration
-    );
+    if json_output {
+        let payload = serde_json::json!({
+            "type": "bench",
+            "benchmarks": bench_results,
+            "passed": passed,
+            "failed": failed,
+            "filtered_out": filtered_count,
+            "duration_seconds": suite_duration.as_secs_f64()
+        });
+        println!("{}", serde_json::to_string_pretty(&payload).map_err(|e| e.to_string())?);
+    } else {
+        let verdict = if failed == 0 { "ok" } else { "FAILED" };
+        println!(
+            "\ntest result: {verdict}. {passed} passed; {failed} failed; {filtered_count} filtered out; finished in {:.2?}\n",
+            suite_duration
+        );
+    }
 
     if failed > 0 {
         Ok(1)
