@@ -56,7 +56,7 @@ fn map_span<'a>(
     Some(LocalSpan { uri, source: location.source, start, end })
 }
 
-fn range_json(source: &str, start: usize, end: usize) -> Value {
+pub(super) fn range_json(source: &str, start: usize, end: usize) -> Value {
     let start = offset_position(source, start);
     let end = offset_position(source, end.max(start.2));
     json!({
@@ -65,7 +65,7 @@ fn range_json(source: &str, start: usize, end: usize) -> Value {
     })
 }
 
-fn offset_position(source: &str, offset: usize) -> (usize, usize, usize) {
+pub(super) fn offset_position(source: &str, offset: usize) -> (usize, usize, usize) {
     let offset = char_boundary(source, offset);
     let prefix = &source[..offset];
     let line = prefix.bytes().filter(|byte| *byte == b'\n').count();
@@ -74,6 +74,56 @@ fn offset_position(source: &str, offset: usize) -> (usize, usize, usize) {
     (line, line_prefix.encode_utf16().count(), offset)
 }
 
+pub(super) fn position_to_offset(source: &str, line: usize, character: usize) -> usize {
+    let mut current_line = 0;
+    let mut line_start = 0;
+    for (index, byte) in source.bytes().enumerate() {
+        if current_line == line {
+            break;
+        }
+        if byte == b'\n' {
+            current_line += 1;
+            line_start = index + 1;
+        }
+    }
+    if current_line < line {
+        return source.len();
+    }
+    let line_slice = &source[line_start..];
+    let mut utf16_count = 0;
+    let mut byte_offset = 0;
+    for ch in line_slice.chars() {
+        if ch == '\n' || ch == '\r' || utf16_count >= character {
+            break;
+        }
+        utf16_count += ch.len_utf16();
+        byte_offset += ch.len_utf8();
+    }
+    char_boundary(source, line_start + byte_offset)
+}
+
+pub(super) fn word_at_offset(source: &str, offset: usize) -> Option<(&str, usize, usize)> {
+    if source.is_empty() { return None; }
+    let offset = char_boundary(source, offset.min(source.len()));
+    let bytes = source.as_bytes();
+    if offset >= bytes.len() {
+        return None;
+    }
+    let is_ident = |b: u8| b.is_ascii_alphanumeric() || b == b'_';
+    let mut start = offset;
+    while start > 0 && is_ident(bytes[start - 1]) {
+        start -= 1;
+    }
+    let mut end = offset;
+    while end < bytes.len() && is_ident(bytes[end]) {
+        end += 1;
+    }
+    if start == end {
+        return None;
+    }
+    let word = std::str::from_utf8(&bytes[start..end]).ok()?;
+    Some((word, start, end))
+}
 #[cfg(test)]
 mod tests {
     use super::*;

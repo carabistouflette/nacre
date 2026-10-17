@@ -20,6 +20,7 @@ mod source_files;
 use source_files::{
     configured_source_roots, source_root_contains, reject_symlink_path, collect_recursive, read_source,
 };
+mod queries;
 
 const MAX_MESSAGE_BYTES: usize = 8 * MAX_SOURCE_BYTES;
 #[cfg(feature = "fuzzing")]
@@ -154,6 +155,9 @@ impl Server {
                                 "change": 1,
                                 "save": { "includeText": false }
                             },
+                            "hoverProvider": true,
+                            "documentSymbolProvider": true,
+                            "definitionProvider": true,
                             "workspace": {
                                 "workspaceFolders": {
                                     "supported": true,
@@ -185,6 +189,21 @@ impl Server {
             "textDocument/didChange" if self.initialized => self.did_change(params, output)?,
             "textDocument/didSave" if self.initialized => self.did_save(params, output)?,
             "textDocument/didClose" if self.initialized => self.did_close(params, output)?,
+            "textDocument/documentSymbol" if self.initialized && has_id => {
+                let result = self.document_symbols(params)?;
+                send(output, json!({ "jsonrpc": "2.0", "id": id.unwrap_or(Value::Null), "result": result }))
+                    .map_err(|error| format!("LSP output failed: {error}"))?;
+            }
+            "textDocument/hover" if self.initialized && has_id => {
+                let result = self.hover(params)?;
+                send(output, json!({ "jsonrpc": "2.0", "id": id.unwrap_or(Value::Null), "result": result }))
+                    .map_err(|error| format!("LSP output failed: {error}"))?;
+            }
+            "textDocument/definition" if self.initialized && has_id => {
+                let result = self.definition(params)?;
+                send(output, json!({ "jsonrpc": "2.0", "id": id.unwrap_or(Value::Null), "result": result }))
+                    .map_err(|error| format!("LSP output failed: {error}"))?;
+            }
             _ if has_id => self.respond_error(output, id.unwrap_or(Value::Null), -32601, "Method not found")?,
             _ => {}
         }
@@ -267,6 +286,72 @@ impl Server {
         }
         Ok(())
     }
+    fn document_symbols(&self, params: &Value) -> Result<Value, String> {
+        let Some(document) = params.get("textDocument") else { return Ok(json!([])); };
+        let Some(uri) = document.get("uri").and_then(Value::as_str) else { return Ok(json!([])); };
+        let Some(path) = uri_to_path(uri) else { return Ok(json!([])); };
+        let scope = self.scope_for(&path);
+        let mut files = match self.load_scope_files(&scope) {
+            Ok(files) => files,
+            Err(_) => return Ok(json!([])),
+        };
+        let file_source = files.iter().find(|f| f.path == path).map(|f| f.text.clone()).unwrap_or_default();
+        let source_list = files.iter_mut().map(|file| {
+            (file.path.to_str().expect("URI paths are UTF-8").to_owned(), std::mem::take(&mut file.text))
+        }).collect();
+        let Ok(bundle) = SourceBundle::from_sources(source_list) else { return Ok(json!([])); };
+        let symbols = queries::document_symbols(&bundle, &path, &file_source);
+        Ok(json!(symbols))
+    }
+
+    fn hover(&self, params: &Value) -> Result<Value, String> {
+        let Some(document) = params.get("textDocument") else { return Ok(Value::Null); };
+        let Some(uri) = document.get("uri").and_then(Value::as_str) else { return Ok(Value::Null); };
+        let Some(path) = uri_to_path(uri) else { return Ok(Value::Null); };
+        let Some(pos) = params.get("position") else { return Ok(Value::Null); };
+        let (Some(line), Some(character)) = (
+            pos.get("line").and_then(Value::as_u64),
+            pos.get("character").and_then(Value::as_u64),
+        ) else { return Ok(Value::Null); };
+        let scope = self.scope_for(&path);
+        let mut files = match self.load_scope_files(&scope) {
+            Ok(files) => files,
+            Err(_) => return Ok(Value::Null),
+        };
+        let file_source = files.iter().find(|f| f.path == path).map(|f| f.text.clone()).unwrap_or_default();
+        let source_list = files.iter_mut().map(|file| {
+            (file.path.to_str().expect("URI paths are UTF-8").to_owned(), std::mem::take(&mut file.text))
+        }).collect();
+        let Ok(bundle) = SourceBundle::from_sources(source_list) else { return Ok(Value::Null); };
+        let hover_value = queries::hover(&bundle, &path, &file_source, line as usize, character as usize);
+        Ok(hover_value.unwrap_or(Value::Null))
+    }
+
+    fn definition(&self, params: &Value) -> Result<Value, String> {
+        let Some(document) = params.get("textDocument") else { return Ok(Value::Null); };
+        let Some(uri) = document.get("uri").and_then(Value::as_str) else { return Ok(Value::Null); };
+        let Some(path) = uri_to_path(uri) else { return Ok(Value::Null); };
+        let Some(pos) = params.get("position") else { return Ok(Value::Null); };
+        let (Some(line), Some(character)) = (
+            pos.get("line").and_then(Value::as_u64),
+            pos.get("character").and_then(Value::as_u64),
+        ) else { return Ok(Value::Null); };
+        let scope = self.scope_for(&path);
+        let mut files = match self.load_scope_files(&scope) {
+            Ok(files) => files,
+            Err(_) => return Ok(Value::Null),
+        };
+        let file_source = files.iter().find(|f| f.path == path).map(|f| f.text.clone()).unwrap_or_default();
+        let file_map: HashMap<PathBuf, String> = files.iter().map(|f| (f.path.clone(), f.uri.clone())).collect();
+        let source_list = files.iter_mut().map(|file| {
+            (file.path.to_str().expect("URI paths are UTF-8").to_owned(), std::mem::take(&mut file.text))
+        }).collect();
+        let Ok(bundle) = SourceBundle::from_sources(source_list) else { return Ok(Value::Null); };
+        let def = queries::definition(&bundle, &path, &file_source, line as usize, character as usize, |p| {
+            file_map.get(p).cloned().or_else(|| path_to_uri(p))
+        });
+        Ok(def.unwrap_or(Value::Null))
+    }
 
     fn change_workspace_folders(&mut self, params: &Value) {
         let Some(event) = params.get("event") else { return; };
@@ -317,7 +402,20 @@ impl Server {
             Ok(files) => files,
             Err(message) => {
                 self.log(output, 2, &format!("Nacre validation unavailable for {}: {message}", scope.root.display()))?;
-                self.publish_scope_diagnostics(scope, output, excluded_uri, HashMap::new(), None)?;
+                let mut manifest_diagnostics = HashMap::new();
+                let manifest_path = scope.root.join("Nacre.toml");
+                if manifest_path.is_file() && let Some(uri) = path_to_uri(&manifest_path) {
+                    manifest_diagnostics.insert(uri, vec![json!({
+                        "range": {
+                            "start": { "line": 0, "character": 0 },
+                            "end": { "line": 0, "character": 0 }
+                        },
+                        "severity": 1,
+                        "source": "Nacre",
+                        "message": message
+                    })]);
+                }
+                self.publish_scope_diagnostics(scope, output, excluded_uri, manifest_diagnostics, None)?;
                 return Ok(());
             }
         };
@@ -362,6 +460,11 @@ impl Server {
                 if self.scope_for(path) == *scope {
                     targets.insert(document.uri.clone(), Some(document.version));
                 }
+            }
+        }
+        for uri in diagnostics.keys() {
+            if !targets.contains_key(uri) {
+                targets.insert(uri.clone(), None);
             }
         }
         if let Some(excluded_uri) = excluded_uri { targets.remove(excluded_uri); }

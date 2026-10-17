@@ -96,6 +96,10 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   `nacre new`, `nacre add`, and `nacre build/run --release` use the manifest;
   the LSP recognizes it while retaining existing `nacre.json` projects.
   Generated helper modules use distinct, punctuation-preserving package namespaces.
+- Add LSP document symbols (`textDocument/documentSymbol`), hover (`textDocument/hover`),
+  and go-to-definition (`textDocument/definition`) providers for classes, interfaces,
+  enums, variants, methods, fields, and functions. Report diagnostics on invalid `Nacre.toml`
+  manifests instead of silently dropping diagnostic publication.
 - Build canonical generic-specialization names directly in their final buffer.
   One argument writer owns separators and nested type spelling, eliminating
   temporary argument strings, vectors, and joins while preserving names,

@@ -320,3 +320,117 @@ fn missing_source_root_overlays(marker: &str, configuration: &str) {
     client.send(json!({ "jsonrpc": "2.0", "method": "exit" }));
     client.finish();
 }
+
+#[test]
+fn lsp_supports_document_symbols_hover_and_definition() {
+    let temp = TempDir::new();
+    let source_dir = temp.0.join("src");
+    fs::create_dir(&source_dir).unwrap();
+    fs::write(temp.0.join("Nacre.toml"), "[package]\nname = 'demo'\nversion = '0.1.0'\nsources = ['src']\n").unwrap();
+
+    let types_path = source_dir.join("Types.ncr");
+    let main_path = source_dir.join("Main.ncr");
+    let types_source = "public class Item {\n    private int count;\n    public Item(int count) { this.count = count; }\n    public readonly int getCount() { return this.count; }\n}\npublic enum Status { Ready; Active(int); }\npublic void helper() {}\n";
+    let main_source = "void main() { Item item = new Item(42); helper(); }\n";
+    fs::write(&types_path, types_source).unwrap();
+    fs::write(&main_path, main_source).unwrap();
+
+    let types_uri = uri(&types_path);
+    let main_uri = uri(&main_path);
+
+    let mut client = Client::spawn();
+    client.send(json!({
+        "jsonrpc": "2.0", "id": 1, "method": "initialize",
+        "params": { "rootUri": uri(&temp.0), "capabilities": {} }
+    }));
+    let init = client.response(1);
+    assert_eq!(init["result"]["capabilities"]["documentSymbolProvider"], true);
+    assert_eq!(init["result"]["capabilities"]["hoverProvider"], true);
+    assert_eq!(init["result"]["capabilities"]["definitionProvider"], true);
+
+    client.send(json!({ "jsonrpc": "2.0", "method": "initialized", "params": {} }));
+    client.send(json!({
+        "jsonrpc": "2.0", "method": "textDocument/didOpen",
+        "params": { "textDocument": { "uri": types_uri.clone(), "languageId": "nacre", "version": 1, "text": types_source } }
+    }));
+    client.send(json!({
+        "jsonrpc": "2.0", "method": "textDocument/didOpen",
+        "params": { "textDocument": { "uri": main_uri.clone(), "languageId": "nacre", "version": 1, "text": main_source } }
+    }));
+
+    // Document symbols query on Types.ncr
+    client.send(json!({
+        "jsonrpc": "2.0", "id": 10, "method": "textDocument/documentSymbol",
+        "params": { "textDocument": { "uri": types_uri.clone() } }
+    }));
+    let sym_resp = client.response(10);
+    let symbols = sym_resp["result"].as_array().expect("symbols array");
+    assert!(symbols.iter().any(|s| s["name"] == "Item" && s["kind"] == 5));
+    assert!(symbols.iter().any(|s| s["name"] == "Status" && s["kind"] == 10));
+    assert!(symbols.iter().any(|s| s["name"] == "helper" && s["kind"] == 12));
+
+    // Hover query on Main.ncr over "Item" (line 0, col 15)
+    client.send(json!({
+        "jsonrpc": "2.0", "id": 20, "method": "textDocument/hover",
+        "params": { "textDocument": { "uri": main_uri.clone() }, "position": { "line": 0, "character": 15 } }
+    }));
+    let hover_resp = client.response(20);
+    let hover_content = hover_resp["result"]["contents"]["value"].as_str().expect("hover markdown");
+    assert!(hover_content.contains("class Item"));
+
+    // Hover query on Main.ncr over "helper" (line 0, col 42)
+    client.send(json!({
+        "jsonrpc": "2.0", "id": 21, "method": "textDocument/hover",
+        "params": { "textDocument": { "uri": main_uri.clone() }, "position": { "line": 0, "character": 42 } }
+    }));
+    let hover_helper = client.response(21);
+    let helper_content = hover_helper["result"]["contents"]["value"].as_str().expect("hover markdown");
+    assert!(helper_content.contains("void helper()"));
+
+    // Definition query on Main.ncr over "Item" (line 0, col 15)
+    client.send(json!({
+        "jsonrpc": "2.0", "id": 30, "method": "textDocument/definition",
+        "params": { "textDocument": { "uri": main_uri.clone() }, "position": { "line": 0, "character": 15 } }
+    }));
+    let def_resp = client.response(30);
+    assert_eq!(def_resp["result"]["uri"], types_uri);
+
+    client.send(json!({ "jsonrpc": "2.0", "id": 40, "method": "shutdown" }));
+    assert!(client.response(40)["result"].is_null());
+    client.send(json!({ "jsonrpc": "2.0", "method": "exit" }));
+    client.finish();
+}
+
+#[test]
+fn lsp_reports_manifest_diagnostics_when_nacre_toml_is_invalid() {
+    let temp = TempDir::new();
+    let source_dir = temp.0.join("src");
+    fs::create_dir(&source_dir).unwrap();
+    let manifest_path = temp.0.join("Nacre.toml");
+    fs::write(&manifest_path, "[package]\nname = \n").unwrap(); // Syntax error in TOML
+
+    let main_path = source_dir.join("Main.ncr");
+    fs::write(&main_path, "void main() {}\n").unwrap();
+
+    let mut client = Client::spawn();
+    client.send(json!({
+        "jsonrpc": "2.0", "id": 1, "method": "initialize",
+        "params": { "rootUri": uri(&temp.0), "capabilities": {} }
+    }));
+    client.response(1);
+    client.send(json!({ "jsonrpc": "2.0", "method": "initialized", "params": {} }));
+    client.send(json!({
+        "jsonrpc": "2.0", "method": "textDocument/didOpen",
+        "params": { "textDocument": { "uri": uri(&main_path), "languageId": "nacre", "version": 1, "text": "void main() {}\n" } }
+    }));
+
+    let manifest_diags = client.diagnostics(&uri(&manifest_path));
+    let diags = manifest_diags["diagnostics"].as_array().expect("diagnostics array");
+    assert!(!diags.is_empty(), "expected diagnostic on invalid Nacre.toml");
+    assert_eq!(diags[0]["severity"].as_u64(), Some(1));
+
+    client.send(json!({ "jsonrpc": "2.0", "id": 2, "method": "shutdown" }));
+    assert!(client.response(2)["result"].is_null());
+    client.send(json!({ "jsonrpc": "2.0", "method": "exit" }));
+    client.finish();
+}

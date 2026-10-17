@@ -371,7 +371,7 @@ function filterItems() {
     html
 }
 
-fn format_function_signature(f: &Function) -> String {
+pub(crate) fn format_function_signature(f: &Function) -> String {
     let mut s = String::new();
     match f.visibility {
         Visibility::Public => s.push_str("public "),
@@ -393,7 +393,7 @@ fn format_function_signature(f: &Function) -> String {
     s
 }
 
-fn format_type(ty: &Type) -> String {
+pub(crate) fn format_type(ty: &Type) -> String {
     match ty {
         Type::Unit => "Unit".to_owned(),
         Type::Byte => "byte".to_owned(),
