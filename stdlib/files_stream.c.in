@@ -28,6 +28,8 @@ static bool ncr_fs_read_all_text_@BUFFER_ID@(int descriptor, ncr_obj_@BUFFER_ID@
     size_t line, size_t column, int *failure) {
     while (buffer->length < (size_t)INT32_MAX) {
         size_t remaining = (size_t)INT32_MAX - buffer->length;
+        size_t available = buffer->capacity - buffer->length;
+        if (available > 0 && available < remaining) { remaining = available; }
         ssize_t count = ncr_fs_read_buffer_@BUFFER_ID@(descriptor, buffer, (int64_t)remaining, line, column);
         if (count < 0) { *failure = errno; return false; }
         if (count == 0) { return true; }

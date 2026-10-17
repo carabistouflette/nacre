@@ -1,0 +1,2697 @@
+{
+  "date": "2026-10-17",
+  "baseline_commit": "9170d06",
+  "baseline_compiler_sha256": "b73dc1af2454f0fcb57703626c340c8208b576ba26c33a0e3630108d467a35ca",
+  "candidate_compiler_sha256": "df7f44de59b6219a0d237d4482231ab3edaf623e81f20aba6efb233c3097d324",
+  "source_hashes": {
+    "stdlib/files_stream.c.in": "35789ed27f62e5bb59450508df5df40c26598eeb4a946bb22b5da4f0acff08d8",
+    "tests/filesystem.rs": "c1c09c374ef72c3f34fb36819fb323235cf17a86aced2ca43ca4750b6ae2b736",
+    "examples/io/contact_book.ncr": "f38007b519dca3ca792047a0f1c2730e6d52667b41d92d83186e0067e961313b",
+    "examples/apps/lending_desk/main.ncr": "2f32bd6d6165c5845f6836ab9f84cfcc3982e13896c05b0924e70244365434f0",
+    "examples/apps/lending_desk/desk.ncr": "dc8f88fdd4d74d994ad44f52619e4bd4274808de3c63dab9ec968277fffd501e",
+    "examples/apps/lending_desk/catalog.ncr": "5902413020851f3c09c4723ff84cf0721d6ef0da95e7307e08e4593eda29054e",
+    "examples/apps/lending_desk/model.ncr": "72d766d4aff13bcc261373692f0d64f31f6b18d91e065f0c2048b6b30bbe991c",
+    "examples/apps/lending_desk/persistence.ncr": "4e5aa6b3ba2488ffc6fe5535867a1a84c76ea939a4f1172c1545bade449009cc"
+  },
+  "decision": "Retain read-all-caller-only tail-space reuse. Preserve shared File.readSome helper, growth policy, ownership/UTF8/Text-size/error contracts; no global compiler/alias/inlining/layout/ISA changes.",
+  "toolchain": {
+    "clang": "clang version 22.1.8\nTarget: x86_64-pc-linux-gnu\nThread model: posix\nInstalledDir: /home/arobin/Downloads/nacre/target/native-deps/llvm22/usr/bin\n",
+    "llvm-link": "LLVM (http://llvm.org/):\n  LLVM version 22.1.0\n  Optimized build.\n",
+    "perf": "perf version 7.2.9-1\n"
+  },
+  "flags": [
+    "-O3",
+    "--native"
+  ],
+  "cpu": 0,
+  "methodology": {
+    "apps": "16balancedalternatingfreshprocesspairsperbackend/scenario,uninstrumentedCwait4supervisor;oldbinariesreused,no baseline rebuild.",
+    "api": "8balancedpairsperbackend/size;onefixedcountperfilechosenfromfastestold/newpilot;existingreadTextloopchecksaccumulatedbytecount.",
+    "allocation": "Separate--memory-statsbinariesandvalidatedglibcinterposer;notusedfortiming/RSS.",
+    "identity_control": "16balancedroundswithtwoidentical-binarylabelsperversion;no nativecode/flag/layoutmutation.",
+    "counter_not_physical": "Interceptedrequestedbytesincludefullreplacementreallocsizes,notphysical/live/copiedbytes."
+  },
+  "allocation": {
+    "contact-roundtrip": {
+      "c": {
+        "old_nacre": {
+          "allocations": 4405683,
+          "frees": 4405683,
+          "live": 0
+        },
+        "new_nacre": {
+          "allocations": 4405563,
+          "frees": 4405563,
+          "live": 0
+        },
+        "old_requested_bytes": 620175824,
+        "new_requested_bytes": 494346704,
+        "requested_bytes_change": -125829120,
+        "allocation_change": -120
+      },
+      "llvm": {
+        "old_nacre": {
+          "allocations": 4405683,
+          "frees": 4405683,
+          "live": 0
+        },
+        "new_nacre": {
+          "allocations": 4405563,
+          "frees": 4405563,
+          "live": 0
+        },
+        "old_requested_bytes": 620175824,
+        "new_requested_bytes": 494346704,
+        "requested_bytes_change": -125829120,
+        "allocation_change": -120
+      }
+    },
+    "contact-search": {
+      "c": {
+        "old_nacre": {
+          "allocations": 53266,
+          "frees": 53266,
+          "live": 0
+        },
+        "new_nacre": {
+          "allocations": 53266,
+          "frees": 53266,
+          "live": 0
+        },
+        "old_requested_bytes": 5707695,
+        "new_requested_bytes": 5707695,
+        "requested_bytes_change": 0,
+        "allocation_change": 0
+      },
+      "llvm": {
+        "old_nacre": {
+          "allocations": 53266,
+          "frees": 53266,
+          "live": 0
+        },
+        "new_nacre": {
+          "allocations": 53266,
+          "frees": 53266,
+          "live": 0
+        },
+        "old_requested_bytes": 5707695,
+        "new_requested_bytes": 5707695,
+        "requested_bytes_change": 0,
+        "allocation_change": 0
+      }
+    },
+    "lending-session": {
+      "c": {
+        "old_nacre": {
+          "allocations": 416811,
+          "frees": 416811,
+          "live": 0
+        },
+        "new_nacre": {
+          "allocations": 416811,
+          "frees": 416811,
+          "live": 0
+        },
+        "old_requested_bytes": 23705716,
+        "new_requested_bytes": 23705716,
+        "requested_bytes_change": 0,
+        "allocation_change": 0
+      },
+      "llvm": {
+        "old_nacre": {
+          "allocations": 416811,
+          "frees": 416811,
+          "live": 0
+        },
+        "new_nacre": {
+          "allocations": 416811,
+          "frees": 416811,
+          "live": 0
+        },
+        "old_requested_bytes": 23705716,
+        "new_requested_bytes": 23705716,
+        "requested_bytes_change": 0,
+        "allocation_change": 0
+      }
+    }
+  },
+  "application_summary": {
+    "contact-roundtrip": {
+      "c": {
+        "median_paired_elapsed_change_pct": -0.6531311191742273,
+        "faster_pairs": 11,
+        "pairs": 16,
+        "changes_pct": [
+          0.7678422592910961,
+          4.194379101497847,
+          -1.0968416591065955,
+          -0.8455370044628374,
+          -1.1150322876008367,
+          -0.7791035160133242,
+          -6.2271460864635975,
+          -4.0424218021813285,
+          -1.659917968015301,
+          -7.128097942008171,
+          -0.4639845197655257,
+          5.109786743593725,
+          0.44630360268804736,
+          -0.5271587223351304,
+          1.8722895150944607,
+          -0.08911100229540558
+        ],
+        "baseline": {
+          "median_ms": 189.81902350000001,
+          "min_ms": 187.504267,
+          "max_ms": 201.403181,
+          "median_peak_rss_bytes": 7090176.0,
+          "min_peak_rss_bytes": 6967296,
+          "max_peak_rss_bytes": 7184384
+        },
+        "candidate": {
+          "median_ms": 188.9472045,
+          "min_ms": 187.046965,
+          "max_ms": 199.787568,
+          "median_peak_rss_bytes": 7057408.0,
+          "min_peak_rss_bytes": 6950912,
+          "max_peak_rss_bytes": 7159808
+        }
+      },
+      "llvm": {
+        "median_paired_elapsed_change_pct": -0.39698552747045035,
+        "faster_pairs": 9,
+        "pairs": 16,
+        "changes_pct": [
+          4.897331446266229,
+          -0.4336816675826416,
+          -2.298848256378405,
+          0.584310572828195,
+          -1.7551021953611912,
+          -3.5652099769455714,
+          1.2127582807816895,
+          1.1728517793108795,
+          -0.3602893873582591,
+          -0.5030197431920902,
+          2.5021233390245756,
+          0.48168574254809915,
+          -4.38176279063196,
+          -1.9512134356066468,
+          -0.7791765629746372,
+          0.31780543430930397
+        ],
+        "baseline": {
+          "median_ms": 197.717877,
+          "min_ms": 195.765969,
+          "max_ms": 206.178847,
+          "median_peak_rss_bytes": 7114752.0,
+          "min_peak_rss_bytes": 6967296,
+          "max_peak_rss_bytes": 7188480
+        },
+        "candidate": {
+          "median_ms": 197.21238549999998,
+          "min_ms": 194.728911,
+          "max_ms": 207.474764,
+          "median_peak_rss_bytes": 7114752.0,
+          "min_peak_rss_bytes": 6955008,
+          "max_peak_rss_bytes": 7163904
+        }
+      }
+    },
+    "contact-search": {
+      "c": {
+        "median_paired_elapsed_change_pct": -0.08380712937015589,
+        "faster_pairs": 8,
+        "pairs": 16,
+        "changes_pct": [
+          -0.5026167906194368,
+          0.4893273070828874,
+          -0.9215791810683549,
+          -2.759701062047315,
+          0.8188455311576082,
+          3.0306567913017,
+          0.7306749058727968,
+          -1.3658825682732245,
+          -8.025960781423569,
+          -1.3368805557450236,
+          0.3953262998394269,
+          3.239935849661535,
+          0.0048859844991921975,
+          -2.9884965581726597,
+          3.1906675175421118,
+          -0.17250024323950397
+        ],
+        "baseline": {
+          "median_ms": 209.355285,
+          "min_ms": 205.435549,
+          "max_ms": 229.989225,
+          "median_peak_rss_bytes": 5888000.0,
+          "min_peak_rss_bytes": 5775360,
+          "max_peak_rss_bytes": 6000640
+        },
+        "candidate": {
+          "median_ms": 210.1070875,
+          "min_ms": 204.373426,
+          "max_ms": 214.919834,
+          "median_peak_rss_bytes": 5883904.0,
+          "min_peak_rss_bytes": 5763072,
+          "max_peak_rss_bytes": 5963776
+        }
+      },
+      "llvm": {
+        "median_paired_elapsed_change_pct": 2.495074653556739,
+        "faster_pairs": 5,
+        "pairs": 16,
+        "changes_pct": [
+          3.603277136730254,
+          -3.3142987477426944,
+          -6.395127263904166,
+          4.3402764222716606,
+          3.2405901692564187,
+          5.456015002960335,
+          -8.719022333722148,
+          -6.004530784381778,
+          4.569245486617968,
+          9.336690707647065,
+          1.7495591378570596,
+          8.312574699326515,
+          1.3241563960578295,
+          -4.6260418004623105,
+          1.0314494094391335,
+          9.807380680811573
+        ],
+        "baseline": {
+          "median_ms": 217.6824415,
+          "min_ms": 209.20939,
+          "max_ms": 235.608331,
+          "median_peak_rss_bytes": 5912576.0,
+          "min_peak_rss_bytes": 5775360,
+          "max_peak_rss_bytes": 5984256
+        },
+        "candidate": {
+          "median_ms": 223.13661100000002,
+          "min_ms": 212.869632,
+          "max_ms": 233.221622,
+          "median_peak_rss_bytes": 5892096.0,
+          "min_peak_rss_bytes": 5869568,
+          "max_peak_rss_bytes": 5976064
+        }
+      }
+    },
+    "lending-session": {
+      "c": {
+        "median_paired_elapsed_change_pct": -0.5407461953730486,
+        "faster_pairs": 9,
+        "pairs": 16,
+        "changes_pct": [
+          1.3766076023256746,
+          6.7631406970307895,
+          -0.9337025317010417,
+          0.10045321185736533,
+          1.7151549927084009,
+          -5.9250201988371165,
+          0.22765884463495922,
+          -2.66736128760936,
+          -6.047479586880222,
+          -3.1041125512678236,
+          -6.468562758161833,
+          -2.380037286793446,
+          3.027029598427755,
+          -0.14778985904505548,
+          4.848170120003048,
+          -1.9679660710616331
+        ],
+        "baseline": {
+          "median_ms": 146.0889775,
+          "min_ms": 142.450149,
+          "max_ms": 153.763044,
+          "median_peak_rss_bytes": 11931648.0,
+          "min_peak_rss_bytes": 11825152,
+          "max_peak_rss_bytes": 11948032
+        },
+        "candidate": {
+          "median_ms": 144.53671450000002,
+          "min_ms": 142.587013,
+          "max_ms": 152.55591,
+          "median_peak_rss_bytes": 11905024.0,
+          "min_peak_rss_bytes": 11829248,
+          "max_peak_rss_bytes": 11948032
+        }
+      },
+      "llvm": {
+        "median_paired_elapsed_change_pct": -0.4154254721268791,
+        "faster_pairs": 8,
+        "pairs": 16,
+        "changes_pct": [
+          -4.599830707717755,
+          1.145367823270571,
+          -6.113811007344516,
+          2.03591979355906,
+          -6.329097109110105,
+          -1.197360611846554,
+          -6.684759549584973,
+          1.6397953006826116,
+          6.467082748924957,
+          -1.3563216936072875,
+          3.445977741908135,
+          -1.6519560834431735,
+          5.124810559508131,
+          -1.1948158606185921,
+          0.36396491636483397,
+          4.249772566118515
+        ],
+        "baseline": {
+          "median_ms": 146.6150105,
+          "min_ms": 143.451771,
+          "max_ms": 155.79054,
+          "median_peak_rss_bytes": 11859968.0,
+          "min_peak_rss_bytes": 11829248,
+          "max_peak_rss_bytes": 11952128
+        },
+        "candidate": {
+          "median_ms": 145.925655,
+          "min_ms": 142.788277,
+          "max_ms": 154.148699,
+          "median_peak_rss_bytes": 11884544.0,
+          "min_peak_rss_bytes": 11825152,
+          "max_peak_rss_bytes": 11952128
+        }
+      }
+    }
+  },
+  "api_summary": {
+    "0": {
+      "c": {
+        "median_paired_elapsed_change_pct": -1.5063949672264823,
+        "faster_pairs": 4,
+        "pairs": 8,
+        "changes_pct": [
+          -9.077932894999774,
+          -10.931580020497456,
+          -13.74133535551948,
+          1.8946708819699953,
+          1.5630941582751579,
+          -4.575884092728122,
+          2.5853649118541933,
+          2.951194599001705
+        ],
+        "baseline": {
+          "median_ms": 28.992343499999997,
+          "min_ms": 27.439668,
+          "max_ms": 41.850071,
+          "median_peak_rss_bytes": 2248704.0,
+          "min_peak_rss_bytes": 2125824,
+          "max_peak_rss_bytes": 2347008
+        },
+        "candidate": {
+          "median_ms": 28.552033,
+          "min_ms": 27.547907,
+          "max_ms": 37.275197,
+          "median_peak_rss_bytes": 2252800.0,
+          "min_peak_rss_bytes": 2129920,
+          "max_peak_rss_bytes": 2310144
+        }
+      },
+      "llvm": {
+        "median_paired_elapsed_change_pct": 0.40792474590604644,
+        "faster_pairs": 4,
+        "pairs": 8,
+        "changes_pct": [
+          0.8524680077670155,
+          -3.206142784794308,
+          1.9751201958266185,
+          -0.036618515954922604,
+          -4.621784072259983,
+          2.913750550777161,
+          1.0704935396817161,
+          -2.6371026202490655
+        ],
+        "baseline": {
+          "median_ms": 28.672041999999998,
+          "min_ms": 28.076266,
+          "max_ms": 29.537122,
+          "median_peak_rss_bytes": 2242560.0,
+          "min_peak_rss_bytes": 2183168,
+          "max_peak_rss_bytes": 2338816
+        },
+        "candidate": {
+          "median_ms": 28.5639015,
+          "min_ms": 28.076196,
+          "max_ms": 29.214596,
+          "median_peak_rss_bytes": 2271232.0,
+          "min_peak_rss_bytes": 2207744,
+          "max_peak_rss_bytes": 2338816
+        }
+      }
+    },
+    "1": {
+      "c": {
+        "median_paired_elapsed_change_pct": -71.58673627194153,
+        "faster_pairs": 8,
+        "pairs": 8,
+        "changes_pct": [
+          -70.98461936441223,
+          -73.06963501044338,
+          -71.13018195249921,
+          -73.22183745084428,
+          -60.790367854244785,
+          -71.5457493941635,
+          -71.62772314971959,
+          -71.95448672836865
+        ],
+        "baseline": {
+          "median_ms": 107.870869,
+          "min_ms": 101.989091,
+          "max_ms": 120.751495,
+          "median_peak_rss_bytes": 2275328.0,
+          "min_peak_rss_bytes": 2129920,
+          "max_peak_rss_bytes": 2330624
+        },
+        "candidate": {
+          "median_ms": 29.929518,
+          "min_ms": 29.240319,
+          "max_ms": 47.346217,
+          "median_peak_rss_bytes": 2269184.0,
+          "min_peak_rss_bytes": 2134016,
+          "max_peak_rss_bytes": 2347008
+        }
+      },
+      "llvm": {
+        "median_paired_elapsed_change_pct": -71.43164171590561,
+        "faster_pairs": 8,
+        "pairs": 8,
+        "changes_pct": [
+          -71.47488092108514,
+          -70.21412137935845,
+          -71.42775987749516,
+          -71.43552355431606,
+          -71.1109056031832,
+          -70.86492485534922,
+          -71.8682276956863,
+          -71.85227866615396
+        ],
+        "baseline": {
+          "median_ms": 104.1972,
+          "min_ms": 102.527548,
+          "max_ms": 108.011237,
+          "median_peak_rss_bytes": 2238464.0,
+          "min_peak_rss_bytes": 2125824,
+          "max_peak_rss_bytes": 2297856
+        },
+        "candidate": {
+          "median_ms": 29.913631,
+          "min_ms": 29.247257,
+          "max_ms": 30.538731,
+          "median_peak_rss_bytes": 2273280.0,
+          "min_peak_rss_bytes": 2134016,
+          "max_peak_rss_bytes": 2338816
+        }
+      }
+    },
+    "65535": {
+      "c": {
+        "median_paired_elapsed_change_pct": -14.88646772006032,
+        "faster_pairs": 8,
+        "pairs": 8,
+        "changes_pct": [
+          -19.59554857485706,
+          -16.01310232068547,
+          -14.456598530480836,
+          -16.67581696246764,
+          -11.414516424838418,
+          -15.287267401122929,
+          -14.485668038997712,
+          -10.719495039884297
+        ],
+        "baseline": {
+          "median_ms": 135.9811335,
+          "min_ms": 132.380172,
+          "max_ms": 148.376075,
+          "median_peak_rss_bytes": 2402304.0,
+          "min_peak_rss_bytes": 2260992,
+          "max_peak_rss_bytes": 2478080
+        },
+        "candidate": {
+          "median_ms": 114.76536250000001,
+          "min_ms": 111.577209,
+          "max_ms": 132.470909,
+          "median_peak_rss_bytes": 2412544.0,
+          "min_peak_rss_bytes": 2363392,
+          "max_peak_rss_bytes": 2453504
+        }
+      },
+      "llvm": {
+        "median_paired_elapsed_change_pct": -17.72483565836461,
+        "faster_pairs": 8,
+        "pairs": 8,
+        "changes_pct": [
+          -21.345496406917874,
+          -17.097551315075098,
+          -18.352120001654125,
+          -16.450294980632798,
+          -18.70202503997689,
+          -17.088591807552888,
+          -20.717622660552614,
+          -8.768126805653864
+        ],
+        "baseline": {
+          "median_ms": 135.0914265,
+          "min_ms": 132.821008,
+          "max_ms": 141.527387,
+          "median_peak_rss_bytes": 2394112.0,
+          "min_peak_rss_bytes": 2256896,
+          "max_peak_rss_bytes": 2478080
+        },
+        "candidate": {
+          "median_ms": 111.270031,
+          "min_ms": 110.111868,
+          "max_ms": 121.331715,
+          "median_peak_rss_bytes": 2420736.0,
+          "min_peak_rss_bytes": 2375680,
+          "max_peak_rss_bytes": 2478080
+        }
+      }
+    },
+    "65536": {
+      "c": {
+        "median_paired_elapsed_change_pct": -0.3263042880115419,
+        "faster_pairs": 4,
+        "pairs": 8,
+        "changes_pct": [
+          -1.3626462919127946,
+          2.1480565764267157,
+          0.31021156488522106,
+          -2.0565527422507057,
+          -4.056160314716307,
+          -0.9628201409083048,
+          1.3549285268134925,
+          0.40083910428403424
+        ],
+        "baseline": {
+          "median_ms": 135.235695,
+          "min_ms": 131.065585,
+          "max_ms": 143.399872,
+          "median_peak_rss_bytes": 2369536.0,
+          "min_peak_rss_bytes": 2265088,
+          "max_peak_rss_bytes": 2478080
+        },
+        "candidate": {
+          "median_ms": 134.729844,
+          "min_ms": 132.84143,
+          "max_ms": 140.450778,
+          "median_peak_rss_bytes": 2377728.0,
+          "min_peak_rss_bytes": 2265088,
+          "max_peak_rss_bytes": 2461696
+        }
+      },
+      "llvm": {
+        "median_paired_elapsed_change_pct": 1.1553499874890738,
+        "faster_pairs": 2,
+        "pairs": 8,
+        "changes_pct": [
+          1.1549583039923261,
+          -2.219860311863675,
+          1.7028819045652455,
+          2.7484326377303914,
+          -2.8398805108899805,
+          0.04336822925765649,
+          1.800148911479682,
+          1.1557416709858215
+        ],
+        "baseline": {
+          "median_ms": 134.77480450000002,
+          "min_ms": 131.214867,
+          "max_ms": 140.115882,
+          "median_peak_rss_bytes": 2400256.0,
+          "min_peak_rss_bytes": 2260992,
+          "max_peak_rss_bytes": 2469888
+        },
+        "candidate": {
+          "median_ms": 136.155475,
+          "min_ms": 131.016628,
+          "max_ms": 142.50189,
+          "median_peak_rss_bytes": 2400256.0,
+          "min_peak_rss_bytes": 2256896,
+          "max_peak_rss_bytes": 2478080
+        }
+      }
+    },
+    "65537": {
+      "c": {
+        "median_paired_elapsed_change_pct": -49.71190662709657,
+        "faster_pairs": 8,
+        "pairs": 8,
+        "changes_pct": [
+          -47.66950043946678,
+          -49.988793164398345,
+          -51.08039011597578,
+          -49.71274538202978,
+          -48.39599670518797,
+          -50.7442925503699,
+          -48.09459147327513,
+          -49.71106787216335
+        ],
+        "baseline": {
+          "median_ms": 281.6064285,
+          "min_ms": 279.267978,
+          "max_ms": 291.494753,
+          "median_peak_rss_bytes": 2529280.0,
+          "min_peak_rss_bytes": 2392064,
+          "max_peak_rss_bytes": 2609152
+        },
+        "candidate": {
+          "median_ms": 142.13119999999998,
+          "min_ms": 138.981998,
+          "max_ms": 146.836879,
+          "median_peak_rss_bytes": 2365440.0,
+          "min_peak_rss_bytes": 2256896,
+          "max_peak_rss_bytes": 2428928
+        }
+      },
+      "llvm": {
+        "median_paired_elapsed_change_pct": -49.57608800245889,
+        "faster_pairs": 8,
+        "pairs": 8,
+        "changes_pct": [
+          -47.26865378005453,
+          -50.29800796885529,
+          -49.74303598774665,
+          -45.13973944275341,
+          -50.510956374897575,
+          -49.409140017171126,
+          -50.56517658404355,
+          -49.26805262160637
+        ],
+        "baseline": {
+          "median_ms": 280.6855555,
+          "min_ms": 276.954339,
+          "max_ms": 287.445649,
+          "median_peak_rss_bytes": 2500608.0,
+          "min_peak_rss_bytes": 2387968,
+          "max_peak_rss_bytes": 2600960
+        },
+        "candidate": {
+          "median_ms": 142.199544,
+          "min_ms": 139.301702,
+          "max_ms": 151.937872,
+          "median_peak_rss_bytes": 2379776.0,
+          "min_peak_rss_bytes": 2256896,
+          "max_peak_rss_bytes": 2478080
+        }
+      }
+    },
+    "131071": {
+      "c": {
+        "median_paired_elapsed_change_pct": -41.636579398595536,
+        "faster_pairs": 8,
+        "pairs": 8,
+        "changes_pct": [
+          -42.46874333304046,
+          -41.51247247119618,
+          -41.76068632599489,
+          -43.411032045911824,
+          -42.15827253847551,
+          -38.605394556824166,
+          -41.49190153240651,
+          -40.94022226021775
+        ],
+        "baseline": {
+          "median_ms": 246.7685725,
+          "min_ms": 246.077347,
+          "max_ms": 251.960806,
+          "median_peak_rss_bytes": 2516992.0,
+          "min_peak_rss_bytes": 2371584,
+          "max_peak_rss_bytes": 2592768
+        },
+        "candidate": {
+          "median_ms": 144.1158595,
+          "min_ms": 142.072199,
+          "max_ms": 151.229282,
+          "median_peak_rss_bytes": 2500608.0,
+          "min_peak_rss_bytes": 2441216,
+          "max_peak_rss_bytes": 2609152
+        }
+      },
+      "llvm": {
+        "median_paired_elapsed_change_pct": -41.3954569801992,
+        "faster_pairs": 8,
+        "pairs": 8,
+        "changes_pct": [
+          -41.17323030519627,
+          -41.19488229642957,
+          -41.66876369248206,
+          -40.999627658297314,
+          -41.24505546458159,
+          -42.38137216605735,
+          -42.82014382270965,
+          -41.54585849581681
+        ],
+        "baseline": {
+          "median_ms": 246.87319,
+          "min_ms": 246.099213,
+          "max_ms": 257.756917,
+          "median_peak_rss_bytes": 2494464.0,
+          "min_peak_rss_bytes": 2375680,
+          "max_peak_rss_bytes": 2576384
+        },
+        "candidate": {
+          "median_ms": 145.049752,
+          "min_ms": 142.722898,
+          "max_ms": 150.669593,
+          "median_peak_rss_bytes": 2506752.0,
+          "min_peak_rss_bytes": 2387968,
+          "max_peak_rss_bytes": 2609152
+        }
+      }
+    },
+    "131072": {
+      "c": {
+        "median_paired_elapsed_change_pct": -1.0190640616728974,
+        "faster_pairs": 7,
+        "pairs": 8,
+        "changes_pct": [
+          -0.7671878826395528,
+          -0.3962921353023674,
+          -1.4357034313055128,
+          -1.1397563238164432,
+          -5.604611949564953,
+          1.2331752491218761,
+          -0.8983717995293516,
+          -3.164753364561279
+        ],
+        "baseline": {
+          "median_ms": 148.3084025,
+          "min_ms": 147.455866,
+          "max_ms": 155.634486,
+          "median_peak_rss_bytes": 2529280.0,
+          "min_peak_rss_bytes": 2473984,
+          "max_peak_rss_bytes": 2592768
+        },
+        "candidate": {
+          "median_ms": 146.6277065,
+          "min_ms": 146.136027,
+          "max_ms": 150.139972,
+          "median_peak_rss_bytes": 2375680.0,
+          "min_peak_rss_bytes": 2367488,
+          "max_peak_rss_bytes": 2580480
+        }
+      },
+      "llvm": {
+        "median_paired_elapsed_change_pct": 0.130476534280477,
+        "faster_pairs": 3,
+        "pairs": 8,
+        "changes_pct": [
+          0.006163283256821472,
+          0.270462179797204,
+          -1.8941189893247556,
+          0.25478978530413254,
+          0.3490063775877017,
+          -0.4328096039904583,
+          2.72102953837825,
+          -3.6202568289489534
+        ],
+        "baseline": {
+          "median_ms": 148.38709,
+          "min_ms": 145.985901,
+          "max_ms": 150.383281,
+          "median_peak_rss_bytes": 2437120.0,
+          "min_peak_rss_bytes": 2367488,
+          "max_peak_rss_bytes": 2592768
+        },
+        "candidate": {
+          "median_ms": 147.7422405,
+          "min_ms": 144.93902,
+          "max_ms": 150.868789,
+          "median_peak_rss_bytes": 2486272.0,
+          "min_peak_rss_bytes": 2367488,
+          "max_peak_rss_bytes": 2568192
+        }
+      }
+    },
+    "131073": {
+      "c": {
+        "median_paired_elapsed_change_pct": 0.46180528508734664,
+        "faster_pairs": 2,
+        "pairs": 8,
+        "changes_pct": [
+          3.03356994532884,
+          -1.495775796806309,
+          2.3924888263167077,
+          3.7324028425193223,
+          0.4503796174315733,
+          -3.4190629437049647,
+          0.47323095274312,
+          0.3019656275361493
+        ],
+        "baseline": {
+          "median_ms": 149.67538050000002,
+          "min_ms": 148.067806,
+          "max_ms": 154.740351,
+          "median_peak_rss_bytes": 2521088.0,
+          "min_peak_rss_bytes": 2478080,
+          "max_peak_rss_bytes": 2568192
+        },
+        "candidate": {
+          "median_ms": 150.546632,
+          "min_ms": 147.742,
+          "max_ms": 153.594293,
+          "median_peak_rss_bytes": 2535424.0,
+          "min_peak_rss_bytes": 2371584,
+          "max_peak_rss_bytes": 2650112
+        }
+      },
+      "llvm": {
+        "median_paired_elapsed_change_pct": -0.2525001723411524,
+        "faster_pairs": 5,
+        "pairs": 8,
+        "changes_pct": [
+          0.10589337400934706,
+          -1.6537459816403643,
+          -4.403872689616605,
+          -0.4063335327917583,
+          1.5243776392355635,
+          0.8347907887793493,
+          -1.1795077147170097,
+          -0.09866681189054649
+        ],
+        "baseline": {
+          "median_ms": 150.0714645,
+          "min_ms": 148.101359,
+          "max_ms": 156.539062,
+          "median_peak_rss_bytes": 2486272.0,
+          "min_peak_rss_bytes": 2371584,
+          "max_peak_rss_bytes": 2564096
+        },
+        "candidate": {
+          "median_ms": 149.58061400000003,
+          "min_ms": 148.698273,
+          "max_ms": 151.245279,
+          "median_peak_rss_bytes": 2525184.0,
+          "min_peak_rss_bytes": 2469888,
+          "max_peak_rss_bytes": 2580480
+        }
+      }
+    },
+    "463347": {
+      "c": {
+        "median_paired_elapsed_change_pct": -28.538974938698384,
+        "faster_pairs": 8,
+        "pairs": 8,
+        "changes_pct": [
+          -28.133127400010373,
+          -30.200959513739768,
+          -28.303354787799726,
+          -28.13357845902148,
+          -28.986268999373344,
+          -28.774595089597042,
+          -28.174847731247212,
+          -29.77966468384743
+        ],
+        "baseline": {
+          "median_ms": 208.38849950000002,
+          "min_ms": 203.004224,
+          "max_ms": 210.647711,
+          "median_peak_rss_bytes": 3381248.0,
+          "min_peak_rss_bytes": 3358720,
+          "max_peak_rss_bytes": 3481600
+        },
+        "candidate": {
+          "median_ms": 147.995486,
+          "min_ms": 145.439622,
+          "max_ms": 150.108761,
+          "median_peak_rss_bytes": 2920448.0,
+          "min_peak_rss_bytes": 2899968,
+          "max_peak_rss_bytes": 3010560
+        }
+      },
+      "llvm": {
+        "median_paired_elapsed_change_pct": -27.904237528807798,
+        "faster_pairs": 8,
+        "pairs": 8,
+        "changes_pct": [
+          -26.889239520531483,
+          -28.91923553708411,
+          -29.929860594914203,
+          -25.80668981061769,
+          -26.305921845002633,
+          -30.871918541367393,
+          -25.97385945025885,
+          -29.406150913579953
+        ],
+        "baseline": {
+          "median_ms": 209.29414250000002,
+          "min_ms": 204.437215,
+          "max_ms": 213.485045,
+          "median_peak_rss_bytes": 3364864.0,
+          "min_peak_rss_bytes": 3358720,
+          "max_peak_rss_bytes": 3465216
+        },
+        "candidate": {
+          "median_ms": 151.2024615,
+          "min_ms": 146.020647,
+          "max_ms": 152.342808,
+          "median_peak_rss_bytes": 2928640.0,
+          "min_peak_rss_bytes": 2899968,
+          "max_peak_rss_bytes": 3018752
+        }
+      }
+    }
+  },
+  "api_rounds": {
+    "0": 50000,
+    "1": 41990,
+    "65535": 6366,
+    "65536": 6325,
+    "65537": 6780,
+    "131071": 2562,
+    "131072": 1523,
+    "131073": 1544,
+    "463347": 403
+  },
+  "identity_control": {
+    "oldA->newA": {
+      "median_change_pct": 1.3599675050970927,
+      "faster_pairs": 5,
+      "pairs": 16,
+      "changes_pct": [
+        -1.1113497592081467,
+        -5.36255679627915,
+        5.8066795183326025,
+        1.3396770218037979,
+        3.336738448745291,
+        4.157459732839164,
+        1.3789453175537592,
+        -2.1166162970820634,
+        -2.0918023760907234,
+        5.509889496127407,
+        1.3409896926404263,
+        5.456806186403851,
+        4.392068093809676,
+        -6.14140400591936,
+        0.06745876548317487,
+        9.364978850370974
+      ]
+    },
+    "oldB->newB": {
+      "median_change_pct": -0.35294171016924114,
+      "faster_pairs": 10,
+      "pairs": 16,
+      "changes_pct": [
+        -0.16191845489322843,
+        -1.7342209775159656,
+        3.1092022815760734,
+        -0.5439649654452539,
+        3.776780346723596,
+        -8.25768906097637,
+        -4.781846624060659,
+        2.631109546790178,
+        7.660703145621794,
+        -6.22801751335027,
+        0.016963225415622674,
+        -7.055195155766758,
+        -1.051843857504231,
+        -1.3632059617966652,
+        1.8401113022633364,
+        -0.01992225965087302
+      ]
+    },
+    "oldA->oldB": {
+      "median_change_pct": 0.5137307715615491,
+      "faster_pairs": 7,
+      "pairs": 16,
+      "changes_pct": [
+        -0.6819139978919808,
+        -1.3801188038524148,
+        2.0058493847521452,
+        1.0137379236214272,
+        3.420097397501487,
+        10.336232259933542,
+        6.903624873838554,
+        -0.9062944970428366,
+        -4.016187518770442,
+        8.128872278337361,
+        0.013723619501671003,
+        6.635382032647152,
+        -3.408921796650921,
+        -6.261745775619287,
+        -3.7197640567037893,
+        2.150213251983679
+      ]
+    },
+    "newA->newB": {
+      "median_change_pct": -1.0784038662972895,
+      "faster_pairs": 10,
+      "pairs": 16,
+      "changes_pct": [
+        0.2716403251312949,
+        2.4009010047225,
+        -0.5947279888503298,
+        -0.8638457004211619,
+        3.8604942653634344,
+        -2.8154012799940342,
+        0.40709851336875325,
+        3.9001366742513532,
+        5.544632554886153,
+        -3.9003948728655313,
+        -1.292962032173417,
+        -6.016452318916709,
+        -8.44602216857745,
+        -1.4896741475431519,
+        -2.0142005639137817,
+        -6.615569540779676
+      ]
+    }
+  },
+  "search_code": {
+    "instruction_count_old": 106,
+    "instruction_count_new": 106,
+    "same_after_relocation_normalization": true,
+    "old_entry": "0x4b60",
+    "new_entry": "0x4b70",
+    "normalization": "Symbol-relativebranch/calltargetsandRIPdisplacementnotationonly;no operand/register/instruction removal.",
+    "differences": []
+  },
+  "raw_pair_fields": [
+    "baseline_elapsed_ns",
+    "candidate_elapsed_ns",
+    "baseline_peak_rss_bytes",
+    "candidate_peak_rss_bytes"
+  ],
+  "application_pairs": {
+    "contact-roundtrip": {
+      "c": [
+        [
+          187504267,
+          188944004,
+          7086080,
+          6950912
+        ],
+        [
+          188694174,
+          196608723,
+          7176192,
+          7143424
+        ],
+        [
+          189562913,
+          187483708,
+          7139328,
+          7159808
+        ],
+        [
+          190606442,
+          188994794,
+          6971392,
+          6955008
+        ],
+        [
+          191449344,
+          189314622,
+          7127040,
+          6950912
+        ],
+        [
+          188768369,
+          187297668,
+          7090176,
+          7057408
+        ],
+        [
+          199492638,
+          187069940,
+          7176192,
+          7061504
+        ],
+        [
+          196910352,
+          188950405,
+          7098368,
+          7057408
+        ],
+        [
+          191905146,
+          188719678,
+          6967296,
+          7053312
+        ],
+        [
+          201403181,
+          187046965,
+          7086080,
+          7122944
+        ],
+        [
+          189295324,
+          188417023,
+          7184384,
+          7135232
+        ],
+        [
+          190075134,
+          199787568,
+          7081984,
+          7143424
+        ],
+        [
+          193894917,
+          194760277,
+          7086080,
+          7049216
+        ],
+        [
+          188607142,
+          187612883,
+          7094272,
+          7057408
+        ],
+        [
+          189440734,
+          192987613,
+          7090176,
+          6950912
+        ],
+        [
+          189161827,
+          188993263,
+          7081984,
+          7114752
+        ]
+      ],
+      "llvm": [
+        [
+          197788410,
+          207474764,
+          7131136,
+          6955008
+        ],
+        [
+          196935463,
+          196081390,
+          7147520,
+          6955008
+        ],
+        [
+          199310763,
+          194728911,
+          7159808,
+          7159808
+        ],
+        [
+          195905406,
+          197050102,
+          6967296,
+          7024640
+        ],
+        [
+          200192844,
+          196679255,
+          7188480,
+          7061504
+        ],
+        [
+          204573673,
+          197280192,
+          7098368,
+          7106560
+        ],
+        [
+          195765969,
+          198140137,
+          7180288,
+          7028736
+        ],
+        [
+          196036877,
+          198336099,
+          6967296,
+          7155712
+        ],
+        [
+          198088266,
+          197374575,
+          7147520,
+          7135232
+        ],
+        [
+          198001771,
+          197005783,
+          7098368,
+          7122944
+        ],
+        [
+          197134087,
+          202066625,
+          7081984,
+          7049216
+        ],
+        [
+          196063723,
+          197008134,
+          7172096,
+          7135232
+        ],
+        [
+          206178847,
+          197144579,
+          7077888,
+          7163904
+        ],
+        [
+          202135242,
+          198191152,
+          7077888,
+          7135232
+        ],
+        [
+          197500422,
+          195961545,
+          6975488,
+          7131136
+        ],
+        [
+          197647344,
+          198275478,
+          7180288,
+          7053312
+        ]
+      ]
+    },
+    "contact-search": {
+      "c": [
+        [
+          206703202,
+          205664277,
+          5935104,
+          5881856
+        ],
+        [
+          206027946,
+          207036097,
+          5890048,
+          5955584
+        ],
+        [
+          206274408,
+          204373426,
+          5873664,
+          5955584
+        ],
+        [
+          212558892,
+          206692902,
+          5877760,
+          5775360
+        ],
+        [
+          207059932,
+          208755433,
+          6000640,
+          5955584
+        ],
+        [
+          205720127,
+          211954798,
+          5877760,
+          5881856
+        ],
+        [
+          212006186,
+          213555262,
+          5885952,
+          5894144
+        ],
+        [
+          217896038,
+          214919834,
+          5984256,
+          5885952
+        ],
+        [
+          229989225,
+          211530380,
+          5951488,
+          5877760
+        ],
+        [
+          212465204,
+          209624798,
+          5881856,
+          5771264
+        ],
+        [
+          209760140,
+          210589377,
+          5943296,
+          5771264
+        ],
+        [
+          205435549,
+          212091529,
+          5775360,
+          5963776
+        ],
+        [
+          211871323,
+          211881675,
+          5955584,
+          5771264
+        ],
+        [
+          211923617,
+          205590287,
+          5943296,
+          5763072
+        ],
+        [
+          205437043,
+          211991856,
+          5881856,
+          5890048
+        ],
+        [
+          208950430,
+          208589990,
+          5885952,
+          5894144
+        ]
+      ],
+      "llvm": [
+        [
+          218627924,
+          226505694,
+          5775360,
+          5890048
+        ],
+        [
+          222013239,
+          214655057,
+          5931008,
+          5926912
+        ],
+        [
+          229001854,
+          214356894,
+          5885952,
+          5877760
+        ],
+        [
+          215427938,
+          224778106,
+          5881856,
+          5885952
+        ],
+        [
+          215868920,
+          222864347,
+          5873664,
+          5869568
+        ],
+        [
+          216736959,
+          228562160,
+          5877760,
+          5939200
+        ],
+        [
+          235608331,
+          215065588,
+          5894144,
+          5922816
+        ],
+        [
+          235203424,
+          221080562,
+          5931008,
+          5877760
+        ],
+        [
+          213646827,
+          223408875,
+          5980160,
+          5881856
+        ],
+        [
+          211528395,
+          231278147,
+          5951488,
+          5951488
+        ],
+        [
+          209209390,
+          212869632,
+          5894144,
+          5939200
+        ],
+        [
+          214290754,
+          232103833,
+          5877760,
+          5943296
+        ],
+        [
+          222849658,
+          225800536,
+          5976064,
+          5976064
+        ],
+        [
+          230676731,
+          220005529,
+          5984256,
+          5885952
+        ],
+        [
+          218820039,
+          221077057,
+          5955584,
+          5894144
+        ],
+        [
+          212391572,
+          233221622,
+          5971968,
+          5873664
+        ]
+      ]
+    },
+    "lending-session": {
+      "c": [
+        [
+          144176670,
+          146161417,
+          11829248,
+          11853824
+        ],
+        [
+          142450149,
+          152084253,
+          11825152,
+          11943936
+        ],
+        [
+          145470849,
+          144112584,
+          11948032,
+          11935744
+        ],
+        [
+          146707106,
+          146854478,
+          11948032,
+          11943936
+        ],
+        [
+          143080247,
+          145534295,
+          11935744,
+          11845632
+        ],
+        [
+          153684590,
+          144578747,
+          11825152,
+          11829248
+        ],
+        [
+          143285450,
+          143611652,
+          11943936,
+          11882496
+        ],
+        [
+          147026952,
+          143105212,
+          11931648,
+          11935744
+        ],
+        [
+          152324830,
+          143113017,
+          11935744,
+          11857920
+        ],
+        [
+          147915384,
+          143323924,
+          11935744,
+          11862016
+        ],
+        [
+          153763044,
+          143816785,
+          11825152,
+          11837440
+        ],
+        [
+          148017555,
+          144494682,
+          11943936,
+          11927552
+        ],
+        [
+          148073676,
+          152555910,
+          11833344,
+          11939840
+        ],
+        [
+          145334735,
+          145119945,
+          11931648,
+          11948032
+        ],
+        [
+          145443308,
+          152494647,
+          11857920,
+          11849728
+        ],
+        [
+          145449408,
+          142587013,
+          11845632,
+          11943936
+        ]
+      ],
+      "llvm": [
+        [
+          152409783,
+          145399191,
+          11853824,
+          11862016
+        ],
+        [
+          143938215,
+          145586837,
+          11853824,
+          11931648
+        ],
+        [
+          153901388,
+          144492148,
+          11952128,
+          11841536
+        ],
+        [
+          143451771,
+          146372334,
+          11902976,
+          11829248
+        ],
+        [
+          154323276,
+          144556006,
+          11943936,
+          11833344
+        ],
+        [
+          146854338,
+          145095962,
+          11845632,
+          11939840
+        ],
+        [
+          155790540,
+          145376317,
+          11845632,
+          11948032
+        ],
+        [
+          143904730,
+          146264473,
+          11857920,
+          11849728
+        ],
+        [
+          144785313,
+          154148699,
+          11927552,
+          11943936
+        ],
+        [
+          144751574,
+          142788277,
+          11862016,
+          11837440
+        ],
+        [
+          148799278,
+          153926868,
+          11931648,
+          11952128
+        ],
+        [
+          146375683,
+          143957621,
+          11935744,
+          11943936
+        ],
+        [
+          145969981,
+          153450666,
+          11829248,
+          11825152
+        ],
+        [
+          150611074,
+          148811549,
+          11952128,
+          11825152
+        ],
+        [
+          147795289,
+          148333212,
+          11833344,
+          11907072
+        ],
+        [
+          145741258,
+          151934930,
+          11857920,
+          11935744
+        ]
+      ]
+    }
+  },
+  "api_pairs": {
+    "0": {
+      "c": [
+        [
+          34149944,
+          31049835,
+          2347008,
+          2129920
+        ],
+        [
+          41850071,
+          37275197,
+          2134016,
+          2240512
+        ],
+        [
+          31936394,
+          27547907,
+          2248704,
+          2310144
+        ],
+        [
+          28479722,
+          29019319,
+          2129920,
+          2248704
+        ],
+        [
+          28288443,
+          28730618,
+          2347008,
+          2252800
+        ],
+        [
+          29504965,
+          28154852,
+          2248704,
+          2310144
+        ],
+        [
+          27658378,
+          28373448,
+          2125824,
+          2289664
+        ],
+        [
+          27439668,
+          28249466,
+          2248704,
+          2252800
+        ]
+      ],
+      "llvm": [
+        [
+          28967656,
+          29214596,
+          2248704,
+          2252800
+        ],
+        [
+          29199916,
+          28263725,
+          2232320,
+          2310144
+        ],
+        [
+          28076266,
+          28630806,
+          2228224,
+          2338816
+        ],
+        [
+          28507436,
+          28496997,
+          2338816,
+          2232320
+        ],
+        [
+          29537122,
+          28171980,
+          2338816,
+          2289664
+        ],
+        [
+          28262337,
+          29085831,
+          2236416,
+          2252800
+        ],
+        [
+          28420349,
+          28724587,
+          2183168,
+          2338816
+        ],
+        [
+          28836648,
+          28076196,
+          2330624,
+          2207744
+        ]
+      ]
+    },
+    "1": {
+      "c": [
+        [
+          103128573,
+          29923148,
+          2297856,
+          2248704
+        ],
+        [
+          111065123,
+          29910243,
+          2252800,
+          2228224
+        ],
+        [
+          101989091,
+          29444065,
+          2330624,
+          2322432
+        ],
+        [
+          114126068,
+          30560864,
+          2240512,
+          2232320
+        ],
+        [
+          120751495,
+          47346217,
+          2252800,
+          2289664
+        ],
+        [
+          109001356,
+          31015519,
+          2322432,
+          2347008
+        ],
+        [
+          103059473,
+          29240319,
+          2330624,
+          2134016
+        ],
+        [
+          106740382,
+          29935888,
+          2129920,
+          2322432
+        ]
+      ],
+      "llvm": [
+        [
+          102531586,
+          29247257,
+          2236416,
+          2248704
+        ],
+        [
+          102527548,
+          30538731,
+          2297856,
+          2322432
+        ],
+        [
+          104315237,
+          29805200,
+          2134016,
+          2297856
+        ],
+        [
+          104079163,
+          29729668,
+          2125824,
+          2338816
+        ],
+        [
+          104618835,
+          30223434,
+          2252800,
+          2134016
+        ],
+        [
+          102814504,
+          29955083,
+          2244608,
+          2338816
+        ],
+        [
+          106186623,
+          29872179,
+          2125824,
+          2236416
+        ],
+        [
+          108011237,
+          30402702,
+          2240512,
+          2183168
+        ]
+      ]
+    },
+    "65535": {
+      "c": [
+        [
+          138769940,
+          111577209,
+          2260992,
+          2383872
+        ],
+        [
+          133080852,
+          111770479,
+          2461696,
+          2363392
+        ],
+        [
+          132380172,
+          113242502,
+          2375680,
+          2453504
+        ],
+        [
+          138620291,
+          115504225,
+          2371584,
+          2441216
+        ],
+        [
+          133020852,
+          117837165,
+          2478080,
+          2371584
+        ],
+        [
+          142640306,
+          120834501,
+          2453504,
+          2453504
+        ],
+        [
+          133341976,
+          114026500,
+          2428928,
+          2441216
+        ],
+        [
+          148376075,
+          132470909,
+          2371584,
+          2367488
+        ]
+      ],
+      "llvm": [
+        [
+          141314610,
+          111150305,
+          2367488,
+          2441216
+        ],
+        [
+          132821008,
+          110111868,
+          2363392,
+          2420736
+        ],
+        [
+          135975059,
+          111020753,
+          2441216,
+          2478080
+        ],
+        [
+          134207794,
+          112130216,
+          2256896,
+          2383872
+        ],
+        [
+          137014184,
+          111389757,
+          2265088,
+          2461696
+        ],
+        [
+          133137875,
+          110386487,
+          2469888,
+          2420736
+        ],
+        [
+          141527387,
+          112206277,
+          2420736,
+          2375680
+        ],
+        [
+          132992682,
+          121331715,
+          2478080,
+          2375680
+        ]
+      ]
+    },
+    "65536": {
+      "c": [
+        [
+          136186185,
+          134330449,
+          2453504,
+          2379776
+        ],
+        [
+          133060648,
+          135918866,
+          2478080,
+          2428928
+        ],
+        [
+          137798860,
+          138226328,
+          2363392,
+          2265088
+        ],
+        [
+          143399872,
+          140450778,
+          2363392,
+          2375680
+        ],
+        [
+          140842017,
+          135129239,
+          2453504,
+          2371584
+        ],
+        [
+          134285205,
+          132992280,
+          2265088,
+          2371584
+        ],
+        [
+          131065585,
+          132841430,
+          2371584,
+          2461696
+        ],
+        [
+          133650134,
+          134185856,
+          2367488,
+          2461696
+        ]
+      ],
+      "llvm": [
+        [
+          134755947,
+          136312322,
+          2363392,
+          2453504
+        ],
+        [
+          139226283,
+          136135654,
+          2379776,
+          2428928
+        ],
+        [
+          140115882,
+          142501890,
+          2469888,
+          2469888
+        ],
+        [
+          134793662,
+          138498375,
+          2469888,
+          2371584
+        ],
+        [
+          134846096,
+          131016628,
+          2260992,
+          2256896
+        ],
+        [
+          132610902,
+          132668413,
+          2428928,
+          2363392
+        ],
+        [
+          131214867,
+          133576930,
+          2420736,
+          2478080
+        ],
+        [
+          134619443,
+          136175296,
+          2375680,
+          2334720
+        ]
+      ]
+    },
+    "65537": {
+      "c": [
+        [
+          279267978,
+          146142328,
+          2560000,
+          2260992
+        ],
+        [
+          280953528,
+          140508250,
+          2392064,
+          2363392
+        ],
+        [
+          291494753,
+          142598096,
+          2498560,
+          2428928
+        ],
+        [
+          281485466,
+          141551313,
+          2498560,
+          2256896
+        ],
+        [
+          284545519,
+          146836879,
+          2576384,
+          2383872
+        ],
+        [
+          282164251,
+          138981998,
+          2572288,
+          2363392
+        ],
+        [
+          281512097,
+          146120004,
+          2609152,
+          2367488
+        ],
+        [
+          281700760,
+          141664304,
+          2494464,
+          2367488
+        ]
+      ],
+      "llvm": [
+        [
+          278336977,
+          146770835,
+          2387968,
+          2375680
+        ],
+        [
+          280273881,
+          139301702,
+          2502656,
+          2383872
+        ],
+        [
+          285961444,
+          143715540,
+          2560000,
+          2256896
+        ],
+        [
+          276954339,
+          151937872,
+          2600960,
+          2379776
+        ],
+        [
+          287249572,
+          142157066,
+          2498560,
+          2383872
+        ],
+        [
+          280991529,
+          142156031,
+          2498560,
+          2478080
+        ],
+        [
+          287445649,
+          142098249,
+          2396160,
+          2379776
+        ],
+        [
+          280379582,
+          142242022,
+          2514944,
+          2256896
+        ]
+      ]
+    },
+    "131071": {
+      "c": [
+        [
+          251960806,
+          144956218,
+          2543616,
+          2502656
+        ],
+        [
+          246396921,
+          144111467,
+          2539520,
+          2609152
+        ],
+        [
+          246077347,
+          143313758,
+          2371584,
+          2498560
+        ],
+        [
+          251059887,
+          142072199,
+          2498560,
+          2514944
+        ],
+        [
+          248054011,
+          143478725,
+          2592768,
+          2441216
+        ],
+        [
+          246323404,
+          151229282,
+          2449408,
+          2609152
+        ],
+        [
+          246325305,
+          144120252,
+          2535424,
+          2494464
+        ],
+        [
+          247140224,
+          145960467,
+          2375680,
+          2498560
+        ]
+      ],
+      "llvm": [
+        [
+          246904720,
+          145246071,
+          2576384,
+          2498560
+        ],
+        [
+          246754112,
+          145104046,
+          2551808,
+          2396160
+        ],
+        [
+          246841660,
+          143985792,
+          2375680,
+          2514944
+        ],
+        [
+          246099213,
+          145199452,
+          2494464,
+          2392064
+        ],
+        [
+          246780010,
+          144995458,
+          2486272,
+          2387968
+        ],
+        [
+          247702702,
+          142722898,
+          2494464,
+          2514944
+        ],
+        [
+          252679567,
+          144481813,
+          2478080,
+          2592768
+        ],
+        [
+          257756917,
+          150669593,
+          2502656,
+          2609152
+        ]
+      ]
+    },
+    "131072": {
+      "c": [
+        [
+          147515625,
+          146383903,
+          2473984,
+          2478080
+        ],
+        [
+          147455866,
+          146871510,
+          2560000,
+          2371584
+        ],
+        [
+          148305768,
+          146176537,
+          2498560,
+          2494464
+        ],
+        [
+          148690116,
+          146995411,
+          2592768,
+          2371584
+        ],
+        [
+          155634486,
+          146911777,
+          2502656,
+          2580480
+        ],
+        [
+          148311037,
+          150139972,
+          2498560,
+          2379776
+        ],
+        [
+          147460773,
+          146136027,
+          2564096,
+          2371584
+        ],
+        [
+          151094365,
+          146312601,
+          2555904,
+          2367488
+        ]
+      ],
+      "llvm": [
+        [
+          147567451,
+          147576546,
+          2379776,
+          2490368
+        ],
+        [
+          147508979,
+          147907935,
+          2494464,
+          2367488
+        ],
+        [
+          149650366,
+          146815810,
+          2592768,
+          2486272
+        ],
+        [
+          150308616,
+          150691587,
+          2531328,
+          2568192
+        ],
+        [
+          149206729,
+          149727470,
+          2494464,
+          2486272
+        ],
+        [
+          145985901,
+          145354060,
+          2367488,
+          2486272
+        ],
+        [
+          146872349,
+          150868789,
+          2375680,
+          2543616
+        ],
+        [
+          150383281,
+          144939020,
+          2371584,
+          2486272
+        ]
+      ]
+    },
+    "131073": {
+      "c": [
+        [
+          149024848,
+          153545621,
+          2490368,
+          2535424
+        ],
+        [
+          149985446,
+          147742000,
+          2486272,
+          2584576
+        ],
+        [
+          148773234,
+          152332617,
+          2478080,
+          2535424
+        ],
+        [
+          148067806,
+          153594293,
+          2551808,
+          2555904
+        ],
+        [
+          149857581,
+          150532509,
+          2498560,
+          2535424
+        ],
+        [
+          154740351,
+          149449681,
+          2568192,
+          2371584
+        ],
+        [
+          149493180,
+          150200628,
+          2568192,
+          2494464
+        ],
+        [
+          150107482,
+          150560755,
+          2543616,
+          2650112
+        ]
+      ],
+      "llvm": [
+        [
+          149357787,
+          149515947,
+          2371584,
+          2568192
+        ],
+        [
+          151488743,
+          148983504,
+          2486272,
+          2580480
+        ],
+        [
+          156539062,
+          149645281,
+          2482176,
+          2469888
+        ],
+        [
+          149698696,
+          149090420,
+          2564096,
+          2478080
+        ],
+        [
+          148101359,
+          150358983,
+          2490368,
+          2576384
+        ],
+        [
+          149993150,
+          151245279,
+          2486272,
+          2494464
+        ],
+        [
+          150473115,
+          148698273,
+          2490368,
+          2494464
+        ],
+        [
+          150149779,
+          150001631,
+          2371584,
+          2555904
+        ]
+      ]
+    },
+    "463347": {
+      "c": [
+        [
+          204349638,
+          146859694,
+          3358720,
+          2912256
+        ],
+        [
+          208369085,
+          145439622,
+          3391488,
+          2924544
+        ],
+        [
+          209366506,
+          150108761,
+          3362816,
+          2904064
+        ],
+        [
+          208407914,
+          149775310,
+          3362816,
+          3006464
+        ],
+        [
+          209802117,
+          148988311,
+          3465216,
+          2916352
+        ],
+        [
+          207894140,
+          148073443,
+          3371008,
+          2899968
+        ],
+        [
+          203004224,
+          145808093,
+          3481600,
+          3010560
+        ],
+        [
+          210647711,
+          147917529,
+          3477504,
+          3010560
+        ]
+      ],
+      "llvm": [
+        [
+          207966272,
+          152045723,
+          3465216,
+          2932736
+        ],
+        [
+          213485045,
+          151746802,
+          3457024,
+          2977792
+        ],
+        [
+          211302334,
+          148059840,
+          3358720,
+          2924544
+        ],
+        [
+          205332270,
+          152342808,
+          3366912,
+          2899968
+        ],
+        [
+          204437215,
+          150658121,
+          3362816,
+          3002368
+        ],
+        [
+          211232026,
+          146020647,
+          3358720,
+          2904064
+        ],
+        [
+          205368290,
+          152026219,
+          3379200,
+          2924544
+        ],
+        [
+          210622013,
+          148686186,
+          3358720,
+          3018752
+        ]
+      ]
+    }
+  },
+  "verification": {
+    "tests_per_backend": {
+      "atomic_files": 6,
+      "example_contact_book": 2,
+      "example_lending_desk": 7,
+      "filesystem": 22
+    },
+    "boundary_cases_per_backend_before_after": 15,
+    "release_cli_asan_ubsan_valid_boundary_cases_per_backend": 9,
+    "generated_runtime_smokes": [
+      "EOF-with-existing-storagefailsallocationbefore70,passesafter0",
+      "INT32exactacceptandone-byteoverflowEFBIGwithoutreading2GiBpayload",
+      "unchangedreadSomeandzero-maxbehavior",
+      "shortreads/EINTR",
+      "readEIOprecedenceovercloseENOSPC",
+      "close-onlyENOSPC"
+    ],
+    "outputs": "BothC/LLVMallapplicationstdoutandindependentpersisted-stateoraclespass.",
+    "clippy": "cargo clippy --offline --locked --test filesystem -- -D warnings passed (isolatedtargetdirectory).",
+    "release_build": "cargo build --offline --locked --release --bin nacre passed;installedcompilerbyte-identicaltomeasuredisolatedcandidate."
+  },
+  "causal_evidence": {
+    "old_read_trace": "7*65536+4595+EOF0perload;EOFrequest65536causes1MiBreplacement despite60941sparebytes.",
+    "new_read_trace": "Same9readcalls/load;finalrequest60941returns0withoutextragrowth.",
+    "load_count": 120,
+    "file_bytes": 463347,
+    "request_bytes_saved": 125829120,
+    "request_bytes_saved_pct": 20.289265580916936,
+    "public_readSome_source_unchanged": true
+  },
+  "limits": [
+    "Cachedfiles,regular-filestdout,oneLinuxx86-64host;affinitydoesnotcontrolfrequency/thermals/otherwork.",
+    "APIloopgainsarenotwholeapplicationgains;contactroundtripelapsednearparityandapplicationRSSmostlyunchanged.",
+    "InitialLLVMsearch+2.495%retained;controls+1.360%/-.353%,identicalcontrols+.514%/-1.078%donotestablishuniversallyzeroeffect.",
+    "Emptyinitialallocationandexact-full-bufferEOFgrowthremain;noadditionalEOFprobe/fstat/storagepolicy."
+  ],
+  "final_compiler_sha256": "df7f44de59b6219a0d237d4482231ab3edaf623e81f20aba6efb233c3097d324",
+  "api_source": "Result<Unit,Text> exercise() {\n    Text input = Args.get(0)?;\n    Text requested = Args.get(1)?;\n    int rounds = requested.parseInt()?;\n    long total = 0L;\n    int index = 0;\n    while (index < rounds) {\n        Text content = Files.readText(input)?;\n        total = total + (long)content.byteLength();\n        index = index + 1;\n    }\n    println(total);\n    return new Result<Unit,Text>.Ok(());\n}\nvoid main() {\n    match (exercise()) {\n        Ok(unit) { println(\"DONE\"); }\n        Err(error) { Console.print(\"ERROR: \"); Console.printText(error); println(\"\"); }\n    }\n}\n",
+  "api_source_sha256": "ee687b197ceb67fb0abc8578c9d1c52156ba7ed01c51349251d380d56c043fea",
+  "probe_source_sha256": "fce0a4f53002a23f030f621e0819ff7af64b960b76fc5464214f671596cfbd19",
+  "fixture_hashes": {
+    "contact-roundtrip": {
+      "stdin.txt": "11248d17c1c3c4994903efc9a22ff8cb27044946baee7123e2617d49234ca698",
+      "expected.data": "c7210df05298ff6884a3ba51962d59ece3cdcc78adbf738c59068d8a67a05552"
+    },
+    "contact-search": {
+      "stdin.txt": "6a909b75f58d3ea5f44e3adc8078aa6e085cb4d2ecfdad830620ca04b16d8f8a",
+      "expected.data": "69748f96c7ea6bfcd165230e582b0b03dd6ec0193e1cf83752b61cbb045e1a35"
+    },
+    "lending-session": {
+      "stdin.txt": "7c77a3f61b730f7c72e2856c6ee048fd9ff0abed914195da9519239a27b29603",
+      "expected.data": "d1d6dbdfde26e601f66661357714bf998e688eab379c31bc6e3ac119b624f2e7"
+    }
+  },
+  "api_input_hashes": {
+    "463347": "ad6938300c6893b520174031d0bb25358b8a498cfba1e5ce74e82cf8cdc986fc",
+    "131073": "a3999e0bf1a63e8d30372ffe7f6699702fe36ae4d52d9b250c0cb3c655092376",
+    "131072": "553f850f8a9ded3c7738ddddfbee3ef89554871b53ace15a35c505bcf27413d9",
+    "131071": "7a56eedcff40a6ef9f7b42d76d28466c9c70a187b632bfb94f763f275d121005",
+    "65537": "19bfc4a41d98ee705969b572d9880afde0aa5674f16e5f3d9a568200483e42fc",
+    "65536": "1ad31e6f6f0ae93a4f723bb84fe4a453b900b517ca8ccc47f26842208f74e32b",
+    "65535": "134def3c95c25e492b548b3ae0b8160ec63e1f3aae2a5e06dd42311138250a4d",
+    "1": "ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb",
+    "0": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "build_commands": {
+    "candidate_compiler": [
+      "cargo",
+      "build",
+      "--offline",
+      "--locked",
+      "--release",
+      "--bin",
+      "nacre"
+    ],
+    "c_consumer": [
+      "nacre",
+      "build",
+      "<source>",
+      "-O3",
+      "--native",
+      "-o",
+      "<output>"
+    ],
+    "llvm_extra": [
+      "--direct"
+    ],
+    "stats_extra": [
+      "--memory-stats"
+    ],
+    "sanitizer_extra": [
+      "--sanitize"
+    ],
+    "cpu_supervisor": [
+      "taskset",
+      "-c",
+      "0",
+      "<Cwait4supervisor>",
+      "<control-fd>",
+      "<executable>",
+      "<arguments>"
+    ]
+  }
+}

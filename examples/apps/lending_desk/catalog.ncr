@@ -69,6 +69,7 @@ class Catalog<T> {
 class DeskState {
     private Catalog<Loanable> resources;
     private Catalog<Member> members;
+    private Map<int,int> activeLoans;
     private int day;
     private int nextResourceId;
     private int nextMemberId;
@@ -76,9 +77,41 @@ class DeskState {
     public DeskState() {
         this.resources = new Catalog<Loanable>();
         this.members = new Catalog<Member>();
+        this.activeLoans = new Map<int,int>();
         this.day = 0;
         this.nextResourceId = 1;
         this.nextMemberId = 1;
+    }
+
+    private void recordLoan(int memberId) {
+        int current = 0;
+        match (this.activeLoans.tryGet(memberId)) {
+            None {}
+            Some(count) { current = count; }
+        }
+        match (this.activeLoans.put(memberId, current + 1)) {
+            None {}
+            Some(prev) {}
+        }
+    }
+
+    private void releaseLoan(int memberId) {
+        match (this.activeLoans.tryGet(memberId)) {
+            None {}
+            Some(count) {
+                if (count <= 1) {
+                    match (this.activeLoans.tryRemove(memberId)) {
+                        None {}
+                        Some(removed) {}
+                    }
+                } else {
+                    match (this.activeLoans.put(memberId, count - 1)) {
+                        None {}
+                        Some(prev) {}
+                    }
+                }
+            }
+        }
     }
 
     public readonly int logicalDay() { return this.day; }
@@ -106,10 +139,45 @@ class DeskState {
     }
 
     public void addResource(int id, Loanable resource) {
+        match (resource.getAvailability()) {
+            Available {}
+            Lent(memberId, dueDay) {
+                this.recordLoan(memberId);
+            }
+            Maintenance(reason) {}
+        }
         match (this.resources.put(id, resource)) {
             None {}
             Some(previous) {}
         }
+    }
+
+    public void setResourceAvailability(int id, Availability availability) {
+        int oldMember = 0;
+        int newMember = 0;
+        {
+            borrow Loanable resource = this.resources.getRef(id);
+            match (resource.getAvailability()) {
+                Available {}
+                Lent(memberId, dueDay) { oldMember = memberId; }
+                Maintenance(reason) {}
+            }
+        }
+        match (borrow availability) {
+            Available {}
+            Lent(memberId, dueDay) { newMember = memberId; }
+            Maintenance(reason) {}
+        }
+        if (oldMember != newMember) {
+            if (oldMember > 0) {
+                this.releaseLoan(oldMember);
+            }
+            if (newMember > 0) {
+                this.recordLoan(newMember);
+            }
+        }
+        borrow mut Loanable resource = this.resources.getMut(id);
+        resource.setAvailability(availability);
     }
 
     public void addMember(int id, Member member) {
@@ -120,6 +188,22 @@ class DeskState {
     }
 
     public Option<Loanable> removeResource(int id) {
+        if (this.resources.containsKey(id)) {
+            int borrowedMember = 0;
+            {
+                borrow Loanable resource = this.resources.getRef(id);
+                match (resource.getAvailability()) {
+                    Available {}
+                    Lent(memberId, dueDay) {
+                        borrowedMember = memberId;
+                    }
+                    Maintenance(reason) {}
+                }
+            }
+            if (borrowedMember > 0) {
+                this.releaseLoan(borrowedMember);
+            }
+        }
         return this.resources.remove(id);
     }
 
@@ -156,18 +240,7 @@ class DeskState {
     }
 
     public readonly boolean hasActiveLoanFor(int memberId) {
-        for (int resourceId, borrow Loanable resource : this.resources.entriesRef()) {
-            boolean found = false;
-            match (resource.getAvailability()) {
-                Available {}
-                Lent(borrowerId, dueDay) {
-                    if (borrowerId == memberId) { found = true; }
-                }
-                Maintenance(reason) {}
-            }
-            if (found) { return true; }
-        }
-        return false;
+        return this.activeLoans.containsKey(memberId);
     }
 
     public readonly boolean hasValidRelationships() {

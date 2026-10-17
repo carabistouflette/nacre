@@ -57,6 +57,28 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   native implementation, enabling vectorized conversion without changing validation,
   allocation order, ownership, or compiler flags. Verify SIMD tails and all byte
   values; record matched six-workload timing, counters, and the code-size cost.
+- Reuse writable tail capacity in whole-file `Files.readText` reads before
+  growing the input buffer, avoiding needless growth when the next read is EOF.
+  Preserve streaming `File.readSome`, UTF-8 and Text-size checks, partial reads,
+  EINTR handling, close-error precedence, and ownership transfer.
+- Grow heap-backed `Text` with the shared reallocation helper instead of
+  allocate–copy–free. Preserve inline spill, capacity rounding, validation,
+  alias rejection, ownership, and allocation-failure behavior.
+- Format `Text.appendInt` with bounded stack-only decimal conversion instead of
+  general `snprintf`. Preserve the full signed 32-bit range, UTF-8/NUL prefixes,
+  Text growth, ownership and allocation-failure behavior; record matched
+  consumer gains and independently checked search controls.
+- Copy `Text.sliceBytes` results through the existing trusted owned-copy path
+  after range and UTF-8 endpoint checks, avoiding redundant validation while
+  preserving independent storage, inline/heap growth, errors and ownership.
+- Copy `Text.slice` (scalar), `Text.trim`, and `Text.split` results through
+  the trusted owned-copy path, removing redundant UTF-8 validation of verified
+  character boundaries across the `Text` substring API.
+- Fast-path short UTF-8 validation and single-byte stores in `Text.append`,
+  reducing serialization and append overhead for common delimiter and newline tokens.
+- Index active borrower counts in `DeskState` (`lending_desk`), replacing the
+  $O(N)$ full-catalog scan in `hasActiveLoanFor` with an $O(1)$ check and accelerating
+  non-borrower member removals by ~45% without changing catalog or persistence invariants.
 - Add optional `nacre doctor --direct` and `--zip` checks. Report selected LLVM
   tool versions and reject incompatible majors before compiling bitcode; verify
   native allocation balance and real binary/empty ZIP archive round-trips.

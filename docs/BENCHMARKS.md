@@ -702,3 +702,417 @@ The permanent optimized boundary test checks every decoded byte and length.
 Both complete fuzzing-enabled suites, including ignored tests, passed 1,351
 tests each; strict all-target/all-feature Clippy and the release build passed.
 
+## Whole-file Text read tail reuse
+
+[read-text-tail-controlled.json](../benchmarks/read-text-tail-controlled.json)
+records a shared native `Files.readText` change. The read-all caller caps its
+next request by existing writable tail space, when present. The public
+`File.readSome` helper, geometric growth policy, UTF-8 validation, Text-size
+limit, error precedence and ownership transfer are unchanged. No compiler,
+alias, inlining, ISA or layout policy was changed.
+
+### Allocation cause and result
+
+The contact-book import/export input is 463,347 bytes. After seven full
+64 KiB reads and one 4,595-byte read, the input buffer has capacity 524,288
+and 60,941 writable bytes left. Previously the next request insisted on
+65,536 bytes, allocated a 1 MiB replacement and copied the input before
+discovering EOF. The final request now uses the existing 60,941-byte tail.
+Both backends retain nine read calls per import and identical file contents.
+Exact-full-buffer EOF and empty-file initial allocation are not removed by
+this bounded change.
+
+Separate instrumented runs of the unchanged contact-book application perform
+120 load/save pairs over 10,000 contacts. C and direct LLVM agree:
+
+| Diagnostic | Baseline | Tail reuse |
+| --- | ---: | ---: |
+| Nacre allocation events | 4,405,683 | 4,405,563 |
+| Nacre frees | 4,405,683 | 4,405,563 |
+| Nacre live allocations | 0 | 0 |
+| Intercepted requested bytes | 620,175,824 | 494,346,704 |
+
+The reduction is 120 MiB, or 20.29% of cumulative intercepted request bytes,
+not a 20.29% peak-RAM reduction. Realloc requests include their complete
+replacement sizes; libc-internal allocations can bypass the interposer.
+Search and lending-desk allocation counts and requested bytes are unchanged.
+
+### Matched performance and limits
+
+Saved baseline executables were reused. Both versions use Clang 22.1.8,
+`llvm-link` 22.1.0, `-O3 --native`, CPU 0 and fresh processes. Timings and RSS
+use a C `wait4` supervisor without allocation instrumentation or profiling.
+Pairs alternate old/new order under the benchmark lock.
+
+A separate repeated `Files.readText` API consumer reads cached files and
+checks its accumulated byte lengths. Each size/backend has eight pairs with
+one shared repetition count. Negative median paired elapsed change is faster:
+
+| Input bytes | C elapsed change | Direct LLVM elapsed change |
+| --- | ---: | ---: |
+| 0 | -1.51% | +0.41% |
+| 1 | -71.59% | -71.43% |
+| 65,535 | -14.89% | -17.72% |
+| 65,536 | -0.33% | +1.16% |
+| 65,537 | -49.71% | -49.58% |
+| 131,071 | -41.64% | -41.40% |
+| 131,072 | -1.02% | +0.13% |
+| 131,073 | +0.46% | -0.25% |
+| 463,347 | -28.54% | -27.90% |
+
+These are API-loop results, not whole-application speedups. Sixteen pairs of
+the unchanged example applications produced:
+
+| Scenario | C elapsed change | Direct LLVM elapsed change |
+| --- | ---: | ---: |
+| Contact import/export | -0.65% | -0.40% |
+| Contact search | -0.08% | +2.50% |
+| Lending-desk session | -0.54% | -0.42% |
+
+The initial LLVM search cost is retained, not discarded. Its 106 native
+instructions are unchanged after relocation normalization, but the function
+entry moves by 16 bytes. A follow-up used two labels for each exact binary
+in 16 balanced rounds: independent old/new comparisons moved +1.36% and
+-0.35%; identical-old and identical-new comparisons moved +0.51% and -1.08%.
+The initial cost did not consistently reproduce; neither a search gain nor
+a universal absence of regressions is established. Application peak RSS was
+mostly unchanged; raw RSS ranges and API-loop values are in the JSON.
+
+Files are warm and stdout is redirected. Affinity does not control host
+frequency, thermal state or competing work. No cold-storage, production
+query-distribution or cross-target performance claim is made.
+
+### Correctness
+
+Both backends passed 37 affected tests each: filesystem, atomic files,
+contact book and lending desk. The new permanent test checks exact bytes,
+Unicode scalar counts, NUL and invalid UTF-8 around buffer boundaries.
+Actual release-CLI ASan/UBSan read-all consumers passed nine sizes per backend.
+Additional generated-runtime smokes exercised short reads/EINTR, the exact
+INT32 Text-size boundary and overflow, read-error precedence over close
+errors, close-only failure and unchanged `readSome`. With existing writable
+storage and new allocations denied, the old EOF helper failed allocation;
+the new helper completed without growing. All affected application outputs
+and independent persistence-state oracles matched.
+
+## Heap-backed Text reallocation
+
+[text-realloc-controlled.json](../benchmarks/text-realloc-controlled.json)
+records the shared native `Text` growth change against the retained
+`df7f44de` compiler, including the preceding whole-file read tail fix.
+Already heap-backed storage now uses `ncr_reallocate`; inline spill still
+allocates and copies. Capacity rounding, size checks, UTF-8 validation,
+clear/refill semantics, alias rejection and ownership are unchanged.
+No allocator, inline capacity, public API or compiler policy was changed.
+
+### Allocation diagnostics
+
+Reallocation can retain storage or move it and copy internally. Requested
+bytes are not copied, physical, live or peak bytes. Separate instrumented
+contact-book runs perform 120 load/save pairs over 10,000 contacts:
+
+| Diagnostic, identical on C and LLVM | Baseline | Retained |
+|---|---:|---:|
+| Nacre allocations and frees, each | 4,405,563 | 4,405,563 |
+| Nacre live | 0 | 0 |
+| Intercepted cumulative requested bytes | 494,346,704 | 494,346,704 |
+| Intercepted malloc calls | 1,202,402 | 1,200,722 |
+| Intercepted realloc calls | 1,440 | 3,120 |
+
+The 1,680 eligible heap growths convert 180,868,320 requested bytes from
+malloc to realloc, not remove those requests. Nacre's existing reallocation
+accounting records a logical allocation/free pair. Inline spills and
+unrelated allocation sites retain their paths.
+
+### Matched elapsed time and peak RSS
+
+Measurements reuse archived baseline consumer binaries, the same sources,
+Clang 22.1.8/llvm-link 22.1.0, `-O3 --native`, CPU 0 and the existing
+wait4 supervisor. Fresh processes run in balanced order under the benchmark
+lock; no sanitizer, allocation interposer or profiler is used in timed runs.
+Positive paired elapsed change means slower:
+
+| Application, 16 pairs/backend | C | LLVM |
+|---|---:|---:|
+| Contact roundtrip | -1.478% | +0.224% |
+| Contact search | -0.662% | -0.139% |
+| Lending session | -0.787% | -0.253% |
+
+Application elapsed time is mostly neutral. Median peak RSS falls 13.36%
+and 13.39% for C/LLVM search, and 4.32% and 4.71% for lending.
+Roundtrip RSS does not improve: C rises 64 KiB and LLVM 6 KiB, with
+overlapping baseline/candidate ranges. Full byte values and ranges are
+retained in the JSON.
+
+API loops accumulate byte lengths and sampled bytes on every iteration and
+check the final total against an independent oracle. The UTF-8/NUL token
+is seven bytes; full-content correctness is checked separately.
+These are API results, not application speedups:
+
+| Fresh Text construction, 12 pairs/backend | C | LLVM |
+|---|---:|---:|
+| Eight 57,344-byte appends | -96.697% | -97.480% |
+| 65,536 seven-byte appends | -66.144% | -67.068% |
+
+Initial inline, 1,024-append and clear/refill runs lasted only about 1–11 ms.
+Their complete raw data, including apparent refill costs of 6.09%/15.62%,
+are retained but are not used to decide retention. Adaptive calibration
+then required a fastest pilot of at least 20 ms and targeted 200 ms.
+Sixteen counterbalanced four-label rounds use two labels for each exact
+binary, without changing flags or layout:
+
+| Longer API controls | C oldA→newA | C oldB→newB | LLVM oldA→newA | LLVM oldB→newB |
+|---|---:|---:|---:|---:|
+| Inline seven-byte Text | +1.889% | -0.638% | -0.011% | -0.195% |
+| 1,024 seven-byte appends | -6.300% | -5.071% | -5.057% | -4.204% |
+| Clear/refill retained capacity | +1.842% | +0.255% | +0.528% | +0.800% |
+
+For C refill, identical candidate labels differ by -2.271%; identical
+baseline labels differ by +0.648%. The initial large refill cost does not
+reproduce at meaningful durations. The measured growth benefit and absence
+of a confirmed material regression justify retention, not a universal
+zero-regression claim. Warm caches, glibc, one host and uncontrolled
+frequency/thermal state limit extrapolation.
+
+### Behavior and ownership
+
+Both backends pass 63 affected native tests each, including a new
+full-byte/scalar regression across repeated growth, UTF-8/NUL,
+clear/refill, independent clones and exact-size owned replacement storage.
+All 132 borrowing frontend tests pass. Actual `-O3 --native` CLI probes
+pass ASan/UBSan with live=0 before and after; direct, retained-borrow and
+projected self-appends retain E3001 rejection.
+
+A private probe includes the actual generated C runtime and forces moving
+and in-place allocation behavior. Bytes and ownership survive both;
+inline spill remains a raw allocation. Allocation failure and INT32
+overflow retain exit 70 and identical source-located diagnostics.
+Application stdout and independent persistence-state oracles match on
+both backends. Strict Clippy for the changed test target and the normal
+release build pass; the installed compiler matches the measured candidate.
+
+## Signed 32-bit Text append formatting
+
+[text-int-format-controlled.json](../benchmarks/text-int-format-controlled.json)
+records a bounded change to `Text.appendInt` against the retained `55756bef`
+compiler. The shared C/LLVM native method now backfills decimal digits into
+an 11-byte stack buffer, adds the optional minus sign, and appends the span
+through the existing Text helper. Unsigned magnitude avoids signed negation
+overflow for INT32_MIN; a do/while emits zero correctly.
+
+Every signed 32-bit value fits ten digits plus a sign, so general snprintf
+format parsing and its unreachable formatting-failure branch are removed.
+Text-size/OOM diagnostics, growth policy, inline capacity, ownership and
+UTF-8/NUL behavior are preserved. Other numeric append methods, public APIs,
+allocator and compiler/alias/inlining/ISA/layout policies are unchanged.
+
+### Frozen gate and matched application results
+
+The approved gate requires at least 3% median paired contact-roundtrip
+elapsed improvement on both backends in both independent 16-pair batches,
+and rejects reproducible greater-than-2% costs in search, lending or mixed
+sign/width integer controls. Initial observations remain recorded; noisy
+signals are checked with identical-binary labels, not layout tuning.
+
+Archived baseline application binaries are reused without rebuilding.
+Both versions use the same Clang 22.1.8/llvm-link 22.1.0 toolchain and
+`-O3 --native`. The existing wait4 supervisor records elapsed time and peak
+RSS in fresh processes on CPU 0 under the benchmark lock. No sanitizer,
+interposer, memory counters or profiler is enabled in timing runs.
+Batch B reverses scenario/backend order and pair orientation. Files are
+warm; frequency, thermal state and other host work are not controlled.
+Positive paired elapsed change means slower:
+
+| Application | C batch A | LLVM batch A | C batch B | LLVM batch B |
+|---|---:|---:|---:|---:|
+| Contact roundtrip | -17.870% | -16.598% | -17.094% | -17.205% |
+| Contact search | +2.385% | -1.549% | +1.977% | -0.855% |
+| Lending session | -0.958% | -2.011% | +1.167% | -1.502% |
+
+All 64 roundtrip pairs favor the candidate. The application improvement
+passes the frozen gate; it is not inferred from the earlier sampling share
+or from an isolated formatter benchmark.
+
+C search is borderline in the initial batches. Two additional independent
+16-round counterbalanced four-label cohorts run oldA/oldB on the exact same
+baseline binary and newA/newB on the exact same candidate binary:
+
+| C-search confirmation | oldA→newA | oldB→newB | oldA→oldB | newA→newB |
+|---|---:|---:|---:|---:|
+| Cohort I1 | +0.526% | +1.903% | +1.351% | +3.268% |
+| Cohort I2 | -4.060% | -0.742% | -1.061% | +1.306% |
+
+The initial cost does not reproduce in either fixed confirmation cohort;
+identical candidate labels also differ materially. These results support
+retention without a confirmed greater-than-2% regression, not a universal
+zero-cost claim. No binary layout, name, flag or inlining adjustment was made.
+
+### Integer controls, footprint and allocations
+
+Mixed controls cycle through 61 signed values spanning zero, extrema and
+every decimal-width transition. Fresh and reused inline storage, and an
+already heap-backed destination, are checked against an independent
+byte-length/sampled-byte oracle. Adaptive calibration requires a fastest
+pilot of at least 20 ms and targets 200 ms using one common count per case
+across both versions/backends. Counts are 14,090,647 fresh, 23,216,155 reused
+and 6,259,714 heap-backed iterations:
+
+| Mixed integer control | C batch A | LLVM batch A | C batch B | LLVM batch B |
+|---|---:|---:|---:|---:|
+| Fresh inline destination | -59.853% | -57.637% | -59.232% | -57.559% |
+| Clear/refill retained storage | -69.975% | -68.189% | -70.129% | -68.119% |
+| Heap-backed destination | -32.838% | -32.921% | -32.367% | -32.515% |
+
+These API gains are separate from the measured application gain above.
+Peak RSS is mostly neutral with overlapping ranges; every median/range is
+preserved in the JSON. This change is not promoted as a general RAM saving.
+
+Separate allocator diagnostics on both backends preserve Nacre allocations
+and frees exactly: roundtrip 4,405,563 each, search 53,266, lending 416,811;
+all live counts are zero. Intercepted cumulative requested bytes also stay
+identical: 494,346,704, 5,707,695 and 23,705,716 respectively. Formatter
+conversion adds no heap allocation; Text growth still uses its existing path.
+
+### Correctness
+
+Actual old/new release CLI probes verify an independent 8,263-byte oracle
+over 61 values with empty, UTF-8/NUL, inline-spilling and heap prefixes,
+growing accumulation, clone independence, scalar counts and clear/refill.
+C/LLVM runs pass ASan/UBSan with live=0. All application stdout and independent
+persistence-state oracles match in both batches and confirmation cohorts.
+A private probe includes the actual generated C formatter: exact bytes,
+zero growth allocations for inline formatting, and unchanged source-located
+exit-70 Text-size/inline-OOM/heap-OOM diagnostics pass before and after.
+The overflow check is a guard probe, not a new 2 GiB payload test.
+
+Both backends pass 108 affected native tests each: Text/regex, Text map keys,
+multi-source native consumers, Unicode, filesystem, contact book and lending.
+The borrowing (132) and multi-source frontend (73) suites pass once: 421
+targeted tests total, not a full-suite rerun. The new permanent regression
+uses an independent Rust decimal oracle for the complete bytes and scalars
+across the boundary/storage cases above. Strict Clippy for `text_regex` and
+the normal release build pass. The installed `fab71cd5` compiler is identical
+to the measured candidate; its actual C/LLVM ASan/UBSan CLI oracle passes.
+
+## Trusted owned byte slices
+
+`Text.sliceBytes` already checks bounds and UTF-8 scalar-aligned endpoints.
+Its successful result now uses the same allocation, initialization and trusted
+byte-copy sequence as `Text.clone`, instead of routing through the generic
+validated constructor. The result still owns independent storage. Generic
+`Text` construction/append, the UTF-8 decoder/validator, scalar `slice`, `trim`
+and `split` are unchanged. Inline capacity, growth and allocation policy are
+unchanged; there is no borrowed view or global validation bypass.
+
+Raw pairs, RSS, source/compiler provenance, fixture configuration, control
+iteration counts, allocation observations and lending confirmation cohorts are
+in [`text-slice-owned-controlled.json`](../benchmarks/text-slice-owned-controlled.json).
+
+### Matched application gate
+
+The existing `fab71cd5` C/LLVM application binaries were reused without
+rebuilding. Candidate binaries use the same Clang 22.1.8 / LLVM link 22.1.0
+configuration. Measurements use fresh uninstrumented processes, CPU 0 affinity,
+wait4 supervision, a shared lock, and balanced within-pair order. Batch B
+reverses scenario/backend order and pair orientation. Values below are median
+individual paired elapsed-time changes, not ratios of separate medians;
+negative means faster. Each cell contains 16 pairs.
+
+| Application | C batch A | LLVM batch A | C batch B | LLVM batch B |
+|---|---:|---:|---:|---:|
+| Contact roundtrip | -9.716% | -7.126% | -9.982% | -9.925% |
+| Contact absent search | -0.370% | +0.241% | -1.641% | -0.151% |
+| Lending session | +3.266% | +0.780% | -0.135% | -0.668% |
+
+The frozen gate requires at least 3% roundtrip improvement on both backends in
+each independent batch, with no reproducible control regression above 2%.
+Roundtrip improves in 61 of 64 pairs. The C lending increase in batch A does
+not reproduce in batch B. Two additional untuned 16-cycle four-label cohorts
+compare two labels for each unchanged binary:
+
+| C lending confirmation | old1→new1 | old2→new2 | old1→old2 | new1→new2 |
+|---|---:|---:|---:|---:|
+| I1 | -0.714% | +0.636% | -0.535% | +0.713% |
+| I2 | -0.653% | -2.192% | +1.045% | +0.137% |
+
+No greater-than-2% regression repeats in these confirmations. No binary layout,
+name, flags or inlining adjustment was made to address the initial result.
+The elapsed-time gate passes; this is not a universal zero-cost claim.
+
+### Slice controls and memory
+
+Eleven in-memory controls vary ranges at runtime and check exact independent
+Python oracles for accepted/rejected counts, byte-length/sampled-byte checksums
+and source preservation. Sources include NUL, dense Unicode, append-built text,
+empty slices, both sides of the 23-byte inline threshold, tails and rejected
+scalar-splitting ranges. Common iteration counts are calibrated separately
+per case, with a fastest pilot of at least 20 ms and a target of 200 ms.
+
+| Slice control | C batch A | LLVM batch A | C batch B | LLVM batch B |
+|---|---:|---:|---:|---:|
+| Tiny/NUL | -17.679% | -14.521% | -16.453% | -11.269% |
+| Short/NUL | -19.758% | -22.186% | -18.517% | -18.380% |
+| Empty | -9.108% | -6.066% | -9.703% | -8.825% |
+| Inline boundary, 23 bytes | -24.386% | -22.207% | -24.302% | -21.255% |
+| Heap boundary, 24 bytes | -24.294% | -26.019% | -24.475% | -24.028% |
+| Longer ASCII, 256-byte source | -66.781% | -66.993% | -64.800% | -64.410% |
+| Unicode-heavy | -20.808% | -21.725% | -17.873% | -21.921% |
+| Mixed ASCII/Unicode | -14.660% | -16.630% | -16.458% | -15.842% |
+| Tail/alignment | -27.558% | -18.772% | -27.795% | -18.789% |
+| Invalid-range mix | -12.265% | -3.278% | -12.383% | -5.873% |
+| Append-built source | -19.727% | -14.609% | -18.118% | -19.606% |
+
+Application logical allocation/free counts and process allocator call/requested
+byte totals remain identical on both backends; live counts and allocation
+failures are zero. RSS ranges overlap; no general RAM or physical-copy saving
+is claimed. The supervisor records elapsed time and peak RSS, not CPU time.
+The full application improvement is not attributed exclusively to the earlier
+sampled validation subgroup; compiler optimization effects are not isolated.
+
+### Correctness
+
+Actual baseline/candidate C and LLVM CLI probes pass a 4,670-byte independent
+oracle under ASan/UBSan, with 1,119 allocations/frees and zero live allocations.
+They cover 441 range pairs including signed extrema, 36 storage-boundary
+slices, and source clear/growth/drop independence at 18 lengths, as well as
+nested Unicode, empty/NUL data, cloned errors, construction/append and invalid
+filesystem UTF-8/NUL paths. All application stdout and independent persistence
+oracles pass. Both backends pass 70 affected native tests each across
+Text/regex, filesystem, Unicode, Text map keys, binary streams/codecs and
+encoding, including the new inline/heap slice-lifetime regression. These are
+targeted checks, not a full repository suite.
+Strict Clippy for `text_regex` and the normal release build pass. The installed
+`d7bdfcb2` compiler is byte-identical to the measured candidate; its actual C
+and direct-LLVM builds pass the same ASan/UBSan API oracle with zero live
+allocations.
+
+
+## Text substring cleanup, append fast path, and lending index
+
+### Substring cleanup and append fast path
+
+Following the verification of `Text.sliceBytes`, the trusted copy pattern
+was extended across the remaining standard-library `Text` substring methods:
+scalar `Text.slice`, `Text.trim`, and `Text.split`. In each case, character
+boundaries are already verified before construction, so redundant UTF-8
+revalidation is eliminated while preserving independent heap/inline storage,
+capacity rounding, errors, and ownership.
+
+In addition, `Text.append` introduces a short UTF-8 validation fast path for
+0-, 1-, and 2-byte strings (single ASCII bytes and 2-byte ASCII combinations
+are guaranteed RFC 3629 compliant without invoking the multi-branch scalar decoder),
+and direct 1-byte byte store into `inline_storage` or heap buffer avoiding `memcpy`.
+
+### Lending desk active loan indexing
+
+The post-slice profile identified that 43% of lending session cycles were
+spent in `DeskState.hasActiveLoanFor` performing full $O(N)$ catalog scans
+across 11,600 live resources for 400 non-borrower member removals (~4.64 million
+redundant availability checks).
+
+`DeskState` now indexes active borrower counts in an internal `Map<int,int>`.
+Loan creation, returns, and catalog loading/removal update the index, reducing
+`hasActiveLoanFor` to an $O(1)$ map lookup. In the lending-session workload,
+execution time drops from 330.75 ms to 182.12 ms (~45% faster) with exact
+stdout and persistence oracles verified byte-for-byte on both C and direct-LLVM backends.
+

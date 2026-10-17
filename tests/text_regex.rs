@@ -220,6 +220,125 @@ void main() {
 }
 
 #[test]
+fn text_repeated_growth_and_clear_preserve_utf8_nul_and_independent_owners() {
+    let output = execute(r#"
+boolean repeated(borrow Text value, borrow Text token, int count) {
+    if (value.byteLength() != token.byteLength() * count || value.charCount() != token.charCount() * count) { return false; }
+    int index = 0;
+    while (index < value.byteLength()) {
+        if (value.byteAt(index) != token.byteAt(index % token.byteLength())) { return false; }
+        index = index + 1;
+    }
+    return true;
+}
+void main() {
+    Text token = new Text("é\0😀");
+    Text value = new Text("");
+    value.append("");
+    int index = 0;
+    while (index < 5000) { value.appendText(token); index = index + 1; }
+    println(repeated(value, token, 5000));
+    Text copy = value.clone();
+    value.clear();
+    println(value.isEmpty());
+    index = 0;
+    while (index < 3000) { value.append("é\0😀"); index = index + 1; }
+    println(repeated(value, token, 3000));
+    while (index < 8000) { value.appendText(token); index = index + 1; }
+    println(repeated(value, token, 8000));
+    println(repeated(copy, token, 5000));
+    println(token.equalsString("é\0😀"));
+    Text input = new Text("aaaaaaaaaaaaaaaaaaaa");
+    Text needle = new Text("a");
+    Text replacement = new Text("é\0😀");
+    Text taken = input.replace(needle, replacement);
+    println(repeated(taken, token, 20));
+    taken.appendText(copy);
+    println(repeated(taken, token, 5020));
+    println(repeated(copy, token, 5000));
+    value.clear();
+    value.appendChar('終');
+    value.appendChar('\0');
+    value.appendChar('🙂');
+    println(value.equalsString("終\0🙂"));
+}
+"#);
+    assert_eq!(output.stdout, b"true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n");
+}
+
+#[test]
+fn text_integer_appends_preserve_signed_decimal_boundaries_and_storage() {
+    use std::fmt::Write;
+
+    let mut values = vec![0, 1, -1, i32::MIN, i32::MIN + 1, i32::MAX - 1, i32::MAX];
+    for power in [10, 100, 1_000, 10_000, 100_000, 1_000_000, 10_000_000, 100_000_000, 1_000_000_000] {
+        for value in [power - 1, power, power + 1] { values.extend([value, -value]); }
+    }
+    values.sort_unstable();
+    values.dedup();
+    let mut source = String::from("void main() { List<int> values = new List<int>();\n");
+    for value in &values {
+        if *value == i32::MIN { source.push_str("values.add((-2147483647 - 1));\n"); }
+        else { writeln!(source, "values.add({value});").unwrap(); }
+    }
+    source.push_str(r#"
+    Text accumulated = new Text("é\0😀|");
+    for (int number : values) {
+        Text empty = new Text("");
+        empty.appendInt(number);
+        empty.print();
+        Text small = new Text("é\0😀|");
+        small.appendInt(number);
+        small.print();
+        Text spill = new Text("é\0😀|xxxxxxxxxxxxxxx");
+        spill.appendInt(number);
+        spill.print();
+        Text heap = new Text("é\0😀|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx");
+        heap.appendInt(number);
+        heap.print();
+        accumulated.appendInt(number);
+        accumulated.append("|");
+    }
+    accumulated.print();
+    println(accumulated.byteLength());
+    println(accumulated.charCount());
+    Text copy = accumulated.clone();
+    accumulated.clear();
+    int pass = 0;
+    while (pass < 2) {
+        int index = values.size();
+        while (index > 0) {
+            index = index - 1;
+            accumulated.appendInt(values.get(index));
+            accumulated.append("|");
+        }
+        pass = pass + 1;
+    }
+    accumulated.print();
+    copy.appendInt((-2147483647 - 1));
+    copy.print();
+    println(accumulated.byteLength());
+    println(accumulated.charCount());
+}
+"#);
+    let mut expected = String::new();
+    for value in &values {
+        for prefix in ["", "é\0😀|", "é\0😀|xxxxxxxxxxxxxxx", "é\0😀|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"] {
+            writeln!(expected, "{prefix}{value}").unwrap();
+        }
+    }
+    let mut joined = String::from("é\0😀|");
+    for value in &values { write!(joined, "{value}|").unwrap(); }
+    let mut refilled = String::new();
+    for _ in 0..2 {
+        for value in values.iter().rev() { write!(refilled, "{value}|").unwrap(); }
+    }
+    writeln!(expected, "{joined}\n{}\n{}", joined.len(), joined.chars().count()).unwrap();
+    writeln!(expected, "{refilled}\n{joined}{}\n{}\n{}", i32::MIN, refilled.len(), refilled.chars().count()).unwrap();
+    assert_eq!(execute(&source).stdout, expected.as_bytes());
+}
+
+#[test]
 fn regex_uses_utf8_pcre2_and_owned_capture_text_with_byte_offsets() {
     let output = execute(r#"
 void main() {
@@ -711,4 +830,111 @@ void main() {
 "#);
     assert_eq!(output.stdout, b"true\n");
     assert_clean_memory(&output);
+}
+
+#[test]
+fn text_byte_slices_own_storage_across_inline_and_heap_boundaries() {
+    let output = execute(r#"
+void checkOwnership(int length) {
+    Text source = new Text("");
+    int index = 0;
+    while (index < 130) { source.append("x"); index = index + 1; }
+    match (source.sliceBytes(0, length)) {
+        Err(error) { println("unexpected slice error"); drop(error); drop(source); }
+        Ok(part) {
+            source.clear();
+            index = 0;
+            while (index < 1024) { source.append("y"); index = index + 1; }
+            drop(source);
+            println(part.byteLength() == length);
+            boolean exact = true;
+            index = 0;
+            while (index < length) {
+                if (part.byteAt(index) != 120) { exact = false; }
+                index = index + 1;
+            }
+            println(exact);
+            part.append("\0é🧭");
+            Text expected = new Text("");
+            index = 0;
+            while (index < length) { expected.append("x"); index = index + 1; }
+            expected.append("\0é🧭");
+            println(part.equals(expected));
+            drop(expected);
+            drop(part);
+        }
+    }
+}
+void main() {
+    checkOwnership(0);
+    checkOwnership(23);
+    checkOwnership(24);
+    checkOwnership(129);
+    Text source = new Text("A\0é€🧭Z");
+    match (source.sliceBytes(3, 4)) {
+        Ok(part) { println("split scalar accepted"); drop(part); }
+        Err(error) {
+            Text saved = error.clone();
+            drop(error);
+            println(saved.equalsString("Text.sliceBytes: invalid byte range"));
+            drop(saved);
+        }
+    }
+    match (source.sliceBytes(2, 11)) {
+        Err(error) { println("valid Unicode slice rejected"); drop(error); drop(source); }
+        Ok(part) {
+            drop(source);
+            println(part.equalsString("é€🧭"));
+            drop(part);
+        }
+    }
+}
+"#);
+    assert_eq!(output.stdout, b"true\n".repeat(14));
+}
+
+#[test]
+fn text_scalar_slices_trim_and_split_preserve_independent_storage_and_unicode_boundaries() {
+    let output = execute(r#"
+void main() {
+    Text source = new Text("  \t\n\0é€🧭Z\0  \n");
+    Text trimmed = source.trim();
+    println(trimmed.equalsString("\0é€🧭Z\0"));
+
+    match (trimmed.slice(1, 4)) {
+        Err(error) { println(false); drop(error); }
+        Ok(slice) {
+            println(slice.equalsString("é€🧭"));
+            source.clear();
+            source.append("new-source-content-long-enough-for-heap-growth-0123456789");
+            println(slice.equalsString("é€🧭"));
+            slice.append("!");
+            println(slice.equalsString("é€🧭!"));
+            drop(slice);
+        }
+    }
+    drop(source);
+
+    Text sentence = new Text("alpha::\0::beta::gamma");
+    Text delim = new Text("::");
+    List<Text> parts = sentence.split(delim);
+    sentence.clear();
+    drop(sentence);
+    println(parts.size() == 4);
+    {
+        borrow Text p0 = parts.getRef(0);
+        println(p0.equalsString("alpha"));
+        borrow Text p1 = parts.getRef(1);
+        println(p1.equalsString("\0"));
+        borrow Text p2 = parts.getRef(2);
+        println(p2.equalsString("beta"));
+        borrow Text p3 = parts.getRef(3);
+        println(p3.equalsString("gamma"));
+    }
+    drop(parts);
+    drop(delim);
+    drop(trimmed);
+}
+"#);
+    assert_eq!(output.stdout, b"true\n".repeat(9));
 }

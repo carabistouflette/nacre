@@ -350,10 +350,7 @@ class Desk {
                             return;
                         }
                         int dueDay = today + days;
-                        {
-                            borrow mut Loanable resource = this.state.getResourceMut(resourceId);
-                            resource.setAvailability(new Availability.Lent(memberId, dueDay));
-                        }
+                        this.state.setResourceAvailability(resourceId, new Availability.Lent(memberId, dueDay));
                         Console.print("Lent resource #");
                         println(resourceId);
                         Console.print("Lent to member #");
@@ -389,10 +386,7 @@ class Desk {
                     println("Only a lent resource can be returned.");
                     return;
                 }
-                {
-                    borrow mut Loanable resource = this.state.getResourceMut(id);
-                    resource.setAvailability(new Availability.Available());
-                }
+                this.state.setResourceAvailability(id, new Availability.Available());
                 Console.print("Returned resource #");
                 println(id);
             }
@@ -427,10 +421,7 @@ class Desk {
                         Availability replacement;
                         if (reason.isEmpty()) { replacement = new Availability.Available(); }
                         else { replacement = new Availability.Maintenance(reason); }
-                        {
-                            borrow mut Loanable resource = this.state.getResourceMut(id);
-                            resource.setAvailability(replacement);
-                        }
+                        this.state.setResourceAvailability(id, replacement);
                         println("Resource availability updated.");
                     }
                     None {}

@@ -395,6 +395,60 @@ void main() {
 }
 
 #[test]
+fn files_read_text_preserves_utf8_and_nul_across_partial_buffer_tails() {
+    let scratch = Scratch::new();
+    let input = scratch.0.join("input.txt");
+    let copied = scratch.0.join("copied.txt");
+    let source = r#"
+Result<Unit,Text> exercise() {
+    Text input = Args.get(0)?;
+    Text output = Args.get(1)?;
+    Text content = Files.readText(input)?;
+    Files.writeText(output, content)?;
+    println(content.byteLength());
+    println(content.charCount());
+    return new Result<Unit,Text>.Ok(());
+}
+void main() {
+    match (exercise()) {
+        Ok(unit) { println("DONE"); }
+        Err(error) { println("READ_ERROR"); }
+    }
+}
+"#;
+    let program = compile(source);
+    let token = "Ω\0🙂e\u{301}".as_bytes();
+    for size in [0, 1, 65535, 65536, 65537, 131071, 131072, 131073, 463347] {
+        let mut bytes = vec![b'a'; size];
+        for boundary in [16usize, 65536, 131072] {
+            let start = boundary - 4;
+            if start + token.len() <= bytes.len() {
+                bytes[start..start + token.len()].copy_from_slice(token);
+            }
+        }
+        fs::write(&input, &bytes).unwrap();
+        fs::write(&copied, b"unchanged").unwrap();
+        let output = run(&program, &[&input, &copied]);
+        let scalars = std::str::from_utf8(&bytes).unwrap().chars().count();
+        assert_eq!(output.stdout, format!("{size}\n{scalars}\nDONE\n").as_bytes());
+        assert_eq!(fs::read(&copied).unwrap(), bytes);
+    }
+    for (prefix, invalid) in [
+        (65535, b"\xf0\x9f".as_slice()),
+        (65535, b"\xe2x\x80".as_slice()),
+        (131071, b"\xed\xa0\x80".as_slice()),
+    ] {
+        let mut bytes = vec![b'a'; prefix];
+        bytes.extend_from_slice(invalid);
+        fs::write(&input, bytes).unwrap();
+        fs::write(&copied, b"unchanged").unwrap();
+        let output = run(&program, &[&input, &copied]);
+        assert_eq!(output.stdout, b"READ_ERROR\n");
+        assert_eq!(fs::read(&copied).unwrap(), b"unchanged");
+    }
+}
+
+#[test]
 fn directory_names_are_owned_utf8_components_and_closed_handles_fail() {
     let scratch = Scratch::new();
     let unicode_name = "entrée-🙂.txt";
