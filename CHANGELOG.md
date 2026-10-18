@@ -35,6 +35,8 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   factories instead of rescanning the full function table per method.
 - Index trait method checks by name, avoiding nested declaration scans while
   preserving impl-local membership and first-match diagnostics.
+- Use checker method tables for iterator-interface calls instead of rescanning
+  interface declaration lists.
 
 - End local borrowed bindings and retained view loans after their last
   control-flow use. Backward liveness follows branch alternatives and loop

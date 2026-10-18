@@ -1534,8 +1534,7 @@ impl Checker<'_> {
                 .map(|(interface, _)| *interface)
                 .find(|interface| is_iterator_interface(*interface))?
         };
-        let next = self.tables.classes[interface].interface_methods.iter().copied()
-            .find(|method| self.tables.signatures[*method].name == "next")?;
+        let next = *self.tables.classes[interface].methods.get("next")?;
         let Type::Object(option) = self.tables.signatures[next].return_type else { return None; };
         let variants = self.tables.classes[option].variants.as_ref()?;
         let none = variants.iter().position(|variant| variant.name == "None")?;
@@ -2127,8 +2126,7 @@ impl Checker<'_> {
                 let class = &self.tables.classes[interface];
                 let name = class.name.split('<').next().unwrap_or(&class.name);
                 if name.rsplit("::").next().unwrap_or(name) != *expected_name { continue; }
-                let Some(method_id) = class.interface_methods.iter().copied()
-                    .find(|id| self.tables.signatures[*id].name == method) else { continue; };
+                let Some(&method_id) = class.methods.get(method) else { continue; };
                 let signature = &self.tables.signatures[method_id];
                 if signature.params.as_slice() == expected_params.as_slice()
                     && expected_return.is_none_or(|ty| signature.return_type == ty) {
