@@ -757,3 +757,62 @@ void main() {{
     );
     assert_native(&source, b"true\ntrue\n");
 }
+
+#[test]
+fn certificates_match_ip_sans_without_accepting_numeric_dns_sans() {
+    const IP_SAN: &str = include_str!("fixtures/crypto_ip_sans.pem");
+    const NUMERIC_DNS: &str = include_str!("fixtures/crypto_numeric_dns.pem");
+    let ip_ca_path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/crypto_ip_sans.pem"
+    );
+    let dns_ca_path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/crypto_numeric_dns.pem"
+    );
+    let source = format!(
+        r#"{HELPERS}
+void main() {{
+    match (parseCertificate({})) {{
+        Err(error) {{ println(false); println(false); println(false); println(false); println(false); println(false); println(false); println(false); println(false); }}
+        Ok(ipCertificate) {{
+            println(booleanResultIs(certificateMatchesHost(ipCertificate, "localhost"), true));
+            println(booleanResultIs(certificateMatchesHost(ipCertificate, "127.0.0.1"), true));
+            println(booleanResultIs(certificateMatchesHost(ipCertificate, "127.0.0.2"), false));
+            println(booleanResultIs(certificateMatchesHost(ipCertificate, "::1"), true));
+            println(booleanResultIs(certificateMatchesHost(ipCertificate, "::1%lo"), true));
+            match (Path.fromText(new Text({}))) {{
+                Err(error) {{ println(false); println(false); println(false); println(false); }}
+                Ok(caFile) {{
+                    println(unitOk(verifyCertificate(ipCertificate, "127.0.0.1", caFile, 1800000000L)));
+                    println(unitError(verifyCertificate(ipCertificate, "127.0.0.2", caFile, 1800000000L)));
+                    println(unitOk(verifyCertificate(ipCertificate, "::1", caFile, 1800000000L)));
+                    println(unitOk(verifyCertificate(ipCertificate, "::1%lo", caFile, 1800000000L)));
+                }}
+            }}
+        }}
+    }}
+    match (parseCertificate({})) {{
+        Err(error) {{ println(false); println(false); }}
+        Ok(dnsCertificate) {{
+            println(booleanResultIs(certificateMatchesHost(dnsCertificate, "127.0.0.1"), false));
+            match (Path.fromText(new Text({}))) {{
+                Err(error) {{ println(false); }}
+                Ok(caFile) {{
+                    println(unitError(verifyCertificate(dnsCertificate, "127.0.0.1", caFile, 1800000000L)));
+                }}
+            }}
+        }}
+    }}
+}}
+"#,
+        nacre_literal(IP_SAN),
+        nacre_literal(ip_ca_path),
+        nacre_literal(NUMERIC_DNS),
+        nacre_literal(dns_ca_path),
+    );
+    assert_native(
+        &source,
+        b"true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n",
+    );
+}

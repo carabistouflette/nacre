@@ -491,6 +491,9 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   certificates own independent copies of the available leaf and peer chain, so
   their PEM remains exportable after the stream closes. Crypto, key signatures,
   streaming digest, and MAC share the same exact six-name digest allowlist.
+- `Certificate.matchesHost` and `verify` match IP literals only against
+  `iPAddress` SANs, including scoped IPv6; DNS names remain SAN-only with no
+  common-name fallback.
 - Secret-returning PEM, agreement, KDF, and decryption values remain ordinary
   caller-owned objects without a clear/drop wiping guarantee; documentation
   distinguishes those results from explicitly cleansed internal scratch.

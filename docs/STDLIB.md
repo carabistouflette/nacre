@@ -609,10 +609,12 @@ after `notAfter` are rejected during parsing.
 stored chain member in preserved order. Both serialize the owned X.509 certificates
 as canonical PEM rather than retaining input whitespace, preserving the certificate
 content, public keys, signatures, subjects, serials, and validity values for
-round-trip parsing and verification. Hostname checks use subject alternative names
-without falling back to the common name. `verify` checks the supplied CA file trust
-store, stored chain, server purpose, explicit Unix time, and SAN hostname; it does
-not fetch certificates or use the network.
+round-trip parsing and verification. `matchesHost` and `verify` match DNS names
+against `dNSName` subject alternative names and IPv4/IPv6 literals against
+`iPAddress` subject alternative names; IPv6 zone identifiers do not affect
+certificate identity. Neither falls back to the common name. `verify` checks the
+supplied CA file trust store, stored chain, server purpose, and explicit Unix
+time; it does not fetch certificates or use the network.
 
 ## `Database` and `SqlStatement`
 
