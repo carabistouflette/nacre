@@ -240,7 +240,9 @@ impl SourceBundle {
     pub fn emit_types(&self) -> Result<String, Diagnostic> { Ok(crate::type_report::dump(&self.typed()?)) }
 
     fn unit_at(&self, offset: usize) -> &Unit {
-        self.units.iter().find(|u| offset >= u.start && offset <= u.end)
+        let index = self.units.partition_point(|unit| unit.end < offset);
+        self.units.get(index)
+            .filter(|unit| offset >= unit.start && offset <= unit.end)
             .unwrap_or_else(|| self.units.last().expect("nonempty source bundle"))
     }
     pub fn render(&self, diagnostic: &Diagnostic) -> String {

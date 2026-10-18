@@ -29,6 +29,8 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   of scanning all functions for each distinct placeholder.
 - Resolve numeric native class IDs and feature presence in single class-table
   passes instead of rescanning declarations for each lookup.
+- Resolve bundle diagnostic offsets by binary-searching ordered source-unit
+  boundaries instead of scanning every file.
 - Resolve the shared Mutex<Unit> class once during concurrency drop-helper
   generation instead of rescanning all classes for every handle type.
 - Index class field names once, replacing repeated linear scans and per-pattern

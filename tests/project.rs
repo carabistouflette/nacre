@@ -4,7 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::sync::atomic::{AtomicU64, Ordering};
-use nacre::project::SourceBundle;
+use nacre::project::{SourceBundle, MAX_FILES};
 use nacre::diagnostic::{Diagnostic, Span, line_column};
 static NEXT: AtomicU64 = AtomicU64::new(0);
 struct Temp(PathBuf);
@@ -84,6 +84,30 @@ fn two_entry_points_are_rejected() {
 #[test]
 fn empty_files_are_allowed_with_an_entry_point() {
     let b=bundle(&[("empty.ncr",""),("Main.ncr","void main(){}")]);b.validate().unwrap();
+}
+
+#[test]
+fn source_bundle_locates_offsets_across_all_units() {
+    let source_units: Vec<_> = (0..MAX_FILES)
+        .map(|index| {
+            let source = if index == MAX_FILES / 2 { String::new() } else { format!("unit {index}") };
+            (format!("{index}.ncr"), source)
+        })
+        .collect();
+    let bundle = SourceBundle::from_sources(source_units.clone()).unwrap();
+
+    let mut offset = 0;
+    for (path, source) in &source_units {
+        let location = bundle.locate(Span::new(offset, offset + source.len()));
+        assert_eq!(location.path, Path::new(path));
+        assert_eq!(location.source, source.as_str());
+        assert_eq!(location.span.start, 0);
+        assert_eq!(location.span.end, source.len());
+
+        let end_location = bundle.locate(Span::new(offset + source.len(), offset + source.len()));
+        assert_eq!(end_location.path, Path::new(path));
+        offset += source.len() + 1;
+    }
 }
 #[test]
 fn no_files_are_rejected() { assert!(SourceBundle::from_sources(vec![]).is_err()); }
