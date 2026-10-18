@@ -546,11 +546,19 @@ fn resolve_project(path: &Path) -> Result<(PathBuf, PathBuf), String> {
             .map_err(|error| path_error(path, format!("cannot resolve current directory: {error}")))?
             .join(path)
     };
+    let requested_metadata = fs::symlink_metadata(&requested)
+        .map_err(|error| path_error(path, format!("cannot inspect dependency path: {error}")))?;
     let canonical = fs::canonicalize(&requested)
         .map_err(|error| path_error(path, format!("cannot resolve dependency path: {error}")))?;
     let (manifest, root) = if canonical.is_dir() {
         (canonical.join("Nacre.toml"), canonical)
     } else {
+        if requested_metadata.file_type().is_symlink() {
+            return Err(path_error(
+                path,
+                "manifest must be a regular file, not a symbolic link",
+            ));
+        }
         if canonical.file_name().and_then(|name| name.to_str()) != Some("Nacre.toml") {
             return Err(path_error(
                 path,
@@ -563,12 +571,6 @@ fn resolve_project(path: &Path) -> Result<(PathBuf, PathBuf), String> {
             .to_path_buf();
         (canonical, root)
     };
-    let manifest = fs::canonicalize(&manifest).map_err(|error| {
-        path_error(
-            path,
-            format!("cannot resolve dependency Nacre.toml: {error}"),
-        )
-    })?;
     Ok((manifest, root))
 }
 

@@ -44,6 +44,7 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 - Bound aggregate manifest reads during dependency-cycle checks to limit memory growth.
 
 - Cover manifest permission preservation when adding a local dependency.
+- Reject symlinked dependency manifests before path canonicalization can hide them.
 
 - Grant CI workflows read-only repository-content permissions.
 
