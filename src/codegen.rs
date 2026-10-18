@@ -317,25 +317,22 @@ fn direct_virtual_dispatchers(program: &t::Program) -> String {
     for function in &program.functions {
         let Some(slot) = function.virtual_slot else { continue; };
         let Some(interface) = function.receiver else { continue; };
-        let mut args = vec!["ncr_self".to_string()];
-        let mut params = vec![format!("{} ncr_self", ctype(program, Type::Object(interface)))];
-        for (id, ty) in &function.params {
-            params.push(format!("{} ncr_v_{id}", ctype_param(program, *ty)));
-            args.push(format!("ncr_v_{id}"));
-        }
-        let call = format!("ncr_self.vtable->m{slot}(ncr_self.data{})",
-            if args.len() > 1 { format!(", {}", args[1..].join(", ")) } else { String::new() });
-        if function.return_type == Type::Void {
-            out.push_str(&format!(
-                "static inline void ncr_fn_{}({}) {{ {}; }}\n",
-                function.id, params.join(", "), call,
-            ));
+        let return_prefix = if function.return_type == Type::Void {
+            write!(out, "static inline void ncr_fn_{}(", function.id).unwrap();
+            ""
         } else {
-            out.push_str(&format!(
-                "static inline {} ncr_fn_{}({}) {{ return {}; }}\n",
-                ctype(program, function.return_type), function.id, params.join(", "), call,
-            ));
+            write!(out, "static inline {} ncr_fn_{}(", ctype(program, function.return_type), function.id).unwrap();
+            "return "
+        };
+        write!(out, "{} ncr_self", ctype(program, Type::Object(interface))).unwrap();
+        for (id, ty) in &function.params {
+            write!(out, ", {} ncr_v_{id}", ctype_param(program, *ty)).unwrap();
         }
+        write!(out, ") {{ {return_prefix}ncr_self.vtable->m{slot}(ncr_self.data").unwrap();
+        for (id, _) in &function.params {
+            write!(out, ", ncr_v_{id}").unwrap();
+        }
+        out.push_str("); }\n");
     }
     out
 }

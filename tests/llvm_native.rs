@@ -197,6 +197,29 @@ void main() {
 }
 
 #[test]
+fn direct_virtual_dispatchers_preserve_void_and_value_methods() {
+    let source = r#"
+interface Accumulator {
+    void add(int amount);
+    readonly int value();
+}
+class Counter implements Accumulator {
+    private int total;
+    public Counter(int total) { this.total = total; }
+    public void add(int amount) { this.total = this.total + amount; }
+    public readonly int value() { return this.total; }
+}
+void main() {
+    Accumulator counter = new Counter(5);
+    counter.add(7);
+    counter.add(-2);
+    println(counter.value());
+}
+"#;
+    assert_direct_matches_c(source, b"10\n", &["-DNACRE_MEMORY_STATS"]);
+}
+
+#[test]
 fn direct_user_thunks_preserve_owned_and_borrowed_pointer_arguments_under_strict_c_checks() {
     let source = r#"
 interface Transformer {

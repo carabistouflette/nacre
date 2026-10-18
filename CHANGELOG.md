@@ -3,6 +3,8 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Stream direct interface dispatchers into generated C without temporary
+  parameter and argument vectors or joined strings.
 - Stream direct user adapter signatures and call arguments into the destination
   buffer instead of allocating temporary vectors and joined strings.
 - Emit LLVM runtime signatures directly into IR, avoiding temporary parameter
