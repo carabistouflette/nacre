@@ -8,6 +8,8 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 
 - Reallocate command argument/environment tables and HTTP response headers,
   avoiding explicit replacement-buffer copies.
+- Exercise the 64 KiB HTTP response header byte and 1,024-field limits at exact
+  and over-limit boundaries with loopback tests.
 
 - Leave BitSet spare capacity uninitialized; zero words only when they become logical.
 

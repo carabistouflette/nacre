@@ -93,7 +93,7 @@ fn one_response_server(response: Vec<u8>, delay: Duration) -> (String, JoinHandl
     });
     (endpoint, worker)
 }
-fn two_response_server(responses: Vec<Vec<u8>>) -> (String, JoinHandle<Vec<CapturedRequest>>) {
+fn multiple_response_server(responses: Vec<Vec<u8>>) -> (String, JoinHandle<Vec<CapturedRequest>>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     listener.set_nonblocking(true).unwrap();
     let endpoint = format!("http://{}/", listener.local_addr().unwrap());
@@ -292,7 +292,7 @@ fn reuses_a_request_without_replacing_prior_response_data() {
         b"HTTP/1.1 200 OK\r\nContent-Length: 3\r\nConnection: close\r\n\r\none".to_vec(),
         b"HTTP/1.1 201 Created\r\nContent-Length: 3\r\nConnection: close\r\n\r\ntwo".to_vec(),
     ];
-    let (url, server) = two_response_server(responses);
+    let (url, server) = multiple_response_server(responses);
     let source = r#"
 Result<Unit, Text> exchange(borrow Text url) {
     Text method = new Text("GET");
@@ -432,6 +432,84 @@ void main() {
     assert_eq!(stdout_lines(&output), vec!["TIMED_OUT".to_owned()]);
     server.join().unwrap();
 }
+
+#[test]
+fn enforces_response_header_byte_and_field_limits() {
+    const HEADER_BYTE_LIMIT: usize = 64 * 1024;
+    let response_with_header_bytes = |total_bytes: usize| {
+        let prefix = b"HTTP/1.0 200 OK\r\nX-Fill: ";
+        let suffix = b"\r\n\r\n";
+        assert!(total_bytes >= prefix.len() + suffix.len());
+        let mut response = Vec::with_capacity(total_bytes);
+        response.extend_from_slice(prefix);
+        response.resize(total_bytes - suffix.len(), b'x');
+        response.extend_from_slice(suffix);
+        assert_eq!(response.len(), total_bytes);
+        response
+    };
+    let response_with_field_count = |field_count: usize| {
+        let mut response = b"HTTP/1.0 200 OK\r\n".to_vec();
+        for index in 0..field_count {
+            response.extend_from_slice(format!("X-{index:04}: value\r\n").as_bytes());
+        }
+        response.extend_from_slice(b"\r\n");
+        response
+    };
+    let (url, server) = multiple_response_server(vec![
+        response_with_header_bytes(HEADER_BYTE_LIMIT),
+        response_with_header_bytes(HEADER_BYTE_LIMIT + 1),
+        response_with_field_count(1024),
+        response_with_field_count(1025),
+    ]);
+    let source = r#"
+Result<HttpResponse, Text> fetch(borrow Text url) {
+    Text method = new Text("GET");
+    HttpRequest request = HttpRequest.create(method, url)?;
+    request.setMaxResponseBytes(0L)?;
+    return request.send();
+}
+
+Result<Unit, Text> checkHeaderLimits(borrow Text url) {
+    match (fetch(url)) {
+        Ok(response) { println("BYTE_LIMIT_EXACT_ACCEPTED"); }
+        Err(error) { println("BYTE_LIMIT_EXACT_REJECTED"); }
+    }
+    match (fetch(url)) {
+        Ok(response) { println("BYTE_LIMIT_OVER_ACCEPTED"); }
+        Err(error) { println("BYTE_LIMIT_OVER_REJECTED"); }
+    }
+    match (fetch(url)) {
+        Ok(response) { println("FIELD_LIMIT_EXACT_ACCEPTED"); }
+        Err(error) { println("FIELD_LIMIT_EXACT_REJECTED"); }
+    }
+    match (fetch(url)) {
+        Ok(response) { println("FIELD_LIMIT_OVER_ACCEPTED"); }
+        Err(error) { println("FIELD_LIMIT_OVER_REJECTED"); }
+    }
+    return new Result<Unit, Text>.Ok(());
+}
+
+void main() {
+    Text url = new Text("@URL@");
+    match (checkHeaderLimits(url)) {
+        Ok(unit) { println("HEADER_LIMITS_DONE"); }
+        Err(error) { println("HEADER_LIMITS_ERROR"); error.print(); }
+    }
+}
+"#;
+    let output = run(&compile(&source.replace("@URL@", &url)));
+    assert_eq!(stdout_lines(&output), vec![
+        "BYTE_LIMIT_EXACT_ACCEPTED".to_owned(),
+        "BYTE_LIMIT_OVER_REJECTED".to_owned(),
+        "FIELD_LIMIT_EXACT_ACCEPTED".to_owned(),
+        "FIELD_LIMIT_OVER_REJECTED".to_owned(),
+        "HEADER_LIMITS_DONE".to_owned(),
+    ]);
+    let requests = server.join().unwrap();
+    assert_eq!(requests.len(), 4);
+    assert!(requests.iter().all(|request| request.headers.starts_with("GET / HTTP/1.1")));
+}
+
 
 #[test]
 fn rejects_malformed_response_headers_without_returning_partial_response() {
