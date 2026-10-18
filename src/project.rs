@@ -1,5 +1,6 @@
 //! Independent parsing for source units followed by whole-program module resolution.
 //! This is whole-program compilation, not separate package linking.
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::Read;
@@ -21,6 +22,13 @@ pub struct SourceLocation<'a> {
     pub span: Span,
 }
 
+fn display_path(path: &Path) -> Cow<'_, str> {
+    match path.to_str() {
+        Some(path) => Cow::Borrowed(path),
+        None => Cow::Owned(format!("{path:?}")),
+    }
+}
+
 impl SourceBundle {
     /// Source paths are diagnostic identities; `module` headers define namespaces.
     pub fn from_sources(sources: Vec<(String, String)>) -> Result<Self, String> {
@@ -37,7 +45,7 @@ impl SourceBundle {
         let mut names = HashSet::new();
         Self::from_units(sources.map(|(path, source)| {
             if !names.insert(path.clone()) {
-                return Err(format!("duplicate source: {}", path.display()));
+                return Err(format!("duplicate source: {}", display_path(&path)));
             }
             Ok((path, source))
         }))
@@ -49,12 +57,12 @@ impl SourceBundle {
         let mut remaining = MAX_SOURCE_BYTES;
         Self::from_units(files.into_iter().map(|path| {
             let mut data = Vec::new();
-            fs::File::open(&path).map_err(|e| format!("{}: {e}", path.display()))?
+            fs::File::open(&path).map_err(|e| format!("{}: {e}", display_path(&path)))?
                 .take(remaining as u64 + 1).read_to_end(&mut data)
-                .map_err(|e| format!("{}: {e}", path.display()))?;
+                .map_err(|e| format!("{}: {e}", display_path(&path)))?;
             if data.len() >= remaining { return Err("combined source exceeds the 1 MiB limit".to_owned()); }
             remaining -= data.len() + 1;
-            let text = String::from_utf8(data).map_err(|e| format!("{}: expected UTF-8 ({e})", path.display()))?;
+            let text = String::from_utf8(data).map_err(|e| format!("{}: expected UTF-8 ({e})", display_path(&path)))?;
             Ok((path, text))
         }))
     }
@@ -176,7 +184,7 @@ impl SourceBundle {
             |span| {
                 let loc = self.locate(span);
                 let (line, _) = crate::diagnostic::line_column(loc.source, loc.span.start);
-                (line, Some(loc.path.to_string_lossy().into_owned()))
+                (line, Some(display_path(loc.path).into_owned()))
             },
         )
     }
@@ -237,18 +245,20 @@ impl SourceBundle {
     }
     pub fn render(&self, diagnostic: &Diagnostic) -> String {
         let location = self.locate(diagnostic.span);
+        let path = display_path(location.path);
         let mut result = diagnostic.render_primary(
-            &location.path.to_string_lossy(), location.source, location.span,
+            &path, location.source, location.span,
         );
         for (span, note) in &diagnostic.notes {
             let location = self.locate(*span);
             if location.span.end > location.span.start && location.span.end <= location.source.len() {
+                let path = display_path(location.path);
                 result.push_str(&diagnostic.render_secondary(
-                    &location.path.to_string_lossy(), location.source, location.span, note,
+                    &path, location.source, location.span, note,
                 ));
             } else {
                 let (line, column) = line_column(location.source, location.span.start);
-                result.push_str(&format!("  = note: {note} ({}:{line}:{column})\n", location.path.display()));
+                result.push_str(&format!("  = note: {note} ({}:{line}:{column})\n", display_path(location.path)));
             }
         }
         if let Some(help) = &diagnostic.help { result.push_str(&format!("  = help: {help}\n")); }
@@ -280,8 +290,9 @@ impl SourceBundle {
         if self.units.len() == 1 { return String::new(); }
         let mut out = String::from("#include <stddef.h>\n#define NACRE_MULTI_SOURCE 1\nstatic const char *ncr_source_file(size_t *line) {\n");
         for unit in self.units.iter().rev() {
+            let path = display_path(&unit.path);
             out.push_str(&format!("    if (*line >= {}) {{ *line -= {}; return {}; }}\n",
-                unit.first_line, unit.first_line - 1, c_string(&unit.path.to_string_lossy())));
+                unit.first_line, unit.first_line - 1, c_string(&path)));
         }
         out.push_str("    return \"<unknown>\";\n}\n");
         out
@@ -299,7 +310,7 @@ pub(crate) fn read_directory_entries(
     path: &Path,
     visited: &mut usize,
 ) -> Result<Vec<PathBuf>, String> {
-    let entries = fs::read_dir(path).map_err(|error| format!("{}: {error}", path.display()))?;
+    let entries = fs::read_dir(path).map_err(|error| format!("{}: {error}", display_path(path)))?;
     let mut output = Vec::new();
     for entry in entries {
         *visited += 1;
@@ -308,7 +319,7 @@ pub(crate) fn read_directory_entries(
                 "directory scan limit is {MAX_DIRECTORY_ENTRIES} entries"
             ));
         }
-        let entry = entry.map_err(|error| format!("{}: {error}", path.display()))?;
+        let entry = entry.map_err(|error| format!("{}: {error}", display_path(path)))?;
         output.push(entry.path());
     }
     output.sort();
@@ -325,11 +336,11 @@ fn collect(
         return Err("source directory nesting limit is 32".to_owned());
     }
     let meta =
-        fs::symlink_metadata(path).map_err(|error| format!("{}: {error}", path.display()))?;
+        fs::symlink_metadata(path).map_err(|error| format!("{}: {error}", display_path(path)))?;
     if meta.file_type().is_symlink() {
         return Err(format!(
             "symbolic-link source is not allowed: {}",
-            path.display()
+            display_path(path)
         ));
     }
     if meta.is_file() {
@@ -343,13 +354,13 @@ fn collect(
                 continue;
             }
             let kind = fs::symlink_metadata(&entry)
-                .map_err(|error| format!("{}: {error}", entry.display()))?;
+                .map_err(|error| format!("{}: {error}", display_path(&entry)))?;
             if kind.is_dir() || is_source_file(&entry) {
                 collect(&entry, depth + 1, visited, output)?;
             }
         }
     } else {
-        return Err(format!("not a regular source file: {}", path.display()));
+        return Err(format!("not a regular source file: {}", display_path(path)));
     }
     Ok(())
 }
@@ -380,7 +391,7 @@ pub fn resolve_inputs(paths: &[PathBuf]) -> Result<Vec<PathBuf>, String> {
                 let mut package_files = Vec::new();
                 collect(root, 0, &mut visited_entries, &mut package_files)?;
                 for file in package_files {
-                    let canonical = file.canonicalize().map_err(|e| format!("{}: {e}", file.display()))?;
+                    let canonical = file.canonicalize().map_err(|e| format!("{}: {e}", display_path(&file)))?;
                     if seen.insert(canonical) { files.push(file); }
                 }
             }
@@ -388,8 +399,8 @@ pub fn resolve_inputs(paths: &[PathBuf]) -> Result<Vec<PathBuf>, String> {
             let mut raw_files = Vec::new();
             collect(path, 0, &mut visited_entries, &mut raw_files)?;
             for file in raw_files {
-                let canonical = file.canonicalize().map_err(|e| format!("{}: {e}", file.display()))?;
-                if !seen.insert(canonical) { return Err(format!("duplicate source: {}", file.display())); }
+                let canonical = file.canonicalize().map_err(|e| format!("{}: {e}", display_path(&file)))?;
+                if !seen.insert(canonical) { return Err(format!("duplicate source: {}", display_path(&file))); }
                 files.push(file);
             }
         }
@@ -435,21 +446,21 @@ struct PackageGraph {
 impl PackageGraph {
     fn visit(&mut self, path: &Path, expected_name: Option<&str>, depth: usize) -> Result<(), String> {
         if depth > 32 { return Err("package dependency nesting limit is 32".to_owned()); }
-        let metadata = fs::symlink_metadata(path).map_err(|e| format!("{}: {e}", path.display()))?;
+        let metadata = fs::symlink_metadata(path).map_err(|e| format!("{}: {e}", display_path(path)))?;
         if metadata.file_type().is_symlink() {
-            return Err(format!("symbolic-link manifest is not allowed: {}", path.display()));
+            return Err(format!("symbolic-link manifest is not allowed: {}", display_path(path)));
         }
-        let path = path.canonicalize().map_err(|e| format!("{}: {e}", path.display()))?;
+        let path = path.canonicalize().map_err(|e| format!("{}: {e}", display_path(path)))?;
         let manifest = crate::manifest::Manifest::load(&path)?;
         let root = path.parent().ok_or("manifest has no parent directory")?;
         if let Some(expected) = expected_name {
-            let package = manifest.package.as_ref().ok_or_else(|| format!("{}: dependency must contain [package]", path.display()))?;
+            let package = manifest.package.as_ref().ok_or_else(|| format!("{}: dependency must contain [package]", display_path(&path)))?;
             if package.name != expected {
-                return Err(format!("{}: dependency name `{expected}` does not match package `{}`", path.display(), package.name));
+                return Err(format!("{}: dependency name `{expected}` does not match package `{}`", display_path(&path), package.name));
             }
         }
         if self.active.contains(&path) {
-            return Err(format!("package dependency cycle at {}", path.display()));
+            return Err(format!("package dependency cycle at {}", display_path(&path)));
         }
         if self.completed.contains(&path) { return Ok(()); }
         if self.completed.len() + self.active.len() >= MAX_FILES {
@@ -458,7 +469,7 @@ impl PackageGraph {
         if let Some(package) = &manifest.package {
             if let Some(previous) = self.names.get(&package.name) {
                 if previous != root {
-                    return Err(format!("conflicting package `{}` at {} and {}", package.name, previous.display(), root.display()));
+                    return Err(format!("conflicting package `{}` at {} and {}", package.name, display_path(previous), display_path(root)));
                 }
             } else {
                 self.names.insert(package.name.clone(), root.to_owned());
@@ -486,7 +497,7 @@ impl PackageGraph {
                 reject_source_symlinks(root, &entry)?;
                 let entry = root.join(entry);
                 if !is_source_file(&entry) || !entry.is_file() {
-                    return Err(format!("{}: package entry must name an existing .ncr file", entry.display()));
+                    return Err(format!("{}: package entry must name an existing .ncr file", display_path(&entry)));
                 }
                 self.roots.push(entry);
             }
@@ -503,11 +514,11 @@ fn reject_source_symlinks(root: &Path, relative: &Path) -> Result<(), String> {
         path.push(component);
         match fs::symlink_metadata(&path) {
             Ok(metadata) if metadata.file_type().is_symlink() => {
-                return Err(format!("symbolic-link source is not allowed: {}", path.display()));
+                return Err(format!("symbolic-link source is not allowed: {}", display_path(&path)));
             }
             Ok(_) => {}
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => break,
-            Err(error) => return Err(format!("{}: {error}", path.display())),
+            Err(error) => return Err(format!("{}: {error}", display_path(&path))),
         }
     }
     Ok(())
@@ -518,7 +529,7 @@ pub fn init(path: &Path) -> Result<(), String> {
     let mut name = path.file_name().and_then(|name| name.to_str()).unwrap_or("app")
         .chars().map(|c| if c.is_ascii_alphanumeric() || c == '_' || c == '-' { c } else { '_' }).collect::<String>();
     if !name.as_bytes().first().is_some_and(u8::is_ascii_alphanumeric) { name.insert_str(0, "app_"); }
-    fs::create_dir(path).map_err(|e| format!("unable to create {} (the path must be new): {e}", path.display()))?;
+    fs::create_dir(path).map_err(|e| format!("unable to create {} (the path must be new): {e}", display_path(path)))?;
     // Encode punctuation injectively, and prefix digits/keywords into identifiers.
     let mut module_prefix = String::with_capacity(5 + name.len() * 2);
     module_prefix.push_str("pkg_");
@@ -544,7 +555,7 @@ pub fn init(path: &Path) -> Result<(), String> {
         fs::write(path.join("README.md"), "# Nacre project\n\n```sh\nnacre check\nnacre run\nnacre build --release\n```\n\nSource units declare modules and import public types or functions. Nacre.toml selects source roots and local path dependencies; all selected source files are compiled together.\n")?;
         Ok(())
     };
-    write().map_err(|e| format!("partial project creation at {}: {e}", path.display()))
+    write().map_err(|e| format!("partial project creation at {}: {e}", display_path(path)))
 }
 
 #[cfg(test)]
