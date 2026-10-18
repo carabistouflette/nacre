@@ -550,3 +550,30 @@ static @LIST_TYPE@ @TEXT_SPLIT@(
     @LIST_ADD@(list, last, line, column);
     return list;
 }
+
+static ncr_obj_@ID@ *@TEXT_JOIN@(
+    @LIST_TYPE@ parts, ncr_obj_@ID@ *delimiter, size_t line, size_t column
+) {
+    int32_t part_count = @LIST_SIZE@(parts, line, column);
+    int64_t total_length = 0;
+    for (int32_t index = 0; index < part_count; ++index) {
+        ncr_obj_@ID@ *part = @LIST_GET_REF@(parts, index, line, column);
+        total_length += part->length;
+        if (index + 1 < part_count) { total_length += delimiter->length; }
+        if (total_length > INT32_MAX) {
+            ncr_fail("Text.join result is too large", line, column);
+        }
+    }
+
+    ncr_obj_@ID@ *result = ncr_allocate(sizeof(*result), line, column);
+    @TEXT_INIT@(result);
+    ncr_text_reserve_@ID@(result, (int32_t)total_length, line, column);
+    for (int32_t index = 0; index < part_count; ++index) {
+        if (index > 0) {
+            ncr_text_append_@ID@(result, delimiter->bytes, (size_t)delimiter->length, line, column);
+        }
+        ncr_obj_@ID@ *part = @LIST_GET_REF@(parts, index, line, column);
+        ncr_text_append_@ID@(result, part->bytes, (size_t)part->length, line, column);
+    }
+    return result;
+}

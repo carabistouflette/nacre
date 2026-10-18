@@ -26,6 +26,10 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 - Run ordinary native behavior suites through a shared C/direct-LLVM backend
   selector. CI covers GCC/C, Clang/C, and Clang/LLVM; injected-C fault fixtures
   and standalone C helpers remain explicitly backend-specific.
+- Add machine-readable `nacre test --json` output with per-test status and
+  failure details, filtered counts, and suite timing.
+- Add `Text.join` for borrowed `List<Text>` parts and a borrowed delimiter.
+  Measure UTF-8 output length first and reserve before appending.
 - Profile release-compiler builds on scalar, collection, and transitive-package
   consumers. Make unused direct-LLVM functions discardable instead of keeping
   them externally live, retaining strong symbols for concrete interface implementations

@@ -171,6 +171,47 @@ void main() {
 }
 
 #[test]
+fn text_join_presizes_and_preserves_parts_and_delimiters() {
+    let output = execute(r#"
+void main() {
+    Text delimiter = new Text("::");
+    List<Text> empty = new List<Text>();
+    Text emptyJoined = Text.join(empty, delimiter);
+    println(emptyJoined.byteLength());
+    drop(emptyJoined);
+    drop(empty);
+
+    List<Text> single = new List<Text>();
+    single.add(new Text("only"));
+    Text singleJoined = Text.join(single, delimiter);
+    singleJoined.print();
+    drop(singleJoined);
+    drop(single);
+
+    List<Text> parts = new List<Text>();
+    parts.add(new Text("A\0"));
+    parts.add(new Text(""));
+    parts.add(new Text("é"));
+    Text joined = Text.join(parts, delimiter);
+    println(joined.equalsString("A\0::::é"));
+    joined.print();
+    drop(joined);
+    drop(parts);
+
+    List<Text> largeParts = new List<Text>();
+    largeParts.add(new Text("12345678901234567890"));
+    largeParts.add(new Text("abcdefghijklmnopqrstuvwxyz"));
+    Text large = Text.join(largeParts, delimiter);
+    println(large.byteLength());
+    println(large.equalsString("12345678901234567890::abcdefghijklmnopqrstuvwxyz"));
+    drop(large);
+    drop(largeParts);
+}
+"#);
+    assert_eq!(output.stdout, "0\nonly\ntrue\nA\0::::é\n48\ntrue\n".as_bytes());
+}
+
+#[test]
 fn text_inline_and_heap_storage_transitions_preserve_ownership() {
     let output = execute(r#"
 void main() {

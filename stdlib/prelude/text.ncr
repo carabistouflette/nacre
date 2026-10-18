@@ -41,4 +41,6 @@ class Text {
     // Non-empty delimiters preserve empty fields; empty delimiters split by scalar.
     // Empty Text with an empty delimiter yields an empty List.
     public readonly List<Text> split(borrow Text delimiter) {}
+    // Joins borrowed parts, inserting delimiter only between values; empty list returns empty Text.
+    public static Text join(borrow List<Text> parts, borrow Text delimiter) {}
 }

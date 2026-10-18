@@ -79,12 +79,65 @@ void test_second() {
 "#,
     ).unwrap();
 
-    let exit_code = nacre::test_runner::run_tests(std::slice::from_ref(&test_file), None, false, false, false).unwrap();
+    let exit_code = nacre::test_runner::run_tests(std::slice::from_ref(&test_file), None, false, false, false, false).unwrap();
     assert_eq!(exit_code, 0);
 
     // Test filtering: only run test_first
-    let exit_code = nacre::test_runner::run_tests(&[test_file], Some("first"), false, false, false).unwrap();
+    let exit_code = nacre::test_runner::run_tests(&[test_file], Some("first"), false, false, false, false).unwrap();
     assert_eq!(exit_code, 0);
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[test]
+fn test_runner_emits_json_results_and_failures() {
+    let temp_dir = std::env::temp_dir().join(format!("ncr_test_json_{}", std::process::id()));
+    fs::create_dir_all(&temp_dir).unwrap();
+    let test_file = temp_dir.join("suite.ncr");
+    fs::write(
+        &test_file,
+        r#"
+void test_passed() {
+    assert(1 == 1);
+}
+
+void test_failed() {
+    assert(1 == 2, "json failure detail");
+}
+"#,
+    ).unwrap();
+
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_nacre"))
+        .args(["test", "--json"])
+        .arg(&test_file)
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    let payload: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(payload["type"], "test");
+    assert_eq!(payload["passed"], 1);
+    assert_eq!(payload["failed"], 1);
+    assert_eq!(payload["filtered_out"], 0);
+    let results = payload["tests"].as_array().unwrap();
+    let passed = results.iter().find(|test| test["name"] == "test_passed").unwrap();
+    assert_eq!(passed["status"], "passed");
+    let failed = results.iter().find(|test| test["name"] == "test_failed").unwrap();
+    assert_eq!(failed["status"], "failed");
+    assert!(failed["failure"].as_str().unwrap().contains("json failure detail"));
+    assert!(payload["duration_seconds"].as_f64().is_some());
+
+    let empty_output = std::process::Command::new(env!("CARGO_BIN_EXE_nacre"))
+        .args(["test", "--json"])
+        .arg(&test_file)
+        .args(["--", "no_such_test"])
+        .output()
+        .unwrap();
+    assert!(empty_output.status.success());
+    let empty_payload: serde_json::Value = serde_json::from_slice(&empty_output.stdout).unwrap();
+    assert_eq!(empty_payload["passed"], 0);
+    assert_eq!(empty_payload["failed"], 0);
+    assert_eq!(empty_payload["filtered_out"], 2);
+    assert!(empty_payload["tests"].as_array().unwrap().is_empty());
 
     let _ = fs::remove_dir_all(&temp_dir);
 }
@@ -127,13 +180,13 @@ fn from_test_paths_enforces_boundaries_and_parses_ast() {
         paths.push(p);
     }
     // 64 files with synthetic main -> 65 files -> exceeds MAX_FILES (64)
-    let err = nacre::test_runner::run_tests(&paths, None, false, false, false).unwrap_err();
+    let err = nacre::test_runner::run_tests(&paths, None, false, false, false, false).unwrap_err();
     assert!(err.contains("source file limit is 64"), "{err}");
 
     // 2. Verify that comments containing "void main()" do NOT suppress synthetic main
     let comment_file = temp_dir.join("comment_main.ncr");
     fs::write(&comment_file, "// void main() is inside this comment\nvoid test_comment() { assert(1 == 1); }\n").unwrap();
-    let exit = nacre::test_runner::run_tests(&[comment_file], None, false, false, false).unwrap();
+    let exit = nacre::test_runner::run_tests(&[comment_file], None, false, false, false, false).unwrap();
     assert_eq!(exit, 0);
 
     let _ = fs::remove_dir_all(&temp_dir);

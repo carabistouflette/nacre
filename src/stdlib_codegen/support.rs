@@ -208,7 +208,7 @@ pub(super) fn marker(method: M) -> &'static str {
         M::TextCompareTo => "@TEXT_COMPARE_TO@", M::TextIndexOf => "@TEXT_INDEX_OF@",
         M::TextStartsWith => "@TEXT_STARTS_WITH@", M::TextEndsWith => "@TEXT_ENDS_WITH@",
         M::TextSlice => "@TEXT_SLICE@", M::TextTrim => "@TEXT_TRIM@",
-        M::TextReplace => "@TEXT_REPLACE@", M::TextSplit => "@TEXT_SPLIT@",
+        M::TextReplace => "@TEXT_REPLACE@", M::TextSplit => "@TEXT_SPLIT@", M::TextJoin => "@TEXT_JOIN@",
         M::UnicodeToUpperCase => "@UNICODE_TO_UPPER_CASE@",
         M::UnicodeToLowerCase => "@UNICODE_TO_LOWER_CASE@",
         M::UnicodeCaseFold => "@UNICODE_CASE_FOLD@",

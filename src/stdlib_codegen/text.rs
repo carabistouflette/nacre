@@ -9,6 +9,7 @@ fn text_method_placeholders(body: String, program: &t::Program, text: usize) -> 
     let slice_bytes = native_function(program, |method| matches!(method, M::TextSliceBytes));
     let slice = native_function(program, |method| matches!(method, M::TextSlice));
     let split = native_function(program, |method| matches!(method, M::TextSplit));
+    let join = native_function(program, |method| matches!(method, M::TextJoin));
     let list_class = match split.return_type {
         Type::Object(class) => class,
         _ => unreachable!("Text.split returns a concrete List<Text>"),
@@ -24,6 +25,12 @@ fn text_method_placeholders(body: String, program: &t::Program, text: usize) -> 
     let list_add = program.functions.iter().find(|function| {
         function.receiver == Some(list_class) && matches!(function.native, Some(M::ListAdd))
     }).expect("Text.split List<Text>.add");
+    let list_size = program.functions.iter().find(|function| {
+        function.receiver == Some(list_class) && matches!(function.native, Some(M::ListSize))
+    }).expect("Text.join List<Text>.size");
+    let list_get_ref = program.functions.iter().find(|function| {
+        function.receiver == Some(list_class) && matches!(function.native, Some(M::ListGetRef))
+    }).expect("Text.join List<Text>.getRef");
     let parse_id = result_id(parse);
     let parse_long_id = result_id(parse_long);
     let parse_double_id = result_id(parse_double);
@@ -48,9 +55,12 @@ fn text_method_placeholders(body: String, program: &t::Program, text: usize) -> 
         ("@ERROR_SLICE_RESULT@", format!("ncr_result_error_{slice_id}")),
         ("@TEXT_MAKE@", format!("ncr_text_from_bytes_{text}")),
         ("@TEXT_TAKE@", format!("ncr_text_take_bytes_{text}")),
+        ("@TEXT_JOIN@", format!("ncr_fn_{}", join.id)),
         ("@LIST_TYPE@", crate::c_repr::ctype(program, split.return_type).into_owned()),
         ("@LIST_NEW@", format!("ncr_fn_{}", list_new.id)),
         ("@LIST_ADD@", format!("ncr_fn_{}", list_add.id)),
+        ("@LIST_SIZE@", format!("ncr_fn_{}", list_size.id)),
+        ("@LIST_GET_REF@", format!("ncr_fn_{}", list_get_ref.id)),
     ])
 }
 

@@ -426,6 +426,7 @@ pub fn method(class: C, name: &str, constructor: bool) -> M {
         (C::Text, "trim") => M::TextTrim,
         (C::Text, "replace") => M::TextReplace,
         (C::Text, "split") => M::TextSplit,
+        (C::Text, "join") => M::TextJoin,
         (C::Regex, "compile") => M::RegexCompile,
         (C::Regex, "matches") => M::RegexMatches,
         (C::Regex, "search") => M::RegexSearch,

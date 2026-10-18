@@ -14,7 +14,7 @@ const HELP: &str = "Nacre — experimental native compiler written in Rust
 
 Usage:
   nacre check  [source.ncr ... | directory | Nacre.toml]
-  nacre test   source.ncr ... | directory [--native] [--lto] [--jemalloc] [-- filter]
+  nacre test   source.ncr ... | directory [--native] [--lto] [--jemalloc] [--json] [-- filter]
   nacre bench  source.ncr ... | directory [--native] [--lto] [--jemalloc] [--json] [-- filter]
   nacre fmt    source.ncr ... | directory [--check]
   nacre doc    source.ncr ... | directory [-o output-dir]
@@ -185,7 +185,7 @@ fn execute(args: Vec<OsString>) -> Result<i32, String> {
             i += 1;
         } else if args[i] == "--jemalloc" && matches!(command, "run" | "build" | "test" | "bench") && !jemalloc {
             jemalloc = true; i += 1;
-        } else if args[i] == "--json" && command == "bench" && !json_output {
+        } else if args[i] == "--json" && matches!(command, "test" | "bench") && !json_output {
             json_output = true; i += 1;
         } else if args[i].to_string_lossy().starts_with("--pgo-generate") && matches!(command, "run" | "build") && pgo_generate.is_none() {
             let path = if let Some(dir) = args[i].to_str().and_then(|s| s.strip_prefix("--pgo-generate=")) {
@@ -230,7 +230,7 @@ fn execute(args: Vec<OsString>) -> Result<i32, String> {
         None
     };
     if command == "test" {
-        return nacre::test_runner::run_tests(&sources, filter.as_deref(), native_arch, lto, jemalloc);
+        return nacre::test_runner::run_tests(&sources, filter.as_deref(), native_arch, lto, jemalloc, json_output);
     }
     if command == "bench" {
         return nacre::bench_runner::run_benchmarks(&sources, filter.as_deref(), native_arch, lto, jemalloc, json_output);

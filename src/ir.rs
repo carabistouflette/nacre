@@ -285,7 +285,7 @@ pub enum NativeMethod {
     TextByteLength, TextByteAt, TextCapacity, TextReserve, TextIsEmpty, TextClear, TextPrint,
     TextClone, TextEquals, TextEqualsString, TextParseInt, TextParseLong, TextParseDouble, TextSliceBytes,
     TextCharCount, TextCharAt, TextCompareTo, TextIndexOf, TextStartsWith, TextEndsWith,
-    TextSlice, TextTrim, TextReplace, TextSplit,
+    TextSlice, TextTrim, TextReplace, TextSplit, TextJoin,
     RegexCompile, RegexMatches, RegexSearch,
     RegexMatchGroupCount, RegexMatchHasGroup, RegexMatchGroup, RegexMatchStart, RegexMatchEnd,
     ConsoleReadLine, ConsolePrint, ConsolePrintText,
