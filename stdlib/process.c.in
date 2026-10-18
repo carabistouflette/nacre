@@ -217,10 +217,7 @@ static void ncr_process_reserve_texts(
         grown *= 2;
     }
     if (grown > SIZE_MAX / sizeof(**items)) { ncr_fail("Command argument capacity overflow", line, column); }
-    ncr_obj_@TEXT_CLASS@ **next = ncr_allocate(grown * sizeof(*next), line, column);
-    if (*capacity > 0) { memcpy(next, *items, *capacity * sizeof(*next)); }
-    ncr_deallocate(*items);
-    *items = next;
+    *items = ncr_reallocate(*items, grown * sizeof(**items), line, column);
     *capacity = grown;
 }
 
@@ -235,16 +232,8 @@ static void ncr_process_reserve_environment(
         grown *= 2;
     }
     if (grown > SIZE_MAX / sizeof(**names)) { ncr_fail("Command environment capacity overflow", line, column); }
-    ncr_obj_@TEXT_CLASS@ **next_names = ncr_allocate(grown * sizeof(*next_names), line, column);
-    ncr_obj_@TEXT_CLASS@ **next_values = ncr_allocate(grown * sizeof(*next_values), line, column);
-    if (*capacity > 0) {
-        memcpy(next_names, *names, *capacity * sizeof(*next_names));
-        memcpy(next_values, *values, *capacity * sizeof(*next_values));
-    }
-    ncr_deallocate(*names);
-    ncr_deallocate(*values);
-    *names = next_names;
-    *values = next_values;
+    *names = ncr_reallocate(*names, grown * sizeof(**names), line, column);
+    *values = ncr_reallocate(*values, grown * sizeof(**values), line, column);
     *capacity = grown;
 }
 

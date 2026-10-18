@@ -429,6 +429,57 @@ void main() {{
 }
 
 #[test]
+fn command_builder_growth_preserves_arguments_and_environment() {
+    let directory = TempDir::new();
+    let mut set_environment = String::new();
+    let mut add_arguments = String::new();
+    let mut expected_output = Vec::new();
+    for index in 0..12 {
+        set_environment.push_str(&format!(
+            "    command.setEnv(new Text(\"NACRE_GROW_{index}\"), new Text(\"value-{index}\"))?;\n"
+        ));
+        add_arguments.push_str(&format!(
+            "    command.addArg(new Text(\"NACRE_GROW_{index}\"))?;\n"
+        ));
+        expected_output.extend_from_slice(format!("value-{index}\n").as_bytes());
+    }
+    let checks = [0usize, 6, 7, 8, 14, 15, 64, 70, 71, 89, 95, 96, 97]
+        .iter()
+        .map(|index| format!(
+            "bytes.get({index}L) == (byte){}",
+            expected_output[*index]
+        ))
+        .collect::<Vec<_>>()
+        .join(" && ");
+    let output_length = expected_output.len().to_string();
+    let source = r#"
+Result<Unit, Text> exercise() {
+    Command command = Command.create(Path.fromText(new Text("/usr/bin/printenv"))?);
+    command.clearEnv()?;
+@SET_ENVIRONMENT@
+@ADD_ARGUMENTS@
+    ProcessOutput output = command.output(@OUTPUT_LENGTH@L, 5000L)?;
+    borrow ByteBuffer bytes = output.stdout();
+    println(bytes.length() == @OUTPUT_LENGTH@L && @CHECKS@);
+    return new Result<Unit, Text>.Ok(());
+}
+void main() {
+    match (exercise()) {
+        Ok(unit) { println("COMPLETE"); }
+        Err(error) { error.print(); }
+    }
+}
+"#
+    .replace("@SET_ENVIRONMENT@", &set_environment)
+    .replace("@ADD_ARGUMENTS@", &add_arguments)
+    .replace("@OUTPUT_LENGTH@", &output_length)
+    .replace("@CHECKS@", &checks);
+    let program = compile_program(&source, &["-DNACRE_MEMORY_STATS"]);
+    let output = execute(&program, directory.path(), &[]);
+    assert_eq!(output.stdout, b"true\nCOMPLETE\n");
+}
+
+#[test]
 fn path_search_uses_child_path_and_empty_components_mean_current_directory() {
     let directory = TempDir::new();
     let helper = build_helper(directory.path());

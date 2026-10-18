@@ -101,13 +101,8 @@ static bool ncr_http_grow_headers(ncr_obj_@HTTP_RESPONSE_ID@ *response, size_t l
     if (response->header_capacity >= NCR_HTTP_HEADER_COUNT_LIMIT) { return false; }
     size_t capacity = response->header_capacity == 0 ? 8 : response->header_capacity * 2;
     if (capacity > NCR_HTTP_HEADER_COUNT_LIMIT) { capacity = NCR_HTTP_HEADER_COUNT_LIMIT; }
-    struct ncr_http_header_entry *entries = ncr_allocate(capacity * sizeof(*entries), line, column);
-    struct ncr_http_header_entry *previous = ncr_http_header_entries(response);
-    if (response->header_count > 0) {
-        memcpy(entries, previous, response->header_count * sizeof(*entries));
-    }
-    ncr_deallocate(previous);
-    response->headers = entries;
+    response->headers = ncr_reallocate(response->headers,
+        capacity * sizeof(struct ncr_http_header_entry), line, column);
     response->header_capacity = capacity;
     return true;
 }

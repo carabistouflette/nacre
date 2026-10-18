@@ -206,6 +206,49 @@ void main() {
 }
 
 #[test]
+fn response_header_table_grows_and_preserves_fields() {
+    let mut response = b"HTTP/1.1 200 OK\r\n".to_vec();
+    for index in 0..12 {
+        write!(&mut response, "X-Nacre-{index}: value-{index}\r\n").unwrap();
+    }
+    response.extend_from_slice(b"Content-Length: 0\r\nConnection: close\r\n\r\n");
+    let (url, server) = one_response_server(response, Duration::ZERO);
+    let source = r#"
+Result<Unit, Text> fetch(borrow Text url) {
+    Text method = new Text("GET");
+    HttpRequest request = HttpRequest.create(method, url)?;
+    request.setTimeoutMillis(2000L)?;
+    HttpResponse response = request.send()?;
+    Text firstName = new Text("X-Nacre-0");
+    Text lastName = new Text("X-Nacre-11");
+    match (response.header(firstName)) {
+        None { println("FIRST_MISSING"); }
+        Some(value) { println(value.equalsString("value-0")); }
+    }
+    match (response.header(lastName)) {
+        None { println("LAST_MISSING"); }
+        Some(value) { println(value.equalsString("value-11")); }
+    }
+    return new Result<Unit, Text>.Ok(());
+}
+void main() {
+    Text url = new Text("@URL@");
+    match (fetch(url)) {
+        Ok(unit) { println("COMPLETE"); }
+        Err(error) { println("REQUEST_ERROR"); }
+    }
+}
+"#;
+    let program = compile(&source.replace("@URL@", &url));
+    let output = run(&program);
+    assert_eq!(stdout_lines(&output), vec![
+        "true".to_owned(), "true".to_owned(), "COMPLETE".to_owned(),
+    ]);
+    let request = server.join().unwrap();
+    assert!(request.headers.starts_with("GET / HTTP/1.1"), "{}", request.headers);
+}
+
+#[test]
 fn preserves_large_response_bodies_across_buffer_growth() {
     let response = concat!(
         "HTTP/1.1 200 OK\r\n",
