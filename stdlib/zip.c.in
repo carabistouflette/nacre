@@ -1,7 +1,10 @@
 /* ZIP_GROUP common */
 #include <archive.h>
 #include <archive_entry.h>
+#include <errno.h>
 #include <locale.h>
+#include <stdio.h>
+#include <sys/types.h>
 /* nacre-link: archive */
 
 static locale_t ncr_zip_create_locale(void) {
@@ -55,6 +58,71 @@ static int ncr_zip_reader_configure(struct archive *archive) {
     return status;
 }
 
+#define NCR_ZIP_READER_READ_SIZE 65536
+
+static int ncr_zip_reader_file_open_@ZIP_READER_ID@(struct archive *archive, void *client_data) {
+    ncr_obj_@ZIP_READER_ID@ *reader = client_data;
+    if (reader->source_file == NULL) {
+        archive_set_error(archive, EBADF, "ZIP reader source file is unavailable");
+        return ARCHIVE_FATAL;
+    }
+    return ARCHIVE_OK;
+}
+
+static la_ssize_t ncr_zip_reader_file_read_@ZIP_READER_ID@(struct archive *archive,
+    void *client_data, const void **buffer) {
+    ncr_obj_@ZIP_READER_ID@ *reader = client_data;
+    FILE *source_file = (FILE *)reader->source_file;
+    if (source_file == NULL || reader->source_buffer == NULL || buffer == NULL) {
+        archive_set_error(archive, EBADF, "ZIP reader source is unavailable");
+        return -1;
+    }
+    errno = 0;
+    size_t amount = fread(reader->source_buffer, 1, NCR_ZIP_READER_READ_SIZE, source_file);
+    if (amount == 0 && ferror(source_file)) {
+        archive_set_error(archive, errno == 0 ? EIO : errno, "ZIP reader source read failed");
+        return -1;
+    }
+    *buffer = reader->source_buffer;
+    return (la_ssize_t)amount;
+}
+
+static la_int64_t ncr_zip_reader_file_seek_@ZIP_READER_ID@(struct archive *archive,
+    void *client_data, la_int64_t offset, int whence) {
+    ncr_obj_@ZIP_READER_ID@ *reader = client_data;
+    FILE *source_file = (FILE *)reader->source_file;
+    if (source_file == NULL) {
+        archive_set_error(archive, EBADF, "ZIP reader source file is unavailable");
+        return ARCHIVE_FATAL;
+    }
+    off_t requested = (off_t)offset;
+    if ((la_int64_t)requested != offset) {
+        archive_set_error(archive, EOVERFLOW, "ZIP reader source seek offset is out of range");
+        return ARCHIVE_FATAL;
+    }
+    errno = 0;
+    if (fseeko(source_file, requested, whence) != 0) {
+        archive_set_error(archive, errno == 0 ? EIO : errno, "ZIP reader source seek failed");
+        return ARCHIVE_FATAL;
+    }
+    errno = 0;
+    off_t position = ftello(source_file);
+    if (position < 0) {
+        archive_set_error(archive, errno == 0 ? EIO : errno, "ZIP reader source position failed");
+        return ARCHIVE_FATAL;
+    }
+    if ((uint64_t)position > (uint64_t)INT64_MAX) {
+        archive_set_error(archive, EOVERFLOW, "ZIP reader source position is out of range");
+        return ARCHIVE_FATAL;
+    }
+    return (la_int64_t)position;
+}
+
+static int ncr_zip_reader_file_close_@ZIP_READER_ID@(struct archive *archive, void *client_data) {
+    (void)archive;
+    (void)client_data;
+    return ARCHIVE_OK;
+}
 
 static bool ncr_zip_buffer_append_@BUFFER_ID@(ncr_obj_@BUFFER_ID@ *buffer, const unsigned char *bytes,
     size_t amount, size_t maximum, size_t line, size_t column) {
@@ -95,42 +163,64 @@ static ncr_obj_@OPEN_RESULT_ID@ @ZIP_READER_OPEN@(ncr_obj_@PATH_ID@ *ncr_v_@OPEN
     }
     memcpy(filename, path->bytes, path_length);
     filename[path_length] = '\0';
+    FILE *source_file = fopen(filename, "rb");
+    free(filename);
+    if (source_file == NULL) {
+        return ncr_result_error_@OPEN_RESULT_ID@("ZipReader.open: unable to open archive file", sizeof("ZipReader.open: unable to open archive file") - 1, ncr_line, ncr_column);
+    }
     struct archive *archive = archive_read_new();
     if (archive == NULL) {
-        free(filename);
+        (void)fclose(source_file);
         return ncr_result_error_@OPEN_RESULT_ID@("ZipReader.open: unable to allocate archive reader", sizeof("ZipReader.open: unable to allocate archive reader") - 1, ncr_line, ncr_column);
     }
     locale_t locale = ncr_zip_create_locale();
     if (locale == (locale_t)0) {
-        free(filename);
+        (void)fclose(source_file);
         (void)archive_read_free(archive);
         return ncr_result_error_@OPEN_RESULT_ID@("ZipReader.open: C.UTF-8 locale is unavailable", sizeof("ZipReader.open: C.UTF-8 locale is unavailable") - 1, ncr_line, ncr_column);
     }
+    ncr_obj_@ZIP_READER_ID@ *reader = ncr_allocate(sizeof(*reader), ncr_line, ncr_column);
+    reader->archive = archive;
+    reader->release = ncr_zip_reader_release;
+    reader->locale = (void *)locale;
+    reader->source_file = source_file;
+    reader->source_buffer = ncr_allocate(NCR_ZIP_READER_READ_SIZE, ncr_line, ncr_column);
+    reader->memory = NULL;
+    reader->entry_active = false;
+    reader->entry_read = false;
+    reader->eof = false;
     int status = ncr_zip_reader_configure(archive);
     if (status == ARCHIVE_OK) {
         locale_t previous = uselocale(locale);
         if (previous == (locale_t)0) {
             status = ARCHIVE_FATAL;
         } else {
-            status = archive_read_open_filename(archive, filename, 65536);
+            status = archive_read_set_callback_data(archive, reader);
+            if (status == ARCHIVE_OK) {
+                status = archive_read_set_open_callback(archive, ncr_zip_reader_file_open_@ZIP_READER_ID@);
+            }
+            if (status == ARCHIVE_OK) {
+                status = archive_read_set_read_callback(archive, ncr_zip_reader_file_read_@ZIP_READER_ID@);
+            }
+            if (status == ARCHIVE_OK) {
+                status = archive_read_set_seek_callback(archive, ncr_zip_reader_file_seek_@ZIP_READER_ID@);
+            }
+            if (status == ARCHIVE_OK) {
+                status = archive_read_set_close_callback(archive, ncr_zip_reader_file_close_@ZIP_READER_ID@);
+            }
+            if (status == ARCHIVE_OK) { status = archive_read_open1(archive); }
             ncr_zip_restore_locale(previous);
         }
     }
-    free(filename);
     if (status != ARCHIVE_OK) {
         char message[512];
         size_t length = ncr_zip_error_message(message, sizeof(message), "ZipReader.open", archive);
         ncr_zip_reader_release(archive, (void *)locale);
+        (void)fclose(source_file);
+        ncr_deallocate(reader->source_buffer);
+        ncr_deallocate(reader);
         return ncr_result_error_@OPEN_RESULT_ID@(message, length, ncr_line, ncr_column);
     }
-    ncr_obj_@ZIP_READER_ID@ *reader = ncr_allocate(sizeof(*reader), ncr_line, ncr_column);
-    reader->archive = archive;
-    reader->release = ncr_zip_reader_release;
-    reader->locale = (void *)locale;
-    reader->memory = NULL;
-    reader->entry_active = false;
-    reader->entry_read = false;
-    reader->eof = false;
     return (ncr_obj_@OPEN_RESULT_ID@){ .tag = @OPEN_OK_TAG@, .data.v@OPEN_OK_TAG@.f0 = reader };
 }
 
@@ -178,6 +268,8 @@ static ncr_obj_@FROM_BYTES_RESULT_ID@ @ZIP_READER_FROM_BYTES@(ncr_obj_@BUFFER_ID
     reader->archive = archive;
     reader->release = ncr_zip_reader_release;
     reader->locale = (void *)locale;
+    reader->source_file = NULL;
+    reader->source_buffer = NULL;
     reader->memory = copy;
     reader->entry_active = false;
     reader->entry_read = false;
@@ -201,29 +293,55 @@ static ncr_obj_@NEXT_RESULT_ID@ @ZIP_READER_NEXT@(ncr_obj_@ZIP_READER_ID@ *ncr_s
         ncr_self->entry_read = false;
     }
     struct archive_entry *header = NULL;
+    char warning_message[512];
+    size_t warning_length = 0;
     locale_t previous = uselocale((locale_t)ncr_self->locale);
     if (previous == (locale_t)0) {
         return ncr_result_error_@NEXT_RESULT_ID@("ZipReader.next: unable to activate C.UTF-8 locale", sizeof("ZipReader.next: unable to activate C.UTF-8 locale") - 1, ncr_line, ncr_column);
     }
     int status = archive_read_next_header(archive, &header);
+    bool has_outer_filter = false;
+    if (status == ARCHIVE_OK || status == ARCHIVE_EOF) {
+        has_outer_filter = archive_filter_count(archive) > 1;
+    }
     const char *pathname = NULL;
     size_t name_length = 0;
     bool valid_pathname = false;
-    if (status == ARCHIVE_OK) {
+    if (status == ARCHIVE_OK && !has_outer_filter) {
         pathname = archive_entry_pathname_utf8(header);
         if (pathname != NULL) {
             name_length = strlen(pathname);
             valid_pathname = ncr_utf8_valid((const unsigned char *)pathname, name_length);
         }
     }
+    if (status == ARCHIVE_WARN) {
+        warning_length = ncr_zip_error_message(warning_message, sizeof(warning_message), "ZipReader.next", archive);
+        int warning_skip_status = archive_read_data_skip(archive);
+        if (warning_skip_status != ARCHIVE_OK) {
+            warning_length = ncr_zip_error_message(warning_message, sizeof(warning_message), "ZipReader.next", archive);
+        }
+    }
     ncr_zip_restore_locale(previous);
+    if (has_outer_filter) {
+        return ncr_result_error_@NEXT_RESULT_ID@("ZipReader.next: outer archive filters are unsupported", sizeof("ZipReader.next: outer archive filters are unsupported") - 1, ncr_line, ncr_column);
+    }
     if (status == ARCHIVE_EOF) {
         ncr_self->eof = true;
         ncr_obj_@OPTION_ID@ option = { .tag = @OPTION_NONE_TAG@, .data.v@OPTION_NONE_TAG@.ncr_empty = 0 };
         return (ncr_obj_@NEXT_RESULT_ID@){ .tag = @NEXT_OK_TAG@, .data.v@NEXT_OK_TAG@.f0 = option };
     }
+    if (status == ARCHIVE_WARN) {
+        return ncr_result_error_@NEXT_RESULT_ID@(warning_message, warning_length, ncr_line, ncr_column);
+    }
     if (status != ARCHIVE_OK) { NCR_ZIP_RETURN_ERROR(@NEXT_RESULT_ID@, "ZipReader.next", archive, ncr_line, ncr_column); }
     if (!valid_pathname) {
+        locale_t skip_previous = uselocale((locale_t)ncr_self->locale);
+        if (skip_previous == (locale_t)0) {
+            return ncr_result_error_@NEXT_RESULT_ID@("ZipReader.next: unable to activate C.UTF-8 locale", sizeof("ZipReader.next: unable to activate C.UTF-8 locale") - 1, ncr_line, ncr_column);
+        }
+        int skip_status = archive_read_data_skip(archive);
+        ncr_zip_restore_locale(skip_previous);
+        if (skip_status != ARCHIVE_OK) { NCR_ZIP_RETURN_ERROR(@NEXT_RESULT_ID@, "ZipReader.next", archive, ncr_line, ncr_column); }
         return ncr_result_error_@NEXT_RESULT_ID@("ZipReader.next: entry name is not UTF-8", sizeof("ZipReader.next: entry name is not UTF-8") - 1, ncr_line, ncr_column);
     }
     if (archive_entry_is_encrypted(header) != 0) {
@@ -244,9 +362,9 @@ static ncr_obj_@NEXT_RESULT_ID@ @ZIP_READER_NEXT@(ncr_obj_@ZIP_READER_ID@ *ncr_s
     } else if (is_directory) {
         size = 0;
     }
+    ncr_obj_@TEXT_ID@ *name = @TEXT_FROM_BYTES@((const unsigned char *)pathname, name_length, ncr_line, ncr_column);
     ncr_self->entry_active = true;
     ncr_self->entry_read = false;
-    ncr_obj_@TEXT_ID@ *name = @TEXT_FROM_BYTES@((const unsigned char *)pathname, name_length, ncr_line, ncr_column);
     ncr_obj_@ZIP_ENTRY_ID@ *entry = ncr_allocate(sizeof(*entry), ncr_line, ncr_column);
     entry->name = name;
     entry->size = size;
@@ -323,11 +441,15 @@ static ncr_obj_@READER_CLOSE_RESULT_ID@ @ZIP_READER_CLOSE@(ncr_obj_@ZIP_READER_I
         return ncr_result_error_@READER_CLOSE_RESULT_ID@("ZipReader.close: handle is closed", sizeof("ZipReader.close: handle is closed") - 1, ncr_line, ncr_column);
     }
     locale_t locale = (locale_t)ncr_self->locale;
+    FILE *source_file = (FILE *)ncr_self->source_file;
+    unsigned char *source_buffer = ncr_self->source_buffer;
     locale_t previous = locale == (locale_t)0 ? (locale_t)0 : uselocale(locale);
     bool locale_active = previous != (locale_t)0;
     ncr_self->archive = NULL;
     ncr_self->release = NULL;
     ncr_self->locale = NULL;
+    ncr_self->source_file = NULL;
+    ncr_self->source_buffer = NULL;
     ncr_self->entry_active = false;
     ncr_self->entry_read = false;
     ncr_self->eof = false;
@@ -338,19 +460,25 @@ static ncr_obj_@READER_CLOSE_RESULT_ID@ @ZIP_READER_CLOSE@(ncr_obj_@ZIP_READER_I
         message_length = ncr_zip_error_message(message, sizeof(message), "ZipReader.close", archive);
     }
     int free_status = archive_read_free(archive);
+    int source_close_status = source_file == NULL ? 0 : fclose(source_file);
+    ncr_deallocate(source_buffer);
     free(ncr_self->memory);
     ncr_self->memory = NULL;
     if (close_status == ARCHIVE_OK && free_status != ARCHIVE_OK) {
         message_length = ncr_zip_error_message(message, sizeof(message), "ZipReader.close", NULL);
+    } else if (close_status == ARCHIVE_OK && free_status == ARCHIVE_OK && source_close_status != 0) {
+        static const char source_error[] = "ZipReader.close: source file close failed";
+        memcpy(message, source_error, sizeof(source_error) - 1);
+        message_length = sizeof(source_error) - 1;
     }
     if (locale_active) { ncr_zip_restore_locale(previous); }
     if (locale != (locale_t)0) { freelocale(locale); }
-    if (!locale_active && close_status == ARCHIVE_OK && free_status == ARCHIVE_OK) {
+    if (!locale_active && close_status == ARCHIVE_OK && free_status == ARCHIVE_OK && source_close_status == 0) {
         static const char locale_error[] = "ZipReader.close: unable to activate C.UTF-8 locale";
         memcpy(message, locale_error, sizeof(locale_error) - 1);
         message_length = sizeof(locale_error) - 1;
     }
-    if (close_status != ARCHIVE_OK || free_status != ARCHIVE_OK || !locale_active) {
+    if (close_status != ARCHIVE_OK || free_status != ARCHIVE_OK || source_close_status != 0 || !locale_active) {
         return ncr_result_error_@READER_CLOSE_RESULT_ID@(message, message_length, ncr_line, ncr_column);
     }
     return (ncr_obj_@READER_CLOSE_RESULT_ID@){ .tag = @READER_CLOSE_OK_TAG@, .data.v@READER_CLOSE_OK_TAG@.f0 = UINT8_C(0) };
