@@ -3,6 +3,8 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Stream interface thunk argument lists directly into generated C, avoiding
+  temporary `Vec<String>` values and joined strings.
 - Write class-support C directly to its destination, avoiding temporary
   formatted strings and joined interface parameter lists.
 - Select builtin generic templates by borrowed minimum qualified name, avoiding

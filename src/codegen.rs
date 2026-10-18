@@ -852,25 +852,35 @@ fn interface_implementations(program: &t::Program) -> String {
     for class in &program.classes {
         for (interface, methods) in &class.implementations {
             let cid = class.id;
-            out.push_str(&format!("static void ncr_destroy_{cid}_{interface}(void *p) {{ ncr_drop_{cid}((ncr_obj_{cid} *)p); }}\n"));
+            writeln!(out, "static void ncr_destroy_{cid}_{interface}(void *p) {{ ncr_drop_{cid}((ncr_obj_{cid} *)p); }}").unwrap();
             for (slot, implementation) in methods.iter().enumerate() {
                 let method = &program.functions[*implementation];
-                let mut params = vec!["void *ncr_data".to_owned()];
-                let mut args = vec![format!("(ncr_obj_{cid} *)ncr_data")];
+                write!(
+                    out,
+                    "static {} ncr_thunk_{cid}_{interface}_{slot}(",
+                    ctype(program, method.return_type),
+                ).unwrap();
+                out.push_str("void *ncr_data");
                 for (index, (_, ty)) in method.params.iter().enumerate() {
-                    params.push(format!("{} a{index}", ctype(program, *ty)));
-                    args.push(format!("a{index}"));
+                    write!(out, ", {} a{index}", ctype(program, *ty)).unwrap();
+                }
+                out.push_str(") {\n    ");
+                if method.return_type != Type::Void { out.push_str("return "); }
+                write!(out, "ncr_fn_{implementation}((ncr_obj_{cid} *)ncr_data").unwrap();
+                for index in 0..method.params.len() {
+                    write!(out, ", a{index}").unwrap();
                 }
                 if method.native.is_some() {
                     // The interface ABI has no source coordinates; zero marks an unknown call site.
-                    args.extend(["0".to_owned(), "0".to_owned()]);
+                    out.push_str(", 0, 0");
                 }
-                out.push_str(&format!("static {} ncr_thunk_{cid}_{interface}_{slot}({}) {{\n    {}ncr_fn_{implementation}({});\n}}\n",
-                    ctype(program, method.return_type), params.join(", "),
-                    if method.return_type == Type::Void { "" } else { "return " }, args.join(", ")));
+                out.push_str(");\n}\n");
             }
-            out.push_str(&format!("static const struct ncr_vtable_{interface} ncr_vtable_{cid}_{interface} = {{\n    .destroy = ncr_destroy_{cid}_{interface},\n"));
-            for slot in 0..methods.len() { out.push_str(&format!("    .m{slot} = ncr_thunk_{cid}_{interface}_{slot},\n")); }
+            writeln!(out, "static const struct ncr_vtable_{interface} ncr_vtable_{cid}_{interface} = {{").unwrap();
+            writeln!(out, "    .destroy = ncr_destroy_{cid}_{interface},").unwrap();
+            for slot in 0..methods.len() {
+                writeln!(out, "    .m{slot} = ncr_thunk_{cid}_{interface}_{slot},").unwrap();
+            }
             out.push_str("};\n");
         }
     }
