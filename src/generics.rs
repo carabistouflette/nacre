@@ -728,10 +728,41 @@ fn iterator_item_type(
     }
 }
 
-fn bind_pattern_types(
-    pattern: &a::Pattern,
+type LocalScopeChanges<'ast> = Vec<(&'ast str, Option<Type>)>;
+
+fn bind_local_type<'ast>(
+    locals: &mut HashMap<String, Type>,
+    changes: &mut LocalScopeChanges<'ast>,
+    name: &'ast str,
+    ty: &Type,
+) {
+    let previous = locals.insert(name.to_owned(), ty.clone());
+    changes.push((name, previous));
+}
+
+fn restore_local_scope<'ast>(
+    locals: &mut HashMap<String, Type>,
+    changes: &mut LocalScopeChanges<'ast>,
+    checkpoint: usize,
+) {
+    while changes.len() > checkpoint {
+        let (name, previous) = changes.pop().expect("scope change exists above checkpoint");
+        match previous {
+            Some(previous) => {
+                *locals.get_mut(name).expect("scoped local remains present") = previous;
+            }
+            None => {
+                locals.remove(name);
+            }
+        }
+    }
+}
+
+fn bind_pattern_types<'ast>(
+    pattern: &'ast a::Pattern,
     ty: &Type,
     locals: &mut HashMap<String, Type>,
+    changes: &mut LocalScopeChanges<'ast>,
     classes: &[a::Class],
 ) {
     match &pattern.kind {
@@ -742,7 +773,7 @@ fn bind_pattern_types(
                 .is_some_and(|variants| variants.iter().any(|variant| variant.name == variant_name)) {
                 return;
             }
-            locals.insert(name.clone(), ty.clone());
+            bind_local_type(locals, changes, name, ty);
         }
         a::PatternKind::Variant { name, fields } => {
             let Some(class) = concrete_class_for_type(ty, classes) else { return; };
@@ -750,26 +781,27 @@ fn bind_pattern_types(
             let variant_name = name.rsplit('.').next().unwrap_or(name);
             let Some(variant) = variants.iter().find(|variant| variant.name == variant_name) else { return; };
             for (pattern, field_type) in fields.iter().zip(&variant.fields) {
-                bind_pattern_types(pattern, field_type, locals, classes);
+                bind_pattern_types(pattern, field_type, locals, changes, classes);
             }
         }
         a::PatternKind::Record { fields, .. } => {
             let Some(class) = concrete_class_for_type(ty, classes) else { return; };
             for (name, pattern) in fields {
                 if let Some(field) = class.fields.iter().find(|field| field.name == *name) {
-                    bind_pattern_types(pattern, &field.ty, locals, classes);
+                    bind_pattern_types(pattern, &field.ty, locals, changes, classes);
                 }
             }
         }
         a::PatternKind::Tuple(first, second) => {
             let Some(class) = concrete_class_for_type(ty, classes) else { return; };
             if class.fields.len() == 2 {
-                bind_pattern_types(first, &class.fields[0].ty, locals, classes);
-                bind_pattern_types(second, &class.fields[1].ty, locals, classes);
+                bind_pattern_types(first, &class.fields[0].ty, locals, changes, classes);
+                bind_pattern_types(second, &class.fields[1].ty, locals, changes, classes);
             }
         }
     }
 }
+
 
 fn scan_iterator_expr(
     expander: &mut Expander,
@@ -812,69 +844,82 @@ fn scan_iterator_expr(
     Ok(())
 }
 
-fn scan_iterator_block(
+fn scan_iterator_block<'ast>(
     expander: &mut Expander,
-    block: &a::Block,
+    block: &'ast a::Block,
     locals: &mut HashMap<String, Type>,
+    changes: &mut LocalScopeChanges<'ast>,
     context: &IteratorContext<'_>,
 ) -> Result<(), Diagnostic> {
     let IteratorContext { current_class, classes, functions, .. } = *context;
     use a::StmtKind as S;
-    let saved = locals.clone();
-    for statement in block {
-        match &statement.kind {
-            S::Let { ty, name, value } => {
-                if let Some(value) = value {
+    let checkpoint = changes.len();
+    let result = (|| {
+        for statement in block {
+            match &statement.kind {
+                S::Let { ty, name, value } => {
+                    if let Some(value) = value {
+                        scan_iterator_expr(expander, value, locals, context)?;
+                    }
+                    bind_local_type(locals, changes, name, ty);
+                }
+                S::Assign { target, value } => {
+                    scan_iterator_expr(expander, target, locals, context)?;
                     scan_iterator_expr(expander, value, locals, context)?;
                 }
-                locals.insert(name.clone(), ty.clone());
-            }
-            S::Assign { target, value } => {
-                scan_iterator_expr(expander, target, locals, context)?;
-                scan_iterator_expr(expander, value, locals, context)?;
-            }
-            S::Expr(expr) => scan_iterator_expr(expander, expr, locals, context)?,
-            S::If { condition, then_block, else_block } => {
-                scan_iterator_expr(expander, condition, locals, context)?;
-                let mut branch = locals.clone();
-                scan_iterator_block(expander, then_block, &mut branch, context)?;
-                if let Some(other) = else_block {
-                    let mut branch = locals.clone();
-                    scan_iterator_block(expander, other, &mut branch, context)?;
-                }
-            }
-            S::While { condition, body } => {
-                scan_iterator_expr(expander, condition, locals, context)?;
-                let mut loop_locals = locals.clone();
-                scan_iterator_block(expander, body, &mut loop_locals, context)?;
-            }
-            S::ForEach { ty, name, key, collection, body, .. } => {
-                scan_iterator_expr(expander, collection, locals, context)?;
-                let mut loop_locals = locals.clone();
-                loop_locals.insert(name.clone(), ty.clone());
-                if let Some((key_type, key_name)) = key { loop_locals.insert(key_name.clone(), key_type.clone()); }
-                scan_iterator_block(expander, body, &mut loop_locals, context)?;
-            }
-            S::Match { value, arms } => {
-                scan_iterator_expr(expander, value, locals, context)?;
-                let value_type = inferred_expression_type(value, locals, current_class, classes, functions);
-                for arm in arms {
-                    let mut arm_locals = locals.clone();
-                    if let Some(ty) = &value_type { bind_pattern_types(&arm.pattern, ty, &mut arm_locals, classes); }
-                    if let Some(guard) = &arm.guard {
-                        scan_iterator_expr(expander, guard, &arm_locals, context)?;
+                S::Expr(expr) => scan_iterator_expr(expander, expr, locals, context)?,
+                S::If { condition, then_block, else_block } => {
+                    scan_iterator_expr(expander, condition, locals, context)?;
+                    scan_iterator_block(expander, then_block, locals, changes, context)?;
+                    if let Some(other) = else_block {
+                        scan_iterator_block(expander, other, locals, changes, context)?;
                     }
-                    scan_iterator_block(expander, &arm.body, &mut arm_locals, context)?;
                 }
+                S::While { condition, body } => {
+                    scan_iterator_expr(expander, condition, locals, context)?;
+                    scan_iterator_block(expander, body, locals, changes, context)?;
+                }
+                S::ForEach { ty, name, key, collection, body, .. } => {
+                    scan_iterator_expr(expander, collection, locals, context)?;
+                    let loop_checkpoint = changes.len();
+                    bind_local_type(locals, changes, name, ty);
+                    if let Some((key_type, key_name)) = key {
+                        bind_local_type(locals, changes, key_name, key_type);
+                    }
+                    let result = scan_iterator_block(expander, body, locals, changes, context);
+                    restore_local_scope(locals, changes, loop_checkpoint);
+                    result?;
+                }
+                S::Match { value, arms } => {
+                    scan_iterator_expr(expander, value, locals, context)?;
+                    let value_type = inferred_expression_type(value, locals, current_class, classes, functions);
+                    for arm in arms {
+                        let arm_checkpoint = changes.len();
+                        let result = (|| {
+                            if let Some(ty) = &value_type {
+                                bind_pattern_types(&arm.pattern, ty, locals, changes, classes);
+                            }
+                            if let Some(guard) = &arm.guard {
+                                scan_iterator_expr(expander, guard, locals, context)?;
+                            }
+                            scan_iterator_block(expander, &arm.body, locals, changes, context)?;
+                            Ok(())
+                        })();
+                        restore_local_scope(locals, changes, arm_checkpoint);
+                        result?;
+                    }
+                }
+                S::Return(Some(expr)) => scan_iterator_expr(expander, expr, locals, context)?,
+                S::Block(inner) => scan_iterator_block(expander, inner, locals, changes, context)?,
+                S::Return(None) | S::Break | S::Continue => {}
             }
-            S::Return(Some(expr)) => scan_iterator_expr(expander, expr, locals, context)?,
-            S::Block(inner) => scan_iterator_block(expander, inner, locals, context)?,
-            S::Return(None) | S::Break | S::Continue => {}
         }
-    }
-    *locals = saved;
-    Ok(())
+        Ok(())
+    })();
+    restore_local_scope(locals, changes, checkpoint);
+    result
 }
+
 
 fn discover_iterator_specializations(
     expander: &mut Expander,
@@ -891,7 +936,8 @@ fn discover_iterator_specializations(
     for function in functions {
         let mut locals: HashMap<_, _> = function.params.iter()
             .map(|param| (param.name.clone(), param.ty.clone())).collect();
-        scan_iterator_block(expander, &function.body, &mut locals, &context)?;
+        let mut changes = Vec::new();
+        scan_iterator_block(expander, &function.body, &mut locals, &mut changes, &context)?;
     }
     for class in classes {
         let context = IteratorContext { current_class: Some(class), ..context };
@@ -904,12 +950,14 @@ fn discover_iterator_specializations(
         if let Some(constructor) = &class.constructor {
             let mut locals: HashMap<_, _> = constructor.params.iter()
                 .map(|param| (param.name.clone(), param.ty.clone())).collect();
-            scan_iterator_block(expander, &constructor.body, &mut locals, &context)?;
+            let mut changes = Vec::new();
+            scan_iterator_block(expander, &constructor.body, &mut locals, &mut changes, &context)?;
         }
         for method in &class.methods {
             let mut locals: HashMap<_, _> = method.params.iter()
                 .map(|param| (param.name.clone(), param.ty.clone())).collect();
-            scan_iterator_block(expander, &method.body, &mut locals, &context)?;
+            let mut changes = Vec::new();
+            scan_iterator_block(expander, &method.body, &mut locals, &mut changes, &context)?;
         }
     }
     Ok(())
