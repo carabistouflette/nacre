@@ -30,6 +30,8 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   failure details, filtered counts, and suite timing.
 - Add `Text.join` for borrowed `List<Text>` parts and a borrowed delimiter.
   Measure UTF-8 output length first and reserve before appending.
+- Extend local Graphify support for Nacre's `.ncr` and `.c.in` sources, linking
+  `Text.join` through native IR and code generation without patching Graphify.
 - Profile release-compiler builds on scalar, collection, and transitive-package
   consumers. Make unused direct-LLVM functions discardable instead of keeping
   them externally live, retaining strong symbols for concrete interface implementations
