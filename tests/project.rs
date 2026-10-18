@@ -131,6 +131,19 @@ fn diagnostic_offsets_round_down_to_utf8_boundaries() {
     }
 }
 #[test]
+fn rendered_diagnostics_sanitize_control_characters_in_crlf_source() {
+    let source = "void main() {\r\n\t\x1b[31mtrue\r\n}";
+    let start = source.find('\x1b').unwrap();
+    let span = Span::new(start, start + 1);
+    let diagnostic = Diagnostic::new(span, "invalid token").with_note(span, "same location");
+    let rendered = diagnostic.render("control.ncr", source);
+
+    assert!(!rendered.contains('\x1b'), "{rendered:?}");
+    assert!(!rendered.contains('\r'), "{rendered:?}");
+    assert!(rendered.contains("    �[31mtrue"), "{rendered:?}");
+}
+
+#[test]
 fn directory_sources_are_sorted_and_outputs_excluded() {
     let t=Temp::new();t.file("B.ncr","class B{}");t.file("A.ncr","void main(){}");
     for name in [".hidden", "out", "target"] {

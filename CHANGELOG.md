@@ -29,6 +29,9 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 
 - Correct ignored LLVM test commands to use the actual Cargo target name.
 
+- Sanitize control characters in compiler diagnostic snippets and omit carriage
+  returns from displayed CRLF source lines.
+
 - Align Tree-sitter, Zed, and VS Code syntax support with trait/impl declarations,
   bounded type parameters, and async/await; capture Zed's named shift-right token.
 

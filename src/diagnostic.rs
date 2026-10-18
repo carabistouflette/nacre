@@ -56,11 +56,11 @@ impl Diagnostic {
         let line_start = source[..start].rfind('\n').map_or(0, |i| i + 1);
         let line_end = source[start..].find('\n').map_or(source.len(), |i| start + i);
         let text = &source[line_start..line_end];
-        let indent = source[line_start..start].chars().map(|c| if c == '\t' { 4 } else { 1 }).sum::<usize>();
+        let indent = rendered_columns(&source[line_start..start]);
         let end = char_boundary(source, span.end.min(line_end)).max(start);
-        let width = source[start..end].chars().count().clamp(1, 60);
+        let width = rendered_columns(&source[start..end]).clamp(1, 60);
         format!("  ::: ({filename}:{line}:{column})\n  |\n{line:>3} | {}\n  | {}{} note: {note}\n",
-            text.replace('\t', "    "), " ".repeat(indent), "-".repeat(width))
+            render_source_line(text), " ".repeat(indent), "-".repeat(width))
     }
     /// Render the primary error using a source-local span; notes and help are separate.
     pub(crate) fn render_primary(&self, filename: &str, source: &str, span: Span) -> String {
@@ -69,12 +69,33 @@ impl Diagnostic {
         let line_start = source[..start].rfind('\n').map_or(0, |i| i + 1);
         let line_end = source[start..].find('\n').map_or(source.len(), |i| start + i);
         let text = &source[line_start..line_end];
-        let indent = source[line_start..start].chars().map(|c| if c == '\t' { 4 } else { 1 }).sum::<usize>();
+        let indent = rendered_columns(&source[line_start..start]);
         let end = char_boundary(source, span.end.min(line_end)).max(start);
-        let width = source[start..end].chars().count().clamp(1, 60);
+        let width = rendered_columns(&source[start..end]).clamp(1, 60);
         format!("{filename}:{line}:{column}: error: {}\n  |\n{line:>3} | {}\n  | {}{}\n",
-            self.message, text.replace('\t', "    "), " ".repeat(indent), "^".repeat(width))
+            self.message, render_source_line(text), " ".repeat(indent), "^".repeat(width))
     }
+}
+
+fn render_source_line(text: &str) -> String {
+    let text = text.strip_suffix('\r').unwrap_or(text);
+    let mut rendered = String::with_capacity(text.len());
+    for character in text.chars() {
+        match character {
+            '\t' => rendered.push_str("    "),
+            character if character.is_control() => rendered.push('�'),
+            character => rendered.push(character),
+        }
+    }
+    rendered
+}
+
+fn rendered_columns(text: &str) -> usize {
+    text.strip_suffix('\r')
+        .unwrap_or(text)
+        .chars()
+        .map(|character| if character == '\t' { 4 } else { 1 })
+        .sum()
 }
 
 impl fmt::Display for Diagnostic {
