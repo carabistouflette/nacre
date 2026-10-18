@@ -75,6 +75,13 @@ its imports. Private traits are usable only within their declaring module.
 Matching uses module-qualified trait identity, so a same-named trait from
 another module cannot satisfy the bound.
 
+A trait implementation must provide every method with exactly matching
+parameter and return types resolved in the trait and implementation source
+units, plus matching borrowing modes, `readonly` status, and visibility. Trait
+methods are instance and synchronous; an implementation cannot substitute a
+static or async method. Implementation method bodies also retain imports from
+the source unit declaring the `impl`.
+
 ## Ownership after substitution
 
 Specialization does not change ownership rules. A type parameter substituted by a

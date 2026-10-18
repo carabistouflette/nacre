@@ -12,6 +12,11 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   from satisfying a bound.
 - Enforce module privacy when resolving trait implementations and bounds;
   private traits cannot be used by other modules.
+- Validate trait implementations against exact method signatures, resolving
+  types in the trait and impl source units and checking borrowing modes, receiver
+  mutability, visibility, and synchronous instance behavior.
+- Retain imports from the impl source unit when resolving implementation method
+  signatures and bodies, including when the class is declared in another file.
 - Cache Unit-mutex dependency discovery as specializations are requested,
   avoiding a full request-set scan after each expansion.
 - Count concrete user types incrementally during generic expansion instead of
