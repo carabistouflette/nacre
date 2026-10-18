@@ -2,6 +2,10 @@
 
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
+
+- Use `ncr_reallocate` for ByteBuffer, console input, and readLink growth,
+  replacing manual allocation-copy-free cycles.
+
 - Align Tree-sitter, Zed, and VS Code syntax support with trait/impl declarations,
   bounded type parameters, and async/await; capture Zed's named shift-right token.
 

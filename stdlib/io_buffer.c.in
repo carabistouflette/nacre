@@ -7,10 +7,7 @@ static bool @IO_RESERVE@(unsigned char **bytes, size_t *capacity, size_t require
         grown *= 2;
     }
     if (grown < required) { return false; }
-    unsigned char *next = ncr_allocate(grown, line, column);
-    if (used > 0) { memcpy(next, *bytes, used); }
-    ncr_deallocate(*bytes);
-    *bytes = next;
+    *bytes = ncr_reallocate(*bytes, grown, line, column);
     *capacity = grown;
     return true;
 }
