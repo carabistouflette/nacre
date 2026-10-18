@@ -35,6 +35,8 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   returns from displayed CRLF source lines.
 
 - Use the same four-space tab expansion for reported source columns.
+- Align rendered diagnostic carets to Unicode display width while retaining
+  source-column semantics used by debug locations.
 
 - Bound aggregate manifest reads during dependency-cycle checks to limit memory growth.
 

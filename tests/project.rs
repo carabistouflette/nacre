@@ -130,6 +130,21 @@ fn diagnostic_offsets_round_down_to_utf8_boundaries() {
         assert_eq!((line, column), expected);
     }
 }
+
+#[test]
+fn diagnostic_carets_follow_unicode_display_width() {
+    let text = "A界B";
+    let start = text.find('B').unwrap();
+    let diagnostic = Diagnostic::new(Span::new(start, start + 1), "wide character");
+    let rendered = diagnostic.render("unicode", text);
+
+    assert!(rendered.starts_with("unicode:1:3: error: wide character\n"), "{rendered:?}");
+    assert_eq!(line_column(text, start), (1, 3));
+    assert!(rendered.contains("  |    ^\n"), "{rendered:?}");
+
+    let wide_span = Diagnostic::new(Span::new(1, 4), "wide span").render("unicode", text);
+    assert!(wide_span.contains("  |  ^^\n"), "{wide_span:?}");
+}
 #[test]
 fn rendered_diagnostics_sanitize_control_characters_in_crlf_source() {
     let source = "void main() {\r\n\t\x1b[31mtrue\r\n}";

@@ -1,5 +1,7 @@
-//! Source locations are byte offsets; displayed columns count tabs as four spaces.
+//! Source locations are byte offsets. Source columns count Unicode scalars and
+//! expand tabs to four spaces; snippet carets use Unicode display width.
 use std::fmt;
+use unicode_width::UnicodeWidthStr;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Span {
@@ -56,9 +58,9 @@ impl Diagnostic {
         let line_start = source[..start].rfind('\n').map_or(0, |i| i + 1);
         let line_end = source[start..].find('\n').map_or(source.len(), |i| start + i);
         let text = &source[line_start..line_end];
-        let indent = rendered_columns(&source[line_start..start]);
+        let indent = display_columns(&source[line_start..start]);
         let end = char_boundary(source, span.end.min(line_end)).max(start);
-        let width = rendered_columns(&source[start..end]).clamp(1, 60);
+        let width = display_columns(&source[start..end]).clamp(1, 60);
         format!("  ::: ({filename}:{line}:{column})\n  |\n{line:>3} | {}\n  | {}{} note: {note}\n",
             render_source_line(text), " ".repeat(indent), "-".repeat(width))
     }
@@ -69,9 +71,9 @@ impl Diagnostic {
         let line_start = source[..start].rfind('\n').map_or(0, |i| i + 1);
         let line_end = source[start..].find('\n').map_or(source.len(), |i| start + i);
         let text = &source[line_start..line_end];
-        let indent = rendered_columns(&source[line_start..start]);
+        let indent = display_columns(&source[line_start..start]);
         let end = char_boundary(source, span.end.min(line_end)).max(start);
-        let width = rendered_columns(&source[start..end]).clamp(1, 60);
+        let width = display_columns(&source[start..end]).clamp(1, 60);
         format!("{filename}:{line}:{column}: error: {}\n  |\n{line:>3} | {}\n  | {}{}\n",
             self.message, render_source_line(text), " ".repeat(indent), "^".repeat(width))
     }
@@ -90,12 +92,26 @@ fn render_source_line(text: &str) -> String {
     rendered
 }
 
-fn rendered_columns(text: &str) -> usize {
+fn source_columns(text: &str) -> usize {
     text.strip_suffix('\r')
         .unwrap_or(text)
         .chars()
         .map(|character| if character == '\t' { 4 } else { 1 })
         .sum()
+}
+
+fn display_columns(text: &str) -> usize {
+    let text = text.strip_suffix('\r').unwrap_or(text);
+    let mut columns = 0;
+    let mut segment_start = 0;
+    for (index, character) in text.char_indices() {
+        if character == '\t' || character.is_control() {
+            columns += text[segment_start..index].width();
+            columns += if character == '\t' { 4 } else { 1 };
+            segment_start = index + character.len_utf8();
+        }
+    }
+    columns + text[segment_start..].width()
 }
 
 impl fmt::Display for Diagnostic {
@@ -109,7 +125,7 @@ impl std::error::Error for Diagnostic {}
 pub fn line_column(source: &str, offset: usize) -> (usize, usize) {
     let prefix = &source[..char_boundary(source, offset)];
     let line = prefix.bytes().filter(|&b| b == b'\n').count() + 1;
-    let column = rendered_columns(prefix.rsplit('\n').next().unwrap_or("")) + 1;
+    let column = source_columns(prefix.rsplit('\n').next().unwrap_or("")) + 1;
     (line, column)
 }
 
