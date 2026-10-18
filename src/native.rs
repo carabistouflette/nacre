@@ -398,19 +398,9 @@ fn c_compiler_command(
     command
 }
 
-fn dependency_cache_fingerprint(
-    compiler: &std::ffi::OsStr,
-    optimization: &str,
-    flags: &[&str],
-    libraries: &NativeLibraries,
-    source_path: &Path,
-) -> Option<u128> {
-    let mut command = c_compiler_command(compiler, optimization, libraries, flags);
-    command.args(["-M", "-MT", "nacre", "-MF", "-"]).arg(source_path);
-    let output = capture_limited_output(command, OUTPUT_CAPTURE_LIMIT_BYTES, StdoutCapture::Capture).ok()?;
-    if !output.status.success() || output.stdout_truncated { return None; }
+fn dependency_files_fingerprint(output: &[u8], source_path: &Path) -> Option<u128> {
     let source_path = source_path.canonicalize().ok()?;
-    let mut paths = parse_make_dependencies(&output.stdout)?;
+    let mut paths = parse_make_dependencies(output)?;
     paths.sort();
     paths.dedup();
     let mut fingerprint = 0xcbf29ce484222325u64 as u128;
@@ -429,6 +419,41 @@ fn dependency_cache_fingerprint(
         }
     }
     Some(fingerprint)
+}
+
+fn dependency_cache_fingerprint(
+    compiler: &std::ffi::OsStr,
+    optimization: &str,
+    flags: &[&str],
+    libraries: &NativeLibraries,
+    source_path: &Path,
+) -> Option<u128> {
+    let mut command = c_compiler_command(compiler, optimization, libraries, flags);
+    command.args(["-M", "-MT", "nacre", "-MF", "-"]).arg(source_path);
+    let output = capture_limited_output(command, OUTPUT_CAPTURE_LIMIT_BYTES, StdoutCapture::Capture).ok()?;
+    if !output.status.success() || output.stdout_truncated { return None; }
+    dependency_files_fingerprint(&output.stdout, source_path)
+}
+
+fn runtime_dependency_fingerprint(
+    compiler: &std::ffi::OsStr,
+    optimization: &str,
+    flags: &[&str],
+    section_flags: &[&str],
+    libraries: &NativeLibraries,
+    source_path: &Path,
+) -> Option<u128> {
+    let mut command = Command::new(compiler);
+    command.arg(optimization)
+        .args(RUNTIME_C_FLAGS)
+        .args(section_flags)
+        .args(libraries.header_flags())
+        .args(flags.iter().copied().filter(|flag| !is_link_only_flag(flag)))
+        .args(["-M", "-MT", "nacre", "-MF", "-"])
+        .arg(source_path);
+    let output = capture_limited_output(command, OUTPUT_CAPTURE_LIMIT_BYTES, StdoutCapture::Capture).ok()?;
+    if !output.status.success() || output.stdout_truncated { return None; }
+    dependency_files_fingerprint(&output.stdout, source_path)
 }
 
 /// Compile at an explicitly selected level; flags are trusted separate arguments.
@@ -563,27 +588,34 @@ pub(crate) fn compile_llvm_direct_with_runtime(
     let target = tools.target();
     let libraries = NativeLibraries::from_source(runtime_c);
     let section_flags: &[&str] = if cfg!(target_os = "linux") { LINUX_SECTION_FLAGS } else { &[] };
-    let cache_entry = cache_dir().filter(|_| pgo_directory(flags).is_none()).map(|cache| {
-        let key = compute_runtime_cache_key(
-            [
-                compiler.as_encoded_bytes(), compiler_version.as_bytes(),
-                linker.as_encoded_bytes(), linker_version.as_bytes(),
-                target.as_bytes(), optimization.as_bytes(),
-            ],
-            flags,
-            section_flags,
-            libraries.header_flags(),
-            runtime_c,
-        );
-        cache.join(format!("llvm-runtime-{key}.bc"))
-    });
+    let cache = cache_dir().filter(|_| pgo_directory(flags).is_none());
     let directory = TempDir::new()?;
     let executable = directory.0.join(if cfg!(windows) { "program.exe" } else { "program" });
     let runtime_bitcode = directory.0.join("runtime.bc");
+    let runtime_path = directory.0.join("runtime.c");
     let user_path = directory.0.join("program.ll");
     let linked_bitcode = directory.0.join("linked.bc");
 
     fs::write(&user_path, llvm_ir).map_err(|e| format!("failed to write temporary direct LLVM IR: {e}"))?;
+    fs::write(&runtime_path, runtime_c).map_err(|e| format!("failed to write temporary LLVM runtime C source: {e}"))?;
+    let cache_entry = cache.and_then(|cache| {
+        runtime_dependency_fingerprint(compiler, optimization, flags, section_flags, &libraries, &runtime_path)
+            .map(|dependencies| {
+                let key = compute_runtime_cache_key(
+                    [
+                        compiler.as_encoded_bytes(), compiler_version.as_bytes(),
+                        linker.as_encoded_bytes(), linker_version.as_bytes(),
+                        target.as_bytes(), optimization.as_bytes(),
+                    ],
+                    flags,
+                    section_flags,
+                    libraries.header_flags(),
+                    runtime_c,
+                    dependencies,
+                );
+                cache.join(format!("llvm-runtime-{key}.bc"))
+            })
+    });
 
     let cached_runtime = cache_entry.as_ref().filter(|path| {
         fs::metadata(path).is_ok_and(|metadata| metadata.is_file() && metadata.len() > 0)
@@ -591,8 +623,6 @@ pub(crate) fn compile_llvm_direct_with_runtime(
     let runtime_bitcode_input = if let Some(cached) = cached_runtime {
         cached.as_path()
     } else {
-        let runtime_path = directory.0.join("runtime.c");
-        fs::write(&runtime_path, runtime_c).map_err(|e| format!("failed to write temporary LLVM runtime C source: {e}"))?;
         let mut command = Command::new(compiler);
         command
             .arg(optimization)
@@ -665,6 +695,7 @@ fn compute_runtime_cache_key(
     section_flags: &[&str],
     header_flags: impl Iterator<Item = &'static str>,
     runtime_c: &str,
+    dependencies: u128,
 ) -> String {
     let mut hash = 0xcbf29ce484222325u64 as u128;
     let prime = 0x100000001b3u64 as u128;
@@ -693,9 +724,8 @@ fn compute_runtime_cache_key(
         }
         hash = (hash ^ 0xff).wrapping_mul(prime);
     }
-    for &byte in runtime_c.as_bytes() {
-        hash = (hash ^ byte as u128).wrapping_mul(prime);
-    }
+    hash_cache_part(&mut hash, runtime_c.as_bytes());
+    hash_cache_part(&mut hash, &dependencies.to_le_bytes());
     format!("{hash:032x}")
 }
 

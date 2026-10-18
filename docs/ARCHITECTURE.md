@@ -269,8 +269,11 @@ bodies and literal data remain in the per-program LLVM module, not the C support
 Clang 23/`llvm-link` 22 pair failed, while matching version 22 tools succeeded.
 The direct runtime-bitcode cache stores generated C support, not user bodies,
 literal data, the per-program LLVM module, or the final executable. Its key
-includes the compiler/linker identities and versions, target, runtime source,
-compilation inputs, and relevant header/environment inputs. It defaults to
+includes compiler/linker identities and versions, target, runtime source,
+compilation flags and environment, and resolved dependency paths and contents.
+Each cache lookup rescans dependencies; incomplete or over-limit scans bypass
+caching. Changed included-file contents therefore cannot reuse stale runtime
+bitcode. The cache defaults to
 `$XDG_CACHE_HOME/nacre` (or `$HOME/.cache/nacre`), `NACRE_CACHE_DIR` overrides
 that location, and `NACRE_NO_CACHE` disables it. PGO builds bypass runtime-bitcode
 caching. Direct native builds retain the selected optimization and native/link

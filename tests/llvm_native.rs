@@ -434,11 +434,17 @@ fn direct_runtime_bitcode_cache_is_reused_across_programs() {
     let compiler = temp.path("record-clang");
     let c_compiles = temp.path("c-compiles");
     fs::write(&compiler, r#"#!/bin/sh
+dependency_scan=0
 for arg do
-    case "$arg" in
-        *.c) printf 'C frontend\n' >> "$NACRE_TEST_C_COMPILES"; break ;;
-    esac
+    if [ "$arg" = "-M" ]; then dependency_scan=1; fi
 done
+if [ "$dependency_scan" -eq 0 ]; then
+    for arg do
+        case "$arg" in
+            *.c) printf 'C frontend\n' >> "$NACRE_TEST_C_COMPILES"; break ;;
+        esac
+    done
+fi
 exec "$NACRE_TEST_CLANG" "$@"
 "#).unwrap();
     fs::set_permissions(&compiler, fs::Permissions::from_mode(0o755)).unwrap();
@@ -460,6 +466,72 @@ exec "$NACRE_TEST_CLANG" "$@"
         assert_eq!(fs::read_to_string(&c_compiles).unwrap(), "C frontend\n",
             "changing only user code must not invoke the C frontend again");
     }
+}
+
+#[cfg(unix)]
+#[test]
+fn direct_runtime_header_cache_probe_child() {
+    if std::env::var_os("NACRE_RUNTIME_CACHE_CHILD").is_none() { return; }
+    let header = std::env::var("NACRE_RUNTIME_CACHE_HEADER").unwrap();
+    let flags = ["-include", header.as_str()];
+    let program = compile_llvm_direct_with_flags("void main() {}\n", &flags).unwrap();
+    let output = program.output().unwrap();
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    let has_memory_report = String::from_utf8_lossy(&output.stderr).contains("NACRE_MEMORY allocations=");
+    let expected = std::env::var("NACRE_EXPECT_RUNTIME_MEMORY_REPORT").unwrap() == "1";
+    assert_eq!(has_memory_report, expected, "{}", String::from_utf8_lossy(&output.stderr));
+}
+
+#[cfg(unix)]
+#[test]
+fn direct_runtime_cache_invalidates_for_forced_header_changes() {
+    use std::os::unix::fs::PermissionsExt;
+    let temp = TestDir::new();
+    let cache = temp.path("cache");
+    fs::create_dir(&cache).unwrap();
+    let header = temp.path("runtime-config.h");
+    fs::write(&header, "").unwrap();
+    let compiler = temp.path("record-clang");
+    let c_compiles = temp.path("c-compiles");
+    fs::write(&compiler, r#"#!/bin/sh
+dependency_scan=0
+for arg do
+    if [ "$arg" = "-M" ]; then dependency_scan=1; fi
+done
+if [ "$dependency_scan" -eq 0 ]; then
+    for arg do
+        case "$arg" in
+            *.c) printf 'C frontend\n' >> "$NACRE_TEST_C_COMPILES"; break ;;
+        esac
+    done
+fi
+exec "$NACRE_TEST_CLANG" "$@"
+"#).unwrap();
+    fs::set_permissions(&compiler, fs::Permissions::from_mode(0o755)).unwrap();
+    let clang = std::env::var_os("NACRE_CLANG").unwrap_or_else(|| "clang".into());
+    let executable = std::env::current_exe().unwrap();
+    let run_probe = |expect_memory_report: bool| {
+        let output = Command::new(&executable)
+            .args(["--exact", "direct_runtime_header_cache_probe_child", "--nocapture"])
+            .env("NACRE_RUNTIME_CACHE_CHILD", "1")
+            .env("NACRE_RUNTIME_CACHE_HEADER", &header)
+            .env("NACRE_EXPECT_RUNTIME_MEMORY_REPORT", if expect_memory_report { "1" } else { "0" })
+            .env("NACRE_CACHE_DIR", &cache)
+            .env("NACRE_ENABLE_TEST_CACHE", "1")
+            .env("NACRE_CLANG", &compiler)
+            .env("NACRE_TEST_CLANG", &clang)
+            .env("NACRE_TEST_C_COMPILES", &c_compiles)
+            .env_remove("NACRE_NO_CACHE")
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "runtime cache probe failed\n{}", String::from_utf8_lossy(&output.stderr));
+    };
+
+    run_probe(false);
+    fs::write(&header, "#define NACRE_MEMORY_STATS 1\n").unwrap();
+    run_probe(true);
+    assert_eq!(fs::read_to_string(&c_compiles).unwrap().lines().count(), 2,
+        "changing force-included header contents must rebuild runtime bitcode");
 }
 
 #[test]

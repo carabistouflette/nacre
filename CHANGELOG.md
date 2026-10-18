@@ -48,6 +48,10 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   Truncated diagnostics are marked, incomplete cache probes skip caching, and
   `emit-llvm` retains the complete IR output.
 
+- Fingerprint included-file contents for direct LLVM runtime-bitcode cache
+  entries. Header changes rebuild the runtime; incomplete dependency scans
+  bypass caching.
+
 - Align Tree-sitter, Zed, and VS Code syntax support with trait/impl declarations,
   bounded type parameters, and async/await; capture Zed's named shift-right token.
 
