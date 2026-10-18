@@ -25,6 +25,11 @@ struct ClassInfo {
     is_interface: bool, interface_methods: Vec<usize>, implementations: Vec<(usize, Vec<usize>)>,
 }
 
+fn class_base_name(name: &str) -> &str {
+    let name = name.split('<').next().unwrap_or(name);
+    name.rsplit("::").next().unwrap_or(name)
+}
+
 fn for_each_view_relevant_type(info: &ClassInfo, mut visit: impl FnMut(Type)) {
     for field in &info.fields { visit(field.ty); }
     if let Some(variants) = &info.variants {
@@ -81,6 +86,7 @@ struct Tables {
     names: HashMap<String, usize>, classes: Vec<ClassInfo>,
     globals: HashMap<String, usize>, signatures: Vec<Signature>,
     interface_implementers: Vec<Vec<usize>>,
+    pair_classes: HashMap<(Type, Type), usize>, option_long_class: Option<usize>,
 }
 impl Tables {
     fn resolve_type(&self, ty: &a::Type, span: Span) -> Result<Type, Diagnostic> {
@@ -408,6 +414,7 @@ fn check_inner(program: &a::Program, collect_references: bool) -> Result<(t::Pro
         names: HashMap::new(), classes: Vec::new(),
         globals: HashMap::new(), signatures: Vec::new(),
         interface_implementers: vec![Vec::new(); program.classes.len()],
+        pair_classes: HashMap::new(), option_long_class: None,
     };
     for (id, class) in program.classes.iter().enumerate() {
         if class.name == "System" || class.name == "println" {
@@ -658,6 +665,25 @@ fn check_inner(program: &a::Program, collect_references: bool) -> Result<(t::Pro
             tables.classes[id].fields.push(FieldInfo { name: field.name.clone(), ty, visibility: field.visibility });
         }
     }
+    let mut pair_classes = HashMap::new();
+    let mut option_long_class = None;
+    for (id, class) in tables.classes.iter().enumerate() {
+        let base = class_base_name(&class.name);
+        if base == "Pair" && class.fields.len() == 2 {
+            pair_classes.entry((class.fields[0].ty, class.fields[1].ty)).or_insert(id);
+        }
+        if option_long_class.is_none() && base == "Option"
+            && class.variants.as_ref().is_some_and(|variants|
+                variants.iter().any(|variant|
+                    variant.name == "Some" && variant.fields.as_slice() == [Type::Long])
+                && variants.iter().any(|variant|
+                    variant.name == "None" && variant.fields.is_empty()))
+        {
+            option_long_class = Some(id);
+        }
+    }
+    tables.pair_classes = pair_classes;
+    tables.option_long_class = option_long_class;
     let has_borrow = classes_containing_views(&tables.classes);
     for (info, value) in tables.classes.iter_mut().zip(has_borrow) { info.has_borrow = value; }
     for (id, class) in program.classes.iter().enumerate() {
@@ -2074,28 +2100,14 @@ impl Checker<'_> {
     /// Borrowing changes the call contract, not ownership. No allocation or copy.
     fn is_pair_class(&self, class: usize) -> bool {
         let info = &self.tables.classes[class];
-        let name = info.name.split('<').next().unwrap_or(&info.name);
-        let base = name.rsplit("::").next().unwrap_or(name);
-        base == "Pair" && info.fields.len() == 2
+        class_base_name(&info.name) == "Pair" && info.fields.len() == 2
             && info.fields[0].name == "first" && info.fields[1].name == "second"
     }
     fn pair_class_for_types(&self, first: Type, second: Type) -> Option<usize> {
-        self.tables.classes.iter().enumerate().find_map(|(id, class)| {
-            let name = class.name.split('<').next().unwrap_or(&class.name);
-            let base = name.rsplit("::").next().unwrap_or(name);
-            (base == "Pair" && class.fields.len() == 2
-                && class.fields[0].ty == first && class.fields[1].ty == second)
-                .then_some(id)
-        })
+        self.tables.pair_classes.get(&(first, second)).copied()
     }
     fn option_long_class(&self) -> Option<usize> {
-        self.tables.classes.iter().enumerate().find_map(|(id, class)| {
-            let name = class.name.split('<').next().unwrap_or(&class.name);
-            let base = name.rsplit("::").next().unwrap_or(name);
-            let variants = class.variants.as_ref()?;
-            (base == "Option" && variants.iter().any(|v| v.name == "Some" && v.fields.as_slice() == [Type::Long])
-                && variants.iter().any(|v| v.name == "None" && v.fields.is_empty())).then_some(id)
-        })
+        self.tables.option_long_class
     }
     fn iterator_callback_interface(
         &self,

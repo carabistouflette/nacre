@@ -29,6 +29,8 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   generation instead of rescanning all classes for every handle type.
 - Index class field names once, replacing repeated linear scans and per-pattern
   metadata clones with constant-time lookups.
+- Index Pair and `Option<long>` specializations once instead of scanning every
+  class for each iterator use.
 
 - End local borrowed bindings and retained view loans after their last
   control-flow use. Backward liveness follows branch alternatives and loop

@@ -5,7 +5,7 @@ use crate::diagnostic::Span;
 use std::borrow::Cow;
 use std::collections::HashMap;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Type { Byte, Char, Int, Long, Double, Unit, Boolean, String, Void, Object(usize), Borrow { class: usize, mutable: bool } }
 impl Type {
     /// Language-level spelling; the owning phase resolves nominal class names.
