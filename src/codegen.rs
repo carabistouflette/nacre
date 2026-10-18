@@ -102,12 +102,18 @@ pub(crate) fn direct_runtime_references(
 ) -> RuntimeReferences {
     use std::collections::BTreeMap;
 
-    fn native_method(program: &t::Program, class: usize, method: t::NativeMethod,
-                     native: &mut HashSet<usize>) {
-        let function = program.functions.iter().find(|function|
-            function.receiver == Some(class) && function.native == Some(method))
+    fn native_method(
+        program: &t::Program,
+        class: usize,
+        method: t::NativeMethod,
+        native: &mut HashSet<usize>,
+        native_method_ids: &mut Option<t::NativeMethodIndex>,
+    ) {
+        let id = native_method_ids
+            .get_or_insert_with(|| t::NativeMethodIndex::new(program))
+            .get(class, method)
             .unwrap_or_else(|| panic!("missing native iterator method {method:?} for class {class}"));
-        native.insert(function.id);
+        native.insert(id);
     }
     fn iterator_receiver_class(receiver: &t::IteratorReceiver) -> usize {
         match receiver {
@@ -120,35 +126,36 @@ pub(crate) fn direct_runtime_references(
         program: &t::Program,
         plan: &t::IteratorPlan,
         native: &mut HashSet<usize>,
+        native_method_ids: &mut Option<t::NativeMethodIndex>,
         virtuals: &mut HashSet<usize>,
         slots: &mut BTreeMap<String, (usize, t::MapSlotKind, Type, Type)>,
     ) {
         match &plan.source {
             t::IteratorSource::List { collection, element_type } => {
                 let class = iterator_receiver_class(collection);
-                native_method(program, class, t::NativeMethod::ListSize, native);
+                native_method(program, class, t::NativeMethod::ListSize, native, native_method_ids);
                 let access = if element_type.is_object() {
                     t::NativeMethod::ListGetRef
                 } else {
                     t::NativeMethod::ListGet
                 };
-                native_method(program, class, access, native);
-                iterator_receiver(collection, program, native, virtuals, slots);
+                native_method(program, class, access, native, native_method_ids);
+                iterator_receiver(collection, program, native, native_method_ids, virtuals, slots);
             }
             t::IteratorSource::Array { collection, element_type } => {
                 let class = iterator_receiver_class(collection);
-                native_method(program, class, t::NativeMethod::ArraySize, native);
+                native_method(program, class, t::NativeMethod::ArraySize, native, native_method_ids);
                 let access = if element_type.is_object() {
                     t::NativeMethod::ArrayGetRef
                 } else {
                     t::NativeMethod::ArrayGet
                 };
-                native_method(program, class, access, native);
-                iterator_receiver(collection, program, native, virtuals, slots);
+                native_method(program, class, access, native, native_method_ids);
+                iterator_receiver(collection, program, native, native_method_ids, virtuals, slots);
             }
             t::IteratorSource::Map { collection, pair_class, .. } => {
                 let class = iterator_receiver_class(collection);
-                native_method(program, class, t::NativeMethod::MapSize, native);
+                native_method(program, class, t::NativeMethod::MapSize, native, native_method_ids);
                 let fields = &program.classes[*pair_class].fields;
                 let slot_types = [
                     (t::MapSlotKind::Occupied, Type::Boolean),
@@ -160,20 +167,20 @@ pub(crate) fn direct_runtime_references(
                     let name = direct_map_slot_symbol(class, kind, ty, index);
                     slots.insert(name, (class, kind, ty, index));
                 }
-                iterator_receiver(collection, program, native, virtuals, slots);
+                iterator_receiver(collection, program, native, native_method_ids, virtuals, slots);
             }
         }
         for stage in &plan.stages {
             match stage {
                 t::IteratorStage::Map { callback, callback_method, .. } |
                 t::IteratorStage::Filter { callback, callback_method, .. } => {
-                    expr(callback, program, native, virtuals, slots);
+                    expr(callback, program, native, native_method_ids, virtuals, slots);
                     virtuals.insert(*callback_method);
                 }
-                t::IteratorStage::Take { count } => expr(count, program, native, virtuals, slots),
+                t::IteratorStage::Take { count } => expr(count, program, native, native_method_ids, virtuals, slots),
                 t::IteratorStage::Enumerate { .. } => {}
                 t::IteratorStage::Zip { right, .. } =>
-                    iterator_plan(program, right, native, virtuals, slots),
+                    iterator_plan(program, right, native, native_method_ids, virtuals, slots),
             }
         }
     }
@@ -181,19 +188,21 @@ pub(crate) fn direct_runtime_references(
         receiver: &t::IteratorReceiver,
         program: &t::Program,
         native: &mut HashSet<usize>,
+        native_method_ids: &mut Option<t::NativeMethodIndex>,
         virtuals: &mut HashSet<usize>,
         slots: &mut BTreeMap<String, (usize, t::MapSlotKind, Type, Type)>,
     ) {
         match receiver {
             t::IteratorReceiver::Borrowed(_) => {}
             t::IteratorReceiver::BorrowedExpr(value) | t::IteratorReceiver::Owned(value) =>
-                expr(value, program, native, virtuals, slots),
+                expr(value, program, native, native_method_ids, virtuals, slots),
         }
     }
     fn expr(
         value: &t::Expr,
         program: &t::Program,
         native: &mut HashSet<usize>,
+        native_method_ids: &mut Option<t::NativeMethodIndex>,
         virtuals: &mut HashSet<usize>,
         slots: &mut BTreeMap<String, (usize, t::MapSlotKind, Type, Type)>,
     ) {
@@ -203,7 +212,7 @@ pub(crate) fn direct_runtime_references(
                 let class = map.ty.object_class().expect("map-slot receiver class");
                 let key = direct_map_slot_symbol(class, *kind, value.ty, index.ty);
                 slots.insert(key, (class, *kind, value.ty, index.ty));
-                expr(index, program, native, virtuals, slots);
+                expr(index, program, native, native_method_ids, virtuals, slots);
             }
             E::Call { target: t::CallTarget::Function(id), args, .. } => {
                 let function = &program.functions[*id];
@@ -212,30 +221,30 @@ pub(crate) fn direct_runtime_references(
                 } else if function.virtual_slot.is_some() {
                     virtuals.insert(*id);
                 }
-                for arg in args { expr(arg, program, native, virtuals, slots); }
+                for arg in args { expr(arg, program, native, native_method_ids, virtuals, slots); }
             }
-            E::Call { args, .. } => for arg in args { expr(arg, program, native, virtuals, slots); },
+            E::Call { args, .. } => for arg in args { expr(arg, program, native, native_method_ids, virtuals, slots); },
             E::New { constructor, args, .. } => {
                 let function = &program.functions[*constructor];
                 if function.native.is_some() { native.insert(*constructor); }
-                for arg in args { expr(arg, program, native, virtuals, slots); }
+                for arg in args { expr(arg, program, native, native_method_ids, virtuals, slots); }
             }
-            E::Variant { args, .. } => for arg in args { expr(arg, program, native, virtuals, slots); },
+            E::Variant { args, .. } => for arg in args { expr(arg, program, native, native_method_ids, virtuals, slots); },
             E::Binary { left, right, .. } => {
-                expr(left, program, native, virtuals, slots);
-                expr(right, program, native, virtuals, slots);
+                expr(left, program, native, native_method_ids, virtuals, slots);
+                expr(right, program, native, native_method_ids, virtuals, slots);
             }
             E::IteratorFold { plan, initial, folder, folder_method, .. } => {
-                iterator_plan(program, plan, native, virtuals, slots);
-                expr(initial, program, native, virtuals, slots);
-                expr(folder, program, native, virtuals, slots);
+                iterator_plan(program, plan, native, native_method_ids, virtuals, slots);
+                expr(initial, program, native, native_method_ids, virtuals, slots);
+                expr(folder, program, native, native_method_ids, virtuals, slots);
                 virtuals.insert(*folder_method);
             }
             E::IteratorSizeHint { plan, .. } =>
-                iterator_plan(program, plan, native, virtuals, slots),
+                iterator_plan(program, plan, native, native_method_ids, virtuals, slots),
             E::Unary { expr: inner, .. } | E::Cast { value: inner } |
             E::Drop(inner) | E::Upcast { value: inner, .. } | E::Try { value: inner, .. } =>
-                expr(inner, program, native, virtuals, slots),
+                expr(inner, program, native, native_method_ids, virtuals, slots),
             E::String(_) | E::Char(_) | E::Int(_) | E::Long(_) | E::Double(_) |
             E::Unit | E::Boolean(_) | E::Read(_) | E::Move(_) | E::Borrow { .. } |
             E::MapCapacity(_) => {}
@@ -245,44 +254,46 @@ pub(crate) fn direct_runtime_references(
         values: &t::Block,
         program: &t::Program,
         native: &mut HashSet<usize>,
+        native_method_ids: &mut Option<t::NativeMethodIndex>,
         virtuals: &mut HashSet<usize>,
         slots: &mut BTreeMap<String, (usize, t::MapSlotKind, Type, Type)>,
     ) {
         for stmt in values {
             match stmt {
                 t::Stmt::Let { value: Some(value), .. } | t::Stmt::Expr(value) =>
-                    expr(value, program, native, virtuals, slots),
+                    expr(value, program, native, native_method_ids, virtuals, slots),
                 t::Stmt::Let { value: None, .. } | t::Stmt::Break | t::Stmt::Continue => {}
                 t::Stmt::Assign { value, .. } | t::Stmt::Return(Some(value)) =>
-                    expr(value, program, native, virtuals, slots),
+                    expr(value, program, native, native_method_ids, virtuals, slots),
                 t::Stmt::Return(None) => {}
                 t::Stmt::If { condition, then_block, else_block } => {
-                    expr(condition, program, native, virtuals, slots);
-                    block(then_block, program, native, virtuals, slots);
-                    if let Some(other) = else_block { block(other, program, native, virtuals, slots); }
+                    expr(condition, program, native, native_method_ids, virtuals, slots);
+                    block(then_block, program, native, native_method_ids, virtuals, slots);
+                    if let Some(other) = else_block { block(other, program, native, native_method_ids, virtuals, slots); }
                 }
                 t::Stmt::While { condition, body } => {
-                    expr(condition, program, native, virtuals, slots);
-                    block(body, program, native, virtuals, slots);
+                    expr(condition, program, native, native_method_ids, virtuals, slots);
+                    block(body, program, native, native_method_ids, virtuals, slots);
                 }
                 t::Stmt::Match { value, arms } => {
-                    expr(value, program, native, virtuals, slots);
+                    expr(value, program, native, native_method_ids, virtuals, slots);
                     for arm in arms {
-                        if let Some(guard) = &arm.guard { expr(guard, program, native, virtuals, slots); }
-                        block(&arm.body, program, native, virtuals, slots);
+                        if let Some(guard) = &arm.guard { expr(guard, program, native, native_method_ids, virtuals, slots); }
+                        block(&arm.body, program, native, native_method_ids, virtuals, slots);
                     }
                 }
-                t::Stmt::Block(inner) => block(inner, program, native, virtuals, slots),
+                t::Stmt::Block(inner) => block(inner, program, native, native_method_ids, virtuals, slots),
             }
         }
     }
 
     let mut native = HashSet::new();
+    let mut native_method_ids = None;
     let mut virtuals = HashSet::new();
     let mut slots = BTreeMap::new();
     for function in &program.functions {
         if function.native.is_none() && function.virtual_slot.is_none() {
-            block(&function.body, program, &mut native, &mut virtuals, &mut slots);
+            block(&function.body, program, &mut native, &mut native_method_ids, &mut virtuals, &mut slots);
         }
     }
     let mut native: Vec<_> = native.into_iter().collect();

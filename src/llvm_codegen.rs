@@ -437,7 +437,7 @@ struct PreparedIteratorPlan {
 
 struct LlvmEmitter<'a> {
     program: &'a t::Program,
-    native_method_ids: Option<HashMap<(usize, t::NativeMethod), usize>>,
+    native_method_ids: Option<t::NativeMethodIndex>,
     source: &'a str,
     debug: DebugInfo<'a>,
     current_debug_scope: Option<usize>,
@@ -1605,16 +1605,10 @@ impl<'a> LlvmEmitter<'a> {
 
     fn native_method_id(&mut self, class: usize, method: t::NativeMethod) -> Result<usize, String> {
         if self.native_method_ids.is_none() {
-            let mut native_method_ids = HashMap::new();
-            for function in &self.program.functions {
-                if let (Some(receiver), Some(native)) = (function.receiver, function.native) {
-                    native_method_ids.entry((receiver, native)).or_insert(function.id);
-                }
-            }
-            self.native_method_ids = Some(native_method_ids);
+            self.native_method_ids = Some(t::NativeMethodIndex::new(self.program));
         }
         self.native_method_ids.as_ref()
-            .and_then(|ids| ids.get(&(class, method)).copied())
+            .and_then(|ids| ids.get(class, method))
             .ok_or_else(|| format!("missing native iterator method {method:?} for class {class}"))
     }
 

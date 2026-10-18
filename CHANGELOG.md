@@ -21,6 +21,8 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   ambiguous-match semantics without rescanning imports for each bound or impl.
 - Build a lazy native-method index for LLVM iterator lowering instead of
   rescanning all functions for each List, Array, or Map operation.
+- Reuse the shared native-method index when collecting direct-runtime iterator
+  references, avoiding repeated function scans across nested plans.
 
 - End local borrowed bindings and retained view loans after their last
   control-flow use. Backward liveness follows branch alternatives and loop

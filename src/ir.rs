@@ -3,6 +3,7 @@
 use crate::ast::{BinaryOp, UnaryOp};
 use crate::diagnostic::Span;
 use std::borrow::Cow;
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Type { Byte, Char, Int, Long, Double, Unit, Boolean, String, Void, Object(usize), Borrow { class: usize, mutable: bool } }
@@ -404,4 +405,21 @@ pub enum NativeMethod {
     XmlWriterWriteText, XmlWriterWriteCData, XmlWriterWriteComment,
     XmlWriterWriteProcessingInstruction, XmlWriterEndElement, XmlWriterFinish,
     XsltStylesheetCompile, XsltStylesheetTransform, XsltStylesheetTransformBytes,
+}
+
+pub(crate) struct NativeMethodIndex(HashMap<(usize, NativeMethod), usize>);
+impl NativeMethodIndex {
+    pub(crate) fn new(program: &Program) -> Self {
+        let mut methods = HashMap::new();
+        for function in &program.functions {
+            if let (Some(receiver), Some(method)) = (function.receiver, function.native) {
+                methods.entry((receiver, method)).or_insert(function.id);
+            }
+        }
+        Self(methods)
+    }
+
+    pub(crate) fn get(&self, class: usize, method: NativeMethod) -> Option<usize> {
+        self.0.get(&(class, method)).copied()
+    }
 }
