@@ -78,9 +78,11 @@ pub(crate) fn generate_direct_runtime(program: &t::Program) -> String {
     }
     for function in &program.functions {
         if function.native.is_none() && function.virtual_slot.is_none() {
-            writeln!(out, "extern void {}({});",
-                direct_function_symbol(function.id),
-                direct_input_parameters(program, function)).unwrap();
+            out.push_str("extern void ");
+            write_direct_function_symbol(&mut out, function.id);
+            out.push('(');
+            write_direct_input_parameters(&mut out, program, function);
+            out.push_str(");\n");
         }
     }
 
@@ -292,24 +294,24 @@ pub(crate) fn direct_runtime_references(
     (native, virtuals, slots)
 }
 
-fn direct_function_symbol(id: usize) -> String {
-    let mut symbol = String::new();
-    write_direct_function_symbol(&mut symbol, id);
-    symbol
-}
-
 fn write_direct_function_symbol(out: &mut String, id: usize) {
     write!(out, "ncr_llvm_fn_{id}").unwrap();
 }
 
-fn direct_input_parameters(program: &t::Program, function: &t::Function) -> String {
-    let mut params = vec!["void *ncr_result".to_owned()];
-    if function.receiver.is_some() { params.push("void *ncr_self".to_owned()); }
-    params.extend(function.params.iter().map(|(id, ty)| match direct_input_abi(program, *ty) {
-        DirectInputAbi::Value => format!("{} ncr_arg_{id}", ctype_param(program, *ty)),
-        DirectInputAbi::Address => format!("void *ncr_arg_{id}"),
-    }));
-    params.join(", ")
+fn write_direct_input_parameters(
+    out: &mut String,
+    program: &t::Program,
+    function: &t::Function,
+) {
+    out.push_str("void *ncr_result");
+    if function.receiver.is_some() { out.push_str(", void *ncr_self"); }
+    for (id, ty) in &function.params {
+        out.push_str(", ");
+        match direct_input_abi(program, *ty) {
+            DirectInputAbi::Value => write!(out, "{} ncr_arg_{id}", ctype_param(program, *ty)).unwrap(),
+            DirectInputAbi::Address => write!(out, "void *ncr_arg_{id}").unwrap(),
+        }
+    }
 }
 
 fn direct_virtual_dispatchers(program: &t::Program) -> String {

@@ -3,6 +3,8 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Stream direct LLVM C-ABI function prototypes without temporary parameter
+  vectors or joined strings.
 - Stream direct interface dispatchers into generated C without temporary
   parameter and argument vectors or joined strings.
 - Stream direct user adapter signatures and call arguments into the destination
