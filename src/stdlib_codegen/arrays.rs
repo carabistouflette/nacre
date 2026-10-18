@@ -1,6 +1,7 @@
+use std::borrow::Cow;
 use crate::c_repr::ctype;
 use crate::ir::{self as t, NativeMethod as M, Type};
-use super::{iterators, support::{marker, result_id, variant}};
+use super::{iterators, support::{marker, replace_placeholders, result_id, variant}};
 
 pub(super) fn array_fields(program: &t::Program, element: Type) -> String {
     format!("    {} *items;\n    int32_t length;\n", ctype(program, element))
@@ -53,13 +54,16 @@ fn borrowed_methods(program: &t::Program, class_id: usize, element: Type) -> Str
         } else {
             "p->items[index]"
         };
-        out.push_str(
-            &include_str!("../../stdlib/array_get_borrowed.c.in")
-                .replace("@RETURN_TYPE@", &ctype(program, function.return_type))
-                .replace("@INDEX_TYPE@", &ctype(program, index_type))
-                .replace("@ARRAY_METHOD@", marker(function.native.expect("Array accessor method")))
-                .replace("@BORROWED_ELEMENT@", borrowed_element),
-        );
+        let substitutions = [
+            ("@RETURN_TYPE@", ctype(program, function.return_type)),
+            ("@INDEX_TYPE@", ctype(program, index_type)),
+            ("@ARRAY_METHOD@", Cow::Borrowed(marker(function.native.expect("Array accessor method")))),
+            ("@BORROWED_ELEMENT@", Cow::Borrowed(borrowed_element)),
+        ];
+        out.push_str(&replace_placeholders(
+            include_str!("../../stdlib/array_get_borrowed.c.in").to_owned(),
+            &substitutions,
+        ));
     }
     out
 }
@@ -76,13 +80,18 @@ fn try_get_method(program: &t::Program, class_id: usize, element: Type) -> Strin
     assert!(matches!(some.fields.as_slice(), [field] if *field == element),
         "Option Some payload must match its Array element type");
     let index_type = function.params.first().expect("Array.tryGet index parameter").1;
-    include_str!("../../stdlib/array_try_get.c.in")
-        .replace("@OPTION_TYPE@", &ctype(program, function.return_type))
-        .replace("@INDEX_TYPE@", &ctype(program, index_type))
-        .replace("@ARRAY_TRY_GET@", marker(M::ArrayTryGet))
-        .replace("@NONE_TAG@", &none_tag.to_string())
-        .replace("@SOME_TAG@", &some_tag.to_string())
-        .replace("@ELEMENT@", &ctype(program, element))
+    let substitutions = [
+        ("@OPTION_TYPE@", ctype(program, function.return_type)),
+        ("@INDEX_TYPE@", ctype(program, index_type)),
+        ("@ARRAY_TRY_GET@", Cow::Borrowed(marker(M::ArrayTryGet))),
+        ("@NONE_TAG@", Cow::Owned(none_tag.to_string())),
+        ("@SOME_TAG@", Cow::Owned(some_tag.to_string())),
+        ("@ELEMENT@", ctype(program, element)),
+    ];
+    replace_placeholders(
+        include_str!("../../stdlib/array_try_get.c.in").to_owned(),
+        &substitutions,
+    )
 }
 
 pub(super) fn array_implementation(program: &t::Program, class_id: usize, element: Type) -> String {
@@ -95,9 +104,13 @@ pub(super) fn array_implementation(program: &t::Program, class_id: usize, elemen
         "Array constructor List element must match the Array element");
 
     let get = array_function(program, class_id, M::ArrayGet).map_or_else(String::new, |_| {
-        include_str!("../../stdlib/array_get.c.in")
-            .replace("@ELEMENT@", &ctype(program, element))
-            .replace("@ARRAY_GET@", marker(M::ArrayGet))
+        replace_placeholders(
+            include_str!("../../stdlib/array_get.c.in").to_owned(),
+            &[
+                ("@ELEMENT@", ctype(program, element)),
+                ("@ARRAY_GET@", Cow::Borrowed(marker(M::ArrayGet))),
+            ],
+        )
     });
     let set = array_function(program, class_id, M::ArraySet)
         .expect("compiler-owned Array.set method is present");
@@ -106,17 +119,22 @@ pub(super) fn array_implementation(program: &t::Program, class_id: usize, elemen
     assert_eq!(set_index, Type::Int, "Array.set index must use int32");
     assert_eq!(set_value, element, "Array.set value must match its element type");
 
-    let mut body = include_str!("../../stdlib/array.c.in")
-        .replace("@ARRAY_TYPE@", &ctype(program, Type::Object(class_id)))
-        .replace("@LIST_TYPE@", &ctype(program, Type::Object(list_class)))
-        .replace("@ELEMENT@", &ctype(program, element))
-        .replace("@ARRAY_NEW@", marker(M::ArrayNew))
-        .replace("@ARRAY_SIZE@", marker(M::ArraySize))
-        .replace("@ARRAY_GET_METHOD@", &get)
-        .replace("@BORROWED_GETTERS@", &borrowed_methods(program, class_id, element))
-        .replace("@TRY_GET_METHOD@", &try_get_method(program, class_id, element))
-        .replace("@ARRAY_SET@", marker(M::ArraySet))
-        .replace("@DROP_AT_INDEX@", &drop_element(element, "p->items[index]"));
+    let substitutions = [
+        ("@ARRAY_TYPE@", ctype(program, Type::Object(class_id))),
+        ("@LIST_TYPE@", ctype(program, Type::Object(list_class))),
+        ("@ELEMENT@", ctype(program, element)),
+        ("@ARRAY_NEW@", Cow::Borrowed(marker(M::ArrayNew))),
+        ("@ARRAY_SIZE@", Cow::Borrowed(marker(M::ArraySize))),
+        ("@ARRAY_GET_METHOD@", Cow::Owned(get)),
+        ("@BORROWED_GETTERS@", Cow::Owned(borrowed_methods(program, class_id, element))),
+        ("@TRY_GET_METHOD@", Cow::Owned(try_get_method(program, class_id, element))),
+        ("@ARRAY_SET@", Cow::Borrowed(marker(M::ArraySet))),
+        ("@DROP_AT_INDEX@", Cow::Owned(drop_element(element, "p->items[index]"))),
+    ];
+    let mut body = replace_placeholders(
+        include_str!("../../stdlib/array.c.in").to_owned(),
+        &substitutions,
+    );
     body.push_str(&iterators::drain_function(
         program,
         class_id,
@@ -151,13 +169,16 @@ pub(super) fn zeroed_implementations(program: &t::Program) -> String {
         assert!(element.is_copy(), "zeroed Array factory cannot initialize affine elements");
         let (length_id, length_type) = function.params.first().expect("Arrays length parameter");
         assert_eq!(*length_type, Type::Int, "ordinary Array length is int32");
-        out.push_str(
-            &include_str!("../../stdlib/array_zeroed.c.in")
-                .replace("@ARRAY_TYPE@", &ctype(program, function.return_type))
-                .replace("@ELEMENT@", &ctype(program, element))
-                .replace("@LENGTH_ID@", &length_id.to_string())
-                .replace("@ARRAYS_FACTORY@", marker(method))
-        );
+        let substitutions = [
+            ("@ARRAY_TYPE@", ctype(program, function.return_type)),
+            ("@ELEMENT@", ctype(program, element)),
+            ("@LENGTH_ID@", Cow::Owned(length_id.to_string())),
+            ("@ARRAYS_FACTORY@", Cow::Borrowed(marker(method))),
+        ];
+        out.push_str(&replace_placeholders(
+            include_str!("../../stdlib/array_zeroed.c.in").to_owned(),
+            &substitutions,
+        ));
         out.push('\n');
     }
     out

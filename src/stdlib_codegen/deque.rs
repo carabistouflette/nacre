@@ -1,6 +1,7 @@
+use std::borrow::Cow;
 use crate::c_repr::ctype;
 use crate::ir::{self as t, NativeMethod as M, Type};
-use super::{iterators, support::{drop_element, marker, native_method, native_method_if, option_tags, zero}};
+use super::{iterators, support::{drop_element, marker, native_method, native_method_if, option_tags, replace_placeholders, zero}};
 
 
 pub(super) fn fields(program: &t::Program, element: Type) -> String {
@@ -23,17 +24,21 @@ fn borrowed_getter(program: &t::Program, function: &t::Function, element_class: 
     };
     assert_eq!(class, element_class, "Deque borrow must match its element type");
     let borrowed = if program.classes[element_class].is_interface {
-        "p->items[physical]".to_owned()
+        "p->items[physical]"
     } else if program.classes[element_class].variants.is_some() {
-        "&(p->items[physical])".to_owned()
+        "&(p->items[physical])"
     } else {
-        "p->items[physical]".to_owned()
+        "p->items[physical]"
     };
-    include_str!("../../stdlib/deque_get_borrowed.c.in")
-        .replace("@RETURN_TYPE@", &ctype(program, function.return_type))
-        .replace("@METHOD@", marker(function.native.expect("native Deque accessor")))
-        .replace("@INDEX_TYPE@", &ctype(program, function.params[0].1))
-        .replace("@BORROWED_ELEMENT@", &borrowed)
+    replace_placeholders(
+        include_str!("../../stdlib/deque_get_borrowed.c.in").to_owned(),
+        &[
+            ("@RETURN_TYPE@", ctype(program, function.return_type)),
+            ("@METHOD@", Cow::Borrowed(marker(function.native.expect("native Deque accessor")))),
+            ("@INDEX_TYPE@", ctype(program, function.params[0].1)),
+            ("@BORROWED_ELEMENT@", Cow::Borrowed(borrowed)),
+        ],
+    )
 }
 
 fn borrowed_getters(program: &t::Program, class_id: usize, element: Type) -> String {
@@ -53,9 +58,13 @@ fn get_method(program: &t::Program, class_id: usize, element: Type) -> String {
         return String::new();
     };
     assert!(element.is_copy(), "Deque.get is pruned for affine elements");
-    include_str!("../../stdlib/deque_get.c.in")
-        .replace("@RETURN_TYPE@", &ctype(program, function.return_type))
-        .replace("@METHOD@", marker(function.native.expect("native Deque.get")))
+    replace_placeholders(
+        include_str!("../../stdlib/deque_get.c.in").to_owned(),
+        &[
+            ("@RETURN_TYPE@", ctype(program, function.return_type)),
+            ("@METHOD@", Cow::Borrowed(marker(function.native.expect("native Deque.get")))),
+        ],
+    )
 }
 
 fn try_get_method(program: &t::Program, class_id: usize, element: Type) -> String {
@@ -64,13 +73,17 @@ fn try_get_method(program: &t::Program, class_id: usize, element: Type) -> Strin
     };
     assert!(element.is_copy(), "Deque.tryGet is pruned for affine elements");
     let (none_tag, some_tag) = option_tags(program, function, element);
-    include_str!("../../stdlib/deque_try_get.c.in")
-        .replace("@OPTION_TYPE@", &ctype(program, function.return_type))
-        .replace("@DEQUE_TRY_GET@", marker(function.native.expect("native Deque.tryGet")))
-        .replace("@INDEX_TYPE@", &ctype(program, function.params[0].1))
-        .replace("@NONE_TAG@", &none_tag.to_string())
-        .replace("@SOME_TAG@", &some_tag.to_string())
-        .replace("@ELEMENT@", &ctype(program, element))
+    replace_placeholders(
+        include_str!("../../stdlib/deque_try_get.c.in").to_owned(),
+        &[
+            ("@OPTION_TYPE@", ctype(program, function.return_type)),
+            ("@DEQUE_TRY_GET@", Cow::Borrowed(marker(function.native.expect("native Deque.tryGet")))),
+            ("@INDEX_TYPE@", ctype(program, function.params[0].1)),
+            ("@NONE_TAG@", Cow::Owned(none_tag.to_string())),
+            ("@SOME_TAG@", Cow::Owned(some_tag.to_string())),
+            ("@ELEMENT@", ctype(program, element)),
+        ],
+    )
 }
 
 fn try_pop_method(program: &t::Program, class_id: usize, element: Type, front: bool) -> String {
@@ -88,12 +101,16 @@ fn try_pop_method(program: &t::Program, class_id: usize, element: Type, front: b
     let pop = native_method(program, class_id, is_pop);
     assert_eq!(pop.return_type, element, "Deque strict pop transfers one element");
     let (none_tag, some_tag) = option_tags(program, function, element);
-    include_str!("../../stdlib/deque_try_pop.c.in")
-        .replace("@OPTION_TYPE@", &ctype(program, function.return_type))
-        .replace("@METHOD@", marker(function.native.expect("native Deque tryPop")))
-        .replace("@STRICT_CALL@", &format!("ncr_fn_{}", pop.id))
-        .replace("@NONE_TAG@", &none_tag.to_string())
-        .replace("@SOME_TAG@", &some_tag.to_string())
+    replace_placeholders(
+        include_str!("../../stdlib/deque_try_pop.c.in").to_owned(),
+        &[
+            ("@OPTION_TYPE@", ctype(program, function.return_type)),
+            ("@METHOD@", Cow::Borrowed(marker(function.native.expect("native Deque tryPop")))),
+            ("@STRICT_CALL@", Cow::Owned(format!("ncr_fn_{}", pop.id))),
+            ("@NONE_TAG@", Cow::Owned(none_tag.to_string())),
+            ("@SOME_TAG@", Cow::Owned(some_tag.to_string())),
+        ],
+    )
 }
 
 fn try_pop_methods(program: &t::Program, class_id: usize, element: Type) -> String {
@@ -107,14 +124,19 @@ pub(super) fn implementation(program: &t::Program, class_id: usize, element: Typ
     let get = get_method(program, class_id, element);
     let try_get = try_get_method(program, class_id, element);
     let try_pops = try_pop_methods(program, class_id, element);
-    let mut body = include_str!("../../stdlib/deque.c.in")
-        .replace("@ELEMENT@", &ctype(program, element))
-        .replace("@ZERO@", &zero(program, element))
-        .replace("@DROP_AT_INDEX@", &drop_element(element, "p->items[physical]"))
-        .replace("@GET_METHOD@", &get)
-        .replace("@BORROWED_GETTERS@", &borrowed)
-        .replace("@TRY_GET_METHOD@", &try_get)
-        .replace("@TRY_POP_METHODS@", &try_pops);
+    let substitutions = [
+        ("@ELEMENT@", ctype(program, element)),
+        ("@ZERO@", Cow::Owned(zero(program, element))),
+        ("@DROP_AT_INDEX@", Cow::Owned(drop_element(element, "p->items[physical]"))),
+        ("@GET_METHOD@", Cow::Owned(get)),
+        ("@BORROWED_GETTERS@", Cow::Owned(borrowed)),
+        ("@TRY_GET_METHOD@", Cow::Owned(try_get)),
+        ("@TRY_POP_METHODS@", Cow::Owned(try_pops)),
+    ];
+    let mut body = replace_placeholders(
+        include_str!("../../stdlib/deque.c.in").to_owned(),
+        &substitutions,
+    );
     body.push_str(&iterators::drain_function(
         program,
         class_id,

@@ -267,7 +267,7 @@ fn append_body(program: &t::Program, out: &mut String, class: &t::Class, native:
         C::Env | C::Command | C::Process | C::ProcessOutput => return,
         C::BigInt | C::BigDecimal => return,
     };
-    body = body.replace("@ID@", &class.id.to_string());
+    body = support::replace_placeholders(body, &[("@ID@", class.id.to_string())]);
     let receiver = match native {
         C::Arrays | C::ByteBuffer | C::Encoding | C::Crypto | C::Uuid | C::Database => None,
         _ => Some(class.id),

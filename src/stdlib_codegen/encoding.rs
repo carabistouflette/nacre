@@ -114,8 +114,8 @@ pub(super) fn implementation(program: &t::Program, class: usize) -> String {
         ("@UTF8_DECODE_RESULT@", utf8_result.to_string()),
         ("@UTF8_DECODE_OK_TAG@", utf8_ok.to_string()),
         ("@UTF8_DECODE_ERROR@", format!("ncr_result_error_{utf8_result}")),
+        ("@ID@", class.to_string()),
     ]);
-    body = body.replace("@ID@", &class.to_string());
     body = replace_method_ids(body, program, None);
     debug_assert!(!super::support::has_placeholder(&body), "unexpanded Encoding placeholder");
     body

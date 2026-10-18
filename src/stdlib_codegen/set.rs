@@ -1,6 +1,7 @@
+use std::borrow::Cow;
 use crate::c_repr::ctype;
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
-use super::{collections, iterators, support::{drop_element, native_method, native_method_if, result_id, variant_id, zero}};
+use super::{collections, iterators, support::{drop_element, native_method, native_method_if, replace_placeholders, result_id, variant_id, zero}};
 
 fn map_for_set(program: &t::Program, key: Type, hasher: Option<Type>) -> &t::Class {
     program.classes.iter().find(|class| {
@@ -64,13 +65,18 @@ pub(super) fn implementation(
     let option_class = result_id(map_remove);
     let some_tag = variant_id(program, option_class, "Some");
     let initializer_methods = initializer_methods(program, class_id, map_class.id, hasher);
-    let mut body = include_str!("../../stdlib/set.c.in")
-        .replace("@TABLE_ID@", &map_class.id.to_string())
-        .replace("@KEY_TYPE@", &ctype(program, add.params[0].1))
-        .replace("@QUERY_TYPE@", &ctype(program, contains.params[0].1))
-        .replace("@OPTION_TYPE@", &ctype(program, option_type))
-        .replace("@SOME_TAG@", &some_tag.to_string())
-        .replace("@SET_INITIALIZER_METHODS@", &initializer_methods);
+    let substitutions = [
+        ("@TABLE_ID@", Cow::Owned(map_class.id.to_string())),
+        ("@KEY_TYPE@", ctype(program, add.params[0].1)),
+        ("@QUERY_TYPE@", ctype(program, contains.params[0].1)),
+        ("@OPTION_TYPE@", ctype(program, option_type)),
+        ("@SOME_TAG@", Cow::Owned(some_tag.to_string())),
+        ("@SET_INITIALIZER_METHODS@", Cow::Owned(initializer_methods)),
+    ];
+    let mut body = replace_placeholders(
+        include_str!("../../stdlib/set.c.in").to_owned(),
+        &substitutions,
+    );
     if let Some(drain) = native_method_if(program, class_id, |method| matches!(method, M::CollectionDrain)) {
         let (next_name, drop_name) = iterators::callback_names(drain.id);
         let entry = format!("struct ncr_map_entry_{}", map_class.id);

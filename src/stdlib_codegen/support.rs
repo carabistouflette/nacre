@@ -686,10 +686,11 @@ pub(super) fn text_helpers(program: &t::Program, text: usize) -> String {
     out
 }
 pub(super) fn replace_method_ids(
-    mut body: String,
+    body: String,
     program: &t::Program,
     receiver: Option<usize>,
 ) -> String {
+    let mut substitutions = Vec::new();
     for function in &program.functions {
         if let Some(class) = receiver {
             let is_static_factory = function.receiver.is_none()
@@ -700,33 +701,34 @@ pub(super) fn replace_method_ids(
         }
         if let Some(method) = function.native {
             let placeholder = marker(method);
-            if body.contains(placeholder) {
-                body = body.replace(placeholder, &format!("ncr_fn_{}", function.id));
+            if body.contains(placeholder)
+                && !substitutions.iter().any(|(existing, _)| *existing == placeholder) {
+                substitutions.push((placeholder, format!("ncr_fn_{}", function.id)));
             }
         }
     }
-    body
+    replace_placeholders(body, &substitutions)
 }
 
 pub(super) fn replace_placeholders(
     body: String,
-    substitutions: &[(impl AsRef<str>, String)],
+    substitutions: &[(impl AsRef<str>, impl AsRef<str>)],
 ) -> String {
     let has_nested_values = substitutions.iter().enumerate().any(|(index, (_, value))| {
         substitutions[index + 1..].iter()
-            .any(|(placeholder, _)| value.contains(placeholder.as_ref()))
+            .any(|(placeholder, _)| value.as_ref().contains(placeholder.as_ref()))
     });
     if has_nested_values {
         let mut body = body;
         for (placeholder, replacement) in substitutions {
             let placeholder = placeholder.as_ref();
+            let replacement = replacement.as_ref();
             if body.contains(placeholder) {
                 body = body.replace(placeholder, replacement);
             }
         }
         return body;
     }
-
     let mut output = None;
     let mut copied_until = 0;
     let mut search_from = 0;
@@ -737,7 +739,7 @@ pub(super) fn replace_placeholders(
         let marker = &body[start..end];
         let replacement = substitutions.iter()
             .find(|(placeholder, _)| placeholder.as_ref() == marker)
-            .map(|(_, replacement)| replacement.as_str());
+            .map(|(_, replacement)| replacement.as_ref());
         let Some(replacement) = replacement else {
             search_from = start + 1;
             continue;
@@ -783,6 +785,15 @@ mod tests {
             ],
         );
         assert_eq!(result, "@SECOND@");
+    }
+
+    #[test]
+    fn direct_replacements_expand_all_matches_once() {
+        let result = replace_placeholders(
+            "π=@ID@ / @ID@ / @UNKNOWN@".to_owned(),
+            &[("@ID@", "7".to_owned())],
+        );
+        assert_eq!(result, "π=7 / 7 / @UNKNOWN@");
     }
 
     #[test]

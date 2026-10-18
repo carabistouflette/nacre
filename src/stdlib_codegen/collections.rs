@@ -1,6 +1,7 @@
+use std::borrow::Cow;
 use crate::c_repr::ctype;
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
-use super::{iterators, support::{drop_element, marker, native_method_if, option_tags, zero}};
+use super::{iterators, support::{drop_element, marker, native_method_if, option_tags, replace_placeholders, zero}};
 pub(super) fn list_fields(program: &t::Program, element: Type) -> String {
     format!("    {} *items;\n    int32_t length;\n    int32_t capacity;\n", ctype(program, element))
 }
@@ -105,11 +106,15 @@ fn borrowed_list_method(program: &t::Program, function: &t::Function, element_cl
         "p->items[index]"
     };
     let method = function.native.expect("native List accessor");
-    include_str!("../../stdlib/list_get_borrowed.c.in")
-        .replace("@RETURN_TYPE@", &ctype(program, function.return_type))
-        .replace("@INDEX_TYPE@", &ctype(program, index_type))
-        .replace("@LIST_METHOD@", marker(method))
-        .replace("@BORROWED_ELEMENT@", borrowed_element)
+    replace_placeholders(
+        include_str!("../../stdlib/list_get_borrowed.c.in").to_owned(),
+        &[
+            ("@RETURN_TYPE@", ctype(program, function.return_type)),
+            ("@INDEX_TYPE@", ctype(program, index_type)),
+            ("@LIST_METHOD@", Cow::Borrowed(marker(method))),
+            ("@BORROWED_ELEMENT@", Cow::Borrowed(borrowed_element)),
+        ],
+    )
 }
 
 fn borrowed_list_methods(program: &t::Program, list_class: usize, element: Type) -> String {
@@ -131,12 +136,16 @@ fn try_get_list_method(program: &t::Program, list_class: usize, element: Type) -
         "List tryGet must be pruned for non-copy elements");
     let (none_tag, some_tag) = option_tags(program, function, element);
     let index_type = function.params.first().expect("List tryGet index parameter").1;
-    include_str!("../../stdlib/list_try_get.c.in")
-        .replace("@OPTION_TYPE@", &ctype(program, function.return_type))
-        .replace("@INDEX_TYPE@", &ctype(program, index_type))
-        .replace("@NONE_TAG@", &none_tag.to_string())
-        .replace("@SOME_TAG@", &some_tag.to_string())
-        .replace("@ELEMENT@", &ctype(program, element))
+    replace_placeholders(
+        include_str!("../../stdlib/list_try_get.c.in").to_owned(),
+        &[
+            ("@OPTION_TYPE@", ctype(program, function.return_type)),
+            ("@INDEX_TYPE@", ctype(program, index_type)),
+            ("@NONE_TAG@", Cow::Owned(none_tag.to_string())),
+            ("@SOME_TAG@", Cow::Owned(some_tag.to_string())),
+            ("@ELEMENT@", ctype(program, element)),
+        ],
+    )
 }
 
 fn try_owned_list_methods(program: &t::Program, list_class: usize, element: Type) -> String {
@@ -152,14 +161,18 @@ fn try_owned_list_methods(program: &t::Program, list_class: usize, element: Type
         .expect("compiler-owned List.remove method is present");
     let (none_tag, some_tag) = option_tags(program, try_pop, element);
     let index_type = try_remove.params.first().expect("List.tryRemove index parameter").1;
-    include_str!("../../stdlib/list_try_owned.c.in")
-        .replace("@OPTION_TYPE@", &ctype(program, try_pop.return_type))
-        .replace("@INDEX_TYPE@", &ctype(program, index_type))
-        .replace("@NONE_TAG@", &none_tag.to_string())
-        .replace("@SOME_TAG@", &some_tag.to_string())
-        .replace("@ELEMENT@", &ctype(program, element))
-        .replace("@STRICT_POP_CALL@", &format!("ncr_fn_{}", pop.id))
-        .replace("@STRICT_REMOVE_CALL@", &format!("ncr_fn_{}", remove.id))
+    replace_placeholders(
+        include_str!("../../stdlib/list_try_owned.c.in").to_owned(),
+        &[
+            ("@OPTION_TYPE@", ctype(program, try_pop.return_type)),
+            ("@INDEX_TYPE@", ctype(program, index_type)),
+            ("@NONE_TAG@", Cow::Owned(none_tag.to_string())),
+            ("@SOME_TAG@", Cow::Owned(some_tag.to_string())),
+            ("@ELEMENT@", ctype(program, element)),
+            ("@STRICT_POP_CALL@", Cow::Owned(format!("ncr_fn_{}", pop.id))),
+            ("@STRICT_REMOVE_CALL@", Cow::Owned(format!("ncr_fn_{}", remove.id))),
+        ],
+    )
 }
 fn map_query_view(program: &t::Program, key: Type, query_type: Type, expression: &str) -> String {
     if let Type::Borrow { class, .. } = query_type
@@ -272,11 +285,15 @@ fn borrowed_map_method(program: &t::Program, function: &t::Function, value_class
     };
     assert_eq!(class, value_class, "Map borrow result must match its value type");
     let borrowed_value = map_borrowed_value(program, function.return_type, "p->table.entries[index].value");
-    include_str!("../../stdlib/map_get_borrowed.c.in")
-        .replace("@RETURN_TYPE@", &ctype(program, function.return_type))
-        .replace("@MAP_METHOD@", marker(function.native.expect("native Map accessor")))
-        .replace("@QUERY_TYPE@", &ctype(program, function.params.first().expect("Map accessor key parameter").1))
-        .replace("@BORROWED_VALUE@", &borrowed_value)
+    replace_placeholders(
+        include_str!("../../stdlib/map_get_borrowed.c.in").to_owned(),
+        &[
+            ("@RETURN_TYPE@", ctype(program, function.return_type)),
+            ("@MAP_METHOD@", Cow::Borrowed(marker(function.native.expect("native Map accessor")))),
+            ("@QUERY_TYPE@", ctype(program, function.params.first().expect("Map accessor key parameter").1)),
+            ("@BORROWED_VALUE@", Cow::Owned(borrowed_value)),
+        ],
+    )
 }
 
 fn borrowed_map_methods(program: &t::Program, map_class: usize, value: Type) -> String {
@@ -296,12 +313,16 @@ fn try_get_map_method(program: &t::Program, map_class: usize, value: Type) -> St
     else { return String::new(); };
     assert!(value.is_copy(), "Map tryGet must be pruned for non-copy values");
     let (none_tag, some_tag) = option_tags(program, function, value);
-    include_str!("../../stdlib/map_try_get.c.in")
-        .replace("@OPTION_TYPE@", &ctype(program, function.return_type))
-        .replace("@QUERY_TYPE@", &ctype(program, function.params.first().expect("Map.tryGet key parameter").1))
-        .replace("@NONE_TAG@", &none_tag.to_string())
-        .replace("@SOME_TAG@", &some_tag.to_string())
-        .replace("@ELEMENT@", &ctype(program, value))
+    replace_placeholders(
+        include_str!("../../stdlib/map_try_get.c.in").to_owned(),
+        &[
+            ("@OPTION_TYPE@", ctype(program, function.return_type)),
+            ("@QUERY_TYPE@", ctype(program, function.params.first().expect("Map.tryGet key parameter").1)),
+            ("@NONE_TAG@", Cow::Owned(none_tag.to_string())),
+            ("@SOME_TAG@", Cow::Owned(some_tag.to_string())),
+            ("@ELEMENT@", ctype(program, value)),
+        ],
+    )
 }
 
 fn map_drain_implementation(
@@ -374,26 +395,31 @@ pub(super) fn map_implementation(
     let hash_body = map_hash_body(program, map_class, key, hasher);
     let key_equal = map_key_equal(program, key, hasher, query_type);
     let key_query = map_query_view(program, key, query_type, "key");
-    let mut body = include_str!("../../stdlib/map.c.in")
-        .replace("@ENTRY_TYPE@", &format!("struct ncr_map_entry_{map_class}"))
-        .replace("@KEY_TYPE@", &ctype(program, key))
-        .replace("@QUERY_TYPE@", &ctype(program, query_type))
-        .replace("@HASH_FINALIZER@", &hash_helpers)
-        .replace("@TABLE_INITIALIZERS@", &table_initializers)
-        .replace("@MAP_INITIALIZER_METHODS@", &initializer_methods)
-        .replace("@HASH_BODY@", &hash_body)
-        .replace("@KEY_QUERY@", &key_query)
-        .replace("@KEY_EQUAL@", &key_equal)
-        .replace("@STORE_HASH@", "table->entries[target].hash = hash;")
-        .replace("@DROP_DUPLICATE_KEY@", &drop_element(key, "key"))
-        .replace("@DROP_KEY_AT_INDEX@", &drop_element(key, "table->entries[index].key"))
-        .replace("@ELEMENT@", &ctype(program, value))
-        .replace("@DROP_VALUE@", &drop_element(value, "table->entries[index].value"))
-        .replace("@OPTION_TYPE@", &ctype(program, put.return_type))
-        .replace("@NONE_TAG@", &none_tag.to_string())
-        .replace("@SOME_TAG@", &some_tag.to_string())
-        .replace("@TRY_GET_METHOD@", &try_get)
-        .replace("@BORROWED_GETTERS@", &borrowed);
+    let substitutions = [
+        ("@ENTRY_TYPE@", Cow::Owned(format!("struct ncr_map_entry_{map_class}"))),
+        ("@KEY_TYPE@", ctype(program, key)),
+        ("@QUERY_TYPE@", ctype(program, query_type)),
+        ("@HASH_FINALIZER@", Cow::Owned(hash_helpers)),
+        ("@TABLE_INITIALIZERS@", Cow::Owned(table_initializers)),
+        ("@MAP_INITIALIZER_METHODS@", Cow::Owned(initializer_methods)),
+        ("@HASH_BODY@", Cow::Owned(hash_body)),
+        ("@KEY_QUERY@", Cow::Owned(key_query)),
+        ("@KEY_EQUAL@", Cow::Owned(key_equal)),
+        ("@STORE_HASH@", Cow::Borrowed("table->entries[target].hash = hash;")),
+        ("@DROP_DUPLICATE_KEY@", Cow::Owned(drop_element(key, "key"))),
+        ("@DROP_KEY_AT_INDEX@", Cow::Owned(drop_element(key, "table->entries[index].key"))),
+        ("@ELEMENT@", ctype(program, value)),
+        ("@DROP_VALUE@", Cow::Owned(drop_element(value, "table->entries[index].value"))),
+        ("@OPTION_TYPE@", ctype(program, put.return_type)),
+        ("@NONE_TAG@", Cow::Owned(none_tag.to_string())),
+        ("@SOME_TAG@", Cow::Owned(some_tag.to_string())),
+        ("@TRY_GET_METHOD@", Cow::Owned(try_get)),
+        ("@BORROWED_GETTERS@", Cow::Owned(borrowed)),
+    ];
+    let mut body = replace_placeholders(
+        include_str!("../../stdlib/map.c.in").to_owned(),
+        &substitutions,
+    );
     body.push_str(&map_drain_implementation(program, map_class, key, value, M::MapDrainKeys, true));
     body.push_str(&map_drain_implementation(program, map_class, key, value, M::MapDrainValues, false));
     body
@@ -404,12 +430,17 @@ pub(super) fn list_implementation(program: &t::Program, class_id: usize, element
     let borrowed_getters = borrowed_list_methods(program, class_id, element);
     let try_get = try_get_list_method(program, class_id, element);
     let try_owned = try_owned_list_methods(program, class_id, element);
-    include_str!("../../stdlib/list.c.in")
-        .replace("@GET_METHOD@", getter)
-        .replace("@BORROWED_GETTERS@", &borrowed_getters)
-        .replace("@TRY_GET_METHOD@", &try_get)
-        .replace("@TRY_OWNED_METHODS@", &try_owned)
-        .replace("@ELEMENT@", &ctype(program, element))
-        .replace("@ZERO@", &zero(program, element))
-        .replace("@DROP_AT_INDEX@", &drop_element(element, "p->items[index]"))
+    let substitutions = [
+        ("@GET_METHOD@", Cow::Borrowed(getter)),
+        ("@BORROWED_GETTERS@", Cow::Owned(borrowed_getters)),
+        ("@TRY_GET_METHOD@", Cow::Owned(try_get)),
+        ("@TRY_OWNED_METHODS@", Cow::Owned(try_owned)),
+        ("@ELEMENT@", ctype(program, element)),
+        ("@ZERO@", Cow::Owned(zero(program, element))),
+        ("@DROP_AT_INDEX@", Cow::Owned(drop_element(element, "p->items[index]"))),
+    ];
+    replace_placeholders(
+        include_str!("../../stdlib/list.c.in").to_owned(),
+        &substitutions,
+    )
 }

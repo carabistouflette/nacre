@@ -16,8 +16,10 @@ pub(super) fn implementation(program: &t::Program) -> Option<String> {
     let (_, some_variant) = variant(program, option, "Some");
     assert!(matches!(some_variant.fields.as_slice(), [Type::Object(id)] if *id == text),
         "Option Some payload must own Text");
-    let mut out = include_str!("../../stdlib/io_buffer.c.in")
-        .replace("@IO_RESERVE@", "ncr_console_reserve");
+    let mut out = replace_placeholders(
+        include_str!("../../stdlib/io_buffer.c.in").to_owned(),
+        &[("@IO_RESERVE@", "ncr_console_reserve")],
+    );
     out.push('\n');
     let body = replace_placeholders(include_str!("../../stdlib/console.c.in").to_owned(), &[
         ("@TEXT_ID@", text.to_string()),

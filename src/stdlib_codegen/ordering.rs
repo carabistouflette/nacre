@@ -1,6 +1,7 @@
+use std::borrow::Cow;
 use crate::c_repr::ctype;
 use crate::ir::{self as t, NativeMethod as M, Type};
-use super::support::{native_method_if, result_id, variant_id, zero};
+use super::support::{native_method_if, replace_method_ids, replace_placeholders, result_id, variant_id, zero};
 
 
 fn default_compare(class_id: usize, element: Type, element_c: &str) -> String {
@@ -71,16 +72,25 @@ fn heapsort_core(
     comparison: HeapComparison<'_>,
     swap_body: &str,
 ) -> String {
-    include_str!("../../stdlib/list_heapsort.c.in")
-        .replace("@SWAP_BODY@", swap_body)
-        .replace("@ID@", &class_id.to_string())
-        .replace("@KIND@", kind)
-        .replace("@ELEMENT@", element_c)
-        .replace("@CONTEXT_PARAM@", comparator_param)
-        .replace("@CONTEXT_PASS@", comparator_pass)
-        .replace("@COMPARE_ELEMENT@", comparison.element)
-        .replace("@COMPARE_REFERENCE@", comparison.reference)
-        .replace("@COMPARE_EXPRESSION@", comparison.expression)
+    let swap_body = replace_placeholders(
+        swap_body.to_owned(),
+        &[("@ELEMENT@", Cow::Borrowed(element_c))],
+    );
+    let substitutions = [
+        ("@SWAP_BODY@", Cow::Owned(swap_body)),
+        ("@ID@", Cow::Owned(class_id.to_string())),
+        ("@KIND@", Cow::Borrowed(kind)),
+        ("@ELEMENT@", Cow::Borrowed(element_c)),
+        ("@CONTEXT_PARAM@", Cow::Borrowed(comparator_param)),
+        ("@CONTEXT_PASS@", Cow::Borrowed(comparator_pass)),
+        ("@COMPARE_ELEMENT@", Cow::Borrowed(comparison.element)),
+        ("@COMPARE_REFERENCE@", Cow::Borrowed(comparison.reference)),
+        ("@COMPARE_EXPRESSION@", Cow::Borrowed(comparison.expression)),
+    ];
+    replace_placeholders(
+        include_str!("../../stdlib/list_heapsort.c.in").to_owned(),
+        &substitutions,
+    )
 }
 
 fn default_sort_method(program: &t::Program, class_id: usize) -> String {
@@ -160,6 +170,14 @@ fn comparator_sort_helpers(program: &t::Program, class_id: usize, element: Type)
     let helper = format!(
         "static int32_t ncr_list_compare_by_{class_id}(const ncr_obj_{comparator} *comparator, {comparison_type} left, {comparison_type} right) {{\n    return {call};\n}}\n",
     );
+    let swap_body = if element.is_copy() {
+        "    @ELEMENT@ value = *left;\n    *left = *right;\n    *right = value;\n".to_owned()
+    } else {
+        replace_placeholders(
+            "    @ELEMENT@ value = *left;\n    *left = @ZERO@;\n    *left = *right;\n    *right = @ZERO@;\n    *right = value;\n    value = @ZERO@;\n".to_owned(),
+            &[("@ZERO@", Cow::Owned(zero(program, element)))],
+        )
+    };
     let heap = heapsort_core(
         class_id,
         &element_c,
@@ -171,11 +189,7 @@ fn comparator_sort_helpers(program: &t::Program, class_id: usize, element: Type)
             reference,
             expression: &format!("ncr_list_compare_by_{class_id}(comparator, left, right)"),
         },
-        if element.is_copy() {
-            "    @ELEMENT@ value = *left;\n    *left = *right;\n    *right = value;\n"
-        } else {
-            "    @ELEMENT@ value = *left;\n    *left = @ZERO@;\n    *left = *right;\n    *right = @ZERO@;\n    *right = value;\n    value = @ZERO@;\n"
-        }.replace("@ZERO@", &zero(program, element)).as_str(),
+        &swap_body,
     );
     helper + &heap
 }

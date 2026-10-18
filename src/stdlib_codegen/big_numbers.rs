@@ -1,5 +1,6 @@
+use std::borrow::Cow;
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M};
-use super::support::{has_placeholder, native_function, replace_method_ids, result_id, variant_id};
+use super::support::{has_placeholder, native_function, replace_method_ids, replace_placeholders, result_id, variant_id};
 
 struct MethodBinding {
     name: &'static str,
@@ -131,15 +132,14 @@ pub(super) fn implementation(program: &t::Program) -> String {
     let rounding = decimal_used.then(|| program.classes.iter()
         .find(|class| class.name == "RoundingMode").expect("BigDecimal API requires RoundingMode").id);
 
-    let mut body = selected_template(bigint_used, decimal_used);
-
+    let mut substitutions: Vec<(Cow<'static, str>, String)> = Vec::new();
     if let Some(bigint) = bigint {
-        body = body.replace("@BIGINT_CLASS@", &bigint.to_string());
+        substitutions.push((Cow::Borrowed("@BIGINT_CLASS@"), bigint.to_string()));
     }
     if let Some(decimal) = decimal {
-        body = body.replace("@BIGDECIMAL_CLASS@", &decimal.to_string());
+        substitutions.push((Cow::Borrowed("@BIGDECIMAL_CLASS@"), decimal.to_string()));
     }
-    body = body.replace("@TEXT_CLASS@", &text.to_string());
+    substitutions.push((Cow::Borrowed("@TEXT_CLASS@"), text.to_string()));
     if let Some(rounding) = rounding {
         for (placeholder, value) in [
             ("@ROUNDING_CLASS@", rounding.to_string()),
@@ -152,7 +152,7 @@ pub(super) fn implementation(program: &t::Program) -> String {
             ("@ROUND_HALF_EVEN@", variant_id(program, rounding, "HalfEven").to_string()),
             ("@ROUND_UNNECESSARY@", variant_id(program, rounding, "Unnecessary").to_string()),
         ] {
-            body = body.replace(placeholder, &value);
+            substitutions.push((Cow::Borrowed(placeholder), value));
         }
     }
     for (present_class, bindings) in [
@@ -163,16 +163,26 @@ pub(super) fn implementation(program: &t::Program) -> String {
         for binding in bindings {
             let function = native_function(program, |method| method == binding.method);
             for (placeholder, index) in binding.parameters {
-                body = body.replace(placeholder, &format!("ncr_v_{}", function.params[*index].0));
+                substitutions.push((
+                    Cow::Borrowed(placeholder),
+                    format!("ncr_v_{}", function.params[*index].0),
+                ));
             }
             if binding.result {
                 let class = result_id(function);
-                body = body.replace(&format!("@{}_RESULT@", binding.name), &class.to_string());
-                body = body.replace(&format!("@{}_OK@", binding.name),
-                    &variant_id(program, class, "Ok").to_string());
+                substitutions.push((
+                    Cow::Owned(format!("@{}_RESULT@", binding.name)),
+                    class.to_string(),
+                ));
+                substitutions.push((
+                    Cow::Owned(format!("@{}_OK@", binding.name)),
+                    variant_id(program, class, "Ok").to_string(),
+                ));
             }
         }
     }
+    let mut body = selected_template(bigint_used, decimal_used);
+    body = replace_placeholders(body, &substitutions);
     body = replace_method_ids(body, program, None);
     debug_assert!(!has_placeholder(&body), "unexpanded BigInt/BigDecimal placeholder");
     body
