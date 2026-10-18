@@ -11,8 +11,25 @@ fn class_method(program: &t::Program, class_id: usize, method: M) -> Option<&t::
     })
 }
 
-fn required_method(program: &t::Program, class_id: usize, method: M) -> &t::Function {
-    class_method(program, class_id, method).expect("compiler-owned iterator method is present")
+fn indexed_class_method<'a>(
+    program: &'a t::Program,
+    method_ids: &t::NativeMethodIndex,
+    class_id: usize,
+    method: M,
+) -> Option<&'a t::Function> {
+    method_ids.get(class_id, method)
+        .map(|id| &program.functions[id])
+        .or_else(|| class_method(program, class_id, method))
+}
+
+fn required_method<'a>(
+    program: &'a t::Program,
+    method_ids: &t::NativeMethodIndex,
+    class_id: usize,
+    method: M,
+) -> &'a t::Function {
+    indexed_class_method(program, method_ids, class_id, method)
+        .expect("compiler-owned iterator method is present")
 }
 
 fn method_slot(program: &t::Program, interface: usize, suffix: &str) -> usize {
@@ -127,9 +144,14 @@ pub(super) fn drain_callbacks(
     )
 }
 
-pub(super) fn list_implementation(program: &t::Program, class_id: usize, element: Type) -> String {
+pub(super) fn list_implementation(
+    program: &t::Program,
+    method_ids: &t::NativeMethodIndex,
+    class_id: usize,
+    element: Type,
+) -> String {
     let mut output = String::new();
-    if class_method(program, class_id, M::ListDrain).is_some() {
+    if indexed_class_method(program, method_ids, class_id, M::ListDrain).is_some() {
         output.push_str(&drain_function(
             program,
             class_id,
@@ -139,7 +161,7 @@ pub(super) fn list_implementation(program: &t::Program, class_id: usize, element
         ));
     }
 
-    if let Some(collect) = class_method(program, class_id, M::ListCollect) {
+    if let Some(collect) = indexed_class_method(program, method_ids, class_id, M::ListCollect) {
         let input_type = collect.params.first().expect("List.collect input iterator").1;
         let Type::Object(interface) = input_type else {
             unreachable!("List.collect consumes an Iterator<T> interface")
@@ -151,8 +173,8 @@ pub(super) fn list_implementation(program: &t::Program, class_id: usize, element
             .expect("Iterator<T> declares next");
         let (none_tag, some_tag) = option_tags(program, next, element);
         let option = ctype(program, next.return_type);
-        let list_new = required_method(program, class_id, M::ListNew);
-        let list_add = required_method(program, class_id, M::ListAdd);
+        let list_new = required_method(program, method_ids, class_id, M::ListNew);
+        let list_add = required_method(program, method_ids, class_id, M::ListAdd);
         output.push_str(&format!(
             "static {} ncr_fn_{}({} input, size_t line, size_t column) {{\n    ncr_obj_{} *result = ncr_allocate(sizeof(ncr_obj_{}), line, column);\n    ncr_fn_{}(result, line, column);\n    while (true) {{\n        {} item = input.vtable->m{}(input.data);\n        if (item.tag == {}) {{ break; }}\n        {} value = item.data.v{}.f0;\n        ncr_fn_{}(result, value, line, column);\n    }}\n    ncr_drop_{}(input);\n    return result;\n}}\n",
             ctype(program, collect.return_type), collect.id, ctype(program, input_type),
@@ -163,8 +185,13 @@ pub(super) fn list_implementation(program: &t::Program, class_id: usize, element
     output
 }
 
-fn list_iterator_next(program: &t::Program, class_id: usize, element: Type) -> String {
-    let function = required_method(program, class_id, M::ListIteratorNext);
+fn list_iterator_next(
+    program: &t::Program,
+    method_ids: &t::NativeMethodIndex,
+    class_id: usize,
+    element: Type,
+) -> String {
+    let function = required_method(program, method_ids, class_id, M::ListIteratorNext);
     let (none_tag, some_tag) = option_tags(program, function, element);
     format!(
         "static {} ncr_fn_{}(ncr_obj_{} *p, size_t line, size_t column) {{\n    (void)line; (void)column;\n    if (p->ncr_next_fn != NULL) {{\n        {} value = {};\n        bool available = false;\n        p->ncr_next_fn(p->state, &p->cursor, p->length, &value, &available);\n        if (!available) {{ return ({}){{ .tag = {} }}; }}\n        return ({}){{ .tag = {}, .data.v{}.f0 = value }};\n    }}\n    if (p->cursor >= p->length) {{ return ({}){{ .tag = {} }}; }}\n    int32_t index = p->cursor++;\n    int32_t physical = index;\n    if (p->capacity > 0) {{\n        int32_t until_end = p->capacity - p->head;\n        physical = index < until_end ? p->head + index : index - until_end;\n    }}\n    {} value = p->items[physical];\n    p->items[physical] = {};\n    return ({}){{ .tag = {}, .data.v{}.f0 = value }};\n}}\n",
@@ -178,15 +205,21 @@ fn list_iterator_next(program: &t::Program, class_id: usize, element: Type) -> S
     )
 }
 
-fn map_iterator(program: &t::Program, class_id: usize, input: Type, output: Type) -> String {
-    let constructor = required_method(program, class_id, M::MapIteratorNew);
+fn map_iterator(
+    program: &t::Program,
+    method_ids: &t::NativeMethodIndex,
+    class_id: usize,
+    input: Type,
+    output: Type,
+) -> String {
+    let constructor = required_method(program, method_ids, class_id, M::MapIteratorNew);
     let input_interface = constructor.params[0].1.object_class().expect("MapIterator input interface");
     let mapper_interface = constructor.params[1].1.object_class().expect("MapIterator mapper interface");
     assert_eq!(program.classes[class_id].fields.first(), Some(&constructor.params[0].1),
         "MapIterator's first declared field owns its input");
     assert_eq!(program.classes[class_id].fields.get(1), Some(&constructor.params[1].1),
         "MapIterator's second declared field owns its mapper");
-    let next = required_method(program, class_id, M::MapIteratorNext);
+    let next = required_method(program, method_ids, class_id, M::MapIteratorNext);
     let (none_tag, some_tag) = option_tags(program, next, output);
     let input_next = program.classes[input_interface].interface_methods.iter()
         .map(|id| &program.functions[*id]).find(|method| method.name.ends_with(".next"))
@@ -212,15 +245,20 @@ fn map_iterator(program: &t::Program, class_id: usize, input: Type, output: Type
     )
 }
 
-fn filter_iterator(program: &t::Program, class_id: usize, element: Type) -> String {
-    let constructor = required_method(program, class_id, M::FilterIteratorNew);
+fn filter_iterator(
+    program: &t::Program,
+    method_ids: &t::NativeMethodIndex,
+    class_id: usize,
+    element: Type,
+) -> String {
+    let constructor = required_method(program, method_ids, class_id, M::FilterIteratorNew);
     let input_interface = constructor.params[0].1.object_class().expect("FilterIterator input interface");
     let predicate_interface = constructor.params[1].1.object_class().expect("FilterIterator predicate interface");
     assert_eq!(program.classes[class_id].fields.first(), Some(&constructor.params[0].1),
         "FilterIterator's first declared field owns its input");
     assert_eq!(program.classes[class_id].fields.get(1), Some(&constructor.params[1].1),
         "FilterIterator's second declared field owns its predicate");
-    let next = required_method(program, class_id, M::FilterIteratorNext);
+    let next = required_method(program, method_ids, class_id, M::FilterIteratorNext);
     let (none_tag, some_tag) = option_tags(program, next, element);
     let input_next = program.classes[input_interface].interface_methods.iter()
         .map(|id| &program.functions[*id]).find(|method| method.name.ends_with(".next"))
@@ -250,20 +288,26 @@ fn filter_iterator(program: &t::Program, class_id: usize, element: Type) -> Stri
     )
 }
 
-fn take_or_skip_iterator(program: &t::Program, class_id: usize, element: Type, take: bool) -> String {
+fn take_or_skip_iterator(
+    program: &t::Program,
+    method_ids: &t::NativeMethodIndex,
+    class_id: usize,
+    element: Type,
+    take: bool,
+) -> String {
     let (constructor_method, next_method) = if take {
         (M::TakeIteratorNew, M::TakeIteratorNext)
     } else {
         (M::SkipIteratorNew, M::SkipIteratorNext)
     };
-    let constructor = required_method(program, class_id, constructor_method);
+    let constructor = required_method(program, method_ids, class_id, constructor_method);
     let input_type = constructor.params[0].1;
     let input_interface = input_type.object_class().expect("bounded iterator input interface");
     assert_eq!(program.classes[class_id].fields.first(), Some(&input_type),
         "bounded iterator's declared input field owns the iterator");
     assert_eq!(constructor.params.get(1).map(|(_, ty)| *ty), Some(Type::Long),
         "bounded iterator constructor takes a nonnegative long count");
-    let next = required_method(program, class_id, next_method);
+    let next = required_method(program, method_ids, class_id, next_method);
     let (none_tag, some_tag) = option_tags(program, next, element);
     let input_next = program.classes[input_interface].interface_methods.iter()
         .map(|id| &program.functions[*id]).find(|method| method.name.ends_with(".next"))
@@ -302,9 +346,14 @@ fn take_or_skip_iterator(program: &t::Program, class_id: usize, element: Type, t
     )
 }
 
-fn iterators_factory(program: &t::Program, class_id: usize, take: bool) -> String {
+fn iterators_factory(
+    program: &t::Program,
+    method_ids: &t::NativeMethodIndex,
+    class_id: usize,
+    take: bool,
+) -> String {
     let factory_method = if take { M::IteratorsTake } else { M::IteratorsSkip };
-    let factory = required_method(program, class_id, factory_method);
+    let factory = required_method(program, method_ids, class_id, factory_method);
     let input_type = factory.params[0].1;
     let Type::Object(interface) = factory.return_type else {
         unreachable!("Iterators factory returns Iterator<T>")
@@ -321,8 +370,7 @@ fn iterators_factory(program: &t::Program, class_id: usize, take: bool) -> Strin
     assert_eq!(implemented_iterator(program, adapter, element), interface,
         "bounded adapter implements its returned Iterator<T>");
     let constructor_method = if take { M::TakeIteratorNew } else { M::SkipIteratorNew };
-    let constructor = class_method(program, adapter, constructor_method)
-        .expect("bounded iterator constructor is present");
+    let constructor = required_method(program, method_ids, adapter, constructor_method);
     format!(
         "static {} ncr_fn_{}({} input, int64_t count, size_t line, size_t column) {{\n    ncr_obj_{} *adapter = ncr_allocate(sizeof(ncr_obj_{}), line, column);\n    ncr_fn_{}(adapter, input, count, line, column);\n    return ({}){{ .data = adapter, .vtable = {} }};\n}}\n",
         ctype(program, factory.return_type), factory.id, ctype(program, input_type),
@@ -331,17 +379,22 @@ fn iterators_factory(program: &t::Program, class_id: usize, take: bool) -> Strin
     )
 }
 
-pub(super) fn implementation(program: &t::Program, class: C, class_id: usize) -> String {
+pub(super) fn implementation(
+    program: &t::Program,
+    method_ids: &t::NativeMethodIndex,
+    class: C,
+    class_id: usize,
+) -> String {
     match class {
-        C::ListIterator(element) => list_iterator_next(program, class_id, element),
-        C::MapIterator(input, output) => map_iterator(program, class_id, input, output),
-        C::FilterIterator(element) => filter_iterator(program, class_id, element),
-        C::TakeIterator(element) => take_or_skip_iterator(program, class_id, element, true),
-        C::SkipIterator(element) => take_or_skip_iterator(program, class_id, element, false),
+        C::ListIterator(element) => list_iterator_next(program, method_ids, class_id, element),
+        C::MapIterator(input, output) => map_iterator(program, method_ids, class_id, input, output),
+        C::FilterIterator(element) => filter_iterator(program, method_ids, class_id, element),
+        C::TakeIterator(element) => take_or_skip_iterator(program, method_ids, class_id, element, true),
+        C::SkipIterator(element) => take_or_skip_iterator(program, method_ids, class_id, element, false),
         C::Iterators(_) => format!(
             "{}{}",
-            iterators_factory(program, class_id, true),
-            iterators_factory(program, class_id, false),
+            iterators_factory(program, method_ids, class_id, true),
+            iterators_factory(program, method_ids, class_id, false),
         ),
         _ => unreachable!("iterator implementation called for another native class"),
     }

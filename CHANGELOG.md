@@ -23,6 +23,8 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   rescanning all functions for each List, Array, or Map operation.
 - Reuse the shared native-method index when collecting direct-runtime iterator
   references, avoiding repeated function scans across nested plans.
+- Reuse the shared native-method index for iterator adapter instance-method
+  lookups; owner-aware scans remain for generic static factories and drain helpers.
 - Resolve native template method IDs in one function pass per template instead
   of scanning all functions for each distinct placeholder.
 - Resolve the shared Mutex<Unit> class once during concurrency drop-helper

@@ -226,7 +226,8 @@ fn append_body(
         C::List(element) => {
             let mut body = collections::list_implementation(program, class.id, element);
             body.push_str(&ordering::list_implementation(program, class.id, element));
-            body.push_str(&iterators::list_implementation(program, class.id, element));
+            let method_ids = native_method_ids.get_or_insert_with(|| t::NativeMethodIndex::new(program));
+            body.push_str(&iterators::list_implementation(program, method_ids, class.id, element));
             body
         }
         C::Array(element) => {
@@ -241,8 +242,10 @@ fn append_body(
         C::PriorityQueue(element) => priority::implementation(program, class.id, element),
         C::BitSet => bitset::implementation(program, class.id),
         C::ListIterator(_) | C::MapIterator(_, _) | C::FilterIterator(_) |
-        C::TakeIterator(_) | C::SkipIterator(_) | C::Iterators(_) =>
-            iterators::implementation(program, native, class.id),
+        C::TakeIterator(_) | C::SkipIterator(_) | C::Iterators(_) => {
+            let method_ids = native_method_ids.get_or_insert_with(|| t::NativeMethodIndex::new(program));
+            iterators::implementation(program, method_ids, native, class.id)
+        }
         C::Text => text::implementation(program, class.id),
         C::Math => math::implementation(program),
         C::Random => random::implementation(program),
