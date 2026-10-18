@@ -583,3 +583,46 @@ void main() {
              (identifier)
              (argument_list))
            (identifier))))))
+
+==================
+Unsupported reserved keywords are not identifiers
+==================
+void main() {
+    int extends = 0;
+    int null = 0;
+    int super = 0;
+    int package = 0;
+    int final = 0;
+    int throw = 0;
+    int try = 0;
+    int catch = 0;
+    int switch = 0;
+    int float = 0;
+}
+---
+(source_file
+  (function_declaration
+    (primitive_type)
+    (identifier)
+    (parameter_list)
+    (block
+      (ERROR (primitive_type))
+      (expression_statement (integer_literal))
+      (ERROR (primitive_type))
+      (expression_statement (integer_literal))
+      (ERROR (primitive_type))
+      (expression_statement (integer_literal))
+      (ERROR (primitive_type))
+      (expression_statement (integer_literal))
+      (ERROR (primitive_type))
+      (expression_statement (integer_literal))
+      (ERROR (primitive_type))
+      (expression_statement (integer_literal))
+      (ERROR (primitive_type))
+      (expression_statement (integer_literal))
+      (ERROR (primitive_type))
+      (expression_statement (integer_literal))
+      (ERROR (primitive_type))
+      (expression_statement (integer_literal))
+      (ERROR (primitive_type))
+      (expression_statement (integer_literal)))))

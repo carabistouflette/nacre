@@ -3,6 +3,9 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Reserve unsupported language keywords in the Tree-sitter grammar so editors
+  flag them consistently with the compiler.
+
 - Revalidate LSP projects against unsaved `Nacre.toml` and `nacre.json` overlays,
   including source-root edits and on-disk restoration when a config closes.
 

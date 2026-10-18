@@ -18,6 +18,9 @@ const commaSep1Trailing = (rule) => seq(rule, repeat(seq(',', rule)), optional('
 
 module.exports = grammar({
   name: 'nacre',
+  reserved: {
+    global: ($) => [$._unsupported_keyword],
+  },
 
   extras: ($) => [/\s/, $.comment],
   word: ($) => $.identifier,
@@ -568,6 +571,11 @@ module.exports = grammar({
     ),
 
     escape_sequence: ($) => token.immediate(seq('\\', /[nrt0"'\\]/)),
+
+    _unsupported_keyword: ($) => token(choice(
+      'extends', 'null', 'super', 'package', 'final',
+      'throw', 'try', 'catch', 'switch', 'float',
+    )),
 
     identifier: ($) => /[A-Za-z_][A-Za-z0-9_]*/,
 
