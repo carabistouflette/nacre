@@ -9,6 +9,7 @@
 (class_declaration name: (identifier) @type)
 (interface_declaration name: (identifier) @type)
 (enum_declaration name: (identifier) @type)
+(trait_declaration name: (identifier) @type)
 (enum_variant name: (identifier) @constructor)
 (new_expression variant: (identifier) @constructor)
 (match_arm pattern: (variant_pattern variant: (qualified_identifier) @constructor))
@@ -20,11 +21,13 @@
 (for_statement value: (identifier) @variable.parameter)
 (field_declaration name: (identifier) @property)
 (member_expression property: (identifier) @property)
+((member_expression property: (identifier) @keyword)
+ (#eq? @keyword "await"))
 (call_expression function: (identifier) @function)
 (call_expression function: (member_expression property: (identifier) @function))
 (generic_static_call_expression function: (identifier) @function)
-["enum" "match" "class" "interface" "implements" "public" "private" "static"
- "readonly" "borrow" "mut" "new" "if" "else" "while" "for"
+["enum" "match" "class" "interface" "implements" "trait" "impl" "public" "private" "static"
+ "readonly" "async" "await" "borrow" "mut" "new" "if" "else" "while" "for"
  "return" "break" "continue" "module" "import"] @keyword
 (this_expression) @variable.special
 (boolean_literal) @boolean
@@ -39,5 +42,6 @@
 (comment) @comment
 ["+" "-" "*" "/" "%" "=" "==" "!" "!=" "<" "<=" ">" ">=" "&&" "||" "=>"
  "|" "^" "&" "~" "<<" "?"] @operator
+(shift_right_operator) @operator
 ["(" ")" "{" "}"] @punctuation.bracket
 [";" "," "." ":"] @punctuation.delimiter

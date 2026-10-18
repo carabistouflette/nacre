@@ -493,3 +493,93 @@ void tuplePatterns() {
                 (qualified_identifier
                   (namespace_identifier)))))
           (block))))))
+
+==================
+Trait, impl, bounded generics, and async/await
+==================
+public trait Measurable {
+    readonly int magnitude();
+}
+class Vector2D {}
+impl Measurable for Vector2D {
+    readonly int magnitude() { return 1; }
+    async int measureAsync() { return 2; }
+}
+class Metrics<T: Measurable> { public async int read() { return 1; } }
+async int fetch() { return 42; }
+void main() {
+    int value = await fetch();
+    int result = fetch().await;
+}
+---
+ (source_file
+   (visibility_modifier)
+   (trait_declaration
+     (identifier)
+     (trait_body
+       (function_declaration
+         (primitive_type)
+         (identifier)
+         (parameter_list))))
+   (class_declaration
+     (identifier)
+     (class_body))
+   (impl_declaration
+     (type_identifier)
+     (type_identifier)
+     (impl_body
+       (function_declaration
+         (primitive_type)
+         (identifier)
+         (parameter_list)
+         (block
+           (return_statement
+             (integer_literal))))
+       (function_declaration
+         (primitive_type)
+         (identifier)
+         (parameter_list)
+         (block
+           (return_statement
+             (integer_literal))))))
+   (class_declaration
+     (identifier)
+     (type_parameters
+       (type_identifier)
+       (type_identifier))
+     (class_body
+       (function_declaration
+         (visibility_modifier)
+         (primitive_type)
+         (identifier)
+         (parameter_list)
+         (block
+           (return_statement
+             (integer_literal))))))
+   (function_declaration
+     (primitive_type)
+     (identifier)
+     (parameter_list)
+     (block
+       (return_statement
+         (integer_literal))))
+   (function_declaration
+     (primitive_type)
+     (identifier)
+     (parameter_list)
+     (block
+       (variable_declaration
+         (primitive_type)
+         (identifier)
+         (await_expression
+           (call_expression
+             (identifier)
+             (argument_list))))
+       (variable_declaration
+         (primitive_type)
+         (identifier)
+         (member_expression
+           (call_expression
+             (identifier)
+             (argument_list))
+           (identifier))))))

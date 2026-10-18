@@ -157,6 +157,36 @@ void main() {
         assert "scalar" in captured_text.get("variable", set())
         print("Verified qualified static calls, module paths, numeric literals and casts, result propagation, and generic closers.")
 
+        trait_async_syntax = b'''public trait Measurable { readonly int magnitude(); }
+class Vector2D {}
+impl Measurable for Vector2D { readonly int magnitude() { return 1; } async int measureAsync() { return 2; } }
+class Metrics<T: Measurable> { public async int read() { return 1; } }
+async int fetch() { return 42; }
+void main() { int value = await fetch(); int result = fetch().await; }'''
+        tree = parser.parse(trait_async_syntax)
+        assert not tree.root_node.has_error, tree.root_node
+        captures = QueryCursor(queries["highlights"]).captures(tree.root_node)
+        feature_text = {
+            capture: {trait_async_syntax[node.start_byte:node.end_byte].decode() for node in nodes}
+            for capture, nodes in captures.items()
+        }
+        assert {"trait", "impl", "async", "await"}.issubset(feature_text.get("keyword", set()))
+        assert sum(
+            trait_async_syntax[node.start_byte:node.end_byte] == b"await"
+            for node in captures.get("keyword", [])
+        ) == 2
+        assert "Measurable" in feature_text.get("type", set())
+        outline = QueryCursor(queries["outline"]).captures(tree.root_node)
+        outline_names = {
+            trait_async_syntax[node.start_byte:node.end_byte].decode()
+            for node in outline.get("name", [])
+        }
+        assert {"Measurable", "Metrics", "Vector2D", "magnitude", "measureAsync", "read", "fetch", "main"}.issubset(outline_names)
+        indent_captures = QueryCursor(queries["indents"]).captures(tree.root_node)
+        indent_contexts = {node.type for node in indent_captures.get("indent", [])}
+        assert {"trait_body", "impl_body"}.issubset(indent_contexts), indent_contexts
+        print("Verified traits, impl blocks, bounded generics, async/await, indentation, and declaration outlines.")
+
         for keyword in ["borrow", "mut", "readonly", "class", "interface", "implements"]:
             assert keyword in all_captures.get("keyword", set()), f"Missing keyword highlight: {keyword}"
         assert {"Sudoku", "solve", "show", "main"}.issubset(sudoku_outline), sudoku_outline

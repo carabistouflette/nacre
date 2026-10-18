@@ -2,6 +2,8 @@
 
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
+- Align Tree-sitter, Zed, and VS Code syntax support with trait/impl declarations,
+  bounded type parameters, and async/await; capture Zed's named shift-right token.
 
 - Reject legacy JSON LSP source roots with an intermediate symlink, preventing
   configured source loading from traversing outside the project tree.

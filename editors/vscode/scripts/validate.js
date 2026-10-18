@@ -259,6 +259,24 @@ async function main() {
   assert.notEqual(qualifiedCallLine, -1, 'module example did not contain a qualified static call');
   assertHasScope(scopesAt(modules, qualifiedCallLine, 'adjust'), 'entity.name.function.member.nacre', 'qualified static method');
 
+  const traitAsyncSyntax = tokenize(grammar, [
+    'public trait Measurable { readonly int magnitude(); }',
+    'class Vector2D {}',
+    'impl Measurable for Vector2D { readonly int magnitude() { return 1; } async int measureAsync() { return 2; } }',
+    'class Metrics<T: Measurable> { public async int read() { return 1; } }',
+    'async int fetch() { return 42; }',
+    'void main() { int value = await fetch(); int result = fetch().await; }'
+  ].join('\n'));
+  assertHasScope(scopesAt(traitAsyncSyntax, 0, 'trait'), 'storage.type.trait.nacre', 'trait declaration keyword');
+  assertHasScope(scopesAt(traitAsyncSyntax, 0, 'Measurable'), 'entity.name.type.trait.nacre', 'trait declaration name');
+  assertHasScope(scopesAt(traitAsyncSyntax, 2, 'impl'), 'keyword.other.nacre', 'trait implementation keyword');
+  assertHasScope(scopesAt(traitAsyncSyntax, 2, 'async'), 'storage.modifier.nacre', 'async impl method modifier');
+  assertHasScope(scopesAt(traitAsyncSyntax, 3, 'async'), 'storage.modifier.nacre', 'async class method modifier');
+  assertHasScope(scopesAt(traitAsyncSyntax, 4, 'async'), 'storage.modifier.nacre', 'async function modifier');
+  assertHasScope(scopesAt(traitAsyncSyntax, 5, 'await'), 'keyword.control.nacre', 'await expression');
+  assertHasScope(scopesAt(traitAsyncSyntax, 5, 'await', 1), 'keyword.control.nacre', 'postfix await expression');
+
+
   const standardTypes = [
     ['Array', 'Array<int>'],
     ['Arrays', 'Arrays'],
