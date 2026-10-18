@@ -712,6 +712,21 @@ pub(super) fn replace_placeholders(
     body: String,
     substitutions: &[(impl AsRef<str>, String)],
 ) -> String {
+    let has_nested_values = substitutions.iter().enumerate().any(|(index, (_, value))| {
+        substitutions[index + 1..].iter()
+            .any(|(placeholder, _)| value.contains(placeholder.as_ref()))
+    });
+    if has_nested_values {
+        let mut body = body;
+        for (placeholder, replacement) in substitutions {
+            let placeholder = placeholder.as_ref();
+            if body.contains(placeholder) {
+                body = body.replace(placeholder, replacement);
+            }
+        }
+        return body;
+    }
+
     let mut output = None;
     let mut copied_until = 0;
     let mut search_from = 0;
@@ -747,7 +762,7 @@ mod tests {
     use super::replace_placeholders;
 
     #[test]
-    fn replacement_values_are_not_reprocessed() {
+    fn replacement_values_expand_in_substitution_order() {
         let result = replace_placeholders(
             "π=@FIRST@ | @MISSING@ | @FIRST@".to_owned(),
             &[
@@ -755,7 +770,19 @@ mod tests {
                 ("@SECOND@", "second".to_owned()),
             ],
         );
-        assert_eq!(result, "π=value @SECOND@ | @MISSING@ | value @SECOND@");
+        assert_eq!(result, "π=value second | @MISSING@ | value second");
+    }
+
+    #[test]
+    fn earlier_placeholders_do_not_reprocess_later_values() {
+        let result = replace_placeholders(
+            "@FIRST@".to_owned(),
+            &[
+                ("@SECOND@", "second".to_owned()),
+                ("@FIRST@", "@SECOND@".to_owned()),
+            ],
+        );
+        assert_eq!(result, "@SECOND@");
     }
 
     #[test]

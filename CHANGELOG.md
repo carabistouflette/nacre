@@ -3,8 +3,8 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
-- Expand native-template placeholders in one pass, avoiding a full template copy per
-  substitution and preventing replacement values from being reprocessed.
+- Expand native-template placeholders in one pass when replacement values do not
+  introduce later markers; preserve ordered expansion for nested template fragments.
 
 - End local borrowed bindings and retained view loans after their last
   control-flow use. Backward liveness follows branch alternatives and loop
