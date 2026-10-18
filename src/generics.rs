@@ -118,6 +118,7 @@ pub fn expand(mut program: a::Program) -> Result<(a::Program, Vec<String>), Diag
     }
     expander.request_unit_mutex_if_needed(&empty, Span::default())?;
     let mut iterator_pairs_discovered = false;
+    let mut implemented_traits: Option<HashSet<(&str, &str)>> = None;
     loop {
         while let Some(request) = expander.pending.pop_front() {
         let mut class = expander.definitions[&request.template].clone();
@@ -127,7 +128,12 @@ pub fn expand(mut program: a::Program) -> Result<(a::Program, Vec<String>), Diag
                     Type::Named(n) => n.as_str(),
                     _ => "",
                 };
-                let satisfies = program.impls.iter().any(|imp| &imp.trait_name == trait_name && imp.target_class == arg_name);
+                let trait_impls = implemented_traits.get_or_insert_with(|| {
+                    program.impls.iter()
+                        .map(|imp| (imp.trait_name.as_str(), imp.target_class.as_str()))
+                        .collect()
+                });
+                let satisfies = trait_impls.contains(&(trait_name.as_str(), arg_name));
                 if !satisfies {
                     return Err(Diagnostic::new(
                         request.span,
@@ -159,6 +165,7 @@ pub fn expand(mut program: a::Program) -> Result<(a::Program, Vec<String>), Diag
         iterator_pairs_discovered = true;
         discover_iterator_specializations(&mut expander, &concrete, &program.functions, &program.impls)?;
     }
+    drop(implemented_traits);
     program.classes = concrete;
     Ok((program, expander.names))
 }
