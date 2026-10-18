@@ -714,16 +714,16 @@ fn enum_order(program: &t::Program) -> Vec<usize> {
 fn class_support(program: &t::Program) -> String {
     let mut out = String::from("\n/* By-value tagged sums and allocation-free interface representations. */\n");
     for class in &program.classes {
-        out.push_str(&format!("typedef struct ncr_obj_{} ncr_obj_{};\n", class.id, class.id));
+        writeln!(out, "typedef struct ncr_obj_{} ncr_obj_{};", class.id, class.id).unwrap();
     }
     for class in &program.classes {
         if matches!(class.native, Some(t::NativeClass::Map { .. })) {
-            out.push_str(&format!("struct ncr_map_entry_{};\n", class.id));
+            writeln!(out, "struct ncr_map_entry_{};", class.id).unwrap();
         }
     }
     for class in &program.classes {
         if matches!(class.native, Some(t::NativeClass::OrderedMap(_, _))) {
-            out.push_str(&format!("struct ncr_ordered_entry_{};\n", class.id));
+            writeln!(out, "struct ncr_ordered_entry_{};", class.id).unwrap();
         }
     }
     for class in &program.classes {
@@ -733,7 +733,7 @@ fn class_support(program: &t::Program) -> String {
     }
     for class in &program.classes {
         if class.is_interface {
-            out.push_str(&format!("struct ncr_obj_{0} {{ void *data; const struct ncr_vtable_{0} *vtable; }};\n", class.id));
+            writeln!(out, "struct ncr_obj_{0} {{ void *data; const struct ncr_vtable_{0} *vtable; }};", class.id).unwrap();
         }
     }
     // Set embeds the table control record from its hidden Map<K, Unit>
@@ -745,35 +745,37 @@ fn class_support(program: &t::Program) -> String {
     }
     for id in enum_order(program) {
         let class = &program.classes[id];
-        out.push_str(&format!("struct ncr_obj_{id} {{\n    int32_t tag;\n    union {{\n"));
+        write!(out, "struct ncr_obj_{id} {{\n    int32_t tag;\n    union {{\n").unwrap();
         for (variant_id, variant) in class.variants.as_ref().unwrap().iter().enumerate() {
             out.push_str("        struct {\n");
             if variant.fields.is_empty() {
                 out.push_str("            unsigned char ncr_empty;\n");
             }
             for (field_id, ty) in variant.fields.iter().enumerate() {
-                out.push_str(&format!("            {} f{field_id};\n", ctype(program, *ty)));
+                writeln!(out, "            {} f{field_id};", ctype(program, *ty)).unwrap();
             }
-            out.push_str(&format!("        }} v{variant_id};\n"));
+            writeln!(out, "        }} v{variant_id};").unwrap();
         }
         out.push_str("    } data;\n};\n");
     }
     for class in &program.classes {
         if class.is_interface || class.variants.is_some() { continue; }
-        out.push_str(&format!("struct ncr_obj_{} {{\n", class.id));
+        writeln!(out, "struct ncr_obj_{} {{", class.id).unwrap();
         if let Some(native) = class.native { out.push_str(&crate::stdlib_codegen::fields(program, native, class.id)); }
         else if class.fields.is_empty() { out.push_str("    unsigned char ncr_empty;\n"); }
-        for (id, ty) in class.fields.iter().enumerate() { out.push_str(&format!("    {} ncr_f_{id};\n", ctype(program, *ty))); }
+        for (id, ty) in class.fields.iter().enumerate() { writeln!(out, "    {} ncr_f_{id};", ctype(program, *ty)).unwrap(); }
         out.push_str("};\n");
     }
     for class in &program.classes {
         if !class.is_interface { continue; }
-        out.push_str(&format!("struct ncr_vtable_{} {{\n    void (*destroy)(void *);\n", class.id));
+        writeln!(out, "struct ncr_vtable_{} {{\n    void (*destroy)(void *);", class.id).unwrap();
         for (slot, id) in class.interface_methods.iter().enumerate() {
             let method = &program.functions[*id];
-            let mut params = vec![std::borrow::Cow::Borrowed("void *")];
-            params.extend(method.params.iter().map(|(_, ty)| ctype(program, *ty)));
-            out.push_str(&format!("    {} (*m{slot})({});\n", ctype(program, method.return_type), params.join(", ")));
+            write!(out, "    {} (*m{slot})(void *", ctype(program, method.return_type)).unwrap();
+            for (_, ty) in &method.params {
+                write!(out, ", {}", ctype(program, *ty)).unwrap();
+            }
+            out.push_str(");\n");
         }
         out.push_str("};\n");
     }
@@ -781,10 +783,11 @@ fn class_support(program: &t::Program) -> String {
     // vtable definitions are emitted.
     for class in &program.classes {
         for (interface, _) in &class.implementations {
-            out.push_str(&format!(
-                "static const struct ncr_vtable_{interface} ncr_vtable_{}_{};\n",
+            writeln!(
+                out,
+                "static const struct ncr_vtable_{interface} ncr_vtable_{}_{};",
                 class.id, interface,
-            ));
+            ).unwrap();
         }
     }
     // Hash entries embed V by value, so define them after all object, enum,
@@ -800,36 +803,36 @@ fn class_support(program: &t::Program) -> String {
         }
     }
     for class in &program.classes {
-        out.push_str(&format!("static void ncr_drop_{}({} p);\n", class.id, ctype(program, Type::Object(class.id))));
+        writeln!(out, "static void ncr_drop_{}({} p);", class.id, ctype(program, Type::Object(class.id))).unwrap();
     }
     out.push_str(&crate::stdlib_codegen::drop_helper_prototypes(program));
     for class in &program.classes {
         if !class.is_interface && class.variants.is_none() {
-            out.push_str(&format!("static void ncr_drop_fields_{}(ncr_obj_{} *p);\n", class.id, class.id));
+            writeln!(out, "static void ncr_drop_fields_{}(ncr_obj_{} *p);", class.id, class.id).unwrap();
         }
     }
     for class in &program.classes {
         if !class.is_interface && class.variants.is_none() {
-            out.push_str(&format!("static void ncr_drop_fields_{}(ncr_obj_{} *p) {{\n", class.id, class.id));
+            writeln!(out, "static void ncr_drop_fields_{}(ncr_obj_{} *p) {{", class.id, class.id).unwrap();
             out.push_str("    if (p == NULL) { return; }\n");
             for (id, ty) in class.fields.iter().enumerate().rev() {
-                if let Type::Object(child) = ty { out.push_str(&format!("    ncr_drop_{child}(p->ncr_f_{id});\n")); }
+                if let Type::Object(child) = ty { writeln!(out, "    ncr_drop_{child}(p->ncr_f_{id});").unwrap(); }
             }
             if let Some(native) = class.native { out.push_str(&crate::stdlib_codegen::drop_fields(program, native, class.id)); }
             out.push_str("}\n");
         }
     }
     for class in &program.classes {
-        out.push_str(&format!("static void ncr_drop_{}({} p) {{\n", class.id, ctype(program, Type::Object(class.id))));
+        writeln!(out, "static void ncr_drop_{}({} p) {{", class.id, ctype(program, Type::Object(class.id))).unwrap();
         if class.is_interface {
             out.push_str("    if (p.data != NULL) { p.vtable->destroy(p.data); }\n");
         } else if let Some(variants) = &class.variants {
             out.push_str("    if (p.tag == -1) { return; }\n    switch (p.tag) {\n");
             for (variant_id, variant) in variants.iter().enumerate() {
-                out.push_str(&format!("    case {variant_id}:"));
+                write!(out, "    case {variant_id}:").unwrap();
                 for (field_id, ty) in variant.fields.iter().enumerate().rev() {
                     if let Type::Object(child) = ty {
-                        out.push_str(&format!("\n        ncr_drop_{child}(p.data.v{variant_id}.f{field_id});"));
+                        write!(out, "\n        ncr_drop_{child}(p.data.v{variant_id}.f{field_id});").unwrap();
                     }
                 }
                 out.push_str("\n        break;\n");
@@ -837,7 +840,7 @@ fn class_support(program: &t::Program) -> String {
             out.push_str("    default: break;\n    }\n    p.tag = -1;\n");
         } else {
             out.push_str("    if (p == NULL) { return; }\n");
-            out.push_str(&format!("    ncr_drop_fields_{}(p);\n", class.id));
+            writeln!(out, "    ncr_drop_fields_{}(p);", class.id).unwrap();
             out.push_str("    ncr_deallocate(p);\n");
         }
         out.push_str("}\n");
