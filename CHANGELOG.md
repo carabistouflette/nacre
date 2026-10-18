@@ -3,6 +3,8 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Cache Unit-mutex dependency discovery as specializations are requested,
+  avoiding a full request-set scan after each expansion.
 - Stream enum variant initializer signatures and bodies directly into the
   generated output buffer, eliminating temporary parameter and initializer strings.
 - Stream native and virtual pointer-slot runtime adapters directly into their

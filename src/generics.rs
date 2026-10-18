@@ -75,6 +75,7 @@ struct Request { template: String, name: String, args: Vec<Type>, span: Span }
 struct Expander {
     definitions: HashMap<String, a::Class>,
     requested: HashSet<String>,
+    unit_mutex_required: bool,
     user_specializations: usize,
     pending: VecDeque<Request>,
     names: Vec<String>,
@@ -86,6 +87,7 @@ pub fn expand(mut program: a::Program) -> Result<(a::Program, Vec<String>), Diag
         return Err(Diagnostic::new(Span::default(), "limit: 128 user classes or interfaces per program, including templates"));
     }
     let mut expander = Expander { definitions: HashMap::new(), requested: HashSet::new(),
+        unit_mutex_required: false,
         user_specializations: 0, pending: VecDeque::new(), names: Vec::new() };
     for class in &program.classes {
         if matches!(class.name.as_str(), "System" | "println") {
@@ -189,10 +191,15 @@ fn append_type_arguments(output: &mut String, args: &[Type]) {
 }
 
 impl Expander {
+    fn enqueue_request(&mut self, template: String, name: String, args: Vec<Type>, span: Span) {
+        self.unit_mutex_required |= crate::stdlib::uses_unit_mutex(&name);
+        self.requested.insert(name.clone());
+        self.names.push(name.clone());
+        self.pending.push_back(Request { template, name, args, span });
+    }
+
     fn request_unit_mutex_if_needed(&mut self, env: &Environment, span: Span) -> Result<(), Diagnostic> {
-        let required = self.requested.iter()
-            .any(|name| crate::stdlib::uses_unit_mutex(name));
-        if required && !self.requested.contains("Mutex<Unit>") {
+        if self.unit_mutex_required && !self.requested.contains("Mutex<Unit>") {
             self.ty(&Type::Applied {
                 name: "Mutex".to_owned(),
                 args: vec![Type::Unit],
@@ -210,9 +217,7 @@ impl Expander {
                 if let Some(replacement) = env.get(name) { return Ok(replacement.clone()); }
                 if self.definitions.get(name).is_some_and(|c|
                     c.native.is_some() && c.type_params.is_empty()) && !self.requested.contains(name) {
-                    self.requested.insert(name.clone());
-                    self.names.push(name.clone());
-                    self.pending.push_back(Request { template: name.clone(), name: name.clone(), args: Vec::new(), span });
+                    self.enqueue_request(name.clone(), name.clone(), Vec::new(), span);
                 }
                 if self.definitions.get(name).is_some_and(|c| !c.type_params.is_empty()) {
                     return Err(Diagnostic::new(span, format!("[E4102] `{name}` requires explicit type arguments")));
@@ -250,9 +255,7 @@ impl Expander {
                         }
                         self.user_specializations += 1;
                     }
-                    self.requested.insert(key.clone());
-                    self.names.push(key.clone());
-                    self.pending.push_back(Request { template: name.clone(), name: key.clone(), args, span });
+                    self.enqueue_request(name.clone(), key.clone(), args, span);
                 }
                 Ok(Type::Named(key))
             }
@@ -1001,6 +1004,7 @@ mod tests {
         Expander {
             definitions,
             requested: HashSet::new(),
+            unit_mutex_required: false,
             user_specializations: 0,
             pending: VecDeque::new(),
             names: Vec::new(),
