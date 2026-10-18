@@ -6,6 +6,8 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 - Revalidate LSP projects against unsaved `Nacre.toml` and `nacre.json` overlays,
   including source-root edits and on-disk restoration when a config closes.
 
+- Pin the LSP framing header-byte limit at its exact 8 KiB boundary.
+
 - Preserve iterator item-type inference through postfix `?` on built-in `Result`
   values, enabling downstream specializations such as `enumerate`.
 

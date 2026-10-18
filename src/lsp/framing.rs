@@ -79,7 +79,7 @@ pub(super) fn send(output: &mut impl Write, message: Value) -> io::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::read_frame;
+    use super::{read_frame, MAX_HEADER_BYTES};
     use std::io::{Cursor, ErrorKind};
 
     #[test]
@@ -90,6 +90,22 @@ mod tests {
         assert!(read_frame(&mut allowed, 2).unwrap().is_none());
         let mut rejected = Cursor::new(frame);
         assert_eq!(read_frame(&mut rejected, 1).unwrap_err().kind(), ErrorKind::InvalidData);
+    }
+
+    #[test]
+    fn enforces_header_byte_budget_at_exact_boundary() {
+        let mut exact = b"Content-Length: 0\r\nX-Padding: ".to_vec();
+        exact.resize(MAX_HEADER_BYTES - 4, b'x');
+        exact.extend_from_slice(b"\r\n\r\n");
+        assert_eq!(exact.len(), MAX_HEADER_BYTES);
+        let mut accepted = Cursor::new(exact.as_slice());
+        assert_eq!(read_frame(&mut accepted, 0).unwrap(), Some(Vec::new()));
+
+        let mut oversized = exact;
+        let insertion = oversized.len() - 4;
+        oversized.insert(insertion, b'x');
+        let mut rejected = Cursor::new(oversized);
+        assert_eq!(read_frame(&mut rejected, 0).unwrap_err().kind(), ErrorKind::InvalidData);
     }
 
     #[test]

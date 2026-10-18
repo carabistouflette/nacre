@@ -436,6 +436,8 @@ and flushed byte-length-prefixed JSON output. It depends only on standard I/O
 and JSON serialization, not workspace or compiler state. The server supplies its
 message-size budget and retains JSON parsing, routing, and document policy.
 The existing fuzz entry point exercises this same decoder through fragmented reads.
+Header blocks are limited to 8 KiB, `Content-Length` is required exactly once, and
+body bytes are bounded by the server-supplied message budget.
 
 The private `lsp/file_uri.rs` module owns local file-URI conversion and lexical
 path normalization. Its decoder accepts only local `file` URIs with valid UTF-8,
