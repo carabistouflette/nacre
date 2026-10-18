@@ -257,6 +257,34 @@ fn nacre_literal(value: &str) -> String {
     literal
 }
 
+
+#[test]
+fn aes_gcm_empty_plaintext_matches_the_zero_key_known_answer() {
+    let source = format!(
+        r#"{HELPERS}
+Result<Unit, Text> exercise() {{
+    ByteBuffer key = hexBuffer("00000000000000000000000000000000")?;
+    ByteBuffer nonce = hexBuffer("000000000000000000000000")?;
+    ByteBuffer plaintext = hexBuffer("")?;
+    ByteBuffer aad = hexBuffer("")?;
+    ByteBuffer ciphertextAndTag = Crypto.aesGcmEncrypt(key, nonce, plaintext, aad)?;
+    Text encoded = Encoding.hexEncode(ciphertextAndTag);
+    println(encoded.equalsString("58e2fccefa7e3061367f1d57a4e7455a"));
+    ByteBuffer decrypted = Crypto.aesGcmDecrypt(key, nonce, ciphertextAndTag, aad)?;
+    println(decrypted.length() == 0L && Crypto.constantTimeEquals(plaintext, decrypted));
+    return new Result<Unit, Text>.Ok(());
+}}
+void main() {{
+    match (exercise()) {{
+        Ok(unit) {{}}
+        Err(error) {{ error.print(); }}
+    }}
+}}
+"#
+    );
+    assert_native(&source, b"true\ntrue\n");
+}
+
 #[test]
 fn digest_and_hmac_streams_match_vectors_and_are_terminal() {
     let source = format!(
