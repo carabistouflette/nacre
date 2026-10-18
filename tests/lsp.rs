@@ -434,3 +434,43 @@ fn lsp_reports_manifest_diagnostics_when_nacre_toml_is_invalid() {
     client.send(json!({ "jsonrpc": "2.0", "method": "exit" }));
     client.finish();
 }
+
+#[cfg(unix)]
+#[test]
+fn lsp_does_not_resolve_through_intermediate_symlinked_source_roots() {
+    use std::os::unix::fs::symlink;
+
+    let temp = TempDir::new();
+    let project = temp.0.join("project");
+    let outside_source = temp.0.join("outside/src");
+    fs::create_dir_all(&project).unwrap();
+    fs::create_dir_all(&outside_source).unwrap();
+    fs::write(project.join("nacre.json"), r#"{"sources":["link/src"]}"#).unwrap();
+    fs::write(outside_source.join("External.ncr"), "class External {}\n").unwrap();
+    symlink(temp.0.join("outside"), project.join("link")).unwrap();
+
+    let main_path = project.join("Main.ncr");
+    let main_source = "void main() { External item = new External(); }\n";
+    fs::write(&main_path, main_source).unwrap();
+
+    let mut client = Client::spawn();
+    client.send(json!({
+        "jsonrpc": "2.0", "id": 1, "method": "initialize",
+        "params": { "rootUri": uri(&project), "capabilities": {} }
+    }));
+    client.response(1);
+    client.send(json!({ "jsonrpc": "2.0", "method": "initialized", "params": {} }));
+    client.send(json!({
+        "jsonrpc": "2.0", "id": 2, "method": "textDocument/definition",
+        "params": {
+            "textDocument": { "uri": uri(&main_path) },
+            "position": { "line": 0, "character": main_source.find("External").unwrap() }
+        }
+    }));
+    assert!(client.response(2)["result"].is_null());
+
+    client.send(json!({ "jsonrpc": "2.0", "id": 3, "method": "shutdown" }));
+    assert!(client.response(3)["result"].is_null());
+    client.send(json!({ "jsonrpc": "2.0", "method": "exit" }));
+    client.finish();
+}

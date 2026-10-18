@@ -38,6 +38,7 @@ pub(super) fn configured_source_roots(root: &Path) -> Result<Vec<PathBuf>, Strin
         if source.is_absolute() { return Err(format!("{} source paths must be relative", config.display())); }
         let path = normalize_path(&root.join(source));
         if !path.starts_with(root) { return Err(format!("{} source path escapes the project root", config.display())); }
+        reject_symlink_path(&path, root)?;
         roots.push(path);
     }
     Ok(roots)

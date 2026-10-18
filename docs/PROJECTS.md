@@ -192,9 +192,11 @@ as the compiler. Legacy `nacre.json` still accepts a non-empty `sources` array:
 ```
 
 Paths that are absolute or escape the project root are rejected. Symlinks are
-not followed. The compiler's file, source-size, and directory-depth limits also
-apply to a project. Legacy JSON configuration must be a regular file and is
-limited to 64 KiB; TOML manifests use the 1 MiB limit above.
+not followed. Legacy JSON source roots also reject symlinks in existing parent
+components, so a symlinked ancestor cannot redirect loading outside the project.
+The compiler's file, source-size, and directory-depth limits also apply to a
+project. Legacy JSON configuration must be a regular file and is limited to 64
+KiB; TOML manifests use the 1 MiB limit above.
 `examples/language/multi_file_project/nacre.json` is a working legacy configuration.
 
 Without a project marker, each open source document is compiled by itself.

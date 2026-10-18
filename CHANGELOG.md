@@ -3,6 +3,8 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Reject legacy JSON LSP source roots with an intermediate symlink, preventing
+  configured source loading from traversing outside the project tree.
 - Cache Unit-mutex dependency discovery as specializations are requested,
   avoiding a full request-set scan after each expansion.
 - Count concrete user types incrementally during generic expansion instead of
