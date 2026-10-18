@@ -1,10 +1,11 @@
 //! Inspection, deterministic output and CLI integration. LLVM-only tests are
 //! explicitly ignored by default and require `cargo test ... -- --ignored`.
+use std::fmt::Write as _;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
-use nacre::{compile_to_c, emit_borrows, emit_flow, emit_types, native};
+use nacre::{compile_to_c, emit_borrows, emit_flow, emit_types, native, validate};
 
 const INTERFACES: &str = include_str!("../examples/language/interfaces.ncr");
 const GENERICS: &str = include_str!("../examples/language/generic_box.ncr");
@@ -120,4 +121,31 @@ fn cli_emit_llvm() {
         .arg(&path).output().unwrap();
     assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
     assert!(fs::read_to_string(path).unwrap().contains("@main("));
+}
+
+fn concrete_type_limit_source(concrete_classes: usize) -> String {
+    let mut source = String::new();
+    for index in 0..concrete_classes {
+        writeln!(source, "class C{index} {{}}").unwrap();
+    }
+    source.push_str("class Box<T> { private T value; public Box(T value) { this.value = value; } }\nvoid main() {\n");
+    for index in 0..64 {
+        writeln!(source, "    Box<C{index}> box{index} = new Box<C{index}>(new C{index}());").unwrap();
+    }
+    source.push_str("}\n");
+    source
+}
+
+#[test]
+fn concrete_type_specialization_limit_accepts_128_and_rejects_129() {
+    let boundary = concrete_type_limit_source(64);
+    validate(&boundary).unwrap_or_else(|error| panic!("{}", error.render("boundary.ncr", &boundary)));
+
+    let over_limit = concrete_type_limit_source(65);
+    let error = validate(&over_limit).expect_err("129 concrete user types were accepted");
+    assert!(
+        error.message.contains("[E4199] limit of 128 concrete types, including specializations"),
+        "{}",
+        error.render("over-limit.ncr", &over_limit),
+    );
 }

@@ -108,8 +108,10 @@ pub fn expand(mut program: a::Program) -> Result<(a::Program, Vec<String>), Diag
     let empty = Environment::new();
     for function in &mut program.functions { expander.function(function, &empty)?; }
     let mut concrete = Vec::new();
+    let mut concrete_user_class_count = 0;
     for mut class in program.classes {
         if class.type_params.is_empty() && class.native.is_none() {
+            if !class.is_builtin { concrete_user_class_count += 1; }
             expander.class(&mut class, &empty)?;
             concrete.push(class);
         }
@@ -147,8 +149,9 @@ pub fn expand(mut program: a::Program) -> Result<(a::Program, Vec<String>), Diag
         expander.class(&mut class, &env).map_err(|d| d.with_note(request.span,
             format!("specialization `{}` requested here", request.name)))?;
         expander.request_unit_mutex_if_needed(&empty, request.span)?;
+        if !class.is_builtin { concrete_user_class_count += 1; }
         concrete.push(class);
-        if concrete.iter().filter(|c| !c.is_builtin).count() > 128 {
+        if concrete_user_class_count > 128 {
             return Err(Diagnostic::new(request.span, "[E4199] limit of 128 concrete types, including specializations"));
         }
     }
