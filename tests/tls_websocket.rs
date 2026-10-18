@@ -125,6 +125,76 @@ fn run(program: &native::NativeProgram, args: &[&str]) -> String {
 }
 
 #[test]
+fn tls_connect_timeout_covers_a_peer_that_stalls_during_handshake() {
+    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let ca_path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/tls_loopback_cert.pem"
+    );
+    let source = format!(
+        r#"
+void main() {{
+    Text addressHost = new Text("127.0.0.1");
+    match (SocketAddress.resolve(addressHost, {port}, false)) {{
+        Err(error) {{ println("RESOLVE_ERROR"); }}
+        Ok(addresses) {{
+            Text caText = new Text({});
+            match (Path.fromText(caText)) {{
+                Err(error) {{ println("PATH_ERROR"); }}
+                Ok(caFile) {{
+                    match (TlsConfig.clientWithCa(caFile)) {{
+                        Err(error) {{ println("CONFIG_ERROR"); }}
+                        Ok(config) {{
+                            match (Mutex<TlsConfig>.create(config)) {{
+                                Err(error) {{ println("MUTEX_ERROR"); }}
+                                Ok(configHandle) {{
+                                    Text host = new Text("localhost");
+                                    match (TlsStream.connect(addresses.getRef(0), configHandle, host, 100L)) {{
+                                        Err(error) {{ error.print(); }}
+                                        Ok(stream) {{ drop(stream); println("UNEXPECTED_SUCCESS"); }}
+                                    }}
+                                }}
+                            }}
+                        }}
+                    }}
+                }}
+            }}
+        }}
+    }}
+}}
+"#,
+        nacre_literal(ca_path),
+    );
+    let program = compile(&source);
+    let (release_tx, release_rx) = mpsc::channel();
+    let server = thread::spawn(move || {
+        let stream = loop {
+            match listener.accept() {
+                Ok((stream, _)) => break stream,
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    match release_rx.try_recv() {
+                        Ok(()) | Err(mpsc::TryRecvError::Disconnected) => return,
+                        Err(mpsc::TryRecvError::Empty) => thread::sleep(Duration::from_millis(1)),
+                    }
+                }
+                Err(error) => panic!("TLS timeout server accept failed: {error}"),
+            }
+        };
+        let _ = release_rx.recv();
+        drop(stream);
+    });
+    let output = run(&program, &[]);
+    let _ = release_tx.send(());
+    server.join().unwrap();
+    assert!(
+        output.contains("TlsStream.connect handshake timed out"),
+        "{output}"
+    );
+}
+
+#[test]
 fn tls_loopback_verifies_identity_and_transfers_bytes_with_owned_config() {
     let server_source = format!(r#"
 void main() {{
