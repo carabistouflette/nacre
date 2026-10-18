@@ -19,6 +19,8 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 
 - Use raw allocation for fully written BigInteger and BigDecimal text buffers.
 
+- Use raw allocation for fully written file and database path buffers.
+
 - Align Tree-sitter, Zed, and VS Code syntax support with trait/impl declarations,
   bounded type parameters, and async/await; capture Zed's named shift-right token.
 

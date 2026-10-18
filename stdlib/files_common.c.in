@@ -14,7 +14,7 @@ static char *ncr_fs_path_cstring_@TEXT_ID@(ncr_obj_@TEXT_ID@ *path, size_t line,
     if (!ncr_fs_path_valid_text_@TEXT_ID@(path)) { errno = EINVAL; return NULL; }
     size_t length = (size_t)path->length;
     if (length == SIZE_MAX) { errno = ENAMETOOLONG; return NULL; }
-    char *copy = ncr_allocate(length + 1, line, column);
+    char *copy = ncr_allocate_raw(length + 1, line, column);
     memcpy(copy, path->bytes, length);
     copy[length] = '\0';
     return copy;

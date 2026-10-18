@@ -347,7 +347,7 @@ static ncr_obj_@DB_OPEN_RESULT@ @DATABASE_OPEN@(
     if (path_length == SIZE_MAX) {
         return NCR_DB_ERROR(@DB_OPEN_RESULT@, "Database.open path is too large", ncr_line, ncr_column);
     }
-    char *filename = ncr_allocate(path_length + 1, ncr_line, ncr_column);
+    char *filename = ncr_allocate_raw(path_length + 1, ncr_line, ncr_column);
     memcpy(filename, path->bytes, path_length);
     filename[path_length] = '\0';
     sqlite3 *handle = NULL;

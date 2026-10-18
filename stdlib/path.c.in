@@ -29,7 +29,7 @@ static ncr_obj_@PATH_JOIN_RESULT@ @PATH_JOIN@(ncr_obj_@PATH_ID@ *@PATH_JOIN_BASE
         return ncr_result_error_@PATH_JOIN_RESULT@("Path.join: joined path is too long", sizeof("Path.join: joined path is too long") - 1, ncr_line, ncr_column);
     }
     size_t length = base_length + child_length + (separator ? 1 : 0);
-    unsigned char *bytes = ncr_allocate(length, ncr_line, ncr_column);
+    unsigned char *bytes = ncr_allocate_raw(length, ncr_line, ncr_column);
     memcpy(bytes, base->bytes, base_length);
     size_t cursor = base_length;
     if (separator) { bytes[cursor++] = '/'; }
