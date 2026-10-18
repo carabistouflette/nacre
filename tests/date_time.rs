@@ -523,6 +523,14 @@ Result<Unit, Text> check() {
         Ok(value) { println("DST_GAP_ACCEPTED"); }
         Err(error) { println("DST_GAP_ERR"); }
     }
+    Temporal beforeGap = Temporal.localDateTime(1, 2024, 3, 9, 2, 30, 0,
+        123456789, gregorianId)?;
+    Temporal zonedBeforeGap = beforeGap.atZone(newYorkId, false)?;
+    Temporal oneCalendarDay = Temporal.period(0, 0, 1)?;
+    match (zonedBeforeGap.plusPeriod(oneCalendarDay, false)) {
+        Ok(value) { println("PERIOD_DST_GAP_ACCEPTED"); }
+        Err(error) { println("PERIOD_DST_GAP_ERR"); }
+    }
 
     Temporal overlap = Temporal.localDateTime(1, 2024, 11, 3, 1, 30, 0, 123456789,
         gregorianId)?;
@@ -552,6 +560,16 @@ Result<Unit, Text> check() {
         Ok(value) { println("ZONE_OFFSET_MISMATCH_ACCEPTED"); }
         Err(error) { println("ZONE_OFFSET_MISMATCH_ERR"); }
     }
+    Temporal beforeOverlap = Temporal.localDateTime(1, 2024, 11, 2, 1, 30, 0,
+        123456789, gregorianId)?;
+    Temporal zonedBeforeOverlap = beforeOverlap.atZone(newYorkId, false)?;
+    Temporal earlierByPeriod = zonedBeforeOverlap.plusPeriod(oneCalendarDay, false)?;
+    Temporal laterByPeriod = zonedBeforeOverlap.plusPeriod(oneCalendarDay, true)?;
+    println(laterByPeriod.epochSecond()? - earlierByPeriod.epochSecond()?);
+    println(earlierByPeriod.offsetSeconds()?);
+    println(laterByPeriod.offsetSeconds()?);
+    println(earlierByPeriod.nanosecond() == 123456789);
+    println(laterByPeriod.nanosecond() == 123456789);
 
     Temporal moved = earlier.withZone(londonId)?;
     Text earlierZone = earlier.zoneId();
@@ -574,7 +592,7 @@ void main() {
     assert_native_success(&output);
     assert_eq!(
         String::from_utf8(output.stdout).unwrap(),
-        "DST_GAP_ERR\n3600\n-14400\n-18000\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\nZONE_OFFSET_MISMATCH_ERR\ntrue\ntrue\ntrue\ntrue\n"
+        "DST_GAP_ERR\nPERIOD_DST_GAP_ERR\n3600\n-14400\n-18000\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\nZONE_OFFSET_MISMATCH_ERR\n3600\n-14400\n-18000\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n"
     );
 }
 
