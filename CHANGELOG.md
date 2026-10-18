@@ -10,6 +10,8 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 - Resolve implementation trait names and generic trait bounds to
   module-qualified identities, preventing same-named traits in other modules
   from satisfying a bound.
+- Enforce module privacy when resolving trait implementations and bounds;
+  private traits cannot be used by other modules.
 - Cache Unit-mutex dependency discovery as specializations are requested,
   avoiding a full request-set scan after each expansion.
 - Count concrete user types incrementally during generic expansion instead of

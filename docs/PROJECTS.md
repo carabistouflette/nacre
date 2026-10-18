@@ -45,12 +45,13 @@ void main() {
 }
 ```
 
-`import model.Counter;` imports one public declaration;
+`import model.Counter;` imports one public type or function;
 `import model.*;` imports the public declarations in that module. Functions may
-also be imported by name. Private declarations are available within their own
-module but cannot be imported from another module. Built-in standard-library
-names are reserved and available without user-authored imports. If a source unit
-has no `module` header, its declarations belong to the unnamed module.
+also be imported by name. Private declarations, including traits, are available
+within their own module but cannot be imported from another module. Built-in
+standard-library names are reserved and available without user-authored imports.
+If a source unit has no `module` header, its declarations belong to the unnamed
+module.
 
 Modules and imports resolve only among the source units selected for the
 compilation bundle, including local package dependencies. This is whole-program

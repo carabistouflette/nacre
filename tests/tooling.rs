@@ -484,6 +484,66 @@ public void main() {
 }
 
 #[test]
+fn private_imported_trait_cannot_be_used_as_generic_bound() {
+    let private_api = r#"
+module private_api;
+private trait Marker {}
+"#;
+    let consumer = r#"
+module consumer;
+import private_api.*;
+
+public class Holder<T: Marker> {}
+public void main() {}
+"#;
+    let bundle = nacre::project::SourceBundle::from_sources(vec![
+        ("private_api.ncr".to_owned(), private_api.to_owned()),
+        ("consumer.ncr".to_owned(), consumer.to_owned()),
+    ]).unwrap();
+    let err = bundle.validate().unwrap_err();
+    assert!(err.message.contains("trait `Marker` is private to module `private_api`"), "{err}");
+}
+
+#[test]
+fn private_imported_trait_cannot_be_implemented_outside_its_module() {
+    let private_api = r#"
+module private_api;
+private trait Marker {}
+"#;
+    let consumer = r#"
+module consumer;
+import private_api.*;
+
+public class Item {}
+impl Marker for Item {}
+public void main() {}
+"#;
+    let bundle = nacre::project::SourceBundle::from_sources(vec![
+        ("private_api.ncr".to_owned(), private_api.to_owned()),
+        ("consumer.ncr".to_owned(), consumer.to_owned()),
+    ]).unwrap();
+    let err = bundle.validate().unwrap_err();
+    assert!(err.message.contains("trait `Marker` is private to module `private_api`"), "{err}");
+}
+
+#[test]
+fn private_root_trait_cannot_be_used_from_named_module() {
+    let private_api = "private trait Marker {}\n";
+    let consumer = r#"
+module consumer;
+public class Item {}
+impl Marker for Item {}
+public void main() {}
+"#;
+    let bundle = nacre::project::SourceBundle::from_sources(vec![
+        ("private_api.ncr".to_owned(), private_api.to_owned()),
+        ("consumer.ncr".to_owned(), consumer.to_owned()),
+    ]).unwrap();
+    let err = bundle.validate().unwrap_err();
+    assert!(err.message.contains("trait `Marker` is private to the unnamed module"), "{err}");
+}
+
+#[test]
 fn ambiguous_imported_traits_are_rejected() {
     let source_a = "module mod_a;\npublic trait SharedTrait { void run(); }\n";
     let source_b = "module mod_b;\npublic trait SharedTrait { void run(); }\n";

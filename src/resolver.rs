@@ -150,12 +150,19 @@ fn resolve_trait<'a>(
     span: Span,
 ) -> Result<&'a a::Trait, Diagnostic> {
     let local = trait_map.get(unit.module.as_str()).and_then(|traits| traits.get(name)).copied();
+    if let Some(tr) = local {
+        return Ok(tr);
+    }
     let root = trait_map.get("").and_then(|traits| traits.get(name)).copied();
-    if let Some(tr) = local.or(root) {
+    if let Some(tr) = root {
+        if tr.visibility == Visibility::Private && !unit.module.is_empty() {
+            return Err(private_trait_error(tr, span));
+        }
         return Ok(tr);
     }
 
     let mut matched: Option<&a::Trait> = None;
+    let mut private_match: Option<&a::Trait> = None;
     for import in &unit.imports {
         let module = if import.wildcard {
             Some(import.path.as_str())
@@ -167,6 +174,10 @@ fn resolve_trait<'a>(
             };
         let Some(module) = module else { continue; };
         let Some(tr) = trait_map.get(module).and_then(|traits| traits.get(name)).copied() else { continue; };
+        if tr.visibility == Visibility::Private {
+            private_match.get_or_insert(tr);
+            continue;
+        }
         if let Some(previous) = matched
             && previous.qualified_name != tr.qualified_name {
                 return Err(Diagnostic::new(
@@ -177,7 +188,23 @@ fn resolve_trait<'a>(
         matched = Some(tr);
     }
 
-    matched.ok_or_else(|| Diagnostic::new(span, format!("unknown trait `{name}`")))
+    if let Some(tr) = matched {
+        Ok(tr)
+    } else if let Some(tr) = private_match {
+        Err(private_trait_error(tr, span))
+    } else {
+        Err(Diagnostic::new(span, format!("unknown trait `{name}`")))
+    }
+}
+
+fn private_trait_error(tr: &a::Trait, span: Span) -> Diagnostic {
+    let module = tr.qualified_name.rsplit_once("::").map_or("", |(module, _)| module);
+    let message = if module.is_empty() {
+        format!("trait `{}` is private to the unnamed module", tr.name)
+    } else {
+        format!("trait `{}` is private to module `{module}`", tr.name)
+    };
+    Diagnostic::new(span, message).with_note(tr.span, "private declaration is here")
 }
 
 fn qualify(module: &str, name: &str) -> String {

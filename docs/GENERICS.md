@@ -71,8 +71,9 @@ void main() {}
 Operations and interface contracts are checked after substituting the concrete
 type. A declared trait bound requires a matching `impl` for that concrete type.
 The bound resolves in the template's source module, then the root module, then
-its imports. Matching uses module-qualified trait identity, so a same-named trait
-from another module cannot satisfy the bound.
+its imports. Private traits are usable only within their declaring module.
+Matching uses module-qualified trait identity, so a same-named trait from
+another module cannot satisfy the bound.
 
 ## Ownership after substitution
 
