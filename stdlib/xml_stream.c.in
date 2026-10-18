@@ -95,7 +95,6 @@ static void ncr_xml_reader_copy_attribute(xmlTextReaderPtr reader,
 static ncr_xml_event_snapshot *ncr_xml_reader_snapshot(xmlTextReaderPtr reader,
         size_t line, size_t column) {
     ncr_xml_event_snapshot *snapshot = ncr_allocate(sizeof(*snapshot), line, column);
-    memset(snapshot, 0, sizeof(*snapshot));
     int node_type = xmlTextReaderNodeType(reader);
     int depth = xmlTextReaderDepth(reader);
     int attribute_count = xmlTextReaderAttributeCount(reader);
@@ -129,7 +128,6 @@ static ncr_xml_event_snapshot *ncr_xml_reader_snapshot(xmlTextReaderPtr reader,
         return NULL;
     }
     snapshot->attributes = ncr_allocate((size_t)attribute_count * sizeof(*snapshot->attributes), line, column);
-    memset(snapshot->attributes, 0, (size_t)attribute_count * sizeof(*snapshot->attributes));
     int moved = xmlTextReaderMoveToFirstAttribute(reader);
     if (moved != 1) {
         ncr_xml_event_snapshot_free(snapshot);
@@ -472,7 +470,6 @@ static ncr_xml_writer_frame *ncr_xml_writer_frame_new(ncr_xml_writer_frame *pare
         bool default_namespace, char *element_prefix, char *element_namespace,
         size_t line, size_t column) {
     ncr_xml_writer_frame *frame = ncr_allocate(sizeof(*frame), line, column);
-    memset(frame, 0, sizeof(*frame));
     frame->parent = parent;
     frame->attributes_open = true;
     frame->default_namespace = default_namespace;
