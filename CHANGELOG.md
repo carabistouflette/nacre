@@ -5,6 +5,8 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 
 - Route standard-library marker replacement through a shared one-pass expander,
   avoiding repeated template copies while preserving ordered nested expansion.
+- Resolve method-ID placeholders from markers present in each template, avoiding
+  a full-template scan for every program function.
 
 - End local borrowed bindings and retained view loans after their last
   control-flow use. Backward liveness follows branch alternatives and loop

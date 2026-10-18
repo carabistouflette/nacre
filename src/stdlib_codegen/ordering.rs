@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use crate::c_repr::ctype;
 use crate::ir::{self as t, NativeMethod as M, Type};
-use super::support::{native_method_if, replace_method_ids, replace_placeholders, result_id, variant_id, zero};
+use super::support::{native_method_if, replace_placeholders, result_id, variant_id, zero};
 
 
 fn default_compare(class_id: usize, element: Type, element_c: &str) -> String {

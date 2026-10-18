@@ -685,26 +685,47 @@ pub(super) fn text_helpers(program: &t::Program, text: usize) -> String {
     }
     out
 }
+fn next_placeholder(source: &str, search_from: usize) -> Option<(usize, usize)> {
+    let start = search_from + source[search_from..].find('@')?;
+    let relative_end = source[start + 1..].find('@')?;
+    Some((start, start + relative_end + 2))
+}
+
 pub(super) fn replace_method_ids(
     body: String,
     program: &t::Program,
     receiver: Option<usize>,
 ) -> String {
     let mut substitutions = Vec::new();
-    for function in &program.functions {
-        if let Some(class) = receiver {
-            let is_static_factory = function.receiver.is_none()
-                && matches!(function.native, Some(M::MapWithHasher | M::SetWithHasher))
-                && function.name.strip_prefix(program.classes[class].name.as_str())
-                    == Some(".withHasher");
-            if function.receiver != Some(class) && !is_static_factory { continue; }
+    let mut search_from = 0;
+    while let Some((start, end)) = next_placeholder(&body, search_from) {
+        let placeholder = &body[start..end];
+        if substitutions.iter().any(|(existing, _)| *existing == placeholder) {
+            search_from = end;
+            continue;
         }
-        if let Some(method) = function.native {
-            let placeholder = marker(method);
-            if body.contains(placeholder)
-                && !substitutions.iter().any(|(existing, _)| *existing == placeholder) {
-                substitutions.push((placeholder, format!("ncr_fn_{}", function.id)));
+        let function = program.functions.iter().find_map(|function| {
+            let method = function.native?;
+            let receiver_matches = if let Some(class) = receiver {
+                let is_static_factory = function.receiver.is_none()
+                    && matches!(function.native, Some(M::MapWithHasher | M::SetWithHasher))
+                    && function.name.strip_prefix(program.classes[class].name.as_str())
+                        == Some(".withHasher");
+                function.receiver == Some(class) || is_static_factory
+            } else {
+                true
+            };
+            if receiver_matches && marker(method) == placeholder {
+                Some((function, method))
+            } else {
+                None
             }
+        });
+        if let Some((function, method)) = function {
+            substitutions.push((marker(method), format!("ncr_fn_{}", function.id)));
+            search_from = end;
+        } else {
+            search_from = start + 1;
         }
     }
     replace_placeholders(body, &substitutions)
@@ -732,10 +753,7 @@ pub(super) fn replace_placeholders(
     let mut output = None;
     let mut copied_until = 0;
     let mut search_from = 0;
-    while let Some(relative_start) = body[search_from..].find('@') {
-        let start = search_from + relative_start;
-        let Some(relative_end) = body[start + 1..].find('@') else { break };
-        let end = start + relative_end + 2;
+    while let Some((start, end)) = next_placeholder(&body, search_from) {
         let marker = &body[start..end];
         let replacement = substitutions.iter()
             .find(|(placeholder, _)| placeholder.as_ref() == marker)
@@ -761,7 +779,43 @@ pub(super) fn replace_placeholders(
 
 #[cfg(test)]
 mod tests {
-    use super::replace_placeholders;
+    use super::{replace_method_ids, replace_placeholders};
+
+    fn function(
+        id: usize,
+        name: &str,
+        receiver: Option<usize>,
+        native: super::M,
+    ) -> super::t::Function {
+        super::t::Function {
+            native: Some(native),
+            virtual_slot: None,
+            id,
+            name: name.to_owned(),
+            receiver,
+            readonly: false,
+            return_type: super::Type::Unit,
+            locals: Vec::new(),
+            params: Vec::new(),
+            body: Vec::new(),
+        }
+    }
+
+    fn class(id: usize, name: &str) -> super::t::Class {
+        super::t::Class {
+            native: None,
+            id,
+            name: name.to_owned(),
+            fields: Vec::new(),
+            variants: None,
+            result: None,
+            has_borrow: false,
+            is_interface: false,
+            interface_methods: Vec::new(),
+            implementations: Vec::new(),
+            borrowed_from: Vec::new(),
+        }
+    }
 
     #[test]
     fn replacement_values_expand_in_substitution_order() {
@@ -794,6 +848,38 @@ mod tests {
             &[("@ID@", "7".to_owned())],
         );
         assert_eq!(result, "π=7 / 7 / @UNKNOWN@");
+    }
+
+    #[test]
+    fn adjacent_placeholders_are_independent() {
+        let result = replace_placeholders(
+            "@LEFT@@RIGHT@".to_owned(),
+            &[("@LEFT@", "L".to_owned()), ("@RIGHT@", "R".to_owned())],
+        );
+        assert_eq!(result, "LR");
+    }
+
+    #[test]
+    fn method_ids_keep_first_match_and_respect_static_factory_receiver() {
+        let program = super::t::Program {
+            classes: vec![class(0, "Map"), class(1, "Other")],
+            functions: vec![
+                function(10, "Map.withHasher", Some(1), super::M::MapWithHasher),
+                function(20, "Map.withHasher", None, super::M::MapWithHasher),
+                function(30, "Map.withHasher", None, super::M::MapWithHasher),
+                function(40, "Other.withHasher", None, super::M::MapWithHasher),
+            ],
+            main: 0,
+        };
+        let marker = super::marker(super::M::MapWithHasher);
+        assert_eq!(
+            replace_method_ids(marker.to_owned(), &program, None),
+            "ncr_fn_10",
+        );
+        assert_eq!(
+            replace_method_ids(marker.to_owned(), &program, Some(0)),
+            "ncr_fn_20",
+        );
     }
 
     #[test]
