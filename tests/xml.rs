@@ -220,6 +220,75 @@ void main() {
 }
 
 #[test]
+fn text_xml_parsers_keep_utf8_despite_legacy_encoding_declarations() {
+    let output = execute(r#"
+Result<Unit, Text> exercise() {
+    Text source = new Text("<?xml version='1.0' encoding='ISO-8859-1'?><root>café 🦀</root>");
+    XmlDocument document = XmlDocument.parse(source)?;
+    Text path = new Text("/root/text()");
+    List<Text> values = document.queryText(path)?;
+    borrow Text documentValue = values.getRef(0);
+    println(documentValue.equalsString("café 🦀"));
+
+    XmlReader reader = XmlReader.fromText(source)?;
+    boolean readerValueMatches = false;
+    while (true) {
+        match (reader.read()?) {
+            Some(event) {
+                if (event.nodeType() == 3) {
+                    Text value = event.value();
+                    readerValueMatches = value.equalsString("café 🦀");
+                }
+                drop(event);
+            }
+            None { break; }
+        }
+    }
+    println(readerValueMatches);
+    ByteBuffer legacyBytes = ByteBuffer.withCapacity(0L)?;
+    Text legacyPrefix = new Text("<?xml version='1.0' encoding='ISO-8859-1'?><root>caf");
+    int index = 0;
+    while (index < legacyPrefix.byteLength()) {
+        legacyBytes.append((byte)legacyPrefix.byteAt(index));
+        index = index + 1;
+    }
+    legacyBytes.append((byte)233);
+    Text legacySuffix = new Text("</root>");
+    index = 0;
+    while (index < legacySuffix.byteLength()) {
+        legacyBytes.append((byte)legacySuffix.byteAt(index));
+        index = index + 1;
+    }
+    XmlReader bufferReader = XmlReader.fromBuffer(legacyBytes)?;
+    boolean bufferValueMatches = false;
+    while (true) {
+        match (bufferReader.read()?) {
+            Some(event) {
+                if (event.nodeType() == 3) {
+                    Text value = event.value();
+                    bufferValueMatches = value.equalsString("café");
+                }
+                drop(event);
+            }
+            None { break; }
+        }
+    }
+    println(bufferValueMatches);
+    return new Result<Unit, Text>.Ok(());
+}
+void main() {
+    match (exercise()) {
+        Ok(unit) {}
+        Err(error) { error.print(); }
+    }
+}
+"#);
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert_eq!(output.stdout, b"true\ntrue\ntrue\n");
+    assert_memory_balanced(&output);
+}
+
+#[test]
 fn escape_only_and_text_query_after_integer_list_specialization() {
     let escape_only = execute(r#"
 void main() {

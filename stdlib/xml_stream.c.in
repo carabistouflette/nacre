@@ -218,7 +218,7 @@ static void ncr_xml_reader_error(void *data, xmlErrorPtr error) {
 }
 
 static xmlTextReaderPtr ncr_xml_reader_create(const unsigned char *bytes, size_t length,
-        unsigned char **owned_input, const char **failure) {
+        const char *encoding, unsigned char **owned_input, const char **failure) {
     *owned_input = NULL;
     if (length > (size_t)INT_MAX || (length > 0 && bytes == NULL)) {
         *failure = "XML input exceeds libxml2 limits or is unavailable";
@@ -228,7 +228,7 @@ static xmlTextReaderPtr ncr_xml_reader_create(const unsigned char *bytes, size_t
     unsigned char *copy = ncr_allocate(allocation, 0, 0);
     if (length > 0) { memcpy(copy, bytes, length); }
     xmlTextReaderPtr reader = xmlReaderForMemory((const char *)copy, (int)length,
-        NULL, NULL, XML_PARSE_NONET);
+        NULL, encoding, XML_PARSE_NONET);
     if (reader == NULL) {
         ncr_deallocate(copy);
         *failure = "libxml2 could not create an XML pull reader";
@@ -257,7 +257,7 @@ static ncr_obj_@CONSTRUCT_RESULT@ @XML_READER_FROM_TEXT@(ncr_obj_@TEXT_ID@ *ncr_
     unsigned char *owned_input = NULL;
     const char *failure = NULL;
     xmlTextReaderPtr native_reader = ncr_xml_reader_create(ncr_v_@FROM_TEXT_XML_ID@->bytes,
-        (size_t)ncr_v_@FROM_TEXT_XML_ID@->length, &owned_input, &failure);
+        (size_t)ncr_v_@FROM_TEXT_XML_ID@->length, "UTF-8", &owned_input, &failure);
     if (native_reader == NULL) {
         return @CONSTRUCT_ERROR@(failure, strlen(failure), ncr_line, ncr_column);
     }
@@ -279,7 +279,7 @@ static ncr_obj_@CONSTRUCT_RESULT@ @XML_READER_FROM_BUFFER@(ncr_obj_@BUFFER_ID@ *
     unsigned char *owned_input = NULL;
     const char *failure = NULL;
     xmlTextReaderPtr native_reader = ncr_xml_reader_create(ncr_v_@FROM_BUFFER_BYTES_ID@->bytes,
-        ncr_v_@FROM_BUFFER_BYTES_ID@->length, &owned_input, &failure);
+        ncr_v_@FROM_BUFFER_BYTES_ID@->length, NULL, &owned_input, &failure);
     if (native_reader == NULL) {
         return @CONSTRUCT_ERROR@(failure, strlen(failure), ncr_line, ncr_column);
     }

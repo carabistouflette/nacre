@@ -3,6 +3,9 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Interpret XML supplied as `Text` as UTF-8 instead of reinterpreting its bytes
+  using the XML declaration; `XmlReader.fromBuffer` retains byte encoding detection.
+
 - Keep Linux directory watchers usable after reporting an entry with a non-UTF-8
   name, while preserving an error for that consumed event.
 

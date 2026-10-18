@@ -120,7 +120,7 @@ static xmlDocPtr ncr_xml_parse_memory(const unsigned char *bytes, size_t length)
     }
     parser->sax->resolveEntity = ncr_xml_deny_external;
     xmlDocPtr document = xmlCtxtReadMemory(parser, (const char *)bytes, (int)length,
-        NULL, NULL, XML_PARSE_NONET | XML_PARSE_NOERROR | XML_PARSE_NOWARNING);
+        NULL, "UTF-8", XML_PARSE_NONET | XML_PARSE_NOERROR | XML_PARSE_NOWARNING);
     bool well_formed = ncr_xml_parser_well_formed(parser);
     bool namespaces_well_formed = ncr_xml_parser_namespaces_well_formed(parser);
     xmlFreeParserCtxt(parser);

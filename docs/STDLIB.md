@@ -739,6 +739,10 @@ Result<Option<XmlEvent>, Text> read()
 Result<Unit, Text> close()
 ```
 
+`XmlDocument.parse` and `XmlReader.fromText` interpret `Text` inputs as UTF-8,
+regardless of an XML declaration's encoding label. `XmlReader.fromBuffer` accepts
+encoded XML bytes and retains libxml2's declaration/BOM-based encoding detection.
+
 `XmlEvent` owns a snapshot returned by `XmlReader.read`:
 
 ```java
