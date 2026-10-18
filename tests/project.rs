@@ -106,6 +106,47 @@ fn source_map_preserves_runtime_location() {
     assert_eq!(result.status.code(),Some(70));
     assert!(String::from_utf8_lossy(&result.stderr).contains("[Data.ncr:2:"));
 }
+
+#[cfg(unix)]
+#[test]
+fn project_diagnostics_preserve_non_utf8_path_identity() {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+
+    let temp = Temp::new();
+    let path = temp.0.join(OsString::from_vec(b"Bad-\xff.ncr".to_vec()));
+    fs::write(&path, "void main(){int value=true;}").unwrap();
+    let bundle = SourceBundle::from_paths(std::slice::from_ref(&path)).unwrap();
+    let diagnostic = bundle.validate().unwrap_err();
+    let rendered = bundle.render(&diagnostic);
+
+    assert!(rendered.contains(&format!("{path:?}")), "{rendered:?}");
+    assert!(!rendered.contains('�'), "{rendered:?}");
+}
+
+#[cfg(unix)]
+#[test]
+fn runtime_source_map_preserves_non_utf8_path_identity() {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+
+    let temp = Temp::new();
+    let data = temp.0.join(OsString::from_vec(b"Data-\xff.ncr".to_vec()));
+    fs::write(
+        &data,
+        "int fail(){\nList<int> xs=new List<int>();return xs.get(0);\n}",
+    )
+    .unwrap();
+    temp.file("Main.ncr", "void main(){println(fail());}");
+    let bundle = SourceBundle::from_paths(std::slice::from_ref(&temp.0)).unwrap();
+    let result = run(&bundle);
+    let stderr = String::from_utf8_lossy(&result.stderr);
+
+    assert_eq!(result.status.code(), Some(70));
+    assert!(stderr.contains(&format!("{data:?}")), "{stderr}");
+    assert!(!stderr.contains('�'), "{stderr}");
+}
+
 #[test]
 fn single_file_keeps_the_original_runtime_format() {
     let b=bundle(&[("Main.ncr","void main(){println(1/0);}")]);

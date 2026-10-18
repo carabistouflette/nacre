@@ -2,6 +2,9 @@
 
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
+- Render non-UTF-8 paths unambiguously in project diagnostics, path errors, and
+  runtime source maps.
+
 - End formatter foreach-header state at its matching parenthesis and space its
   colon, preserving normal loop-body and following-statement layout.
 
