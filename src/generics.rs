@@ -592,13 +592,14 @@ impl Expander {
 }
 
 fn builtin_template(expander: &Expander, name: &str, arity: usize) -> Option<String> {
-    let mut candidates: Vec<_> = expander.definitions.iter().filter_map(|(qualified, class)| {
+    expander.definitions.iter().filter_map(|(qualified, class)| {
         let base = qualified.rsplit("::").next().unwrap_or(qualified);
-        (class.is_builtin && class.type_params.len() == arity && base == name)
-            .then_some(qualified.clone())
-    }).collect();
-    candidates.sort();
-    candidates.into_iter().next()
+        if class.is_builtin && class.type_params.len() == arity && base == name {
+            Some(qualified.as_str())
+        } else {
+            None
+        }
+    }).min().map(str::to_owned)
 }
 
 fn concrete_class_by_name<'a>(name: &str, classes: &'a [a::Class]) -> Option<&'a a::Class> {
@@ -967,4 +968,54 @@ fn discover_iterator_specializations(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn builtin_class(qualified_name: &str, arity: usize, is_builtin: bool) -> a::Class {
+        a::Class {
+            native: None,
+            is_builtin,
+            is_builtin_result: false,
+            name: qualified_name.rsplit("::").next().unwrap_or(qualified_name).to_owned(),
+            span: Span::default(),
+            fields: Vec::new(),
+            type_params: (0..arity).map(|index| format!("T{index}")).collect(),
+            type_bounds: vec![None; arity],
+            implements: Vec::new(),
+            is_interface: false,
+            variants: None,
+            methods: Vec::new(),
+            constructor: None,
+            qualified_name: qualified_name.to_owned(),
+            unit: 0,
+            visibility: a::Visibility::Public,
+        }
+    }
+
+    fn test_expander(classes: impl IntoIterator<Item = a::Class>) -> Expander {
+        let definitions = classes.into_iter()
+            .map(|class| (class.qualified_name.clone(), class)).collect();
+        Expander {
+            definitions,
+            requested: HashSet::new(),
+            user_specializations: 0,
+            pending: VecDeque::new(),
+            names: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn builtin_template_selects_lexically_first_eligible_class() {
+        let expander = test_expander([
+            builtin_class("z::Pair", 2, true),
+            builtin_class("a::Pair", 2, true),
+            builtin_class("0::Pair", 2, false),
+            builtin_class("00::Pair", 1, true),
+        ]);
+        assert_eq!(builtin_template(&expander, "Pair", 2).as_deref(), Some("a::Pair"));
+        assert_eq!(builtin_template(&expander, "Pair", 3), None);
+    }
 }

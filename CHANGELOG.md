@@ -3,6 +3,8 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Select builtin generic templates by borrowed minimum qualified name, avoiding
+  per-definition string clones and candidate sorting.
 - Avoid the discarded second token clone when parsing identifiers; advance the
   cursor directly after extracting the retained name.
 - Avoid temporary ownership-state copies on identity control-flow nodes; only
