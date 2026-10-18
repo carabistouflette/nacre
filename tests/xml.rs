@@ -867,6 +867,34 @@ void nacre_invalid_probe_init(void) {
 }
 
 #[test]
+fn xslt_element_available_uses_no_namespace_for_unprefixed_qnames() {
+    let source = r#"
+Result<Unit, Text> exercise() {
+    Text input = new Text("<root/>");
+    XmlDocument document = XmlDocument.parse(input)?;
+    Text styleSource = new Text("<xsl:stylesheet xmlns:xsl='http://www.w3.org/1999/XSL/Transform' xmlns='http://www.w3.org/1999/XSL/Transform' version='1.0'><xsl:template match='/'><xsl:element name='out' namespace=''><xsl:value-of select=\"element-available('value-of')\"/></xsl:element></xsl:template></xsl:stylesheet>");
+    XsltStylesheet style = XsltStylesheet.compile(styleSource)?;
+    XmlDocument result = style.transform(document)?;
+    Text path = new Text("/out/text()");
+    List<Text> values = result.queryText(path)?;
+    borrow Text value = values.getRef(0);
+    value.print();
+    return new Result<Unit, Text>.Ok(());
+}
+void main() {
+    match (exercise()) {
+        Ok(_) {}
+        Err(error) { error.print(); }
+    }
+}
+"#;
+    let output = execute(source);
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert_eq!(output.stdout, b"false\n");
+    assert_memory_balanced(&output);
+}
+
+#[test]
 fn xslt_serialized_results_preserve_output_method_encoding_and_owned_lifetimes() {
     let source = r#"
 Result<ByteBuffer, Text> render(borrow XmlDocument document, String method, String encoding, String body) {

@@ -200,9 +200,7 @@ static void ncr_xslt_element_available(xmlXPathParserContextPtr context, int arg
         xmlChar *colon = (xmlChar *)xmlStrchr(qualified, ':');
         const xmlChar *local = colon == NULL ? qualified : colon + 1;
         xmlNsPtr binding = NULL;
-        if (colon == NULL) {
-            binding = xmlSearchNs(transform->inst->doc, transform->inst, NULL);
-        } else {
+        if (colon != NULL) {
             // The popped XPath argument owns this string; restore its QName immediately.
             *colon = 0;
             binding = xmlSearchNs(transform->inst->doc, transform->inst, qualified);

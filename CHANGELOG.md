@@ -29,6 +29,8 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 
 - Reject non-ASCII LSP header bytes before parsing Content-Length.
 - Publish a source diagnostic when an open LSP document exceeds the source limit.
+- Resolve unprefixed XSLT `element-available()` QNames in no namespace, regardless
+  of the stylesheet's default namespace.
 
 - Correct ignored LLVM test commands to use the actual Cargo target name.
 
