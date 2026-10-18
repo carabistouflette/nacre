@@ -273,6 +273,8 @@ static bool ncr_tls_configure_client_host(SSL *ssl, ncr_obj_@TEXT_ID@ *host, boo
             return false;
         }
     }
+    SSL_set_hostflags(ssl,
+        X509_CHECK_FLAG_NEVER_CHECK_SUBJECT | X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
     int configured;
     if (is_ip) {
         char *zone = strchr(name, '%');

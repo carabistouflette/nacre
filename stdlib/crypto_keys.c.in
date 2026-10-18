@@ -569,6 +569,8 @@ static @MAC_FINISH_RESULT@ @CRYPTO_MAC_FINISH@(@MAC_TYPE@ ncr_self, size_t line,
 /* CRYPTOKEYS_GROUP_END MAC */
 
 /* CRYPTOKEYS_GROUP CERTIFICATE */
+#define NCR_CRYPTO_CERTIFICATE_HOST_FLAGS \
+    (X509_CHECK_FLAG_NEVER_CHECK_SUBJECT | X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS)
 
 /* Returns raw IPv4/IPv6 bytes; an optional IPv6 zone is not part of identity. */
 static size_t ncr_cryptokeys_ip_address(const unsigned char *host, size_t length,
@@ -805,7 +807,7 @@ static @CERTIFICATE_HOST_RESULT@ @CERTIFICATE_MATCHES_HOST@(@CERTIFICATE_TYPE@ n
         ? X509_check_host((X509 *)ncr_self->certificate,
             (const char *)ncr_v_@CERTIFICATE_MATCHES_HOST_ID@->bytes,
             (size_t)ncr_v_@CERTIFICATE_MATCHES_HOST_ID@->length,
-            X509_CHECK_FLAG_NEVER_CHECK_SUBJECT, NULL)
+            NCR_CRYPTO_CERTIFICATE_HOST_FLAGS, NULL)
         : X509_check_ip((X509 *)ncr_self->certificate, address, address_length, 0);
     if (matched == 1) { return (@CERTIFICATE_HOST_RESULT@){ .tag = @CERTIFICATE_HOST_OK_TAG@, .data.v@CERTIFICATE_HOST_OK_TAG@.f0 = true }; }
     if (matched == 0) { return (@CERTIFICATE_HOST_RESULT@){ .tag = @CERTIFICATE_HOST_OK_TAG@, .data.v@CERTIFICATE_HOST_OK_TAG@.f0 = false }; }
@@ -855,7 +857,7 @@ static @CERTIFICATE_VERIFY_RESULT@ @CERTIFICATE_VERIFY@(@CERTIFICATE_TYPE@ ncr_s
             (size_t)ncr_v_@CERTIFICATE_VERIFY_HOST_ID@->length) == 1
         : X509_VERIFY_PARAM_set1_ip(parameters, address, address_length) == 1);
     if (parameters_set) {
-        X509_VERIFY_PARAM_set_hostflags(parameters, X509_CHECK_FLAG_NEVER_CHECK_SUBJECT);
+        X509_VERIFY_PARAM_set_hostflags(parameters, NCR_CRYPTO_CERTIFICATE_HOST_FLAGS);
         parameters_set = X509_VERIFY_PARAM_set_purpose(parameters, X509_PURPOSE_SSL_SERVER) == 1;
         X509_VERIFY_PARAM_set_time(parameters, verify_time);
     }
@@ -865,4 +867,5 @@ static @CERTIFICATE_VERIFY_RESULT@ @CERTIFICATE_VERIFY@(@CERTIFICATE_TYPE@ ncr_s
     if (verified != 1) { return ncr_result_error_@CERTIFICATE_VERIFY_ERROR_RESULT@(failure, sizeof("certificate verification failed") - 1, line, column); }
     return (@CERTIFICATE_VERIFY_RESULT@){ .tag = @CERTIFICATE_VERIFY_OK_TAG@, .data.v@CERTIFICATE_VERIFY_OK_TAG@.f0 = 0 };
 }
+#undef NCR_CRYPTO_CERTIFICATE_HOST_FLAGS
 /* CRYPTOKEYS_GROUP_END CERTIFICATE */

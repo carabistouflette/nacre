@@ -3,6 +3,10 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Reject partial DNS wildcards in `Certificate` hostname checks; `TlsStream.connect`
+  now requires SAN-based identities, disables Common Name fallback, and accepts
+  wildcards only as a complete leftmost label.
+
 - Interpret XML supplied as `Text` as UTF-8 instead of reinterpreting its bytes
   using the XML declaration; `XmlReader.fromBuffer` retains byte encoding detection.
 

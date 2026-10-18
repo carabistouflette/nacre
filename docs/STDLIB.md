@@ -610,11 +610,12 @@ stored chain member in preserved order. Both serialize the owned X.509 certifica
 as canonical PEM rather than retaining input whitespace, preserving the certificate
 content, public keys, signatures, subjects, serials, and validity values for
 round-trip parsing and verification. `matchesHost` and `verify` match DNS names
-against `dNSName` subject alternative names and IPv4/IPv6 literals against
+against `dNSName` subject alternative names with wildcards limited to a complete
+leftmost label; partial wildcards are rejected. IPv4/IPv6 literals match only
 `iPAddress` subject alternative names; IPv6 zone identifiers do not affect
-certificate identity. Neither falls back to the common name. `verify` checks the
-supplied CA file trust store, stored chain, server purpose, and explicit Unix
-time; it does not fetch certificates or use the network.
+certificate identity. Neither method falls back to the common name. `verify`
+checks the supplied CA file trust store, stored chain, server purpose, and
+explicit Unix time; it does not fetch certificates or use the network.
 
 ## `Database` and `SqlStatement`
 
@@ -2590,13 +2591,15 @@ Result<Unit, Text> TlsStream.close()
 ```
 
 Client configurations use system trust or an explicit CA file and verify the peer.
-`connect` uses `host` for SNI and certificate hostname/IP verification; it is
-independent of the numeric `SocketAddress`. Configurations that take a certificate
-and private key own those identities. `serverWithClientAuth` also requires and
-verifies client certificates. A stream consumes one `Mutex<TlsConfig>` handle; callers
-need to use a configuration for more than one stream must explicitly clone the
-handle with the mutex API. The TLS context and its owned identity remain alive
-until all such handles have been dropped.
+`connect` uses `host` for SNI and certificate identity verification, independent of
+the numeric `SocketAddress`. DNS hosts must match `dNSName` subject alternative
+names; wildcards are restricted to a complete leftmost label, and Common Name
+fallback is disabled. IP hosts must match `iPAddress` subject alternative names.
+Configurations that take a certificate and private key own those identities.
+`serverWithClientAuth` also requires and verifies client certificates. A stream
+consumes one `Mutex<TlsConfig>` handle; callers who need to use a configuration
+for more than one stream must explicitly clone the handle with the mutex API. The
+TLS context and its owned identity remain alive until all such handles have been dropped.
 
 TLS connect, accept, handshake, read, and write timeouts use the same monotonic
 deadline convention as TCP: zero is unbounded, positive values are milliseconds,

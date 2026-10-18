@@ -676,3 +676,145 @@ void main() {
     assert!(wss_output.contains("true\n"), "{wss_output}");
     server.join().unwrap();
 }
+
+#[test]
+fn tls_hostname_checks_reject_partial_wildcards_and_common_name_fallback() {
+    let client_source = r#"
+void connectToHost(int port, borrow Text host, Text caText) {
+    Text addressHost = new Text("127.0.0.1");
+    match (SocketAddress.resolve(addressHost, port, false)) {
+        Err(error) { println("resolve-error"); }
+        Ok(addresses) {
+            match (Path.fromText(caText)) {
+                Err(error) { println("path-error"); }
+                Ok(caFile) {
+                    match (TlsConfig.clientWithCa(caFile)) {
+                        Err(error) { println("config-error"); }
+                        Ok(config) {
+                            match (Mutex<TlsConfig>.create(config)) {
+                                Err(error) { println("mutex-error"); }
+                                Ok(configHandle) {
+                                    match (TlsStream.connect(addresses.getRef(0), configHandle, host, 5000L)) {
+                                        Err(error) { println("hostname-rejected"); }
+                                        Ok(stream) { println("UNEXPECTED_SUCCESS"); drop(stream); }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+void main() {
+    match (Args.get(0)) {
+        Err(error) { println("argument-error"); }
+        Ok(portText) {
+            match (portText.parseInt()) {
+                Err(error) { println("parse-error"); }
+                Ok(port) {
+                    match (Args.get(1)) {
+                        Err(error) { println("host-error"); }
+                        Ok(host) {
+                            match (Args.get(2)) {
+                                Err(error) { println("ca-error"); }
+                                Ok(caText) { connectToHost(port, host, caText); }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+"#;
+    let client = compile(client_source);
+    let cases = [
+        (
+            include_str!("fixtures/tls_partial_wildcard_cert.pem"),
+            "www.example.test",
+            concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/tests/fixtures/tls_partial_wildcard_cert.pem"
+            ),
+        ),
+        (
+            include_str!("fixtures/tls_cn_only_cert.pem"),
+            "legacy.example.test",
+            concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/tests/fixtures/tls_cn_only_cert.pem"
+            ),
+        ),
+    ];
+    for (certificate, host, ca_path) in cases {
+        let server_source = format!(
+            r#"
+void main() {{
+    Text certificateText = new Text({});
+    match (Certificate.parsePem(certificateText)) {{
+        Err(error) {{ println("certificate-error"); }}
+        Ok(certificate) {{
+            Text keyText = new Text({});
+            match (CryptoKey.parsePrivatePem(keyText)) {{
+                Err(error) {{ println("key-error"); }}
+                Ok(key) {{
+                    match (TlsConfig.server(certificate, key)) {{
+                        Err(error) {{ println("config-error"); }}
+                        Ok(config) {{
+                            match (Mutex<TlsConfig>.create(config)) {{
+                                Err(error) {{ println("mutex-error"); }}
+                                Ok(configHandle) {{
+                                    Text bindHost = new Text("127.0.0.1");
+                                    match (SocketAddress.resolve(bindHost, 0, false)) {{
+                                        Err(error) {{ println("resolve-error"); }}
+                                        Ok(addresses) {{
+                                            match (TcpListener.bind(addresses.getRef(0), 4)) {{
+                                                Err(error) {{ println("bind-error"); }}
+                                                Ok(listener) {{
+                                                    match (listener.localAddress()) {{
+                                                        Err(error) {{ println("local-address-error"); }}
+                                                        Ok(endpoint) {{
+                                                            Text endpointText = endpoint.toText();
+                                                            Console.printText(endpointText);
+                                                            Console.print("\n");
+                                                            match (TlsStream.accept(listener, configHandle, 5000L)) {{
+                                                                Err(error) {{ println("server-handshake-rejected"); }}
+                                                                Ok(stream) {{ println("UNEXPECTED_SERVER_ACCEPT"); drop(stream); }}
+                                                            }}
+                                                        }}
+                                                    }}
+                                                }}
+                                            }}
+                                        }}
+                                    }}
+                                }}
+                            }}
+                        }}
+                    }}
+                }}
+            }}
+        }}
+    }}
+}}
+"#,
+            nacre_literal(certificate),
+            nacre_literal(KEY),
+        );
+        let server = compile(&server_source);
+        let mut server_process = Running::start(&server, &[]);
+        let endpoint = server_process.next_line();
+        assert!(endpoint.starts_with("127.0.0.1:"), "{endpoint}");
+        let port = endpoint.rsplit(':').next().unwrap();
+        let output = run(&client, &[port, host, ca_path]);
+        assert_eq!(
+            output, "hostname-rejected\n",
+            "port={port:?}; output={output:?}"
+        );
+        let (status, stdout, stderr) = server_process.finish_for(Duration::from_secs(15));
+        assert!(status.success(), "TLS test server failed:\n{stderr}");
+        assert_live_zero(&stderr);
+        assert!(stdout.contains("server-handshake-rejected\n"), "{stdout}");
+    }
+}

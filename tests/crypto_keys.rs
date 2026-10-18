@@ -844,3 +844,36 @@ void main() {{
         b"true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n",
     );
 }
+#[test]
+fn certificates_reject_partial_wildcards_and_only_match_one_wildcard_label() {
+    const CERTIFICATE: &str = include_str!("fixtures/tls_partial_wildcard_cert.pem");
+    let ca_path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/tls_partial_wildcard_cert.pem"
+    );
+    let source = format!(
+        r#"{HELPERS}
+void main() {{
+    match (parseCertificate({})) {{
+        Err(error) {{ println(false); println(false); println(false); println(false); println(false); println(false); }}
+        Ok(certificate) {{
+            println(booleanResultIs(certificateMatchesHost(certificate, "www.example.test"), false));
+            println(booleanResultIs(certificateMatchesHost(certificate, "api.full.example.test"), true));
+            println(booleanResultIs(certificateMatchesHost(certificate, "a.api.full.example.test"), false));
+            match (Path.fromText(new Text({}))) {{
+                Err(error) {{ println(false); println(false); println(false); }}
+                Ok(caFile) {{
+                    println(unitError(verifyCertificate(certificate, "www.example.test", caFile, 1800000000L)));
+                    println(unitOk(verifyCertificate(certificate, "api.full.example.test", caFile, 1800000000L)));
+                    println(unitError(verifyCertificate(certificate, "a.api.full.example.test", caFile, 1800000000L)));
+                }}
+            }}
+        }}
+    }}
+}}
+"#,
+        nacre_literal(CERTIFICATE),
+        nacre_literal(ca_path),
+    );
+    assert_native(&source, b"true\ntrue\ntrue\ntrue\ntrue\ntrue\n");
+}
