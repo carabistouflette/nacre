@@ -3,6 +3,8 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Stream native and virtual pointer-slot runtime adapters directly into their
+  output, avoiding per-parameter vectors and joined call strings.
 - Stream direct LLVM C-ABI function prototypes without temporary parameter
   vectors or joined strings.
 - Stream direct interface dispatchers into generated C without temporary

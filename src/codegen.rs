@@ -426,6 +426,12 @@ pub(crate) fn direct_map_slot_symbol(
     format!("ncr_llvm_map_slot_{class}_{kind}_{}_{}", direct_type_code(value_type), direct_type_code(index_type))
 }
 
+fn write_direct_argument_slots(out: &mut String, count: usize) {
+    for index in 0..count {
+        write!(out, ", void *ncr_arg_{index}").unwrap();
+    }
+}
+
 fn direct_runtime_helpers(
     program: &t::Program,
     native_calls: &[usize],
@@ -540,48 +546,51 @@ fn direct_runtime_helpers(
 
     for function_id in native_calls {
         let function = &program.functions[*function_id];
-        let mut params = vec!["void *ncr_result".to_owned(), "void *ncr_receiver".to_owned()];
-        params.extend(function.params.iter().enumerate().map(|(i, _)| format!("void *ncr_arg_{i}")));
-        params.extend(["uint64_t ncr_line".to_owned(), "uint64_t ncr_column".to_owned()]);
-        let mut args = Vec::new();
-        if let Some(class) = function.receiver {
-            args.push(if program.classes[class].is_interface || program.classes[class].variants.is_some() {
-                format!("*(ncr_obj_{class} *)ncr_receiver")
-            } else {
-                format!("({} )ncr_receiver", ctype(program, Type::Object(class)))
-            });
-        }
-        args.extend(function.params.iter().enumerate().map(|(i, (_, ty))|
-            format!("*({} *)ncr_arg_{i}", ctype(program, *ty))));
-        args.extend(["(size_t)ncr_line".to_owned(), "(size_t)ncr_column".to_owned()]);
-        let call = format!("ncr_fn_{}({})", function.id, args.join(", "));
         // These are ABI adapters, not independent algorithm entry points.
         // Keep caller constants visible across the erased-pointer boundary.
+        write!(out, "__attribute__((always_inline)) void ncr_llvm_native_{}(void *ncr_result, void *ncr_receiver", function.id).unwrap();
+        write_direct_argument_slots(&mut out, function.params.len());
+        out.push_str(", uint64_t ncr_line, uint64_t ncr_column) {\n    ");
         if function.return_type == Type::Void {
-            writeln!(out, "__attribute__((always_inline)) void ncr_llvm_native_{}({}) {{ (void)ncr_result; {}; }}",
-                function.id, params.join(", "), call).unwrap();
+            out.push_str("(void)ncr_result; ");
         } else {
-            writeln!(out, "__attribute__((always_inline)) void ncr_llvm_native_{}({}) {{ *({} *)ncr_result = {}; }}",
-                function.id, params.join(", "), ctype(program, function.return_type), call).unwrap();
+            write!(out, "*({} *)ncr_result = ", ctype(program, function.return_type)).unwrap();
         }
+        write!(out, "ncr_fn_{}(", function.id).unwrap();
+        let mut has_args = false;
+        if let Some(class) = function.receiver {
+            if program.classes[class].is_interface || program.classes[class].variants.is_some() {
+                write!(out, "*(ncr_obj_{class} *)ncr_receiver").unwrap();
+            } else {
+                write!(out, "({} )ncr_receiver", ctype(program, Type::Object(class))).unwrap();
+            }
+            has_args = true;
+        }
+        for (index, (_, ty)) in function.params.iter().enumerate() {
+            if has_args { out.push_str(", "); }
+            write!(out, "*({} *)ncr_arg_{index}", ctype(program, *ty)).unwrap();
+            has_args = true;
+        }
+        if has_args { out.push_str(", "); }
+        out.push_str("(size_t)ncr_line, (size_t)ncr_column);\n}\n");
     }
 
     for function_id in virtual_calls {
         let function = &program.functions[*function_id];
         let receiver_class = function.receiver.expect("interface method receiver");
-        let mut params = vec!["void *ncr_result".to_owned(), "void *ncr_receiver".to_owned()];
-        params.extend(function.params.iter().enumerate().map(|(i, _)| format!("void *ncr_arg_{i}")));
-        let mut args = vec![format!("*(ncr_obj_{receiver_class} *)ncr_receiver")];
-        args.extend(function.params.iter().enumerate().map(|(i, (_, ty))|
-            format!("*({} *)ncr_arg_{i}", ctype(program, *ty))));
-        let call = format!("ncr_fn_{}({})", function.id, args.join(", "));
+        write!(out, "void ncr_llvm_call_{}(void *ncr_result, void *ncr_receiver", function.id).unwrap();
+        write_direct_argument_slots(&mut out, function.params.len());
+        out.push_str(") {\n    ");
         if function.return_type == Type::Void {
-            writeln!(out, "void ncr_llvm_call_{}({}) {{ (void)ncr_result; {}; }}",
-                function.id, params.join(", "), call).unwrap();
+            out.push_str("(void)ncr_result; ");
         } else {
-            writeln!(out, "void ncr_llvm_call_{}({}) {{ *({} *)ncr_result = {}; }}",
-                function.id, params.join(", "), ctype(program, function.return_type), call).unwrap();
+            write!(out, "*({} *)ncr_result = ", ctype(program, function.return_type)).unwrap();
         }
+        write!(out, "ncr_fn_{}(*(ncr_obj_{receiver_class} *)ncr_receiver", function.id).unwrap();
+        for (index, (_, ty)) in function.params.iter().enumerate() {
+            write!(out, ", *({} *)ncr_arg_{index}", ctype(program, *ty)).unwrap();
+        }
+        out.push_str(");\n}\n");
     }
 
     for (concrete, class) in program.classes.iter().enumerate() {
