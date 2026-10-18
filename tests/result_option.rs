@@ -121,7 +121,7 @@ fn consuming_match_rejects_reuse_and_conflicting_borrows() {
     let use_after_match = "enum E { None; Some(int); } void main() { E value = new E.None(); match (value) { None {} Some(x) {} } match (value) { None {} Some(x) {} } }";
     assert!(validate(use_after_match).is_err());
 
-    let active_borrow = "enum E { None; } void main() { E value = new E.None(); { borrow E view = value; match (value) { None {} } } }";
+    let active_borrow = "enum E { None; } void inspect(borrow E view) { match (view) { None {} } } void main() { E value = new E.None(); { borrow E view = value; match (value) { None {} } inspect(view); } }";
     assert!(validate(active_borrow).is_err());
 }
 

@@ -554,7 +554,7 @@ impl Expander {
     fn expression(&mut self, expr: &mut a::Expr, env: &Environment) -> Result<(), Diagnostic> {
         use a::ExprKind as E;
         match &mut expr.kind {
-            E::StaticCall { class, type_args, name, args } => {
+            E::StaticCall { class, type_args, name, name_span, args } => {
                 let ty = Type::Applied { name: class.clone(), args: std::mem::take(type_args) };
                 let Type::Named(concrete) = self.ty(&ty, env, expr.span, 0)? else {
                     unreachable!("generic static receiver expands to a nominal type");
@@ -562,7 +562,7 @@ impl Expander {
                 for argument in args.iter_mut() { self.expression(argument, env)?; }
                 expr.kind = E::MethodCall {
                     receiver: Box::new(a::Expr { kind: E::Var(concrete), span: expr.span, depth: 1 }),
-                    name: std::mem::take(name), args: std::mem::take(args),
+                    name: std::mem::take(name), name_span: *name_span, args: std::mem::take(args),
                 };
             }
             E::New { class, type_args, args } | E::Variant { class, type_args, args, .. } => {
@@ -711,7 +711,7 @@ fn iterator_item_type(
 ) -> Result<Option<Type>, Diagnostic> {
     let IteratorContext { current_class, classes, functions, pair_template, .. } = *context;
     if depth >= 128 { return Ok(None); }
-    let a::ExprKind::MethodCall { receiver, name, args } = &expr.kind else { return Ok(None); };
+    let a::ExprKind::MethodCall { receiver, name, args, .. } = &expr.kind else { return Ok(None); };
     match name.as_str() {
         "iter" => {
             let Some(receiver_type) = inferred_expression_type(receiver, locals, current_class, classes, functions) else {

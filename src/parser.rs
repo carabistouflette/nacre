@@ -693,11 +693,11 @@ impl Parser {
                     expr = make_expr(ExprKind::Await(Box::new(expr)), span)?;
                     continue;
                 }
-                let (name, end) = self.ident()?;
-                let span = expr.span.join(end);
+                let (name, name_span) = self.ident()?;
+                let span = expr.span.join(name_span);
                 expr = if self.at(&K::LParen) {
                     let (args, end) = self.arguments()?;
-                    make_expr(ExprKind::MethodCall { receiver: Box::new(expr), name, args }, span.join(end))?
+                    make_expr(ExprKind::MethodCall { receiver: Box::new(expr), name, name_span, args }, span.join(end))?
                 } else {
                     make_expr(ExprKind::Field { base: Box::new(expr), name }, span)?
                 };
@@ -729,15 +729,15 @@ impl Parser {
         }
         let candidate = self.type_arguments().ok().and_then(|type_args| {
             if !self.eat(&K::Dot) { return None; }
-            let (name, _) = self.ident().ok()?;
-            self.at(&K::LParen).then_some((type_args, name))
+            let (name, name_span) = self.ident().ok()?;
+            self.at(&K::LParen).then_some((type_args, name, name_span))
         });
-        let Some((type_args, name)) = candidate else {
+        let Some((type_args, name, name_span)) = candidate else {
             self.position = saved;
             return Ok(None);
         };
         let (args, end) = self.arguments()?;
-        make_expr(ExprKind::StaticCall { class, type_args, name, args }, start.join(end)).map(Some)
+        make_expr(ExprKind::StaticCall { class, type_args, name, name_span, args }, start.join(end)).map(Some)
     }
     fn primary(&mut self) -> Result<Expr, Diagnostic> {
         let token = self.bump();
@@ -768,9 +768,10 @@ impl Parser {
             K::Ident(name) => {
                 if let Some(call) = self.generic_static_call(&name, span)? { return Ok(call); }
                 if self.at(&K::LParen) {
+                    let name_span = span;
                     let (args, end) = self.arguments()?;
                     span = span.join(end);
-                    ExprKind::Call { name, args }
+                    ExprKind::Call { name, name_span, args }
                 } else { ExprKind::Var(name) }
             }
             K::LParen => {

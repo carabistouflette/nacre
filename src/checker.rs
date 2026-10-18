@@ -383,7 +383,23 @@ fn returns_native_owner(program: &a::Program, names: &HashMap<String, usize>,
     false
 }
 
-pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
+pub(crate) struct CallSite { pub name_span: Span, pub target_function: usize }
+pub(crate) struct CheckResult {
+    pub function_spans_by_id: Vec<Span>,
+    pub call_sites: Vec<CallSite>,
+}
+struct References { function_spans_by_id: Vec<Span>, call_sites: Vec<CallSite> }
+
+pub(crate) fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
+    check_inner(program, false).map(|(program, _)| program)
+}
+pub(crate) fn check_with_references(program: &a::Program) -> Result<CheckResult, Diagnostic> {
+    let (_, references) = check_inner(program, true)?;
+    let references = references.expect("reference collection was enabled");
+    Ok(CheckResult { function_spans_by_id: references.function_spans_by_id, call_sites: references.call_sites })
+}
+
+fn check_inner(program: &a::Program, collect_references: bool) -> Result<(t::Program, Option<References>), Diagnostic> {
     if program.classes.iter().filter(|c| !c.is_builtin).count() > 128 {
         return Err(Diagnostic::new(Span::default(), "limit: 128 user classes per program"));
     }
@@ -851,6 +867,9 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
     let main_id = main.id;
     let mut functions = Vec::new();
     let mut borrowed_from: Vec<Vec<Option<usize>>> = tables.classes.iter().map(|c| vec![None; c.fields.len()]).collect();
+    // Signature IDs follow declaration order; keep this map indexed by function ID.
+    let function_spans_by_id = collect_references.then(|| declarations.iter().map(|function| function.span).collect());
+    let mut call_sites = collect_references.then(Vec::new);
     for (id, function) in declarations.iter().enumerate() {
         let sig = &tables.signatures[id];
         let receiver = if matches!(sig.kind, Kind::Instance | Kind::Constructor | Kind::Interface) { sig.owner } else { None };
@@ -861,6 +880,7 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
             return_type: sig.return_type, parameter_ids: Vec::new(),
             field_sources: receiver.map_or_else(Vec::new, |c| vec![None; tables.classes[c].fields.len()]),
             initialized: receiver.map_or_else(Vec::new, |c| vec![sig.kind != Kind::Constructor; tables.classes[c].fields.len()]),
+            call_sites: collect_references.then(Vec::new),
         };
         let mut params = Vec::new();
         for (param, ty) in function.params.iter().zip(&sig.params) {
@@ -911,6 +931,9 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
         let name = sig.owner.map_or_else(|| function.name.clone(),
             |c| format!("{}.{}", tables.classes[c].name, function.name));
         if checker.constructor { borrowed_from[sig.owner.unwrap()] = checker.field_sources.clone(); }
+        if let Some(call_sites) = &mut call_sites {
+            call_sites.extend(checker.call_sites.expect("reference collection enabled in checker"));
+        }
         functions.push(t::Function { native: None, id, name, receiver, readonly: sig.readonly, return_type: sig.return_type,
             params, body, locals: checker.variables, virtual_slot: None });
     }
@@ -920,7 +943,9 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
         borrowed_from: borrowed_from[id].clone(), is_interface: c.is_interface,
         interface_methods: c.interface_methods.clone(), implementations: c.implementations.clone()
     }).collect();
-    Ok(t::Program { classes, functions, main: main_id })
+    let references = function_spans_by_id.zip(call_sites)
+        .map(|(function_spans_by_id, call_sites)| References { function_spans_by_id, call_sites });
+    Ok((t::Program { classes, functions, main: main_id }, references))
 }
 
 struct Checker<'a> {
@@ -929,6 +954,7 @@ struct Checker<'a> {
     locks: Vec<usize>, loop_depth: usize, block_depth: usize, expr_depth: usize,
     return_type: Type, initialized: Vec<bool>,
     parameter_ids: Vec<usize>, field_sources: Vec<Option<usize>>,
+    call_sites: Option<Vec<CallSite>>,
 }
 
 fn synthetic_expr(kind: a::ExprKind, span: Span) -> a::Expr {
@@ -1383,7 +1409,7 @@ impl Checker<'_> {
 
             let size_receiver = synthetic_expr(a::ExprKind::Var(collection_name.clone()), span);
             let size = synthetic_expr(a::ExprKind::MethodCall {
-                receiver: Box::new(size_receiver), name: "size".to_owned(), args: Vec::new(),
+                receiver: Box::new(size_receiver), name: "size".to_owned(), name_span: Span::default(), args: Vec::new(),
             }, collection.span);
             let size_expr = self.expression(&size)?;
 
@@ -1443,7 +1469,7 @@ impl Checker<'_> {
                 let element_index = synthetic_expr(a::ExprKind::Var(cursor_name.clone()), span);
                 let element_receiver = synthetic_expr(a::ExprKind::Var(collection_name), span);
                 let element_value = synthetic_expr(a::ExprKind::MethodCall {
-                    receiver: Box::new(element_receiver), name: getter.to_owned(), args: vec![element_index],
+                    receiver: Box::new(element_receiver), name: getter.to_owned(), name_span: Span::default(), args: vec![element_index],
                 }, collection.span);
                 let element = a::Stmt { kind: a::StmtKind::Let {
                     ty: header.clone(), name: name.to_owned(), value: Some(element_value),
@@ -1565,7 +1591,7 @@ impl Checker<'_> {
                 left: Box::new(synthetic_expr(a::ExprKind::Var(cursor_name.clone()), span)),
                 right: Box::new(synthetic_expr(a::ExprKind::MethodCall {
                     receiver: Box::new(synthetic_expr(a::ExprKind::Var(map_name), span)),
-                    name: "size".to_owned(), args: Vec::new(),
+                    name: "size".to_owned(), name_span: Span::default(), args: Vec::new(),
                 }, collection.span)),
             }, span);
             let condition = self.expression(&condition_ast)?;
@@ -2314,16 +2340,22 @@ impl Checker<'_> {
             }
             E::New { class, args, .. } => self.new_expression(class, args, expr.span)?,
             E::Variant { class, variant, args, .. } => self.variant_expression(class, variant, args, expr.span)?,
-            E::Call { name, args } => self.call_expression(name, args, expr.span)?,
+            E::Call { name, args, .. } => self.call_expression(name, args, expr.span)?,
             E::StaticCall { .. } => unreachable!("generic static calls expand before type checking"),
             E::Tuple(_, _) => return Err(Diagnostic::new(expr.span,
                 "a pair expression requires an expected `(T, U)` or `Pair<T, U>` type")),
-            E::MethodCall { receiver, name, args } => self.method_expression(receiver, name, args, expr.span)?,
+            E::MethodCall { receiver, name, args, .. } => self.method_expression(receiver, name, args, expr.span)?,
             E::Unary { op, expr: inner } => self.unary_expression(*op, inner, expr.span)?,
             E::Try(inner) => self.try_expression(inner, expr.span)?,
             E::Binary { op, left, right } => self.binary_expression(*op, left, right, expr.span)?,
             E::Await(inner) => self.await_expression(inner, expr.span)?,
         };
+        if let Some(call_sites) = &mut self.call_sites
+            && let E::Call { name_span, .. } | E::MethodCall { name_span, .. } | E::StaticCall { name_span, .. } = &expr.kind
+            && name_span.start < name_span.end
+            && let t::ExprKind::Call { target: crate::ir::CallTarget::Function(target), .. } = &kind {
+                call_sites.push(CallSite { name_span: *name_span, target_function: *target });
+            }
         Ok(t::Expr { kind, ty, span: expr.span })
     }
 
@@ -2503,7 +2535,7 @@ impl Checker<'_> {
     }
     fn iterator_plan(&mut self, expr: &a::Expr, depth: usize) -> Result<t::IteratorPlan, Diagnostic> {
         if depth >= 128 { return Err(Diagnostic::new(expr.span, "iterator pipeline is too deep")); }
-        let a::ExprKind::MethodCall { receiver, name, args } = &expr.kind else {
+        let a::ExprKind::MethodCall { receiver, name, args, .. } = &expr.kind else {
             return Err(Diagnostic::new(expr.span, "expected a fused iterator pipeline"));
         };
         match name.as_str() {

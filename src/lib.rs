@@ -42,14 +42,24 @@ fn front_end(source: &str) -> Result<ir::Program, Diagnostic> {
     check_parsed(parser::parse(tokens)?)
 }
 
-pub(crate) fn check_parsed(mut parsed: ast::Program) -> Result<ir::Program, Diagnostic> {
+pub(crate) fn check_parsed(parsed: ast::Program) -> Result<ir::Program, Diagnostic> {
+    let expanded = prepare_parsed(parsed)?;
+    let checked = checker::check(&expanded)?;
+    ownership::check(&checked)?;
+    borrowing::check(&checked)?;
+    Ok(checked)
+}
+
+pub(crate) fn check_parsed_with_references(parsed: ast::Program) -> Result<checker::CheckResult, Diagnostic> {
+    let expanded = prepare_parsed(parsed)?;
+    checker::check_with_references(&expanded)
+}
+
+fn prepare_parsed(mut parsed: ast::Program) -> Result<ast::Program, Diagnostic> {
     resolver::resolve(&mut parsed)?;
     stdlib::inject(&mut parsed)?;
     let (expanded, _) = generics::expand(parsed)?;
-    let typed = checker::check(&expanded)?;
-    ownership::check(&typed)?;
-    borrowing::check(&typed)?;
-    Ok(typed)
+    Ok(expanded)
 }
 
 /// Parse and type-check without requiring a C compiler.

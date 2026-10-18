@@ -193,7 +193,7 @@ fn list_destruction_is_blocked_while_an_element_loan_is_live() {
 
 #[test]
 fn exclusive_element_loan_blocks_independent_list_reads() {
-    assert_rejected("void main() { List<Text> items = new List<Text>(); items.add(new Text(\"x\")); borrow mut Text item = items.getMut(0); println(items.size()); }", "E3001");
+    assert_rejected("void main() { List<Text> items = new List<Text>(); items.add(new Text(\"x\")); borrow mut Text item = items.getMut(0); println(items.size()); println(item.byteLength()); }", "E3001");
 }
 
 #[test]

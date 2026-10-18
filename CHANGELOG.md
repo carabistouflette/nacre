@@ -28,6 +28,9 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 
 - Pin the LSP framing header-byte limit at its exact 8 KiB boundary.
 
+- Resolve ambiguous LSP hover and go-to-definition queries using typed
+  function/method targets rather than the first same-named declaration.
+
 - Preserve iterator item-type inference through postfix `?` on built-in `Result`
   values, enabling downstream specializations such as `enumerate`.
 

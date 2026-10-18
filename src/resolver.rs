@@ -691,7 +691,7 @@ impl Resolver {
     }
 
     fn expression(&self, expression: &mut Expr, context: &mut BodyContext) -> Result<(), Diagnostic> {
-        if let E::MethodCall { receiver, name, args } = &mut expression.kind {
+        if let E::MethodCall { receiver, name, name_span, args } = &mut expression.kind {
             let system_print = name == "println" && matches!(&receiver.kind,
                 E::Field { base, name } if name == "out" && matches!(&base.kind, E::Var(system) if system == "System"));
             if !system_print
@@ -704,7 +704,7 @@ impl Resolver {
                         if let Some(target) = self.qualified_function(context.unit, &full_path, expression.span)? {
                             for argument in args.iter_mut() { self.expression(argument, context)?; }
                             let moved_args = std::mem::take(args);
-                            expression.kind = E::Call { name: target, args: moved_args };
+                            expression.kind = E::Call { name: target, name_span: *name_span, args: moved_args };
                             return Ok(());
                         }
                         if !context.type_params.iter().any(|parameter| parameter == &path) {
@@ -724,7 +724,7 @@ impl Resolver {
                 for argument in type_args { self.resolve_type(context.unit, &context.type_params, argument, expression.span)?; }
                 for argument in args { self.expression(argument, context)?; }
             }
-            E::Call { name, args } => {
+            E::Call { name, args, .. } => {
                 if !matches!(name.as_str(), "println" | "move" | "drop" | "assert")
                     && !context.owner_methods.contains(name.as_str()) {
                     match self.lookup_function(context.unit, name, expression.span)? {

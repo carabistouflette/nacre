@@ -6,6 +6,7 @@ use crate::doc::{format_function_signature, format_type};
 use crate::project::SourceBundle;
 use super::diagnostics::{position_to_offset, range_json, word_at_offset};
 
+use crate::diagnostic::Span;
 /// Symbol kinds per Language Server Protocol specification.
 mod symbol_kind {
     pub const CLASS: u64 = 5;
@@ -212,6 +213,11 @@ pub(super) fn hover(
             if hover_text.is_some() { break; }
         }
     }
+    if has_ambiguous_declaration_name(&program, word)
+        && let Some(span) = semantic_call_target_span(bundle, path, offset, program.clone())
+        && let Some(function) = function_with_span(&program, span) {
+            hover_text = Some(format_function_signature(function));
+        }
 
     let text = hover_text?;
     Some(json!({
@@ -225,7 +231,7 @@ pub(super) fn hover(
 
 pub(super) fn definition(
     bundle: &SourceBundle,
-    _path: &Path,
+    path: &Path,
     source: &str,
     line: usize,
     character: usize,
@@ -234,71 +240,95 @@ pub(super) fn definition(
     let offset = position_to_offset(source, line, character);
     let (word, _, _) = word_at_offset(source, offset)?;
     let Ok(program) = bundle.parse() else { return None; };
+    let fallback_span = definition_span(&program, word);
 
+    if has_ambiguous_declaration_name(&program, word)
+        && let Some(span) = semantic_call_target_span(bundle, path, offset, program)
+        && let Some(definition) = definition_location(bundle, span, &uri_for_path) {
+            return Some(definition);
+        }
+
+    definition_location(bundle, fallback_span?, &uri_for_path)
+}
+fn semantic_call_target_span(
+    bundle: &SourceBundle,
+    path: &Path,
+    offset: usize,
+    program: crate::ast::Program,
+) -> Option<Span> {
+    let checked = crate::check_parsed_with_references(program).ok()?;
+    let call_site = checked.call_sites.iter().find(|site| {
+        let location = bundle.locate(site.name_span);
+        location.path == path && location.span.start <= offset && offset <= location.span.end
+    })?;
+    let span = checked.function_spans_by_id.get(call_site.target_function).copied()?;
+    (span.start < span.end).then_some(span)
+}
+
+fn function_with_span(
+    program: &crate::ast::Program,
+    span: Span,
+) -> Option<&crate::ast::Function> {
+    program.functions.iter()
+        .chain(program.classes.iter().flat_map(|class| class.methods.iter().chain(class.constructor.iter())))
+        .chain(program.traits.iter().flat_map(|tr| tr.methods.iter()))
+        .chain(program.impls.iter().flat_map(|imp| imp.methods.iter()))
+        .find(|function| function.span.start == span.start && function.span.end == span.end)
+}
+
+
+fn definition_span(program: &crate::ast::Program, word: &str) -> Option<Span> {
     for function in &program.functions {
-        if function.name == word {
-            let loc = bundle.locate(function.span);
-            let target_uri = uri_for_path(loc.path)?;
-            return Some(json!({
-                "uri": target_uri,
-                "range": range_json(loc.source, loc.span.start, loc.span.end)
-            }));
-        }
+        if function.name == word { return Some(function.span); }
     }
-
     for class in &program.classes {
-        if class.name == word {
-            let loc = bundle.locate(class.span);
-            let target_uri = uri_for_path(loc.path)?;
-            return Some(json!({
-                "uri": target_uri,
-                "range": range_json(loc.source, loc.span.start, loc.span.end)
-            }));
-        }
+        if class.name == word { return Some(class.span); }
         if let Some(variants) = &class.variants {
             for variant in variants {
-                if variant.name == word {
-                    let loc = bundle.locate(variant.span);
-                    let target_uri = uri_for_path(loc.path)?;
-                    return Some(json!({
-                        "uri": target_uri,
-                        "range": range_json(loc.source, loc.span.start, loc.span.end)
-                    }));
-                }
+                if variant.name == word { return Some(variant.span); }
             }
         }
         for method in &class.methods {
-            if method.name == word {
-                let loc = bundle.locate(method.span);
-                let target_uri = uri_for_path(loc.path)?;
-                return Some(json!({
-                    "uri": target_uri,
-                    "range": range_json(loc.source, loc.span.start, loc.span.end)
-                }));
-            }
+            if method.name == word { return Some(method.span); }
         }
     }
-
     for tr in &program.traits {
-        if tr.name == word {
-            let loc = bundle.locate(tr.span);
-            let target_uri = uri_for_path(loc.path)?;
-            return Some(json!({
-                "uri": target_uri,
-                "range": range_json(loc.source, loc.span.start, loc.span.end)
-            }));
-        }
+        if tr.name == word { return Some(tr.span); }
         for method in &tr.methods {
-            if method.name == word {
-                let loc = bundle.locate(method.span);
-                let target_uri = uri_for_path(loc.path)?;
-                return Some(json!({
-                    "uri": target_uri,
-                    "range": range_json(loc.source, loc.span.start, loc.span.end)
-                }));
-            }
+            if method.name == word { return Some(method.span); }
         }
     }
-
     None
+}
+
+// Unique names retain the cheap name-only path; collisions need typed call targets.
+fn has_ambiguous_declaration_name(program: &crate::ast::Program, name: &str) -> bool {
+    let mut declarations = program.functions.iter().filter(|function| function.name == name).count();
+    for class in &program.classes {
+        declarations += usize::from(class.name == name);
+        declarations += class.variants.as_ref().map_or(0, |variants| {
+            variants.iter().filter(|variant| variant.name == name).count()
+        });
+        declarations += class.methods.iter().filter(|method| method.name == name).count();
+    }
+    for tr in &program.traits {
+        declarations += usize::from(tr.name == name);
+        declarations += tr.methods.iter().filter(|method| method.name == name).count();
+    }
+    for imp in &program.impls {
+        declarations += imp.methods.iter().filter(|method| method.name == name).count();
+    }
+    declarations > 1
+}
+
+fn definition_location(
+    bundle: &SourceBundle,
+    span: Span,
+    uri_for_path: &impl Fn(&Path) -> Option<String>,
+) -> Option<Value> {
+    let location = bundle.locate(span);
+    Some(json!({
+        "uri": uri_for_path(location.path)?,
+        "range": range_json(location.source, location.span.start, location.span.end)
+    }))
 }

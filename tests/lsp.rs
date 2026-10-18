@@ -412,8 +412,8 @@ fn lsp_supports_document_symbols_hover_and_definition() {
 
     let types_path = source_dir.join("Types.ncr");
     let main_path = source_dir.join("Main.ncr");
-    let types_source = "public class Item {\n    private int count;\n    public Item(int count) { this.count = count; }\n    public readonly int getCount() { return this.count; }\n}\npublic enum Status { Ready; Active(int); }\npublic void helper() {}\n";
-    let main_source = "void main() { Item item = new Item(42); helper(); }\n";
+    let types_source = "public class Item {\n    private int count;\n    public Item(int count) { this.count = count; }\n    public readonly int getCount() { return this.count; }\n}\npublic class OtherItem {\n    public readonly long getCount() { return 7L; }\n}\npublic enum Status { Ready; Active(int); }\npublic void helper() {}\n";
+    let main_source = "void main() { Item item = new Item(42); helper(); OtherItem other = new OtherItem(); println(other.getCount()); }\n";
     fs::write(&types_path, types_source).unwrap();
     fs::write(&main_path, main_source).unwrap();
 
@@ -468,6 +468,13 @@ fn lsp_supports_document_symbols_hover_and_definition() {
     let hover_helper = client.response(21);
     let helper_content = hover_helper["result"]["contents"]["value"].as_str().expect("hover markdown");
     assert!(helper_content.contains("void helper()"));
+    client.send(json!({
+        "jsonrpc": "2.0", "id": 22, "method": "textDocument/hover",
+        "params": { "textDocument": { "uri": main_uri.clone() }, "position": { "line": 0, "character": main_source.find("getCount").unwrap() } }
+    }));
+    let other_hover = client.response(22);
+    let other_hover_content = other_hover["result"]["contents"]["value"].as_str().expect("method hover markdown");
+    assert!(other_hover_content.contains("long getCount()"));
 
     // Definition query on Main.ncr over "Item" (line 0, col 15)
     client.send(json!({
@@ -476,6 +483,16 @@ fn lsp_supports_document_symbols_hover_and_definition() {
     }));
     let def_resp = client.response(30);
     assert_eq!(def_resp["result"]["uri"], types_uri);
+
+    let other_method_line = types_source.lines().position(|line| line.contains("return 7")).unwrap() as u64;
+    let other_call_character = main_source.find("getCount").unwrap() as u64;
+    client.send(json!({
+        "jsonrpc": "2.0", "id": 31, "method": "textDocument/definition",
+        "params": { "textDocument": { "uri": main_uri.clone() }, "position": { "line": 0, "character": other_call_character } }
+    }));
+    let other_method_definition = client.response(31);
+    assert_eq!(other_method_definition["result"]["uri"], types_uri);
+    assert_eq!(other_method_definition["result"]["range"]["start"]["line"].as_u64(), Some(other_method_line));
 
     client.send(json!({ "jsonrpc": "2.0", "id": 40, "method": "shutdown" }));
     assert!(client.response(40)["result"].is_null());
