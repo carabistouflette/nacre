@@ -517,6 +517,351 @@ fn lsp_reports_manifest_diagnostics_when_nacre_toml_is_invalid() {
     client.finish();
 }
 
+#[test]
+fn lsp_uses_unsaved_nacre_toml_overlays_and_reverts_on_close() {
+    let temp = TempDir::new();
+    let source_dir = temp.0.join("src");
+    let alternate_dir = temp.0.join("alternate");
+    fs::create_dir_all(&source_dir).unwrap();
+    fs::create_dir_all(&alternate_dir).unwrap();
+
+    let manifest_path = temp.0.join("Nacre.toml");
+    let invalid_disk_manifest = "[package]\nname = \n";
+    fs::write(&manifest_path, invalid_disk_manifest).unwrap();
+    let main_path = source_dir.join("Main.ncr");
+    let alternate_path = alternate_dir.join("Invalid.ncr");
+    fs::write(&main_path, "void main() {}\n").unwrap();
+    fs::write(&alternate_path, "void main() { Missing value = new Missing(); }\n").unwrap();
+
+    let manifest_uri = uri(&manifest_path);
+    let main_uri = uri(&main_path);
+    let alternate_uri = uri(&alternate_path);
+    let alternate_manifest =
+        "[package]\nname = \"app\"\nversion = \"0.1.0\"\nsources = [\"alternate\"]\n";
+    let source_manifest =
+        "[package]\nname = \"app\"\nversion = \"0.1.0\"\nsources = [\"src\"]\n";
+
+    let mut client = Client::spawn();
+    client.send(json!({
+        "jsonrpc": "2.0", "id": 1, "method": "initialize",
+        "params": { "rootUri": uri(&temp.0), "capabilities": {} }
+    }));
+    client.response(1);
+    client.send(json!({ "jsonrpc": "2.0", "method": "initialized", "params": {} }));
+    client.send(json!({
+        "jsonrpc": "2.0", "method": "textDocument/didOpen",
+        "params": { "textDocument": { "uri": main_uri, "languageId": "nacre", "version": 1, "text": "void main() {}\n" } }
+    }));
+
+    let initial = client.diagnostics(&manifest_uri);
+    assert!(!initial["diagnostics"].as_array().unwrap().is_empty());
+    fs::write(&manifest_path, source_manifest).unwrap();
+
+    client.send(json!({
+        "jsonrpc": "2.0", "method": "textDocument/didOpen",
+        "params": { "textDocument": { "uri": manifest_uri, "languageId": "toml", "version": 1, "text": alternate_manifest } }
+    }));
+    let repaired = client.diagnostics(&manifest_uri);
+    assert!(repaired["diagnostics"].as_array().unwrap().is_empty(),
+        "a valid unsaved manifest must clear its stale diagnostic");
+    let alternate = client.diagnostics(&alternate_uri);
+    assert!(!alternate["diagnostics"].as_array().unwrap().is_empty(),
+        "the unsaved source-root setting must select the alternate directory");
+    assert_eq!(fs::read_to_string(&manifest_path).unwrap(), source_manifest,
+        "editing a manifest overlay must not write it to disk");
+
+    client.send(json!({
+        "jsonrpc": "2.0", "method": "textDocument/didChange",
+        "params": {
+            "textDocument": { "uri": manifest_uri, "version": 2 },
+            "contentChanges": [{ "text": source_manifest }]
+        }
+    }));
+    let alternate = client.diagnostics(&alternate_uri);
+    assert!(alternate["diagnostics"].as_array().unwrap().is_empty(),
+        "changing source roots must clear diagnostics for the removed root");
+    client.send(json!({
+        "jsonrpc": "2.0", "method": "textDocument/didChange",
+        "params": {
+            "textDocument": { "uri": manifest_uri, "version": 3 },
+            "contentChanges": [{ "text": alternate_manifest }]
+        }
+    }));
+    let alternate = client.diagnostics(&alternate_uri);
+    assert!(!alternate["diagnostics"].as_array().unwrap().is_empty(),
+        "a later manifest edit must reselect the alternate source root");
+
+    client.send(json!({
+        "jsonrpc": "2.0", "method": "textDocument/didClose",
+        "params": { "textDocument": { "uri": manifest_uri } }
+    }));
+    let restored = client.diagnostics(&alternate_uri);
+    assert!(restored["diagnostics"].as_array().unwrap().is_empty(),
+        "closing the manifest must restore the on-disk source root");
+
+    client.send(json!({ "jsonrpc": "2.0", "id": 2, "method": "shutdown" }));
+    assert!(client.response(2)["result"].is_null());
+    client.send(json!({ "jsonrpc": "2.0", "method": "exit" }));
+    client.finish();
+}
+
+
+#[test]
+fn lsp_closing_new_unsaved_project_manifest_restores_unmarked_scope() {
+    let temp = TempDir::new();
+    let source_dir = temp.0.join("src");
+    let alternate_dir = temp.0.join("alternate");
+    fs::create_dir_all(&source_dir).unwrap();
+    fs::create_dir_all(&alternate_dir).unwrap();
+
+    let manifest_path = temp.0.join("Nacre.toml");
+    let main_path = source_dir.join("Main.ncr");
+    fs::write(&main_path, "void main() { Missing value = new Missing(); }\n").unwrap();
+    fs::write(alternate_dir.join("Main.ncr"), "void main() {}\n").unwrap();
+    let manifest_uri = uri(&manifest_path);
+    let main_uri = uri(&main_path);
+
+    let mut client = Client::spawn();
+    client.send(json!({
+        "jsonrpc": "2.0", "id": 1, "method": "initialize",
+        "params": { "rootUri": uri(&temp.0), "capabilities": {} }
+    }));
+    client.response(1);
+    client.send(json!({ "jsonrpc": "2.0", "method": "initialized", "params": {} }));
+    client.send(json!({
+        "jsonrpc": "2.0", "method": "textDocument/didOpen",
+        "params": { "textDocument": { "uri": main_uri, "languageId": "nacre", "version": 1, "text": "void main() { Missing value = new Missing(); }\n" } }
+    }));
+    let unconfigured = client.diagnostics(&main_uri);
+    assert!(!unconfigured["diagnostics"].as_array().unwrap().is_empty());
+
+    client.send(json!({
+        "jsonrpc": "2.0", "method": "textDocument/didOpen",
+        "params": {
+            "textDocument": {
+                "uri": manifest_uri, "languageId": "toml", "version": 1,
+                "text": "[package]\nname = \"app\"\nversion = \"0.1.0\"\nsources = [\"alternate\"]\n"
+            }
+        }
+    }));
+    let configured = client.diagnostics(&main_uri);
+    assert!(configured["diagnostics"].as_array().unwrap().is_empty(),
+        "the unsaved new manifest should replace the unconfigured source snapshot");
+
+    client.send(json!({
+        "jsonrpc": "2.0", "method": "textDocument/didClose",
+        "params": { "textDocument": { "uri": manifest_uri } }
+    }));
+    let restored = client.diagnostics(&main_uri);
+    assert!(!restored["diagnostics"].as_array().unwrap().is_empty(),
+        "closing a new unsaved manifest must revalidate remaining files without project configuration");
+    assert!(!manifest_path.exists(), "the LSP overlay must not create the manifest on disk");
+
+    client.send(json!({ "jsonrpc": "2.0", "id": 2, "method": "shutdown" }));
+    assert!(client.response(2)["result"].is_null());
+    client.send(json!({ "jsonrpc": "2.0", "method": "exit" }));
+    client.finish();
+}
+#[test]
+fn lsp_uses_unsaved_legacy_nacre_json_overlays() {
+    let temp = TempDir::new();
+    let source_dir = temp.0.join("src");
+    let alternate_dir = temp.0.join("alternate");
+    fs::create_dir_all(&source_dir).unwrap();
+    fs::create_dir_all(&alternate_dir).unwrap();
+
+    let config_path = temp.0.join("nacre.json");
+    let disk_config = r#"{"sources":["src"]}"#;
+    fs::write(&config_path, disk_config).unwrap();
+    let main_path = source_dir.join("Main.ncr");
+    let alternate_path = alternate_dir.join("Invalid.ncr");
+    fs::write(&main_path, "void main() {}\n").unwrap();
+    fs::write(&alternate_path, "void main() { Missing value = new Missing(); }\n").unwrap();
+
+    let config_uri = uri(&config_path);
+    let main_uri = uri(&main_path);
+    let alternate_uri = uri(&alternate_path);
+    let mut client = Client::spawn();
+    client.send(json!({
+        "jsonrpc": "2.0", "id": 1, "method": "initialize",
+        "params": { "rootUri": uri(&temp.0), "capabilities": {} }
+    }));
+    client.response(1);
+    client.send(json!({ "jsonrpc": "2.0", "method": "initialized", "params": {} }));
+    client.send(json!({
+        "jsonrpc": "2.0", "method": "textDocument/didOpen",
+        "params": { "textDocument": { "uri": main_uri, "languageId": "nacre", "version": 1, "text": "void main() {}\n" } }
+    }));
+    client.diagnostics(&main_uri);
+
+    client.send(json!({
+        "jsonrpc": "2.0", "method": "textDocument/didOpen",
+        "params": { "textDocument": { "uri": config_uri, "languageId": "json", "version": 1, "text": r#"{"sources":["alternate"]}"# } }
+    }));
+    let alternate = client.diagnostics(&alternate_uri);
+    assert!(!alternate["diagnostics"].as_array().unwrap().is_empty(),
+        "an unsaved legacy config must select its alternate source root");
+    assert_eq!(fs::read_to_string(&config_path).unwrap(), disk_config,
+        "editing a project config overlay must not write it to disk");
+
+    client.send(json!({
+        "jsonrpc": "2.0", "method": "textDocument/didClose",
+        "params": { "textDocument": { "uri": config_uri } }
+    }));
+    let restored = client.diagnostics(&alternate_uri);
+    assert!(restored["diagnostics"].as_array().unwrap().is_empty(),
+        "closing the config must restore its on-disk source root");
+
+    client.send(json!({ "jsonrpc": "2.0", "id": 2, "method": "shutdown" }));
+    assert!(client.response(2)["result"].is_null());
+    client.send(json!({ "jsonrpc": "2.0", "method": "exit" }));
+    client.finish();
+}
+
+#[test]
+fn lsp_does_not_parse_configuration_overlays_as_source_files() {
+    let temp = TempDir::new();
+    let manifest_path = temp.0.join("Nacre.toml");
+    let main_path = temp.0.join("Main.ncr");
+    let manifest = "[package]\nname = \"app\"\nversion = \"0.1.0\"\nsources = [\".\"]\n";
+    fs::write(&manifest_path, manifest).unwrap();
+    fs::write(&main_path, "void main() {}\n").unwrap();
+    let manifest_uri = uri(&manifest_path);
+    let main_uri = uri(&main_path);
+
+    let mut client = Client::spawn();
+    client.send(json!({
+        "jsonrpc": "2.0", "id": 1, "method": "initialize",
+        "params": { "rootUri": uri(&temp.0), "capabilities": {} }
+    }));
+    client.response(1);
+    client.send(json!({ "jsonrpc": "2.0", "method": "initialized", "params": {} }));
+    client.send(json!({
+        "jsonrpc": "2.0", "method": "textDocument/didOpen",
+        "params": { "textDocument": { "uri": main_uri, "languageId": "nacre", "version": 1, "text": "void main() {}\n" } }
+    }));
+    client.diagnostics(&main_uri);
+
+    client.send(json!({
+        "jsonrpc": "2.0", "method": "textDocument/didOpen",
+        "params": { "textDocument": { "uri": manifest_uri, "languageId": "toml", "version": 1, "text": manifest } }
+    }));
+    let config_diagnostics = client.diagnostics(&manifest_uri);
+    assert!(config_diagnostics["diagnostics"].as_array().unwrap().is_empty(),
+        "a config overlay selected as a source root must not be parsed as Nacre");
+
+    client.send(json!({ "jsonrpc": "2.0", "id": 2, "method": "shutdown" }));
+    assert!(client.response(2)["result"].is_null());
+    client.send(json!({ "jsonrpc": "2.0", "method": "exit" }));
+    client.finish();
+}
+
+#[test]
+fn lsp_closing_config_overlay_restores_saved_config_diagnostic() {
+    let temp = TempDir::new();
+    let source_dir = temp.0.join("src");
+    fs::create_dir_all(&source_dir).unwrap();
+    let manifest_path = temp.0.join("Nacre.toml");
+    let invalid_manifest = "[package]\nname = \n";
+    let valid_manifest =
+        "[package]\nname = \"app\"\nversion = \"0.1.0\"\nsources = [\"src\"]\n";
+    fs::write(&manifest_path, invalid_manifest).unwrap();
+    let main_path = source_dir.join("Main.ncr");
+    fs::write(&main_path, "void main() {}\n").unwrap();
+    let manifest_uri = uri(&manifest_path);
+    let main_uri = uri(&main_path);
+
+    let mut client = Client::spawn();
+    client.send(json!({
+        "jsonrpc": "2.0", "id": 1, "method": "initialize",
+        "params": { "rootUri": uri(&temp.0), "capabilities": {} }
+    }));
+    client.response(1);
+    client.send(json!({ "jsonrpc": "2.0", "method": "initialized", "params": {} }));
+    client.send(json!({
+        "jsonrpc": "2.0", "method": "textDocument/didOpen",
+        "params": { "textDocument": { "uri": main_uri, "languageId": "nacre", "version": 1, "text": "void main() {}\n" } }
+    }));
+    assert!(!client.diagnostics(&manifest_uri)["diagnostics"].as_array().unwrap().is_empty());
+
+    fs::write(&manifest_path, valid_manifest).unwrap();
+    client.send(json!({
+        "jsonrpc": "2.0", "method": "textDocument/didOpen",
+        "params": { "textDocument": { "uri": manifest_uri, "languageId": "toml", "version": 1, "text": valid_manifest } }
+    }));
+    assert!(client.diagnostics(&manifest_uri)["diagnostics"].as_array().unwrap().is_empty());
+
+    fs::write(&manifest_path, invalid_manifest).unwrap();
+    client.send(json!({
+        "jsonrpc": "2.0", "method": "textDocument/didClose",
+        "params": { "textDocument": { "uri": manifest_uri } }
+    }));
+    let restored = client.diagnostics(&manifest_uri);
+    assert!(!restored["diagnostics"].as_array().unwrap().is_empty(),
+        "closing a valid overlay must publish errors from the invalid saved manifest");
+
+    client.send(json!({ "jsonrpc": "2.0", "id": 2, "method": "shutdown" }));
+    assert!(client.response(2)["result"].is_null());
+    client.send(json!({ "jsonrpc": "2.0", "method": "exit" }));
+    client.finish();
+}
+
+#[test]
+fn lsp_new_nested_manifest_reconciles_parent_scope_diagnostics() {
+    let temp = TempDir::new();
+    let source_dir = temp.0.join("src");
+    let alternate_dir = source_dir.join("alternate");
+    fs::create_dir_all(&alternate_dir).unwrap();
+
+    let parent_manifest = temp.0.join("Nacre.toml");
+    fs::write(
+        &parent_manifest,
+        "[package]\nname = \"parent\"\nversion = \"0.1.0\"\nsources = [\"src/Main.ncr\", \"src/Invalid.ncr\"]\n",
+    ).unwrap();
+    let main_path = source_dir.join("Main.ncr");
+    let invalid_path = source_dir.join("Invalid.ncr");
+    let alternate_path = alternate_dir.join("Main.ncr");
+    let child_manifest = source_dir.join("Nacre.toml");
+    fs::write(&main_path, "void main() {}\n").unwrap();
+    fs::write(&invalid_path, "void fail() { Missing value = new Missing(); }\n").unwrap();
+    fs::write(&alternate_path, "void main() {}\n").unwrap();
+    let main_uri = uri(&main_path);
+    let invalid_uri = uri(&invalid_path);
+    let child_manifest_uri = uri(&child_manifest);
+
+    let mut client = Client::spawn();
+    client.send(json!({
+        "jsonrpc": "2.0", "id": 1, "method": "initialize",
+        "params": { "rootUri": uri(&temp.0), "capabilities": {} }
+    }));
+    client.response(1);
+    client.send(json!({ "jsonrpc": "2.0", "method": "initialized", "params": {} }));
+    client.send(json!({
+        "jsonrpc": "2.0", "method": "textDocument/didOpen",
+        "params": { "textDocument": { "uri": main_uri, "languageId": "nacre", "version": 1, "text": "void main() {}\n" } }
+    }));
+    assert!(!client.diagnostics(&invalid_uri)["diagnostics"].as_array().unwrap().is_empty());
+
+    client.send(json!({
+        "jsonrpc": "2.0", "method": "textDocument/didOpen",
+        "params": {
+            "textDocument": {
+                "uri": child_manifest_uri, "languageId": "toml", "version": 1,
+                "text": "[package]\nname = \"child\"\nversion = \"0.1.0\"\nsources = [\"alternate/Main.ncr\"]\n"
+            }
+        }
+    }));
+    let after_marker = client.diagnostics(&invalid_uri);
+    assert!(after_marker["diagnostics"].as_array().unwrap().is_empty(),
+        "diagnostics from a source file that left the parent scope must be cleared");
+    assert!(!child_manifest.exists(), "opening the nested config must remain an unsaved overlay");
+
+    client.send(json!({ "jsonrpc": "2.0", "id": 2, "method": "shutdown" }));
+    assert!(client.response(2)["result"].is_null());
+    client.send(json!({ "jsonrpc": "2.0", "method": "exit" }));
+    client.finish();
+}
+
 #[cfg(unix)]
 #[test]
 fn lsp_does_not_resolve_through_intermediate_symlinked_source_roots() {

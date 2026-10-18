@@ -446,18 +446,19 @@ workspace access; filesystem admission belongs to `lsp/source_files.rs`.
 The private `lsp/source_files.rs` module owns project configuration parsing,
 configured-root membership, directory traversal, symlink rejection, and bounded
 UTF-8 reads. It reuses the project's filename predicates and file-count limit,
-and the file-URI module's lexical path normalization. The server supplies the
-remaining source-byte budget and retains document versions, overlay precedence,
-scope association, combined snapshots, and diagnostic publication. The policy
-module does not depend on `Server`, `Document`, or protocol output.
+and the file-URI module's lexical path normalization. The server retains document
+versions, configuration/source overlay precedence, scope association, combined
+snapshots, and diagnostic publication. The policy module does not depend on
+`Server`, `Document`, or protocol output.
 
 The nearest ancestor `Nacre.toml` (or legacy `nacre.json`) declares project source
 roots. TOML manifests also resolve local path dependencies and workspace members.
-Within a project scope, open buffers override disk files, including unsaved new source files under
-the configured roots. Stale document versions do not replace newer snapshots.
-Without a marker, each document is validated alone; nearby files are not merged.
-VS Code and Zed launch the same server. See [PROJECTS.md](PROJECTS.md) for the
-configuration and overlay contract.
+Open configuration buffers override disk settings while selecting roots; open
+source buffers override disk files, including unsaved new files under configured
+roots. Stale document versions do not replace newer snapshots. Without a marker,
+each document is validated alone; nearby files are not merged. VS Code and Zed
+launch the same server. See [PROJECTS.md](PROJECTS.md) for the configuration and
+overlay contract.
 
 Native I/O bodies construct the actual IR specializations of `Option`/`Result`.
 They validate UTF-8, ranges, and conversions, returning owned error Text.

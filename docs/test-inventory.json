@@ -34,9 +34,9 @@
     "tests/interfaces_generics_tools.rs": 18,
     "tests/io.rs": 13,
     "tests/iteration_traversal.rs": 7,
-    "tests/iterator_fusion.rs": 9,
+    "tests/iterator_fusion.rs": 10,
     "tests/llvm_native.rs": 17,
-    "tests/lsp.rs": 9,
+    "tests/lsp.rs": 15,
     "tests/map_traversal.rs": 11,
     "tests/math_random_time.rs": 9,
     "tests/modules.rs": 12,
@@ -54,7 +54,7 @@
     "tests/packages.rs": 7,
     "tests/patterns_deep.rs": 8,
     "tests/process.rs": 12,
-    "tests/project.rs": 38,
+    "tests/project.rs": 40,
     "tests/result_option.rs": 6,
     "tests/sqlite.rs": 9,
     "tests/sudoku.rs": 4,
@@ -62,7 +62,7 @@
     "tests/text_map_keys.rs": 10,
     "tests/text_regex.rs": 18,
     "tests/tls_websocket.rs": 3,
-    "tests/tooling.rs": 33,
+    "tests/tooling.rs": 35,
     "tests/unicode_native.rs": 10,
     "tests/uri_dns.rs": 4,
     "tests/uuid.rs": 6,
@@ -79,5 +79,5 @@
     "src/ownership.rs": 5,
     "src/project.rs": 1
   },
-  "total": 1415
+  "total": 1426
 }

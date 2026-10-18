@@ -18,7 +18,8 @@ mod diagnostics;
 use diagnostics::diagnostic_json;
 mod source_files;
 use source_files::{
-    configured_source_roots, source_root_contains, reject_symlink_path, collect_recursive, read_source,
+    configured_source_roots, is_project_config, source_root_contains, reject_symlink_path,
+    collect_recursive, read_source,
 };
 mod queries;
 
@@ -235,15 +236,36 @@ impl Server {
             document.get("text").and_then(Value::as_str),
         ) else { return Ok(()); };
         let Some(path) = uri_to_path(uri) else { return Ok(()); };
-        if !is_source_file(&path) { return Ok(()); }
+        if !is_source_file(&path) && !is_project_config(&path) { return Ok(()); }
         if self.documents.get(&path).is_some_and(|existing| version < existing.version) { return Ok(()); }
         if !self.documents.contains_key(&path) && self.documents.len() >= MAX_FILES {
-            self.log(output, 2, &format!("Cannot track more than {MAX_FILES} open Nacre source files"))?;
+            self.log(output, 2, &format!("Cannot track more than {MAX_FILES} open Nacre documents"))?;
             self.publish_one(output, uri, None, Vec::new())?;
             return Ok(());
         }
+        let mut previous_scopes = HashSet::new();
+        if is_project_config(&path) {
+            let marker_root = path.parent().unwrap_or_else(|| Path::new("/"));
+            if self.scope_for(&path).root.as_path() != marker_root {
+                previous_scopes.extend(self.published_by_scope.keys()
+                    .filter(|scope| scope.root.as_path().starts_with(marker_root)
+                        || marker_root.starts_with(scope.root.as_path()))
+                    .cloned());
+                previous_scopes.extend(self.documents.keys()
+                    .map(|open_path| self.scope_for(open_path))
+                    .filter(|scope| scope.root.as_path().starts_with(marker_root)
+                        || marker_root.starts_with(scope.root.as_path())));
+            }
+        }
         let text = bounded_text(text);
         self.documents.insert(path.clone(), Document { uri: uri.to_owned(), version, text });
+        for previous_scope in previous_scopes {
+            if self.documents.keys().any(|open_path| self.scope_for(open_path) == previous_scope) {
+                self.revalidate_scope(&previous_scope, output, None)?;
+            } else {
+                self.clear_scope(&previous_scope, output)?;
+            }
+        }
         self.revalidate_path(&path, output, None)
     }
 
@@ -285,16 +307,33 @@ impl Server {
             return Ok(());
         };
         let Some(path) = uri_to_path(uri) else { return Ok(()); };
-        if self.documents.remove(&path).is_some() {
+        if self.documents.contains_key(&path) {
             let scope = self.scope_for(&path);
+            let is_config = is_project_config(&path);
+            let affected_paths: Vec<PathBuf> = self.documents.keys()
+                .filter(|open_path| *open_path != &path && self.scope_for(open_path) == scope)
+                .cloned()
+                .collect();
+            self.documents.remove(&path);
             let canonical_uri = path_to_uri(&path).unwrap_or_else(|| uri.to_owned());
-            if self.documents.keys().any(|open_path| self.scope_for(open_path) == scope) {
-                self.revalidate_scope(&scope, output, Some(&canonical_uri))?;
+            let scopes: HashSet<ProjectScope> = affected_paths.iter()
+                .map(|open_path| self.scope_for(open_path))
+                .collect();
+            if scopes.contains(&scope) {
+                let excluded_uri = if is_config { None } else { Some(canonical_uri.as_str()) };
+                self.revalidate_scope(&scope, output, excluded_uri)?;
             } else {
                 self.clear_scope(&scope, output)?;
             }
-            self.publish_one(output, uri, None, Vec::new())?;
-            if canonical_uri != uri { self.publish_one(output, &canonical_uri, None, Vec::new())?; }
+            for affected_scope in scopes {
+                if affected_scope != scope {
+                    self.revalidate_scope(&affected_scope, output, None)?;
+                }
+            }
+            if !is_config {
+                self.publish_one(output, uri, None, Vec::new())?;
+                if canonical_uri != uri { self.publish_one(output, &canonical_uri, None, Vec::new())?; }
+            }
         }
         Ok(())
     }
@@ -412,8 +451,21 @@ impl Server {
                     }
                 }
                 let manifest_path = scope.root.join("Nacre.toml");
-                if manifest_path.is_file() && let Some(uri) = path_to_uri(&manifest_path) {
-                    load_diagnostics.insert(uri, vec![validation_unavailable_diagnostic(message)]);
+                let legacy_path = scope.root.join("nacre.json");
+                let config_path = if manifest_path.exists() || self.documents.contains_key(&manifest_path) {
+                    Some(manifest_path)
+                } else if legacy_path.exists() || self.documents.contains_key(&legacy_path) {
+                    Some(legacy_path)
+                } else {
+                    None
+                };
+                if let Some(config_path) = config_path
+                    && !self.documents.get(&config_path).is_some_and(|document| document.text.is_none()) {
+                        let uri = self.documents.get(&config_path).map(|document| document.uri.clone())
+                            .or_else(|| path_to_uri(&config_path));
+                        if let Some(uri) = uri {
+                            load_diagnostics.insert(uri, vec![validation_unavailable_diagnostic(message)]);
+                        }
                 }
                 self.publish_scope_diagnostics(scope, output, excluded_uri, load_diagnostics, None)?;
                 return Ok(());
@@ -455,11 +507,9 @@ impl Server {
                 targets.insert(file.uri.clone(), file.version);
             }
         }
-        if files.is_none() {
-            for (path, document) in &self.documents {
-                if self.scope_for(path) == *scope {
-                    targets.insert(document.uri.clone(), Some(document.version));
-                }
+        for (path, document) in &self.documents {
+            if self.scope_for(path) == *scope {
+                targets.entry(document.uri.clone()).or_insert(Some(document.version));
             }
         }
         for uri in diagnostics.keys() {
@@ -482,7 +532,29 @@ impl Server {
     }
     fn load_scope_files(&self, scope: &ProjectScope) -> Result<Vec<SourceFile>, String> {
         let inputs = if scope.has_marker {
-            configured_source_roots(&scope.root)?
+            let manifest_path = scope.root.join("Nacre.toml");
+            let legacy_path = scope.root.join("nacre.json");
+            let manifest_document = self.documents.get(&manifest_path);
+            let legacy_document = self.documents.get(&legacy_path);
+            if manifest_path.exists() || manifest_document.is_some() {
+                if manifest_document.is_some_and(|document| document.text.is_none()) {
+                    return Err(format!("{} exceeds the {MAX_SOURCE_BYTES}-byte project configuration limit", manifest_path.display()));
+                }
+                configured_source_roots(
+                    &scope.root,
+                    manifest_document.and_then(|document| document.text.as_deref()),
+                    None,
+                )?
+            } else {
+                if legacy_document.is_some_and(|document| document.text.is_none()) {
+                    return Err(format!("{} exceeds the {MAX_SOURCE_BYTES}-byte project configuration limit", legacy_path.display()));
+                }
+                configured_source_roots(
+                    &scope.root,
+                    None,
+                    legacy_document.and_then(|document| document.text.as_deref()),
+                )?
+            }
         } else {
             vec![scope.root.clone()]
         };
@@ -499,7 +571,7 @@ impl Server {
             }
         }
         for (path, document) in &self.documents {
-            if self.scope_for(path) == *scope
+            if is_source_file(path) && self.scope_for(path) == *scope
                 && let Some(input) = inputs.iter().find(|input| source_root_contains(input, path)) {
                     reject_symlink_path(path, input)?;
                     if document.text.is_none() {
@@ -555,7 +627,10 @@ impl Server {
         let mut current = Some(directory);
         for _ in 0..=32 {
             let Some(dir) = current else { break; };
-            if dir.join("Nacre.toml").is_file() || dir.join("nacre.json").is_file() {
+            let manifest = dir.join("Nacre.toml");
+            let legacy = dir.join("nacre.json");
+            if manifest.is_file() || legacy.is_file()
+                || self.documents.contains_key(&manifest) || self.documents.contains_key(&legacy) {
                 return ProjectScope { root: dir.to_owned(), has_marker: true };
             }
             if boundary == Some(dir) { break; }

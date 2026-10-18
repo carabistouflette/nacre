@@ -2,6 +2,13 @@
 
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
+
+- Revalidate LSP projects against unsaved `Nacre.toml` and `nacre.json` overlays,
+  including source-root edits and on-disk restoration when a config closes.
+
+- Preserve iterator item-type inference through postfix `?` on built-in `Result`
+  values, enabling downstream specializations such as `enumerate`.
+
 - Render non-UTF-8 paths unambiguously in project diagnostics, path errors, and
   runtime source maps.
 

@@ -115,6 +115,31 @@ void main() {
 
 
 #[test]
+fn postfix_try_iterator_source_infers_enumerated_item_type() {
+    let output = run(r#"
+Result<List<int>, Text> makeValues() {
+    List<int> values = new List<int>();
+    values.add(7);
+    return new Result<List<int>, Text>.Ok(values);
+}
+
+Result<Pair<long, Option<long>>, Text> hint() {
+    Pair<long, Option<long>> size =
+        makeValues()?.iter().enumerate().sizeHint();
+    return new Result<Pair<long, Option<long>>, Text>.Ok(size);
+}
+
+void main() {
+    match (hint()) {
+        Err(error) {}
+        Ok(size) { println(size.first); }
+    }
+}
+"#);
+    assert_eq!(output.stdout, b"1\n");
+}
+
+#[test]
 fn filter_and_take_preserve_pipeline_order() {
     let output = run(r#"
 class VisitOdd implements Predicate<int> {

@@ -207,10 +207,12 @@ remain separate unless a project explicitly selects them together.
 
 The server supports full-text `didOpen`/`didChange` snapshots, saves, closes, and
 workspace-folder changes. It advertises full-document synchronization; ranged
-incremental edits are not applied. Open buffers override their disk files, and
-an unsaved new `.ncr` file under a configured source root participates in the
-bundle. Stale document versions do not replace newer buffers. Closing a document
-removes its overlay, allowing its saved disk contents to be used again.
+incremental edits are not applied. Open source buffers override their disk files,
+and an unsaved new `.ncr` file under a configured source root participates in the
+bundle. Open `Nacre.toml` and legacy `nacre.json` buffers also supply project
+configuration and source roots; closing one restores the saved disk configuration,
+or per-file validation when no project configuration remains. Stale document
+versions do not replace newer snapshots.
 
 Validation publishes the first frontend diagnostic, mapped to the owning file
 with UTF-16 positions and related notes. Diagnostics are cleared when resolved

@@ -420,9 +420,9 @@ fn manifest_path(path: &Path) -> Option<PathBuf> {
 }
 
 /// Includes directory roots so that the editor can admit unsaved source files.
-pub(crate) fn manifest_source_roots(manifest: &Path) -> Result<Vec<PathBuf>, String> {
+pub(crate) fn manifest_source_roots(manifest: &Path, overlay: Option<&str>) -> Result<Vec<PathBuf>, String> {
     let mut graph = PackageGraph::default();
-    graph.visit(manifest, None, 0)?;
+    graph.visit_with_overlay(manifest, None, 0, overlay)?;
     graph.roots.sort();
     graph.roots.dedup();
     let mut roots = Vec::new();
@@ -445,13 +445,41 @@ struct PackageGraph {
 
 impl PackageGraph {
     fn visit(&mut self, path: &Path, expected_name: Option<&str>, depth: usize) -> Result<(), String> {
+        self.visit_with_overlay(path, expected_name, depth, None)
+    }
+
+    fn visit_with_overlay(
+        &mut self,
+        path: &Path,
+        expected_name: Option<&str>,
+        depth: usize,
+        overlay: Option<&str>,
+    ) -> Result<(), String> {
         if depth > 32 { return Err("package dependency nesting limit is 32".to_owned()); }
-        let metadata = fs::symlink_metadata(path).map_err(|e| format!("{}: {e}", display_path(path)))?;
-        if metadata.file_type().is_symlink() {
-            return Err(format!("symbolic-link manifest is not allowed: {}", display_path(path)));
-        }
-        let path = path.canonicalize().map_err(|e| format!("{}: {e}", display_path(path)))?;
-        let manifest = crate::manifest::Manifest::load(&path)?;
+        let exists = match fs::symlink_metadata(path) {
+            Ok(metadata) => {
+                if metadata.file_type().is_symlink() {
+                    return Err(format!("symbolic-link manifest is not allowed: {}", display_path(path)));
+                }
+                if overlay.is_some() && !metadata.is_file() {
+                    return Err(format!("{}: manifest must be a regular file", display_path(path)));
+                }
+                true
+            }
+            Err(error) if overlay.is_some() && error.kind() == std::io::ErrorKind::NotFound => false,
+            Err(error) => return Err(format!("{}: {error}", display_path(path))),
+        };
+        let path = if exists {
+            path.canonicalize().map_err(|e| format!("{}: {e}", display_path(path)))?
+        } else {
+            let parent = path.parent().ok_or("manifest has no parent directory")?;
+            let name = path.file_name().ok_or("manifest has no file name")?;
+            parent.canonicalize().map_err(|e| format!("{}: {e}", display_path(path)))?.join(name)
+        };
+        let manifest = match overlay {
+            Some(contents) => crate::manifest::Manifest::parse(&path, contents)?,
+            None => crate::manifest::Manifest::load(&path)?,
+        };
         let root = path.parent().ok_or("manifest has no parent directory")?;
         if let Some(expected) = expected_name {
             let package = manifest.package.as_ref().ok_or_else(|| format!("{}: dependency must contain [package]", display_path(&path)))?;

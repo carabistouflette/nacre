@@ -114,11 +114,23 @@ impl Manifest {
         Self::load_with_size(path).map(|(manifest, _)| manifest)
     }
 
+    /// Parse and validate manifest text supplied by an editor overlay.
+    pub(crate) fn parse(path: &Path, contents: &str) -> Result<Self, String> {
+        if contents.len() > MAX_MANIFEST_BYTES {
+            return Err(path_error(
+                path,
+                format!("manifest exceeds the {MAX_MANIFEST_BYTES}-byte read limit"),
+            ));
+        }
+        let manifest = parse_manifest(path, contents)?;
+        validate_manifest(path, &manifest)?;
+        Ok(manifest)
+    }
+
     fn load_with_size(path: &Path) -> Result<(Self, usize), String> {
         let contents = read_manifest(path)?;
         let bytes_read = contents.len();
-        let manifest = parse_manifest(path, &contents)?;
-        validate_manifest(path, &manifest)?;
+        let manifest = Self::parse(path, &contents)?;
         Ok((manifest, bytes_read))
     }
 }
@@ -136,8 +148,7 @@ pub fn add_dependency(manifest_path: &Path, dependency_path: &Path) -> Result<St
             format!("cannot resolve manifest path: {error}"),
         )
     })?;
-    let owner = parse_manifest(&owner_file, &owner_contents)?;
-    validate_manifest(&owner_file, &owner)?;
+    let owner = Manifest::parse(&owner_file, &owner_contents)?;
 
     let (target_file, target_root) = resolve_project(dependency_path)?;
     let target = Manifest::load(&target_file)?;

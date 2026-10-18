@@ -7,23 +7,44 @@ use std::fs;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 
-pub(super) fn configured_source_roots(root: &Path) -> Result<Vec<PathBuf>, String> {
-    let manifest = root.join("Nacre.toml");
-    if manifest.exists() {
-        return crate::project::manifest_source_roots(&manifest);
-    }
+pub(super) fn is_project_config(path: &Path) -> bool {
+    path.file_name().is_some_and(|name| name == "Nacre.toml" || name == "nacre.json")
+}
+
+pub(super) fn configured_source_roots(
+    root: &Path,
+    manifest_overlay: Option<&str>,
+    json_overlay: Option<&str>,
+) -> Result<Vec<PathBuf>, String> {
     const MAX_CONFIG_BYTES: usize = 64 * 1024;
-    let config = root.join("nacre.json");
-    let metadata = fs::symlink_metadata(&config).map_err(|error| format!("{}: {error}", config.display()))?;
-    if metadata.file_type().is_symlink() || !metadata.is_file() {
-        return Err(format!("{} must be a regular project configuration file", config.display()));
+    let manifest = root.join("Nacre.toml");
+    if manifest.exists() || manifest_overlay.is_some() {
+        return crate::project::manifest_source_roots(&manifest, manifest_overlay);
     }
-    let mut bytes = Vec::new();
-    fs::File::open(&config).map_err(|error| format!("{}: {error}", config.display()))?
-        .take(MAX_CONFIG_BYTES as u64 + 1).read_to_end(&mut bytes)
-        .map_err(|error| format!("{}: {error}", config.display()))?;
-    if bytes.len() > MAX_CONFIG_BYTES { return Err(format!("{} exceeds the {MAX_CONFIG_BYTES}-byte configuration limit", config.display())); }
-    let value: Value = serde_json::from_slice(&bytes).map_err(|error| format!("{}: invalid JSON ({error})", config.display()))?;
+    let config = root.join("nacre.json");
+    match fs::symlink_metadata(&config) {
+        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() => {
+            return Err(format!("{} must be a regular project configuration file", config.display()));
+        }
+        Ok(_) => {}
+        Err(error) if json_overlay.is_some() && error.kind() == io::ErrorKind::NotFound => {}
+        Err(error) => return Err(format!("{}: {error}", config.display())),
+    }
+    let value: Value = if let Some(text) = json_overlay {
+        if text.len() > MAX_CONFIG_BYTES {
+            return Err(format!("{} exceeds the {MAX_CONFIG_BYTES}-byte configuration limit", config.display()));
+        }
+        serde_json::from_str(text).map_err(|error| format!("{}: invalid JSON ({error})", config.display()))?
+    } else {
+        let mut bytes = Vec::new();
+        fs::File::open(&config).map_err(|error| format!("{}: {error}", config.display()))?
+            .take(MAX_CONFIG_BYTES as u64 + 1).read_to_end(&mut bytes)
+            .map_err(|error| format!("{}: {error}", config.display()))?;
+        if bytes.len() > MAX_CONFIG_BYTES {
+            return Err(format!("{} exceeds the {MAX_CONFIG_BYTES}-byte configuration limit", config.display()));
+        }
+        serde_json::from_slice(&bytes).map_err(|error| format!("{}: invalid JSON ({error})", config.display()))?
+    };
     let sources = value.get("sources").and_then(Value::as_array)
         .ok_or_else(|| format!("{} must contain a string array named `sources`", config.display()))?;
     if sources.is_empty() { return Err(format!("{} has no source paths", config.display())); }

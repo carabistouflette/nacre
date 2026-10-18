@@ -669,7 +669,14 @@ fn inferred_expression_type(
         E::Char(_) => Some(Type::Char), E::Int(_) => Some(Type::Int), E::Long(_) => Some(Type::Long),
         E::Double(_) => Some(Type::Double), E::Unit => Some(Type::Unit), E::Boolean(_) => Some(Type::Boolean),
         E::String(_) => Some(Type::String),
-        E::Tuple(_, _) | E::Unary { .. } | E::Try(_) | E::Await(_) | E::Binary { .. } => None,
+        E::Try(inner) => {
+            let source_type = inferred_expression_type(inner, locals, current_class, classes, functions)?;
+            let source = concrete_class_for_type(&source_type, classes)?;
+            if !source.is_builtin_result { return None; }
+            source.variants.as_ref()?.iter()
+                .find(|variant| variant.name == "Ok")?.fields.first().cloned()
+        }
+        E::Tuple(_, _) | E::Unary { .. } | E::Await(_) | E::Binary { .. } => None,
     }
 }
 
