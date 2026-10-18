@@ -601,15 +601,20 @@ fn builtin_template(expander: &Expander, name: &str, arity: usize) -> Option<Str
     candidates.into_iter().next()
 }
 
+fn concrete_class_by_name<'a>(name: &str, classes: &'a [a::Class]) -> Option<&'a a::Class> {
+    classes.iter().find(|class| class.qualified_name == name || class.name == name)
+}
+
 fn concrete_class_for_type<'a>(ty: &Type, classes: &'a [a::Class]) -> Option<&'a a::Class> {
     let name = match ty {
-        Type::Named(name) => name.clone(),
+        Type::Named(name) => return concrete_class_by_name(name, classes),
         Type::Applied { .. } => {
             let mut name = String::new();
             append_type_name(&mut name, ty);
             name
         }
-        Type::Borrow { name, args, .. } if args.is_empty() => name.clone(),
+        Type::Borrow { name, args, .. } if args.is_empty() =>
+            return concrete_class_by_name(name, classes),
         Type::Borrow { name, args, .. } => {
             let mut full = name.clone();
             append_type_arguments(&mut full, args);
@@ -617,8 +622,9 @@ fn concrete_class_for_type<'a>(ty: &Type, classes: &'a [a::Class]) -> Option<&'a
         }
         _ => return None,
     };
-    classes.iter().find(|class| class.qualified_name == name || class.name == name)
+    concrete_class_by_name(&name, classes)
 }
+
 
 fn inferred_expression_type(
     expr: &a::Expr,

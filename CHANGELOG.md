@@ -6,6 +6,8 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 - Avoid copying complete local type maps at every nested block during iterator
   specialization discovery; track and restore only bindings introduced in each
   scope.
+- Borrow names for direct concrete-class lookups during generic inference,
+  avoiding a temporary owned string for named and non-generic borrowed types.
 - Share LSP query source loading across document-symbol, hover, and definition
   requests; borrow the active document slice from its source bundle rather than
   cloning it for each request.
