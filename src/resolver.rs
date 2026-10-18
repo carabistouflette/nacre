@@ -23,6 +23,13 @@ struct ImportScope {
     functions: HashMap<String, ImportBinding>,
 }
 
+#[derive(Default)]
+struct ImportedTraitCandidates<'a> {
+    visible: Option<(usize, &'a a::Trait)>,
+    private: Option<(usize, &'a a::Trait)>,
+    ambiguous: bool,
+}
+
 struct Resolver {
     modules: HashSet<String>,
     unit_modules: Vec<String>,
@@ -69,11 +76,12 @@ pub fn resolve(program: &mut a::Program) -> Result<(), Diagnostic> {
             return Err(Diagnostic::new(tr.span, format!("duplicate trait `{}` in module `{}`", tr.name, module)));
         }
     }
+    let imported_traits = index_imported_traits(program, &trait_map);
 
     for class in &mut program.classes {
         let unit = &program.units[class.unit];
         for name in class.type_bounds.iter_mut().flatten() {
-            let (_, tr) = resolve_trait(&trait_map, unit, name, class.span)?;
+            let (_, tr) = resolve_trait(&trait_map, &imported_traits[class.unit], unit, name, class.span)?;
             tr.qualified_name.clone_into(name);
         }
     }
@@ -92,7 +100,7 @@ pub fn resolve(program: &mut a::Program) -> Result<(), Diagnostic> {
 
     for imp in &mut program.impls {
         let unit = &program.units[imp.unit];
-        let (trait_index, tr) = resolve_trait(&trait_map, unit, &imp.trait_name, imp.span)?;
+        let (trait_index, tr) = resolve_trait(&trait_map, &imported_traits[imp.unit], unit, &imp.trait_name, imp.span)?;
         let imp_module = &unit.module;
         let qualified_class = qualify(imp_module, &imp.target_class);
         let mut best_candidate: Option<(u8, usize)> = None;
@@ -154,6 +162,7 @@ pub fn resolve(program: &mut a::Program) -> Result<(), Diagnostic> {
         }
     }
 
+    drop(imported_traits);
     drop(trait_map);
     let resolver = Resolver::new(program)?;
     for function in &mut program.functions {
@@ -166,7 +175,8 @@ pub fn resolve(program: &mut a::Program) -> Result<(), Diagnostic> {
 }
 
 fn resolve_trait<'a>(
-    trait_map: &HashMap<&str, HashMap<&str, (usize, &'a a::Trait)>>,
+    trait_map: &HashMap<&'a str, HashMap<&'a str, (usize, &'a a::Trait)>>,
+    imported_traits: &HashMap<&'a str, ImportedTraitCandidates<'a>>,
     unit: &a::SourceUnit,
     name: &str,
     span: Span,
@@ -183,39 +193,82 @@ fn resolve_trait<'a>(
         return Ok((index, tr));
     }
 
-    let mut matched: Option<(usize, &'a a::Trait)> = None;
-    let mut private_match: Option<(usize, &'a a::Trait)> = None;
-    for import in &unit.imports {
-        let module = if import.wildcard {
-            Some(import.path.as_str())
-        } else if let Some((module, imported_name)) = import.path.rsplit_once('.')
-            && imported_name == name {
-                Some(module)
-            } else {
-                None
-            };
-        let Some(module) = module else { continue; };
-        let Some((index, tr)) = trait_map.get(module).and_then(|traits| traits.get(name)).copied() else { continue; };
-        if tr.visibility == Visibility::Private {
-            private_match.get_or_insert((index, tr));
-            continue;
+    if let Some(imported) = imported_traits.get(name) {
+        if imported.ambiguous {
+            return Err(Diagnostic::new(
+                span,
+                format!("ambiguous trait `{name}`: found multiple matching traits in imported modules"),
+            ));
         }
-        if let Some((_, previous)) = matched
-            && previous.qualified_name != tr.qualified_name {
-                return Err(Diagnostic::new(
-                    span,
-                    format!("ambiguous trait `{name}`: found multiple matching traits in imported modules"),
-                ));
-            }
-        matched = Some((index, tr));
+        if let Some(found) = imported.visible {
+            return Ok(found);
+        }
+        if let Some((_, tr)) = imported.private {
+            return Err(private_trait_error(tr, span));
+        }
+    }
+    Err(Diagnostic::new(span, format!("unknown trait `{name}`")))
+}
+
+fn index_imported_traits<'a>(
+    program: &a::Program,
+    trait_map: &HashMap<&'a str, HashMap<&'a str, (usize, &'a a::Trait)>>,
+) -> Vec<HashMap<&'a str, ImportedTraitCandidates<'a>>> {
+    if program.impls.is_empty()
+        && !program.classes.iter().any(|class| class.type_bounds.iter().any(Option::is_some)) {
+        return Vec::new();
     }
 
-    if let Some(found) = matched {
-        Ok(found)
-    } else if let Some((_, tr)) = private_match {
-        Err(private_trait_error(tr, span))
+    let mut referenced_units = vec![false; program.units.len()];
+    for class in &program.classes {
+        if class.type_bounds.iter().any(Option::is_some) {
+            referenced_units[class.unit] = true;
+        }
+    }
+    for imp in &program.impls {
+        referenced_units[imp.unit] = true;
+    }
+
+    let mut scopes = Vec::with_capacity(program.units.len());
+    for (unit_id, unit) in program.units.iter().enumerate() {
+        let mut scope = HashMap::new();
+        if referenced_units[unit_id] {
+            for import in &unit.imports {
+                if import.wildcard {
+                    if let Some(traits) = trait_map.get(import.path.as_str()) {
+                        for (&name, &(index, tr)) in traits {
+                            record_imported_trait(&mut scope, name, index, tr);
+                        }
+                    }
+                } else if let Some((module, imported_name)) = import.path.rsplit_once('.') {
+                    if let Some((trait_name, candidate)) = trait_map.get(module)
+                        .and_then(|traits| traits.get_key_value(imported_name)) {
+                            let (index, tr) = *candidate;
+                            record_imported_trait(&mut scope, *trait_name, index, tr);
+                        }
+                }
+            }
+        }
+        scopes.push(scope);
+    }
+    scopes
+}
+
+fn record_imported_trait<'a>(
+    scope: &mut HashMap<&'a str, ImportedTraitCandidates<'a>>,
+    name: &'a str,
+    index: usize,
+    tr: &'a a::Trait,
+) {
+    let candidates = scope.entry(name).or_default();
+    if tr.visibility == Visibility::Private {
+        candidates.private.get_or_insert((index, tr));
+    } else if let Some((_, previous)) = candidates.visible {
+        if previous.qualified_name != tr.qualified_name {
+            candidates.ambiguous = true;
+        }
     } else {
-        Err(Diagnostic::new(span, format!("unknown trait `{name}`")))
+        candidates.visible = Some((index, tr));
     }
 }
 

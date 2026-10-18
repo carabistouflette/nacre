@@ -142,6 +142,17 @@ fn impl_target_prefers_current_module_class_over_root_class() {
 }
 
 #[test]
+fn public_trait_import_wins_over_private_match() {
+    let source = bundle(&[
+        ("private.ncr", "module private_api; private trait Marker {}"),
+        ("public.ncr", "module public_api; public trait Marker {}"),
+        ("model.ncr", "module model; import private_api.*; import public_api.*; public class Item {} impl Marker for Item {} public class Holder<T: Marker> {}"),
+        ("main.ncr", "module app; import model.*; void main() { Holder<Item> holder = new Holder<Item>(); }"),
+    ]);
+    source.validate().unwrap();
+}
+
+#[test]
 fn declarations_are_unique_within_a_module_but_isolated_between_modules() {
     let duplicate = bundle(&[
         ("one.ncr", "module first.types; public class Item {}"),

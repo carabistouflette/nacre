@@ -17,6 +17,8 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   unit/module/root priority without scanning and sorting every class per impl.
 - Build a borrowed trait/class implementation index on the first generic-bound
   check instead of rescanning every impl for each specialization.
+- Index imported traits once per referenced source unit, preserving private and
+  ambiguous-match semantics without rescanning imports for each bound or impl.
 
 - End local borrowed bindings and retained view loans after their last
   control-flow use. Backward liveness follows branch alternatives and loop
