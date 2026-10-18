@@ -28,6 +28,7 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 - Use raw allocation for Text.parseDouble's fully copied input.
 
 - Reject non-ASCII LSP header bytes before parsing Content-Length.
+- Publish a source diagnostic when an open LSP document exceeds the source limit.
 
 - Correct ignored LLVM test commands to use the actual Cargo target name.
 

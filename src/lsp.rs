@@ -102,6 +102,18 @@ enum Control {
     Exit { graceful: bool },
 }
 
+fn validation_unavailable_diagnostic(message: String) -> Value {
+    json!({
+        "range": {
+            "start": { "line": 0, "character": 0 },
+            "end": { "line": 0, "character": 0 }
+        },
+        "severity": 1,
+        "source": "Nacre",
+        "message": message
+    })
+}
+
 impl Server {
     fn handle(&mut self, message: Value, output: &mut impl Write) -> Result<Control, String> {
         let Some(object) = message.as_object() else {
@@ -389,20 +401,21 @@ impl Server {
             Ok(files) => files,
             Err(message) => {
                 self.log(output, 2, &format!("Nacre validation unavailable for {}: {message}", scope.root.display()))?;
-                let mut manifest_diagnostics = HashMap::new();
+                let mut load_diagnostics = HashMap::new();
+                for (path, document) in &self.documents {
+                    if self.scope_for(path) == *scope && document.text.is_none() {
+                        let message = format!("document exceeds the {MAX_SOURCE_BYTES}-byte source limit");
+                        load_diagnostics.insert(
+                            document.uri.clone(),
+                            vec![validation_unavailable_diagnostic(message)],
+                        );
+                    }
+                }
                 let manifest_path = scope.root.join("Nacre.toml");
                 if manifest_path.is_file() && let Some(uri) = path_to_uri(&manifest_path) {
-                    manifest_diagnostics.insert(uri, vec![json!({
-                        "range": {
-                            "start": { "line": 0, "character": 0 },
-                            "end": { "line": 0, "character": 0 }
-                        },
-                        "severity": 1,
-                        "source": "Nacre",
-                        "message": message
-                    })]);
+                    load_diagnostics.insert(uri, vec![validation_unavailable_diagnostic(message)]);
                 }
-                self.publish_scope_diagnostics(scope, output, excluded_uri, manifest_diagnostics, None)?;
+                self.publish_scope_diagnostics(scope, output, excluded_uri, load_diagnostics, None)?;
                 return Ok(());
             }
         };

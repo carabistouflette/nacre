@@ -223,6 +223,42 @@ fn stdio_lsp_reports_utf16_diagnostics_edits_and_unsaved_project_overlays() {
     client.send(json!({ "jsonrpc": "2.0", "method": "exit" }));
     client.finish();
 }
+
+#[test]
+fn oversized_open_document_reports_a_source_diagnostic() {
+    let temp = TempDir::new();
+    let path = temp.0.join("Main.ncr");
+    let document_uri = uri(&path);
+    let mut client = Client::spawn();
+    client.send(json!({
+        "jsonrpc": "2.0", "id": 1, "method": "initialize",
+        "params": { "rootUri": uri(&temp.0), "capabilities": {} }
+    }));
+    client.response(1);
+    client.send(json!({ "jsonrpc": "2.0", "method": "initialized", "params": {} }));
+
+    let prefix = "void main() {}\n";
+    let text = format!(
+        "{prefix}{}",
+        " ".repeat(nacre::project::MAX_SOURCE_BYTES + 1 - prefix.len())
+    );
+    client.send(json!({
+        "jsonrpc": "2.0", "method": "textDocument/didOpen",
+        "params": { "textDocument": { "uri": document_uri, "languageId": "nacre", "version": 9, "text": text } }
+    }));
+    let diagnostics = client.diagnostics(&uri(&path));
+    let items = diagnostics["diagnostics"].as_array().unwrap();
+    assert_eq!(items.len(), 1, "{diagnostics}");
+    assert_eq!(items[0]["severity"].as_u64(), Some(1));
+    assert!(items[0]["message"].as_str().unwrap().contains("source limit"), "{diagnostics}");
+    assert_eq!(diagnostics["version"].as_i64(), Some(9));
+
+    client.send(json!({ "jsonrpc": "2.0", "id": 2, "method": "shutdown" }));
+    assert!(client.response(2)["result"].is_null());
+    client.send(json!({ "jsonrpc": "2.0", "method": "exit" }));
+    client.finish();
+}
+
 #[test]
 fn unsaved_cross_module_privacy_errors_clear_when_imported_overlay_changes() {
     let temp = TempDir::new();
