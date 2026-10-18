@@ -143,7 +143,6 @@ static ncr_obj_@WATCHER_NEXT_RESULT@ @WATCHER_NEXT@(ncr_obj_@WATCHER_ID@ *@WATCH
         NCR_FS_RETURN_ERROR(@WATCHER_NEXT_RESULT@, "Watcher.next malformed event name", EPROTO, ncr_line, ncr_column);
     }
     if (name_length > 0 && !ncr_utf8_valid(name_bytes, name_length)) {
-        @WATCHER_NEXT_SELF@->invalidated = true;
         return ncr_result_error_@WATCHER_NEXT_RESULT@("Watcher.next event name is not valid UTF-8", sizeof("Watcher.next event name is not valid UTF-8") - 1, ncr_line, ncr_column);
     }
     ncr_obj_@TEXT_ID@ *name = ncr_text_from_bytes_@TEXT_ID@(name_bytes, name_length, ncr_line, ncr_column);

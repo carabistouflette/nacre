@@ -3,6 +3,9 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Keep Linux directory watchers usable after reporting an entry with a non-UTF-8
+  name, while preserving an error for that consumed event.
+
 - Reserve unsupported language keywords in the Tree-sitter grammar so editors
   flag them consistently with the compiler.
 

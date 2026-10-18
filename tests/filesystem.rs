@@ -1552,6 +1552,105 @@ void main() {
     assert!(stdout.contains("CLOSED_NEXT_REJECTED\n"));
     assert!(stdout.contains("WATCH_DONE\n"));
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn watcher_remains_usable_after_non_utf8_entry_name() {
+    use std::os::unix::ffi::OsStringExt;
+
+    let scratch = Scratch::new();
+    let watched = scratch.0.join("watched");
+    let source_dir = scratch.0.join("source");
+    fs::create_dir(&watched).unwrap();
+    fs::create_dir(&source_dir).unwrap();
+    let invalid_name = OsString::from_vec(vec![0xff]);
+    let source_path = source_dir.join(&invalid_name);
+    let target_path = watched.join(invalid_name);
+    fs::write(&source_path, b"payload").unwrap();
+    let source = r#"
+Result<Unit,Text> watch(borrow Path path) {
+    Watcher watcher = Watcher.open(path)?;
+    Console.print("WATCH_READY\n");
+    match (Console.readLine()) {
+        Err(error) { return new Result<Unit,Text>.Err(error); }
+        Ok(option) { drop(option); }
+    }
+    match (watcher.next(2000L)) {
+        Err(error) {
+            if (error.equalsString("Watcher.next event name is not valid UTF-8")) { println("NON_UTF8_NAME_REPORTED"); }
+            else { println("UNEXPECTED_INITIAL_ERROR"); }
+            drop(error);
+        }
+        Ok(option) { println("NON_UTF8_NAME_NOT_REPORTED"); drop(option); }
+    }
+    Console.print("VALID_EVENT_READY\n");
+    match (Console.readLine()) {
+        Err(error) { return new Result<Unit,Text>.Err(error); }
+        Ok(option) { drop(option); }
+    }
+    boolean done = false;
+    while (!done) {
+        match (watcher.next(2000L)) {
+            Err(error) {
+                if (error.equalsString("Watcher.next event name is not valid UTF-8")) { println("NON_UTF8_NAME_REPORTED_AGAIN"); }
+                else if (error.equalsString("Watcher.next: directory watch is invalidated")) {
+                    println("WATCHER_INVALIDATED");
+                    done = true;
+                } else {
+                    println("UNEXPECTED_ERROR");
+                    done = true;
+                }
+                drop(error);
+            }
+            Ok(option) {
+                match (option) {
+                    None { println("VALID_EVENT_TIMED_OUT"); done = true; }
+                    Some(event) {
+                        borrow Text name = event.name();
+                        if (name.equalsString("valid")) {
+                            println("VALID_EVENT_RECEIVED");
+                            done = true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    watcher.close()?;
+    return new Result<Unit,Text>.Ok(());
+}
+void main() {
+    match (Args.get(0)) {
+        Err(error) { println("ARG_ERROR"); }
+        Ok(pathText) {
+            match (Path.fromText(pathText)) {
+                Err(error) { println("PATH_ERROR"); }
+                Ok(path) {
+                    match (watch(path)) {
+                        Err(error) { Console.printText(error); println(""); }
+                        Ok(unit) { println("WATCH_DONE"); }
+                    }
+                }
+            }
+        }
+    }
+}
+"#;
+    let program = compile(source);
+    let (mut child, mut output) = spawn_watcher(&program, &watched);
+    fs::rename(&source_path, &target_path).unwrap();
+    send_line(&mut child);
+    assert_eq!(take_line(&mut output), "NON_UTF8_NAME_REPORTED");
+    assert_eq!(take_line(&mut output), "VALID_EVENT_READY");
+    fs::create_dir(watched.join("valid")).unwrap();
+    send_line(&mut child);
+    let result = finish_child(child, output);
+    assert!(result.status.success(), "{}", String::from_utf8_lossy(&result.stderr));
+    assert_live_zero(&result);
+    let stdout = String::from_utf8(result.stdout).unwrap();
+    assert!(stdout.contains("VALID_EVENT_RECEIVED\n"), "{stdout}");
+    assert!(!stdout.contains("WATCHER_INVALIDATED\n"), "{stdout}");
+}
 #[cfg(target_os = "linux")]
 #[test]
 fn watcher_accepts_nameless_attribute_event_for_watched_directory() {
