@@ -34,6 +34,8 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 
 - Use the same four-space tab expansion for reported source columns.
 
+- Bound aggregate manifest reads during dependency-cycle checks to limit memory growth.
+
 - Cover manifest permission preservation when adding a local dependency.
 
 - Grant CI workflows read-only repository-content permissions.

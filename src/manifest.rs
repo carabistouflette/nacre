@@ -10,6 +10,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use toml_edit::{DocumentMut, InlineTable, Item, Table, Value};
 
 const MAX_MANIFEST_BYTES: usize = 1024 * 1024;
+const MAX_CYCLE_CHECK_MANIFEST_BYTES: usize = 8 * MAX_MANIFEST_BYTES;
 const MAX_CYCLE_CHECK_MANIFESTS: usize = 1024;
 static TEMP_FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -110,10 +111,15 @@ pub struct Profile {
 impl Manifest {
     /// Load and validate a Nacre TOML manifest.
     pub fn load(path: &Path) -> Result<Self, String> {
+        Self::load_with_size(path).map(|(manifest, _)| manifest)
+    }
+
+    fn load_with_size(path: &Path) -> Result<(Self, usize), String> {
         let contents = read_manifest(path)?;
+        let bytes_read = contents.len();
         let manifest = parse_manifest(path, &contents)?;
         validate_manifest(path, &manifest)?;
-        Ok(manifest)
+        Ok((manifest, bytes_read))
     }
 }
 
@@ -573,11 +579,13 @@ fn ensure_no_dependency_cycle(owner_file: &Path, target_file: &Path) -> Result<(
         .map_err(|error| path_error(target_file, format!("cannot resolve dependency manifest: {error}")))?;
     let mut states = HashMap::new();
     let mut visited = 0usize;
+    let mut total_manifest_bytes = 0usize;
     visit_dependency_graph(
         &target_file,
         &owner_file,
         &mut states,
         &mut visited,
+        &mut total_manifest_bytes,
     )
 }
 
@@ -586,6 +594,7 @@ fn visit_dependency_graph(
     owner_file: &Path,
     states: &mut HashMap<PathBuf, u8>,
     visited: &mut usize,
+    total_manifest_bytes: &mut usize,
 ) -> Result<(), String> {
     let manifest_file = fs::canonicalize(manifest_file).map_err(|error| {
         path_error(
@@ -623,11 +632,26 @@ fn visit_dependency_graph(
     }
     states.insert(manifest_file.clone(), 1);
 
-    let manifest = Manifest::load(&manifest_file)?;
+    let (manifest, manifest_bytes) = Manifest::load_with_size(&manifest_file)?;
+    *total_manifest_bytes = (*total_manifest_bytes).saturating_add(manifest_bytes);
+    if *total_manifest_bytes > MAX_CYCLE_CHECK_MANIFEST_BYTES {
+        return Err(path_error(
+            owner_file,
+            format!(
+                "dependency graph exceeds the {MAX_CYCLE_CHECK_MANIFEST_BYTES}-byte cycle-check manifest byte limit"
+            ),
+        ));
+    }
     let base = manifest_file.parent().unwrap_or_else(|| Path::new("."));
     for dependency in manifest.dependencies.values() {
         if let Some(reachable) = existing_dependency_manifest(base, &dependency.path, &manifest_file)? {
-            visit_dependency_graph(&reachable, owner_file, states, visited)?;
+            visit_dependency_graph(
+                &reachable,
+                owner_file,
+                states,
+                visited,
+                total_manifest_bytes,
+            )?;
         }
     }
 
@@ -988,6 +1012,33 @@ mod tests {
             .mode()
             & 0o7777;
         assert_eq!(mode, 0o600);
+    }
+
+    #[test]
+    fn dependency_cycle_check_bounds_aggregate_manifest_bytes() {
+        let temp = TestDir::new();
+        let owner = temp.write_manifest("owner", &package_manifest("owner"));
+        let large_name = "a".repeat(MAX_MANIFEST_BYTES - 256);
+        let chain_length = 10;
+        for index in 0..chain_length {
+            let dependencies = if index + 1 < chain_length {
+                format!("[dependencies]\nnext = {{ path = \"../chain-{}\" }}\n", index + 1)
+            } else {
+                String::new()
+            };
+            let contents = format!(
+                "[package]\nname = \"{large_name}\"\nversion = \"0.1.0\"\n{dependencies}"
+            );
+            temp.write_manifest(&format!("chain-{index}"), &contents);
+        }
+        let before = fs::read(&owner).expect("read owner manifest");
+
+        let error = match add_dependency(&owner, &temp.0.join("chain-0")) {
+            Ok(_) => panic!("cycle checking accepted a graph above its manifest byte limit"),
+            Err(error) => error,
+        };
+        assert!(error.contains("cycle-check manifest byte limit"), "{error}");
+        assert_eq!(fs::read(&owner).expect("read owner manifest"), before);
     }
 
     #[test]
