@@ -218,10 +218,7 @@ static size_t ncr_http_body_callback(char *bytes, size_t size, size_t count, voi
             context->response_too_large = true;
             return 0;
         }
-        unsigned char *next = ncr_allocate(capacity, context->line, context->column);
-        if (body->length > 0) { memcpy(next, body->bytes, body->length); }
-        ncr_deallocate(body->bytes);
-        body->bytes = next;
+        body->bytes = ncr_reallocate(body->bytes, capacity, context->line, context->column);
         body->capacity = capacity;
     }
     if (length > 0) { memcpy(body->bytes + body->length, bytes, length); }

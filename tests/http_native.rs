@@ -206,6 +206,44 @@ void main() {
 }
 
 #[test]
+fn preserves_large_response_bodies_across_buffer_growth() {
+    let response = concat!(
+        "HTTP/1.1 200 OK\r\n",
+        "Transfer-Encoding: chunked\r\n",
+        "Connection: close\r\n",
+        "\r\n",
+        "10\r\n",
+        "0123456789abcdef\r\n",
+        "10\r\n",
+        "0123456789abcdef\r\n",
+        "0\r\n",
+        "\r\n",
+    ).as_bytes().to_vec();
+    let (url, server) = one_response_server(response, Duration::ZERO);
+    let source = r#"
+Result<Unit, Text> fetch(borrow Text url) {
+    Text method = new Text("GET");
+    HttpRequest request = HttpRequest.create(method, url)?;
+    request.setMaxResponseBytes(64L)?;
+    HttpResponse response = request.send()?;
+    Text body = response.bodyText()?;
+    println(body.equalsString("0123456789abcdef0123456789abcdef"));
+    return new Result<Unit, Text>.Ok(());
+}
+void main() {
+    Text url = new Text("@URL@");
+    match (fetch(url)) {
+        Ok(unit) { println("DONE"); }
+        Err(error) { println("BODY_ERROR"); }
+    }
+}
+"#;
+    let output = run(&compile(&source.replace("@URL@", &url)));
+    assert_eq!(stdout_lines(&output), vec!["true".to_owned(), "DONE".to_owned()]);
+    server.join().unwrap();
+}
+
+#[test]
 fn reuses_a_request_without_replacing_prior_response_data() {
     let responses = vec![
         b"HTTP/1.1 200 OK\r\nContent-Length: 3\r\nConnection: close\r\n\r\none".to_vec(),
