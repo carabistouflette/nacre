@@ -1211,13 +1211,14 @@ pub(super) fn helpers(program: &t::Program) -> String {
 
 pub(super) fn drop_helpers(program: &t::Program) -> String {
     let mut out = String::new();
+    let mut unit_mutex_id = None;
     for class in &program.classes {
         let Some(native) = class.native else { continue };
         if !is_extra(native) { continue; }
         match native {
             C::AtomicInt | C::AtomicLong | C::AtomicBoolean | C::Semaphore |
             C::CountDownLatch | C::Barrier | C::CancellationToken => {
-                let unit = unit_mutex(program);
+                let unit = *unit_mutex_id.get_or_insert_with(|| unit_mutex(program));
                 out.push_str(&format!(
                     "static void ncr_concurrency_drop_{0}(ncr_obj_{0} *p) {{ struct ncr_mutex_control_{1} *control = p->control; p->control = NULL; if (control != NULL) {{ ncr_mutex_release_{1}(control); }} }}\n",
                     class.id, unit));
@@ -1229,13 +1230,13 @@ pub(super) fn drop_helpers(program: &t::Program) -> String {
                     class.id, mutex));
             }
             C::Future(_) => {
-                let unit = unit_mutex(program);
+                let unit = *unit_mutex_id.get_or_insert_with(|| unit_mutex(program));
                 out.push_str(&format!(
                     "static void ncr_concurrency_drop_{0}(ncr_obj_{0} *p) {{\n    int error = ncr_cancel_request_control(p->token_control);\n    if (error != 0) {{ ncr_sync_fatal(\"CancellationToken request during Future drop\", error); }}\n    if (p->pool_ready != NULL) {{\n        struct ncr_mutex_control_{1} *pool_control = p->pool_control;\n        error = pthread_mutex_lock(&pool_control->mutex);\n        if (error != 0) {{ ncr_sync_fatal(\"pthread_mutex_lock(Future drop wake)\", error); }}\n        error = pthread_cond_broadcast(&p->pool_ready->condition);\n        int unlock_error = pthread_mutex_unlock(&pool_control->mutex);\n        if (unlock_error != 0) {{ ncr_sync_fatal(\"pthread_mutex_unlock(Future drop wake)\", unlock_error); }}\n        if (error != 0) {{ ncr_sync_fatal(\"pthread_cond_broadcast(Future drop)\", error); }}\n    }}\n    if (p->standalone && !p->joined) {{\n        if (pthread_equal(pthread_self(), p->thread)) {{ ncr_sync_fatal(\"Future dropped by its own worker\", EDEADLK); }}\n        error = pthread_join(p->thread, NULL);\n        if (error != 0) {{ ncr_sync_fatal(\"pthread_join during Future drop\", error); }}\n        p->joined = true;\n    }}\n    struct ncr_mutex_control_{1} *state_control = p->state_control;\n    struct ncr_mutex_control_{1} *token_control = p->token_control;\n    struct ncr_mutex_control_{1} *pool_control = p->pool_control;\n    p->state_control = NULL; p->token_control = NULL; p->pool_control = NULL; p->pool_ready = NULL;\n    if (state_control != NULL) {{ ncr_mutex_release_{1}(state_control); }}\n    if (token_control != NULL) {{ ncr_mutex_release_{1}(token_control); }}\n    if (pool_control != NULL) {{ ncr_mutex_release_{1}(pool_control); }}\n}}\n",
                     class.id, unit));
             }
             C::ThreadPool(_) => {
-                let unit = unit_mutex(program);
+                let unit = *unit_mutex_id.get_or_insert_with(|| unit_mutex(program));
                 out.push_str(&format!(
                     "static void ncr_concurrency_drop_{0}(ncr_obj_{0} *p) {{\n    struct ncr_mutex_control_{1} *control = p->control;\n    p->control = NULL;\n    if (control == NULL) {{ return; }}\n    int error = ncr_pool_shutdown_{0}(control, false);\n    if (error != 0) {{ ncr_sync_fatal(\"ThreadPool shutdown during drop\", error); }}\n    ncr_mutex_release_{1}(control);\n}}\n",
                     class.id, unit));

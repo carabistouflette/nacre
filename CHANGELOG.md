@@ -25,6 +25,8 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   references, avoiding repeated function scans across nested plans.
 - Resolve native template method IDs in one function pass per template instead
   of scanning all functions for each distinct placeholder.
+- Resolve the shared Mutex<Unit> class once during concurrency drop-helper
+  generation instead of rescanning all classes for every handle type.
 
 - End local borrowed bindings and retained view loans after their last
   control-flow use. Backward liveness follows branch alternatives and loop
