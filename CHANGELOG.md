@@ -2,6 +2,12 @@
 
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
+- End formatter foreach-header state at its matching parenthesis and space its
+  colon, preserving normal loop-body and following-statement layout.
+
+- Preserve non-ASCII characters in formatter tokenization without UTF-8 boundary
+  panics.
+
 - Encode file URIs from Unix filesystem bytes, preserving non-UTF-8 source
   paths so the LSP can open them and publish diagnostics.
 

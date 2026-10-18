@@ -50,6 +50,29 @@ assert(f.get()==42);
 }
 
 #[test]
+fn formatter_exits_for_each_header_before_formatting_body_and_following_statements() {
+    let source = "void main(){List<int> values=new List<int>();for(int value:(values)){println(value);}println(2);}";
+    let formatted = fmt::format_source(source).unwrap();
+    assert!(
+        formatted.contains("for (int value : (values)) {"),
+        "{formatted}",
+    );
+    assert!(
+        formatted.contains("        println(value);\n    }\n    println(2);\n}\n"),
+        "{formatted}",
+    );
+
+    assert_eq!(fmt::format_source(&formatted).unwrap(), formatted);
+    validate(&formatted).unwrap();
+}
+
+#[test]
+fn formatter_preserves_non_ascii_source_characters_outside_literals() {
+    let formatted = fmt::format_source("void main(){€;}").unwrap();
+    assert_eq!(formatted, "void main() {\n    €;\n}\n");
+}
+
+#[test]
 fn visual_borrow_diagnostics_display_secondary_spans() {
     let source = "class C { int n = 1; void inc() { n = n + 1; } }\nvoid main() {\n    C c = new C();\n    borrow C r = c;\n    c.inc();\n}";
     let err = validate(source).unwrap_err();
