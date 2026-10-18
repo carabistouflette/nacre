@@ -969,6 +969,26 @@ mod tests {
             Path::new("../libs/core")
         );
     }
+    #[cfg(unix)]
+    #[test]
+    fn add_dependency_preserves_manifest_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp = TestDir::new();
+        let owner = temp.write_manifest("owner", &package_manifest("owner"));
+        let target = temp.write_manifest("target", &package_manifest("target"));
+        fs::set_permissions(&owner, fs::Permissions::from_mode(0o600))
+            .expect("restrict manifest permissions");
+
+        add_dependency(&owner, target.parent().unwrap()).expect("dependency added");
+
+        let mode = fs::metadata(&owner)
+            .expect("inspect updated manifest")
+            .permissions()
+            .mode()
+            & 0o7777;
+        assert_eq!(mode, 0o600);
+    }
 
     #[test]
     fn refuses_duplicate_dependency_without_changing_manifest() {
