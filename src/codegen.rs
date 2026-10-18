@@ -486,24 +486,22 @@ fn direct_runtime_helpers(
                         writeln!(out,
                             "void *ncr_llvm_variant_field_{id}_{variant_id}_{field_id}(void *value) {{ return &((ncr_obj_{id} *)value)->data.v{variant_id}.f{field_id}; }}").unwrap();
                     }
-                    let params: Vec<_> = (0..variant.fields.len()).map(|i| format!("void *ncr_arg_{i}")).collect();
-                    let mut init = format!("ncr_obj_{id} value = {{ .tag = {variant_id}, .data.v{variant_id} = {{");
+                    write!(out, "void ncr_llvm_variant_init_{id}_{variant_id}(void *out").unwrap();
+                    write_direct_argument_slots(&mut out, variant.fields.len());
+                    out.push_str(") {\n    ");
+                    write!(out, "ncr_obj_{id} value = {{ .tag = {variant_id}, .data.v{variant_id} = {{").unwrap();
                     if variant.fields.is_empty() {
-                        init.push_str(".ncr_empty = 0");
+                        out.push_str(".ncr_empty = 0");
                     } else {
                         for field_id in 0..variant.fields.len() {
-                            if field_id != 0 { init.push_str(", "); }
-                            write!(init, ".f{field_id} = *({} *)ncr_arg_{field_id}",
+                            if field_id != 0 { out.push_str(", "); }
+                            write!(out, ".f{field_id} = *({} *)ncr_arg_{field_id}",
                                 ctype(program, variant.fields[field_id])).unwrap();
                         }
                     }
-                    init.push_str("} };\n    *(ncr_obj_");
-                    init.push_str(&id.to_string());
-                    init.push_str(" *)out = value;");
-                    let mut signature = vec!["void *out".to_owned()];
-                    signature.extend(params);
-                    writeln!(out, "void ncr_llvm_variant_init_{id}_{variant_id}({}) {{\n    {}\n}}",
-                        signature.join(", "), init).unwrap();
+                    out.push_str("} };\n    *(ncr_obj_");
+                    write!(out, "{id}").unwrap();
+                    out.push_str(" *)out = value;\n}\n");
                 }
             }
         }

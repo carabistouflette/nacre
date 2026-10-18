@@ -164,6 +164,14 @@ int readNumber(Choice<int> value) {
     }
     return result;
 }
+int emptyVariantTag(Choice<int> value) {
+    int result = -1;
+    match (value) {
+        Empty { result = 1; }
+        Item(number) { result = number; }
+    }
+    return result;
+}
 int readInterface(Choice<NumberLike> value) {
     match (value) {
         Empty { return 0; }
@@ -187,11 +195,12 @@ void main() {
     println(readInterface(boxed()));
     println(readNested(nested()));
     println(readNumber(identity(number())));
+    println(emptyVariantTag(new Choice<int>.Empty()));
 }
 "#;
     assert_direct_matches_c(
         source,
-        b"9\n11\n42\n",
+        b"9\n11\n42\n1\n",
         &["-DNACRE_MEMORY_STATS"],
     );
 }
