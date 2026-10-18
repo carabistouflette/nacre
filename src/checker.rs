@@ -23,9 +23,63 @@ struct ClassInfo {
     methods: HashMap<String, usize>, constructor: Option<usize>, has_borrow: bool,
     is_interface: bool, interface_methods: Vec<usize>, implementations: Vec<(usize, Vec<usize>)>,
 }
+
+fn for_each_view_relevant_type(info: &ClassInfo, mut visit: impl FnMut(Type)) {
+    for field in &info.fields { visit(field.ty); }
+    if let Some(variants) = &info.variants {
+        for field in variants.iter().flat_map(|variant| &variant.fields) {
+            visit(*field);
+        }
+    }
+    match info.native {
+        Some(t::NativeClass::Map { key, value, hasher }) => {
+            visit(key);
+            visit(value);
+            if let Some(hasher) = hasher { visit(hasher); }
+        }
+        Some(t::NativeClass::Set { key, hasher }) => {
+            visit(key);
+            if let Some(hasher) = hasher { visit(hasher); }
+        }
+        _ => {}
+    }
+}
+
+fn classes_containing_views(classes: &[ClassInfo]) -> Vec<bool> {
+    let mut has_borrow = vec![false; classes.len()];
+    for (id, info) in classes.iter().enumerate() {
+        for_each_view_relevant_type(info, |ty| has_borrow[id] |= ty.is_borrow());
+    }
+    if !has_borrow.iter().any(|contains_view| *contains_view) {
+        return has_borrow;
+    }
+
+    let mut owners_by_component = vec![Vec::new(); classes.len()];
+    for (owner, info) in classes.iter().enumerate() {
+        for_each_view_relevant_type(info, |ty| {
+            if !ty.is_borrow()
+                && let Some(component) = ty.object_class() {
+                    owners_by_component[component].push(owner);
+                }
+        });
+    }
+
+    let mut pending: Vec<usize> = has_borrow.iter().enumerate()
+        .filter_map(|(id, &contains_view)| contains_view.then_some(id)).collect();
+    while let Some(component) = pending.pop() {
+        for &owner in &owners_by_component[component] {
+            if !has_borrow[owner] {
+                has_borrow[owner] = true;
+                pending.push(owner);
+            }
+        }
+    }
+    has_borrow
+}
 struct Tables {
     names: HashMap<String, usize>, classes: Vec<ClassInfo>,
     globals: HashMap<String, usize>, signatures: Vec<Signature>,
+    interface_implementers: Vec<Vec<usize>>,
 }
 impl Tables {
     fn resolve_type(&self, ty: &a::Type, span: Span) -> Result<Type, Diagnostic> {
@@ -75,18 +129,14 @@ impl Tables {
             let class = &tables.classes[id];
             let mut sendable = !class.has_borrow;
             if sendable && class.is_interface {
-                let mut has_implementation = false;
-                for (candidate, implementation) in tables.classes.iter().enumerate() {
-                    if implementation.implementations.iter().any(|(interface, _)|
-                        *interface == id) {
-                        has_implementation = true;
-                        if !class_sendable(tables, candidate, states) {
-                            sendable = false;
-                            break;
-                        }
+                let implementers = &tables.interface_implementers[id];
+                sendable &= !implementers.is_empty();
+                for &candidate in implementers {
+                    if !class_sendable(tables, candidate, states) {
+                        sendable = false;
+                        break;
                     }
                 }
-                sendable &= has_implementation;
             } else if sendable {
                 let (native_first, native_second, native_third) = match class.native {
                     Some(t::NativeClass::List(element)
@@ -337,7 +387,11 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
     if program.classes.iter().filter(|c| !c.is_builtin).count() > 128 {
         return Err(Diagnostic::new(Span::default(), "limit: 128 user classes per program"));
     }
-    let mut tables = Tables { names: HashMap::new(), classes: Vec::new(), globals: HashMap::new(), signatures: Vec::new() };
+    let mut tables = Tables {
+        names: HashMap::new(), classes: Vec::new(),
+        globals: HashMap::new(), signatures: Vec::new(),
+        interface_implementers: vec![Vec::new(); program.classes.len()],
+    };
     for (id, class) in program.classes.iter().enumerate() {
         if class.name == "System" || class.name == "println" {
             return Err(Diagnostic::new(class.span, "class name reserved for output support"));
@@ -587,30 +641,7 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
             tables.classes[id].fields.push(FieldInfo { name: field.name.clone(), ty, visibility: field.visibility });
         }
     }
-    // View-ness propagates through class fields and every enum payload.
-    let mut has_borrow = vec![false; program.classes.len()];
-    loop {
-        let mut changed = false;
-        for (id, info) in tables.classes.iter().enumerate() {
-            let contains_view = |ty: Type| ty.is_borrow()
-                || ty.object_class().is_some_and(|child| has_borrow[child]);
-            let native_contains_view = match info.native {
-                Some(t::NativeClass::Map { key, value, hasher }) =>
-                    contains_view(key) || contains_view(value) || hasher.is_some_and(contains_view),
-                Some(t::NativeClass::Set { key, hasher }) =>
-                    contains_view(key) || hasher.is_some_and(contains_view),
-                _ => false,
-            };
-            if !has_borrow[id] && (info.fields.iter().any(|f| contains_view(f.ty))
-                || info.variants.as_ref().is_some_and(|variants|
-                    variants.iter().any(|v| v.fields.iter().copied().any(contains_view)))
-                || native_contains_view) {
-                has_borrow[id] = true;
-                changed = true;
-            }
-        }
-        if !changed { break; }
-    }
+    let has_borrow = classes_containing_views(&tables.classes);
     for (info, value) in tables.classes.iter_mut().zip(has_borrow) { info.has_borrow = value; }
     for (id, class) in program.classes.iter().enumerate() {
         match tables.classes[id].native {
@@ -767,6 +798,7 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
                 methods.push(implementation);
             }
             tables.classes[class_id].implementations.push((interface_id, methods));
+            tables.interface_implementers[interface_id].push(class_id);
         }
     }
     // Ordinary objects still require mandatory fields. Enums are alternatives:
@@ -787,9 +819,7 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
                 // An abstract interface with no local implementers is an opaque
                 // boundary, not a recursive ownership cycle. Existing concrete
                 // implementers still participate in the productivity fixed point.
-                let mut implementers = tables.classes.iter().enumerate().filter_map(
-                    |(candidate, class)| class.implementations.iter()
-                        .any(|(interface, _)| *interface == id).then_some(candidate));
+                let mut implementers = tables.interface_implementers[id].iter().copied();
                 match implementers.next() {
                     None => true,
                     Some(candidate) => productive[candidate]

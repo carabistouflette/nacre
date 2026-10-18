@@ -2,6 +2,7 @@
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::process::Command;
+use super::{capture_limited_output, compiler_stderr, StdoutCapture, OUTPUT_CAPTURE_LIMIT_BYTES};
 
 #[derive(Debug)]
 pub struct Toolchain {
@@ -76,9 +77,9 @@ fn tool_output(
     variable: &str,
     guidance: &str,
 ) -> Result<String, String> {
-    let output = Command::new(tool)
-        .args(args)
-        .output()
+    let mut command = Command::new(tool);
+    command.args(args);
+    let output = capture_limited_output(command, OUTPUT_CAPTURE_LIMIT_BYTES, StdoutCapture::Capture)
         .map_err(|error| format!(
             "direct LLVM compilation requires {name} ({variable}={tool:?}) executable: {error}. {guidance}; set {variable} to its executable path"
         ))?;
@@ -86,7 +87,13 @@ fn tool_output(
         return Err(format!(
             "{name} {tool:?} failed for {}:\n{}",
             args.join(" "),
-            String::from_utf8_lossy(&output.stderr),
+            compiler_stderr(&output),
+        ));
+    }
+    if let Some(note) = output.truncation_note(OUTPUT_CAPTURE_LIMIT_BYTES) {
+        return Err(format!(
+            "{name} {tool:?} produced excessive output for {}:\n{note}",
+            args.join(" "),
         ));
     }
     let mut result = String::from_utf8_lossy(&output.stdout).into_owned();

@@ -19,7 +19,8 @@ Directories are traversed recursively in sorted order. Directory inputs collect
 `.ncr` files and skip hidden entries, `out`, and `target`. An explicitly supplied
 regular file is read as given. Symlink sources are refused, as are duplicate
 canonical paths. Source text must be UTF-8. A bundle is limited to 64 files,
-1 MiB of combined source, and directory nesting depth 32.
+1 MiB of combined source, 4,096 directory entries across discovery, and
+directory nesting depth 32.
 
 Each file is lexed and parsed independently, then its declarations are resolved
 as one whole program. A source-unit header assigns declarations to a namespace;
@@ -45,12 +46,13 @@ void main() {
 }
 ```
 
-`import model.Counter;` imports one public declaration;
+`import model.Counter;` imports one public type or function;
 `import model.*;` imports the public declarations in that module. Functions may
-also be imported by name. Private declarations are available within their own
-module but cannot be imported from another module. Built-in standard-library
-names are reserved and available without user-authored imports. If a source unit
-has no `module` header, its declarations belong to the unnamed module.
+also be imported by name. Private declarations, including traits, are available
+within their own module but cannot be imported from another module. Built-in
+standard-library names are reserved and available without user-authored imports.
+If a source unit has no `module` header, its declarations belong to the unnamed
+module.
 
 Modules and imports resolve only among the source units selected for the
 compilation bundle, including local package dependencies. This is whole-program
@@ -192,9 +194,11 @@ as the compiler. Legacy `nacre.json` still accepts a non-empty `sources` array:
 ```
 
 Paths that are absolute or escape the project root are rejected. Symlinks are
-not followed. The compiler's file, source-size, and directory-depth limits also
-apply to a project. Legacy JSON configuration must be a regular file and is
-limited to 64 KiB; TOML manifests use the 1 MiB limit above.
+not followed. Legacy JSON source roots also reject symlinks in existing parent
+components, so a symlinked ancestor cannot redirect loading outside the project.
+The compiler's file, source-size, and directory-depth limits also apply to a
+project. Legacy JSON configuration must be a regular file and is limited to 64
+KiB; TOML manifests use the 1 MiB limit above.
 `examples/language/multi_file_project/nacre.json` is a working legacy configuration.
 
 Without a project marker, each open source document is compiled by itself.

@@ -135,6 +135,36 @@ void main() {
 "#);
     assert_eq!(output.stdout, b"1\n2\n1\n1\n2\n3\n4\n");
 }
+
+#[test]
+fn sibling_iterator_scopes_restore_each_local_type() {
+    let output = run(r#"
+class DoubleInt implements Mapper<int, int> {
+    public int apply(int value) { return value * 2; }
+}
+class SumInt implements Folder<int, int> {
+    public int apply(int total, int value) { return total + value; }
+}
+class DoubleLong implements Mapper<long, long> {
+    public long apply(long value) { return value * 2L; }
+}
+class SumLong implements Folder<long, long> {
+    public long apply(long total, long value) { return total + value; }
+}
+void main() {
+    if (true) {
+        List<int> values = new List<int>();
+        values.add(3);
+        println(values.iter().map(new DoubleInt()).fold(0, new SumInt()));
+    } else {
+        List<long> values = new List<long>();
+        values.add(4L);
+        println(values.iter().map(new DoubleLong()).fold(0L, new SumLong()));
+    }
+}
+"#);
+    assert_eq!(output.stdout, b"6\n");
+}
 #[test]
 fn zip_enumerate_and_map_sources_use_the_shared_pair_representation() {
     let output = run(r#"

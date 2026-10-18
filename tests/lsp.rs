@@ -223,6 +223,82 @@ fn stdio_lsp_reports_utf16_diagnostics_edits_and_unsaved_project_overlays() {
     client.send(json!({ "jsonrpc": "2.0", "method": "exit" }));
     client.finish();
 }
+
+#[test]
+fn lsp_position_queries_resolve_bare_cr_line_endings() {
+    let temp = TempDir::new();
+    let source_dir = temp.0.join("src");
+    fs::create_dir(&source_dir).unwrap();
+    fs::write(
+        temp.0.join("Nacre.toml"),
+        "[package]\nname = 'cr_line_endings'\nversion = '0.1.0'\nsources = ['src']\n",
+    ).unwrap();
+    let source = "class Item {}\rvoid main() { Item item = new Item(); }\r";
+    let path = source_dir.join("Main.ncr");
+    fs::write(&path, source).unwrap();
+    let document_uri = uri(&path);
+    let character = source.split('\r').nth(1).unwrap().find("Item").unwrap();
+
+    let mut client = Client::spawn();
+    client.send(json!({
+        "jsonrpc": "2.0", "id": 1, "method": "initialize",
+        "params": { "rootUri": uri(&temp.0), "capabilities": {} }
+    }));
+    client.response(1);
+    client.send(json!({ "jsonrpc": "2.0", "method": "initialized", "params": {} }));
+    client.send(json!({
+        "jsonrpc": "2.0", "method": "textDocument/didOpen",
+        "params": { "textDocument": { "uri": document_uri.clone(), "languageId": "nacre", "version": 1, "text": source } }
+    }));
+    client.send(json!({
+        "jsonrpc": "2.0", "id": 2, "method": "textDocument/definition",
+        "params": { "textDocument": { "uri": document_uri }, "position": { "line": 1, "character": character } }
+    }));
+    let definition = client.response(2);
+    assert_eq!(definition["result"]["uri"], uri(&path));
+    assert_eq!(definition["result"]["range"]["start"]["line"], 0);
+
+    client.send(json!({ "jsonrpc": "2.0", "id": 3, "method": "shutdown" }));
+    assert!(client.response(3)["result"].is_null());
+    client.send(json!({ "jsonrpc": "2.0", "method": "exit" }));
+    client.finish();
+}
+
+#[test]
+fn oversized_open_document_reports_a_source_diagnostic() {
+    let temp = TempDir::new();
+    let path = temp.0.join("Main.ncr");
+    let document_uri = uri(&path);
+    let mut client = Client::spawn();
+    client.send(json!({
+        "jsonrpc": "2.0", "id": 1, "method": "initialize",
+        "params": { "rootUri": uri(&temp.0), "capabilities": {} }
+    }));
+    client.response(1);
+    client.send(json!({ "jsonrpc": "2.0", "method": "initialized", "params": {} }));
+
+    let prefix = "void main() {}\n";
+    let text = format!(
+        "{prefix}{}",
+        " ".repeat(nacre::project::MAX_SOURCE_BYTES + 1 - prefix.len())
+    );
+    client.send(json!({
+        "jsonrpc": "2.0", "method": "textDocument/didOpen",
+        "params": { "textDocument": { "uri": document_uri, "languageId": "nacre", "version": 9, "text": text } }
+    }));
+    let diagnostics = client.diagnostics(&uri(&path));
+    let items = diagnostics["diagnostics"].as_array().unwrap();
+    assert_eq!(items.len(), 1, "{diagnostics}");
+    assert_eq!(items[0]["severity"].as_u64(), Some(1));
+    assert!(items[0]["message"].as_str().unwrap().contains("source limit"), "{diagnostics}");
+    assert_eq!(diagnostics["version"].as_i64(), Some(9));
+
+    client.send(json!({ "jsonrpc": "2.0", "id": 2, "method": "shutdown" }));
+    assert!(client.response(2)["result"].is_null());
+    client.send(json!({ "jsonrpc": "2.0", "method": "exit" }));
+    client.finish();
+}
+
 #[test]
 fn unsaved_cross_module_privacy_errors_clear_when_imported_overlay_changes() {
     let temp = TempDir::new();
@@ -431,6 +507,46 @@ fn lsp_reports_manifest_diagnostics_when_nacre_toml_is_invalid() {
 
     client.send(json!({ "jsonrpc": "2.0", "id": 2, "method": "shutdown" }));
     assert!(client.response(2)["result"].is_null());
+    client.send(json!({ "jsonrpc": "2.0", "method": "exit" }));
+    client.finish();
+}
+
+#[cfg(unix)]
+#[test]
+fn lsp_does_not_resolve_through_intermediate_symlinked_source_roots() {
+    use std::os::unix::fs::symlink;
+
+    let temp = TempDir::new();
+    let project = temp.0.join("project");
+    let outside_source = temp.0.join("outside/src");
+    fs::create_dir_all(&project).unwrap();
+    fs::create_dir_all(&outside_source).unwrap();
+    fs::write(project.join("nacre.json"), r#"{"sources":["link/src"]}"#).unwrap();
+    fs::write(outside_source.join("External.ncr"), "class External {}\n").unwrap();
+    symlink(temp.0.join("outside"), project.join("link")).unwrap();
+
+    let main_path = project.join("Main.ncr");
+    let main_source = "void main() { External item = new External(); }\n";
+    fs::write(&main_path, main_source).unwrap();
+
+    let mut client = Client::spawn();
+    client.send(json!({
+        "jsonrpc": "2.0", "id": 1, "method": "initialize",
+        "params": { "rootUri": uri(&project), "capabilities": {} }
+    }));
+    client.response(1);
+    client.send(json!({ "jsonrpc": "2.0", "method": "initialized", "params": {} }));
+    client.send(json!({
+        "jsonrpc": "2.0", "id": 2, "method": "textDocument/definition",
+        "params": {
+            "textDocument": { "uri": uri(&main_path) },
+            "position": { "line": 0, "character": main_source.find("External").unwrap() }
+        }
+    }));
+    assert!(client.response(2)["result"].is_null());
+
+    client.send(json!({ "jsonrpc": "2.0", "id": 3, "method": "shutdown" }));
+    assert!(client.response(3)["result"].is_null());
     client.send(json!({ "jsonrpc": "2.0", "method": "exit" }));
     client.finish();
 }

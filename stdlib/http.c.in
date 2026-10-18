@@ -101,13 +101,8 @@ static bool ncr_http_grow_headers(ncr_obj_@HTTP_RESPONSE_ID@ *response, size_t l
     if (response->header_capacity >= NCR_HTTP_HEADER_COUNT_LIMIT) { return false; }
     size_t capacity = response->header_capacity == 0 ? 8 : response->header_capacity * 2;
     if (capacity > NCR_HTTP_HEADER_COUNT_LIMIT) { capacity = NCR_HTTP_HEADER_COUNT_LIMIT; }
-    struct ncr_http_header_entry *entries = ncr_allocate(capacity * sizeof(*entries), line, column);
-    struct ncr_http_header_entry *previous = ncr_http_header_entries(response);
-    if (response->header_count > 0) {
-        memcpy(entries, previous, response->header_count * sizeof(*entries));
-    }
-    ncr_deallocate(previous);
-    response->headers = entries;
+    response->headers = ncr_reallocate(response->headers,
+        capacity * sizeof(struct ncr_http_header_entry), line, column);
     response->header_capacity = capacity;
     return true;
 }
@@ -174,7 +169,12 @@ static bool ncr_http_response_line_is_status(const unsigned char *line, size_t l
     if (line[space + 1] < '0' || line[space + 1] > '9'
         || line[space + 2] < '0' || line[space + 2] > '9'
         || line[space + 3] < '0' || line[space + 3] > '9') { return false; }
-    return length == space + 4 || line[space + 4] == ' ';
+    if (length != space + 4 && line[space + 4] != ' ') { return false; }
+    for (size_t index = space + 4; index < length; ++index) {
+        unsigned char byte = line[index];
+        if ((byte < 0x20U && byte != '\t') || byte == 0x7fU) { return false; }
+    }
+    return true;
 }
 
 struct ncr_http_callback_context {
@@ -185,7 +185,7 @@ struct ncr_http_callback_context {
     bool response_too_large;
     bool header_limit_exceeded;
     bool header_count_exceeded;
-    bool malformed_header;
+    bool malformed_response;
 };
 
 static size_t ncr_http_body_callback(char *bytes, size_t size, size_t count, void *userdata) {
@@ -213,10 +213,7 @@ static size_t ncr_http_body_callback(char *bytes, size_t size, size_t count, voi
             context->response_too_large = true;
             return 0;
         }
-        unsigned char *next = ncr_allocate(capacity, context->line, context->column);
-        if (body->length > 0) { memcpy(next, body->bytes, body->length); }
-        ncr_deallocate(body->bytes);
-        body->bytes = next;
+        body->bytes = ncr_reallocate(body->bytes, capacity, context->line, context->column);
         body->capacity = capacity;
     }
     if (length > 0) { memcpy(body->bytes + body->length, bytes, length); }
@@ -248,7 +245,7 @@ static size_t ncr_http_header_callback(char *bytes, size_t size, size_t count, v
     if (content_length == 0) { return length; }
     if (content_length >= 5 && memcmp(bytes, "HTTP/", 5) == 0) {
         if (!ncr_http_response_line_is_status((const unsigned char *)bytes, content_length)) {
-            context->malformed_header = true;
+            context->malformed_response = true;
             return 0;
         }
         ncr_http_clear_headers(response);
@@ -259,7 +256,7 @@ static size_t ncr_http_header_callback(char *bytes, size_t size, size_t count, v
     while (colon < content_length && bytes[colon] != ':') { colon++; }
     if (colon == 0 || colon == content_length
         || !ncr_http_valid_token((const unsigned char *)bytes, colon)) {
-        context->malformed_header = true;
+        context->malformed_response = true;
         return 0;
     }
     size_t value_start = colon + 1;
@@ -269,14 +266,14 @@ static size_t ncr_http_header_callback(char *bytes, size_t size, size_t count, v
     size_t value_length = value_end - value_start;
     if (!ncr_http_valid_header_value((const unsigned char *)bytes + value_start, value_length)
         || !ncr_utf8_valid((const unsigned char *)bytes + value_start, value_length)) {
-        context->malformed_header = true;
+        context->malformed_response = true;
         return 0;
     }
 
     struct ncr_http_header_entry *entries = ncr_http_header_entries(response);
     for (size_t index = 0; index < response->header_count; index++) {
         if (ncr_http_header_name_equal(&entries[index], (const unsigned char *)bytes, colon)) {
-            unsigned char *value = value_length == 0 ? NULL : ncr_allocate(value_length, context->line, context->column);
+            unsigned char *value = value_length == 0 ? NULL : ncr_allocate_raw(value_length, context->line, context->column);
             if (value_length > 0) { memcpy(value, bytes + value_start, value_length); }
             ncr_deallocate(entries[index].value);
             entries[index].value = value;
@@ -294,9 +291,9 @@ static size_t ncr_http_header_callback(char *bytes, size_t size, size_t count, v
         return 0;
     }
     entries = ncr_http_header_entries(response);
-    unsigned char *name = ncr_allocate(colon, context->line, context->column);
+    unsigned char *name = ncr_allocate_raw(colon, context->line, context->column);
     memcpy(name, bytes, colon);
-    unsigned char *value = value_length == 0 ? NULL : ncr_allocate(value_length, context->line, context->column);
+    unsigned char *value = value_length == 0 ? NULL : ncr_allocate_raw(value_length, context->line, context->column);
     if (value_length > 0) { memcpy(value, bytes + value_start, value_length); }
     entries[response->header_count++] = (struct ncr_http_header_entry){
         .name = name, .name_length = colon, .value = value, .value_length = value_length,
@@ -327,7 +324,7 @@ static @CREATE_RESULT_TYPE@ @HTTP_REQUEST_CREATE@(ncr_obj_@TEXT_ID@ *@CREATE_MET
     }
 
     size_t url_length = (size_t)@CREATE_URL_ID@->length;
-    unsigned char *url = ncr_allocate(url_length + 1, ncr_line, ncr_column);
+    unsigned char *url = ncr_allocate_raw(url_length + 1, ncr_line, ncr_column);
     memcpy(url, @CREATE_URL_ID@->bytes, url_length);
     url[url_length] = 0;
     if (ncr_http_url_has_userinfo(url, url_length)) {
@@ -365,7 +362,7 @@ static @CREATE_RESULT_TYPE@ @HTTP_REQUEST_CREATE@(ncr_obj_@TEXT_ID@ *@CREATE_MET
         return ncr_result_error_@CREATE_RESULT_ID@("HttpRequest.create: libcurl could not allocate an easy handle", sizeof("HttpRequest.create: libcurl could not allocate an easy handle") - 1, ncr_line, ncr_column);
     }
     size_t method_length = (size_t)@CREATE_METHOD_ID@->length;
-    unsigned char *method = ncr_allocate(method_length + 1, ncr_line, ncr_column);
+    unsigned char *method = ncr_allocate_raw(method_length + 1, ncr_line, ncr_column);
     memcpy(method, @CREATE_METHOD_ID@->bytes, method_length);
     method[method_length] = 0;
     ncr_obj_@HTTP_REQUEST_ID@ *request = ncr_allocate(sizeof(*request), ncr_line, ncr_column);
@@ -395,7 +392,7 @@ static @UNIT_RESULT_TYPE@ @HTTP_REQUEST_SET_HEADER@(ncr_obj_@HTTP_REQUEST_ID@ *n
         return ncr_result_error_@UNIT_RESULT_ID@("HttpRequest.setHeader: header is too large", sizeof("HttpRequest.setHeader: header is too large") - 1, ncr_line, ncr_column);
     }
     size_t line_length = name_length + 2 + value_length;
-    unsigned char *line = ncr_allocate(line_length + 1, ncr_line, ncr_column);
+    unsigned char *line = ncr_allocate_raw(line_length + 1, ncr_line, ncr_column);
     memcpy(line, @SET_HEADER_NAME_ID@->bytes, name_length);
     line[name_length] = ':';
     line[name_length + 1] = ' ';
@@ -417,7 +414,7 @@ static void @HTTP_REQUEST_SET_BODY@(ncr_obj_@HTTP_REQUEST_ID@ *ncr_self,
         ncr_fail("HttpRequest.setBody: invalid request or body", ncr_line, ncr_column);
     }
     size_t length = @SET_BODY_SOURCE_ID@->length;
-    unsigned char *copy = length == 0 ? NULL : ncr_allocate(length, ncr_line, ncr_column);
+    unsigned char *copy = length == 0 ? NULL : ncr_allocate_raw(length, ncr_line, ncr_column);
     if (length > 0) { memcpy(copy, @SET_BODY_SOURCE_ID@->bytes, length); }
     ncr_deallocate(ncr_self->body);
     ncr_self->body = copy;
@@ -458,7 +455,7 @@ static @UNIT_RESULT_TYPE@ @HTTP_REQUEST_SET_CA_FILE@(ncr_obj_@HTTP_REQUEST_ID@ *
     if (length == 0 || memchr(path_text->bytes, 0, length) != NULL) {
         return ncr_result_error_@UNIT_RESULT_ID@("HttpRequest.setCaFile: path must be nonempty and contain no NUL", sizeof("HttpRequest.setCaFile: path must be nonempty and contain no NUL") - 1, ncr_line, ncr_column);
     }
-    unsigned char *path = ncr_allocate(length + 1, ncr_line, ncr_column);
+    unsigned char *path = ncr_allocate_raw(length + 1, ncr_line, ncr_column);
     memcpy(path, path_text->bytes, length);
     path[length] = 0;
     ncr_deallocate(ncr_self->ca_file);
@@ -537,7 +534,7 @@ static @SEND_RESULT_TYPE@ @HTTP_REQUEST_SEND@(ncr_obj_@HTTP_REQUEST_ID@ *ncr_sel
         if (context.response_too_large) { detail = "response body exceeds configured byte limit"; }
         else if (context.header_limit_exceeded) { detail = "response headers exceed the 65536-byte limit"; }
         else if (context.header_count_exceeded) { detail = "response has more than 1024 distinct headers"; }
-        else if (context.malformed_header) { detail = "response contains a malformed or non-UTF-8 header"; }
+        else if (context.malformed_response) { detail = "response contains an invalid status line or response header"; }
         char message[256];
         size_t message_length = ncr_http_format_error(message, sizeof(message), "HttpRequest.send", detail);
         ncr_drop_@HTTP_RESPONSE_ID@(response);
@@ -561,7 +558,7 @@ static @SEND_RESULT_TYPE@ @HTTP_REQUEST_SEND@(ncr_obj_@HTTP_REQUEST_ID@ *ncr_sel
         ncr_drop_@HTTP_RESPONSE_ID@(response);
         return ncr_result_error_@SEND_RESULT_ID@("HttpRequest.send: final URL exceeds Text limits", sizeof("HttpRequest.send: final URL exceeds Text limits") - 1, ncr_line, ncr_column);
     }
-    response->final_url = ncr_allocate(final_url_length + 1, ncr_line, ncr_column);
+    response->final_url = ncr_allocate_raw(final_url_length + 1, ncr_line, ncr_column);
     memcpy(response->final_url, effective_url, final_url_length + 1);
     response->final_url_length = final_url_length;
     response->status = (int32_t)response_code;

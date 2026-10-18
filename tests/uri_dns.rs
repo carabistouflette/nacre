@@ -402,3 +402,55 @@ void main() {
     assert!(stdout.lines().all(|line| line == "true"), "{stdout}");
     assert_eq!(stdout.lines().count(), 13, "{stdout}");
 }
+
+#[test]
+fn dns_idna_rejects_legacy_numeric_ipv4_spellings() {
+    let source = r#"
+Result<Text, Text> idna(String host) {
+    Text input = new Text(host);
+    return Dns.idna(input);
+}
+Result<List<SocketAddress>, Text> resolve(String host) {
+    Text input = new Text(host);
+    return Dns.resolve(input, 0);
+}
+boolean idnaError(String host) {
+    match (idna(host)) {
+        Err(error) { return true; }
+        Ok(ascii) { return false; }
+    }
+}
+boolean idnaEquals(String host, String expected) {
+    match (idna(host)) {
+        Err(error) { return false; }
+        Ok(ascii) { return ascii.equalsString(expected); }
+    }
+}
+boolean resolveError(String host) {
+    match (resolve(host)) {
+        Err(error) { return true; }
+        Ok(addresses) { return false; }
+    }
+}
+void main() {
+    println(idnaEquals("127.0.0.1", "127.0.0.1"));
+    println(idnaError("127"));
+    println(idnaError("0"));
+    println(idnaError("0x7f000001"));
+    println(idnaError("0x7f.1"));
+    println(idnaError("0x7f.0.1"));
+    println(idnaError("0x7f.0.0.1"));
+    println(idnaError("0177.0.0.1"));
+    println(idnaError("127.1"));
+    println(idnaEquals("0x7f000001.example", "0x7f000001.example"));
+    println(resolveError("127"));
+    println(resolveError("0"));
+    println(resolveError("0x7f000001"));
+}
+"#;
+    let output = execute(&compile(source));
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        "true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n",
+    );
+}

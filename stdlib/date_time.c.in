@@ -292,26 +292,10 @@ ncr_obj_@DATE_TIME_ADD_RESULT@ @DATE_TIME_ADD_CALENDAR@(
             "DateTime.addCalendar: target month lands in an invalid date or daylight-saving gap",
             ncr_line, ncr_column);
     }
-    status = U_ZERO_ERROR;
-    ucal_setMillis(calendar, (UDate)intermediate, &status);
-    if (U_SUCCESS(status)) { ucal_add(calendar, UCAL_DATE, ncr_v_3, &status); }
-    UDate final_instant = U_FAILURE(status) ? 0.0 : ucal_getMillis(calendar, &status);
-    struct ncr_dt_fields final_fields;
-    valid = U_SUCCESS(status) && ncr_dt_calendar_fields(calendar, &final_fields)
-        && final_fields.year == expected_date.year
-        && final_fields.month == expected_date.month && final_fields.day == expected_date.day
-        && final_fields.hour == fields.hour && final_fields.minute == fields.minute
-        && final_fields.second == fields.second && final_fields.millisecond == fields.millisecond;
     int64_t result = 0;
-    if (valid) {
-        valid = ncr_dt_resolve_wall(calendar, final_fields.year, final_fields.month + 1,
-            final_fields.day, fields.hour, fields.minute, fields.second, fields.millisecond,
-            false, true, &result);
-    }
-    if (valid) {
-        valid = ncr_dt_udate_to_epoch(final_instant, &intermediate)
-            && intermediate == result && ncr_dt_epoch_in_range(result);
-    }
+    valid = ncr_dt_resolve_wall(calendar, expected_date.year, expected_date.month + 1,
+        expected_date.day, fields.hour, fields.minute, fields.second, fields.millisecond,
+        false, true, &result);
     ucal_close(calendar);
     if (!valid) {
         return NCR_DT_RESULT_ERROR(@DATE_TIME_ADD_RESULT@,

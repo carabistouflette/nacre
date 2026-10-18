@@ -1165,6 +1165,43 @@ void main() {
     );
 }
 
+#[test]
+fn files_read_link_grows_for_long_targets() {
+    use std::os::unix::fs::symlink;
+
+    let scratch = Scratch::new();
+    let target = format!("{}target", "segment/".repeat(40));
+    let link = scratch.0.join("long-link");
+    symlink(&target, &link).unwrap();
+
+    let source = r#"
+Result<Unit,Text> printLink(borrow Path link) {
+    Path target = Files.readLink(link)?;
+    Console.printText(target.asText());
+    println("");
+    return new Result<Unit,Text>.Ok(());
+}
+void main() {
+    match (Args.get(0)) {
+        Err(error) { println("ARG_ERROR"); }
+        Ok(linkText) {
+            match (Path.fromText(linkText)) {
+                Err(error) { println("PATH_ERROR"); }
+                Ok(link) {
+                    match (printLink(link)) {
+                        Err(error) { Console.printText(error); println(""); }
+                        Ok(unit) { println("OK"); }
+                    }
+                }
+            }
+        }
+    }
+}
+"#;
+    let output = run_source(source, &[link.as_path()]);
+    assert_eq!(output.stdout, format!("{target}\nOK\n").as_bytes());
+}
+
 #[cfg(target_os = "linux")]
 #[test]
 fn canonical_rejects_invalid_utf8_in_resolved_paths() {

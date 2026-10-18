@@ -127,6 +127,32 @@ void main() {
 }
 
 #[test]
+fn empty_compression_results_keep_small_capacities() {
+    let source = r#"
+Result<Unit, Text> exercise() {
+    ByteBuffer input = ByteBuffer.withCapacity(0L)?;
+    match (Compression.deflate(input, -1)) {
+        Err(error) { println("deflate-error"); drop(error); }
+        Ok(encoded) { println(encoded.capacity() <= 64L); }
+    }
+    match (Compression.gzip(input, -1)) {
+        Err(error) { println("gzip-error"); drop(error); }
+        Ok(encoded) { println(encoded.capacity() <= 64L); }
+    }
+    return new Result<Unit, Text>.Ok(());
+}
+void main() {
+    match (exercise()) {
+        Ok(unit) {}
+        Err(error) { error.print(); }
+    }
+}
+"#;
+    let output = execute(source);
+    assert_clean(&output, b"true\ntrue\n");
+}
+
+#[test]
 fn large_binary_payload_round_trips_through_wrapped_deflate_and_gzip() {
     let source = r#"
 Result<ByteBuffer, Text> makeBuffer() { return ByteBuffer.withCapacity(0L); }

@@ -317,6 +317,13 @@ nacre add <path> [--manifest-path <file>]
 nacre doctor [--direct] [--zip]
 nacre lsp
 ```
+`nacre test` discards child stdout and captures at most 64 KiB of stderr. The
+`nacre bench` runner captures at most 64 KiB per stream; it drains and discards
+excess. Failed tests report truncated stderr; benchmarks exceeding the cap fail.
+Native C/LLVM compiler diagnostics and toolchain probes are capped at 64 KiB per
+captured stream. Truncated diagnostics are marked; incomplete cache probes skip
+caching, while `emit-llvm` still returns the complete IR output.
+
 Commands accept multiple sources or recursively collected directories, resolving
 their module namespaces together as one whole-program compilation. `init` and
 `new` create projects; `init` is an alias. Existing outputs are replaced except
@@ -331,12 +338,13 @@ instruction extensions (`-march=native`); `--lto` enables link-time optimization
 (`-flto`); `--jemalloc` links jemalloc (`-ljemalloc`). These options and the
 selected optimization also apply to `--direct` native builds.
 
-The default C `run`/`build` path caches completed executables, keyed by generated
-C source, compiler, optimization level, and flags. The cache defaults to
-`$XDG_CACHE_HOME/nacre` (or `$HOME/.cache/nacre`); `NACRE_CACHE_DIR` overrides
-the location and `NACRE_NO_CACHE` disables caching. PGO builds bypass the cache.
-Direct native builds use a separate runtime-bitcode cache only; they do not cache
-the per-program user LLVM module or final executable.
+The default C `run`/`build` path caches completed executables. Its key includes
+generated C, compiler command/version/target, flags, and resolved header paths
+and contents. If dependency scanning fails, the build safely bypasses the cache.
+The cache defaults to `$XDG_CACHE_HOME/nacre` (or `$HOME/.cache/nacre`);
+`NACRE_CACHE_DIR` overrides the location and `NACRE_NO_CACHE` disables caching.
+PGO builds bypass the cache. Direct native builds use a separate runtime-bitcode
+cache only; their user LLVM module and final executable are not cached.
 
 `emit-llvm` uses Clang's C frontend by default. With `--direct`, it emits the
 typed-IR user functions and `main` as LLVM; `--memory-stats` is unavailable for

@@ -23,12 +23,14 @@ module.exports = grammar({
   word: ($) => $.identifier,
   inline: ($) => [
     $._return_type, $.type_identifier, $.method_modifiers, $.top_level_modifiers,
-    $.interface_method_modifiers,
+    $.interface_method_modifiers, $.trait_method_modifiers, $.impl_method_modifiers,
   ],
   conflicts: ($) => [
     [$.qualified_type_identifier, $._expression],
     [$._type_identifier, $._expression],
     [$.record_pattern, $.match_binding],
+    [$.field_declaration, $._method_function_declaration],
+    [$.field_declaration, $.constructor_declaration, $._method_function_declaration],
   ],
 
   rules: {
@@ -61,6 +63,8 @@ module.exports = grammar({
       seq(optional($.visibility_modifier), $.class_declaration),
       seq(optional($.visibility_modifier), $.interface_declaration),
       seq(optional($.visibility_modifier), $.enum_declaration),
+      seq(optional($.visibility_modifier), $.trait_declaration),
+      seq(optional($.visibility_modifier), $.impl_declaration),
       alias($._top_level_function_declaration, $.function_declaration),
     ),
 
@@ -77,6 +81,20 @@ module.exports = grammar({
       field('name', $.identifier),
       optional(field('type_parameters', $.type_parameters)),
       field('body', $.interface_body),
+    ),
+
+    trait_declaration: ($) => seq(
+      'trait',
+      field('name', $.identifier),
+      field('body', $.trait_body),
+    ),
+
+    impl_declaration: ($) => seq(
+      'impl',
+      field('trait', $.type_identifier),
+      'for',
+      field('target', $.type_identifier),
+      field('body', $.impl_body),
     ),
 
     enum_declaration: ($) => seq(
@@ -120,6 +138,34 @@ module.exports = grammar({
       '}',
     ),
 
+    trait_body: ($) => seq(
+      '{',
+      repeat(alias($._trait_method_function_declaration, $.function_declaration)),
+      '}',
+    ),
+
+    impl_body: ($) => seq(
+      '{',
+      repeat(alias($._impl_method_function_declaration, $.function_declaration)),
+      '}',
+    ),
+
+    _trait_method_function_declaration: ($) => seq(
+      optional(field('modifiers', $.trait_method_modifiers)),
+      field('return_type', $._return_type),
+      field('name', $.identifier),
+      field('parameters', $.parameter_list),
+      field('body', ';'),
+    ),
+
+    _impl_method_function_declaration: ($) => seq(
+      optional(field('modifiers', $.impl_method_modifiers)),
+      field('return_type', $._return_type),
+      field('name', $.identifier),
+      field('parameters', $.parameter_list),
+      field('body', $.block),
+    ),
+
     field_declaration: ($) => seq(
       optional(field('modifiers', $.visibility_modifier)),
       field('type', $._type),
@@ -159,22 +205,29 @@ module.exports = grammar({
       field('body', ';'),
     ),
 
-    top_level_modifiers: ($) => choice(
+    top_level_modifiers: ($) => repeat1(choice(
       $.visibility_modifier,
       'static',
-      seq($.visibility_modifier, 'static'),
-      seq('static', $.visibility_modifier),
-    ),
+      'async',
+    )),
 
-    method_modifiers: ($) => choice(
+    method_modifiers: ($) => repeat1(choice(
       $.visibility_modifier,
       'static',
       'readonly',
-      seq($.visibility_modifier, 'static'),
-      seq('static', $.visibility_modifier),
-      seq($.visibility_modifier, 'readonly'),
-      seq('readonly', $.visibility_modifier),
-    ),
+      'async',
+    )),
+
+    trait_method_modifiers: ($) => repeat1(choice(
+      $.visibility_modifier,
+      'readonly',
+    )),
+
+    impl_method_modifiers: ($) => repeat1(choice(
+      $.visibility_modifier,
+      'readonly',
+      'async',
+    )),
 
     interface_method_modifiers: ($) => choice(
       'public',
@@ -187,7 +240,7 @@ module.exports = grammar({
 
     type_parameters: ($) => seq(
       '<',
-      commaSep1($.type_identifier),
+      commaSep1(seq($.type_identifier, optional(seq(':', $.type_identifier)))),
       '>',
     ),
 
@@ -381,6 +434,7 @@ module.exports = grammar({
       $.binary_expression,
       $.unary_expression,
       $.numeric_cast_expression,
+      $.await_expression,
       $.borrow_expression,
       $.generic_static_call_expression,
       $.result_propagation_expression,
@@ -415,6 +469,11 @@ module.exports = grammar({
 
     unary_expression: ($) => prec(PREC.UNARY, seq(
       field('operator', choice('+', '-', '!', '~')),
+      field('argument', $._expression),
+    )),
+
+    await_expression: ($) => prec(PREC.UNARY, seq(
+      'await',
       field('argument', $._expression),
     )),
 

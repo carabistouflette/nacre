@@ -114,3 +114,27 @@ fn manifest_apis_reject_symlinks_and_nonregular_files() {
     assert!(nacre::manifest::Manifest::load(&socket).is_err());
     assert!(nacre::manifest::Manifest::load(&app).is_err());
 }
+
+#[cfg(unix)]
+#[test]
+fn add_dependency_rejects_symlinked_target_manifests() {
+    let t = Temp::new();
+    let app = t.package("app", "app", "", "void main(){}");
+    let helper = t.package("helper", "helper", "", "public int answer(){return 42;}");
+    let owner = app.join("Nacre.toml");
+    let original = fs::read(&owner).unwrap();
+
+    let direct_manifest = t.0.join("linked-manifest.toml");
+    std::os::unix::fs::symlink(helper.join("Nacre.toml"), &direct_manifest).unwrap();
+    assert!(nacre::manifest::add_dependency(&owner, &direct_manifest).is_err());
+
+    let linked_project = t.0.join("linked-project");
+    fs::create_dir(&linked_project).unwrap();
+    std::os::unix::fs::symlink(
+        helper.join("Nacre.toml"),
+        linked_project.join("Nacre.toml"),
+    )
+    .unwrap();
+    assert!(nacre::manifest::add_dependency(&owner, &linked_project).is_err());
+    assert_eq!(fs::read(&owner).unwrap(), original);
+}

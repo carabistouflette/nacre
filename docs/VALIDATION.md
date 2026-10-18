@@ -416,7 +416,7 @@ cargo test --offline --locked --features fuzzing --no-fail-fast
 cargo clippy --offline --locked --all-targets --features fuzzing -- -D warnings
 cargo check --offline --locked --all-targets --features fuzzing
 python3 scripts/validate.py --cc gcc --cc clang --sanitizers --llvm
-NACRE_CC=clang cargo test --offline --locked --test features_v4_tools -- --ignored
+NACRE_CC=clang cargo test --offline --locked --test interfaces_generics_tools -- --ignored
 python3 examples/run.py
 python3 scripts/audit_package.py
 npm --prefix editors/tree-sitter-nacre test

@@ -94,7 +94,7 @@ static ncr_obj_@FILES_READ_LINK_RESULT@ @FILES_READ_LINK@(ncr_obj_@PATH_ID@ *@FI
     if (path == NULL) { NCR_FS_RETURN_ERROR(@FILES_READ_LINK_RESULT@, "Files.readLink", errno, ncr_line, ncr_column); }
     const size_t limit = (size_t)1048576;
     size_t capacity = (size_t)256;
-    unsigned char *bytes = ncr_allocate(capacity, ncr_line, ncr_column);
+    unsigned char *bytes = ncr_allocate_raw(capacity, ncr_line, ncr_column);
     ssize_t length;
     for (;;) {
         do { length = readlink(path, (char *)bytes, capacity); } while (length < 0 && errno == EINTR);
@@ -111,10 +111,7 @@ static ncr_obj_@FILES_READ_LINK_RESULT@ @FILES_READ_LINK@(ncr_obj_@PATH_ID@ *@FI
             NCR_FS_RETURN_ERROR(@FILES_READ_LINK_RESULT@, "Files.readLink target limit", EOVERFLOW, ncr_line, ncr_column);
         }
         size_t next_capacity = capacity > limit / 2 ? limit : capacity * 2;
-        unsigned char *next = ncr_allocate(next_capacity, ncr_line, ncr_column);
-        memcpy(next, bytes, capacity);
-        ncr_deallocate(bytes);
-        bytes = next;
+        bytes = ncr_reallocate(bytes, next_capacity, ncr_line, ncr_column);
         capacity = next_capacity;
     }
     if (!ncr_utf8_valid(bytes, (size_t)length)) {

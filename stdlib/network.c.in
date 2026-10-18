@@ -14,6 +14,7 @@
     size_t ncr_network_length = ncr_network_format_gai(ncr_network_message, sizeof(ncr_network_message), operation, code, system_errno); \
     return ncr_result_error_ ## result_id(ncr_network_message, ncr_network_length, line, column); \
 } while (0)
+#define NCR_NETWORK_RECEIVE_CHUNK_MAX 65536U
 
 static size_t ncr_network_format_error(char *message, size_t capacity, const char *operation, int failure) {
     int written = snprintf(message, capacity, "%s failed (errno=%d)", operation, failure);
@@ -59,6 +60,13 @@ static int ncr_network_check_deadline(bool finite, int64_t deadline, bool *timed
     if (!ncr_time_monotonic_value(&now, failure)) { return -1; }
     if (now >= deadline) { *timed_out = true; return 0; }
     return 1;
+}
+
+static size_t ncr_network_receive_limit(int64_t max_bytes) {
+    uint64_t requested = (uint64_t)max_bytes;
+    uint64_t limit = (uint64_t)NCR_NETWORK_RECEIVE_CHUNK_MAX;
+    if (limit > (uint64_t)SSIZE_MAX) { limit = (uint64_t)SSIZE_MAX; }
+    return (size_t)(requested < limit ? requested : limit);
 }
 
 /* Return 1 when ready, 0 when the original deadline expires, and -1 on error. */
@@ -412,10 +420,7 @@ static ncr_obj_@LONG_RESULT_TYPE@ @TCP_STREAM_READ_SOME@(ncr_obj_@TCP_STREAM_ID@
     if (ncr_v_@READ_MAX_ID@ == 0) {
         return (ncr_obj_@LONG_RESULT_ID@){.tag = @LONG_RESULT_OK_TAG@, .data.v@LONG_RESULT_OK_TAG@.f0 = 0};
     }
-    uint64_t requested_value = (uint64_t)ncr_v_@READ_MAX_ID@;
-    if (requested_value > (uint64_t)SIZE_MAX) { NCR_NETWORK_RETURN_ERROR(@LONG_RESULT_ID@, "TcpStream.readSome maxBytes", EOVERFLOW, ncr_line, ncr_column); }
-    if (requested_value > (uint64_t)SSIZE_MAX) { requested_value = (uint64_t)SSIZE_MAX; }
-    size_t requested = (size_t)requested_value;
+    size_t requested = ncr_network_receive_limit(ncr_v_@READ_MAX_ID@);
     if (requested > (size_t)INT64_MAX - ncr_v_@READ_DESTINATION_ID@->length
         || requested > SIZE_MAX - ncr_v_@READ_DESTINATION_ID@->length) {
         NCR_NETWORK_RETURN_ERROR(@LONG_RESULT_ID@, "TcpStream.readSome buffer length", EOVERFLOW, ncr_line, ncr_column);
@@ -426,11 +431,12 @@ static ncr_obj_@LONG_RESULT_TYPE@ @TCP_STREAM_READ_SOME@(ncr_obj_@TCP_STREAM_ID@
     if (!ncr_network_deadline(ncr_v_@READ_TIMEOUT_ID@, &finite, &deadline, &failure)) {
         NCR_NETWORK_RETURN_ERROR(@LONG_RESULT_ID@, "TcpStream.readSome timeout", failure, ncr_line, ncr_column);
     }
-    @BUFFER_RESERVE@(ncr_v_@READ_DESTINATION_ID@, ncr_v_@READ_DESTINATION_ID@->length + requested, ncr_line, ncr_column);
     for (;;) {
         int ready = ncr_network_poll(p->fd, POLLIN, finite, deadline, &failure);
         if (ready == 0) { NCR_NETWORK_RETURN_TIMEOUT(@LONG_RESULT_ID@, "TcpStream.readSome", ncr_line, ncr_column); }
         if (ready < 0) { NCR_NETWORK_RETURN_ERROR(@LONG_RESULT_ID@, "TcpStream.readSome poll", failure, ncr_line, ncr_column); }
+        @BUFFER_RESERVE@(ncr_v_@READ_DESTINATION_ID@,
+            ncr_v_@READ_DESTINATION_ID@->length + requested, ncr_line, ncr_column);
         ssize_t count = recv(p->fd, ncr_v_@READ_DESTINATION_ID@->bytes + ncr_v_@READ_DESTINATION_ID@->length, requested, 0);
         if (count >= 0) {
             ncr_v_@READ_DESTINATION_ID@->length += (size_t)count;
@@ -609,10 +615,7 @@ static ncr_obj_@DATAGRAM_RESULT_TYPE@ @UDP_SOCKET_RECEIVE_FROM@(ncr_obj_@UDP_SOC
     if (p->fd < 0) { NCR_NETWORK_RETURN_ERROR(@UDP_RECEIVE_RESULT_ID@, "UdpSocket.receiveFrom", EBADF, ncr_line, ncr_column); }
     if (ncr_v_@UDP_RECEIVE_MAX_ID@ < 0) { NCR_NETWORK_RETURN_ERROR(@UDP_RECEIVE_RESULT_ID@, "UdpSocket.receiveFrom maxBytes", EINVAL, ncr_line, ncr_column); }
     if (ncr_v_@UDP_RECEIVE_TIMEOUT_ID@ < 0) { NCR_NETWORK_RETURN_ERROR(@UDP_RECEIVE_RESULT_ID@, "UdpSocket.receiveFrom timeout", EINVAL, ncr_line, ncr_column); }
-    uint64_t requested_value = (uint64_t)ncr_v_@UDP_RECEIVE_MAX_ID@;
-    if (requested_value > (uint64_t)SIZE_MAX) { NCR_NETWORK_RETURN_ERROR(@UDP_RECEIVE_RESULT_ID@, "UdpSocket.receiveFrom maxBytes", EOVERFLOW, ncr_line, ncr_column); }
-    if (requested_value > (uint64_t)SSIZE_MAX) { requested_value = (uint64_t)SSIZE_MAX; }
-    size_t requested = (size_t)requested_value;
+    size_t requested = ncr_network_receive_limit(ncr_v_@UDP_RECEIVE_MAX_ID@);
     if (requested > (size_t)INT64_MAX - ncr_v_@UDP_RECEIVE_DESTINATION_ID@->length
         || requested > SIZE_MAX - ncr_v_@UDP_RECEIVE_DESTINATION_ID@->length) {
         NCR_NETWORK_RETURN_ERROR(@UDP_RECEIVE_RESULT_ID@, "UdpSocket.receiveFrom buffer length", EOVERFLOW, ncr_line, ncr_column);
@@ -623,11 +626,12 @@ static ncr_obj_@DATAGRAM_RESULT_TYPE@ @UDP_SOCKET_RECEIVE_FROM@(ncr_obj_@UDP_SOC
     if (!ncr_network_deadline(ncr_v_@UDP_RECEIVE_TIMEOUT_ID@, &finite, &deadline, &failure)) {
         NCR_NETWORK_RETURN_ERROR(@UDP_RECEIVE_RESULT_ID@, "UdpSocket.receiveFrom timeout", failure, ncr_line, ncr_column);
     }
-    @BUFFER_RESERVE@(ncr_v_@UDP_RECEIVE_DESTINATION_ID@, ncr_v_@UDP_RECEIVE_DESTINATION_ID@->length + requested, ncr_line, ncr_column);
     for (;;) {
         int ready = ncr_network_poll(p->fd, POLLIN, finite, deadline, &failure);
         if (ready == 0) { NCR_NETWORK_RETURN_TIMEOUT(@UDP_RECEIVE_RESULT_ID@, "UdpSocket.receiveFrom", ncr_line, ncr_column); }
         if (ready < 0) { NCR_NETWORK_RETURN_ERROR(@UDP_RECEIVE_RESULT_ID@, "UdpSocket.receiveFrom poll", failure, ncr_line, ncr_column); }
+        @BUFFER_RESERVE@(ncr_v_@UDP_RECEIVE_DESTINATION_ID@,
+            ncr_v_@UDP_RECEIVE_DESTINATION_ID@->length + requested, ncr_line, ncr_column);
         struct sockaddr_storage source_storage;
         memset(&source_storage, 0, sizeof(source_storage));
         struct iovec vector = {
@@ -696,3 +700,4 @@ static bool @DATAGRAM_TRUNCATED@(ncr_obj_@DATAGRAM_ID@ *p, size_t ncr_line, size
 #undef NCR_NETWORK_RETURN_ERROR
 #undef NCR_NETWORK_RETURN_TIMEOUT
 #undef NCR_NETWORK_RETURN_GAI
+#undef NCR_NETWORK_RECEIVE_CHUNK_MAX

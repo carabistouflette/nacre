@@ -8,6 +8,10 @@
       "required": false,
       "types": [
         {
+          "type": "await_expression",
+          "named": true
+        },
+        {
           "type": "binary_expression",
           "named": true
         },
@@ -113,6 +117,106 @@
         "required": true,
         "types": [
           {
+            "type": "await_expression",
+            "named": true
+          },
+          {
+            "type": "binary_expression",
+            "named": true
+          },
+          {
+            "type": "boolean_literal",
+            "named": true
+          },
+          {
+            "type": "borrow_expression",
+            "named": true
+          },
+          {
+            "type": "call_expression",
+            "named": true
+          },
+          {
+            "type": "character_literal",
+            "named": true
+          },
+          {
+            "type": "double_literal",
+            "named": true
+          },
+          {
+            "type": "generic_static_call_expression",
+            "named": true
+          },
+          {
+            "type": "identifier",
+            "named": true
+          },
+          {
+            "type": "integer_literal",
+            "named": true
+          },
+          {
+            "type": "long_literal",
+            "named": true
+          },
+          {
+            "type": "member_expression",
+            "named": true
+          },
+          {
+            "type": "new_expression",
+            "named": true
+          },
+          {
+            "type": "numeric_cast_expression",
+            "named": true
+          },
+          {
+            "type": "parenthesized_expression",
+            "named": true
+          },
+          {
+            "type": "result_propagation_expression",
+            "named": true
+          },
+          {
+            "type": "string_literal",
+            "named": true
+          },
+          {
+            "type": "this_expression",
+            "named": true
+          },
+          {
+            "type": "tuple_expression",
+            "named": true
+          },
+          {
+            "type": "unary_expression",
+            "named": true
+          },
+          {
+            "type": "unit_literal",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
+    "type": "await_expression",
+    "named": true,
+    "fields": {
+      "argument": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "await_expression",
+            "named": true
+          },
+          {
             "type": "binary_expression",
             "named": true
           },
@@ -204,6 +308,10 @@
         "multiple": false,
         "required": true,
         "types": [
+          {
+            "type": "await_expression",
+            "named": true
+          },
           {
             "type": "binary_expression",
             "named": true
@@ -369,6 +477,10 @@
         "required": true,
         "types": [
           {
+            "type": "await_expression",
+            "named": true
+          },
+          {
             "type": "binary_expression",
             "named": true
           },
@@ -520,6 +632,10 @@
         "multiple": false,
         "required": true,
         "types": [
+          {
+            "type": "await_expression",
+            "named": true
+          },
           {
             "type": "binary_expression",
             "named": true
@@ -890,6 +1006,10 @@
         "required": true,
         "types": [
           {
+            "type": "await_expression",
+            "named": true
+          },
+          {
             "type": "binary_expression",
             "named": true
           },
@@ -1032,6 +1152,10 @@
         "required": false,
         "types": [
           {
+            "type": "await_expression",
+            "named": true
+          },
+          {
             "type": "binary_expression",
             "named": true
           },
@@ -1171,6 +1295,10 @@
         "multiple": false,
         "required": true,
         "types": [
+          {
+            "type": "await_expression",
+            "named": true
+          },
           {
             "type": "binary_expression",
             "named": true
@@ -1398,6 +1526,10 @@
         "required": false,
         "types": [
           {
+            "type": "async",
+            "named": false
+          },
+          {
             "type": "public",
             "named": false
           },
@@ -1556,6 +1688,10 @@
         "required": true,
         "types": [
           {
+            "type": "await_expression",
+            "named": true
+          },
+          {
             "type": "binary_expression",
             "named": true
           },
@@ -1643,6 +1779,57 @@
         "types": [
           {
             "type": "block",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
+    "type": "impl_body",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "function_declaration",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "impl_declaration",
+    "named": true,
+    "fields": {
+      "body": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "impl_body",
+            "named": true
+          }
+        ]
+      },
+      "target": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "type_identifier",
+            "named": true
+          }
+        ]
+      },
+      "trait": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "type_identifier",
             "named": true
           }
         ]
@@ -1767,6 +1954,10 @@
         "multiple": false,
         "required": false,
         "types": [
+          {
+            "type": "await_expression",
+            "named": true
+          },
           {
             "type": "binary_expression",
             "named": true
@@ -1925,6 +2116,10 @@
         "required": true,
         "types": [
           {
+            "type": "await_expression",
+            "named": true
+          },
+          {
             "type": "binary_expression",
             "named": true
           },
@@ -2026,6 +2221,10 @@
         "multiple": false,
         "required": true,
         "types": [
+          {
+            "type": "await_expression",
+            "named": true
+          },
           {
             "type": "binary_expression",
             "named": true
@@ -2188,6 +2387,10 @@
         "multiple": false,
         "required": true,
         "types": [
+          {
+            "type": "await_expression",
+            "named": true
+          },
           {
             "type": "binary_expression",
             "named": true
@@ -2357,6 +2560,10 @@
       "required": true,
       "types": [
         {
+          "type": "await_expression",
+          "named": true
+        },
+        {
           "type": "binary_expression",
           "named": true
         },
@@ -2513,6 +2720,10 @@
         "required": true,
         "types": [
           {
+            "type": "await_expression",
+            "named": true
+          },
+          {
             "type": "binary_expression",
             "named": true
           },
@@ -2604,6 +2815,10 @@
         "multiple": false,
         "required": false,
         "types": [
+          {
+            "type": "await_expression",
+            "named": true
+          },
           {
             "type": "binary_expression",
             "named": true
@@ -2710,6 +2925,10 @@
           "named": true
         },
         {
+          "type": "impl_declaration",
+          "named": true
+        },
+        {
           "type": "import_declaration",
           "named": true
         },
@@ -2719,6 +2938,10 @@
         },
         {
           "type": "module_declaration",
+          "named": true
+        },
+        {
+          "type": "trait_declaration",
           "named": true
         },
         {
@@ -2744,6 +2967,47 @@
     }
   },
   {
+    "type": "trait_body",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "function_declaration",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "trait_declaration",
+    "named": true,
+    "fields": {
+      "body": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "trait_body",
+            "named": true
+          }
+        ]
+      },
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
     "type": "tuple_expression",
     "named": true,
     "fields": {},
@@ -2751,6 +3015,10 @@
       "multiple": true,
       "required": true,
       "types": [
+        {
+          "type": "await_expression",
+          "named": true
+        },
         {
           "type": "binary_expression",
           "named": true
@@ -2955,6 +3223,10 @@
         "required": true,
         "types": [
           {
+            "type": "await_expression",
+            "named": true
+          },
+          {
             "type": "binary_expression",
             "named": true
           },
@@ -3113,6 +3385,10 @@
         "multiple": false,
         "required": false,
         "types": [
+          {
+            "type": "await_expression",
+            "named": true
+          },
           {
             "type": "binary_expression",
             "named": true
@@ -3281,6 +3557,10 @@
         "multiple": false,
         "required": true,
         "types": [
+          {
+            "type": "await_expression",
+            "named": true
+          },
           {
             "type": "binary_expression",
             "named": true
@@ -3482,6 +3762,14 @@
     "named": false
   },
   {
+    "type": "async",
+    "named": false
+  },
+  {
+    "type": "await",
+    "named": false
+  },
+  {
     "type": "boolean",
     "named": false
   },
@@ -3552,6 +3840,10 @@
   },
   {
     "type": "if",
+    "named": false
+  },
+  {
+    "type": "impl",
     "named": false
   },
   {
@@ -3629,6 +3921,10 @@
   {
     "type": "this_expression",
     "named": true
+  },
+  {
+    "type": "trait",
+    "named": false
   },
   {
     "type": "true",

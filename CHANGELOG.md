@@ -3,6 +3,150 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Keep file-backed ZIP readers on libarchive's strict seekable path with explicit
+  read/seek callbacks, and drain warning-rejected headers before returning errors
+  so subsequent entries remain reachable.
+
+- Resolve DateTime wall times across the full exact-millisecond range with checked
+  Gregorian arithmetic and ICU's local time-zone offset rules.
+
+- Use zlib's bound as the initial growth target for short deflate/gzip inputs,
+  avoiding the fixed 16 KiB reservation when the bound is smaller.
+
+- Use `ncr_reallocate` for ByteBuffer, console input, and readLink growth,
+  replacing manual allocation-copy-free cycles.
+
+- Reallocate command argument/environment tables and HTTP response headers,
+  avoiding explicit replacement-buffer copies.
+- Exercise the 64 KiB HTTP response header byte and 1,024-field limits at exact
+  and over-limit boundaries with loopback tests.
+
+- Leave BitSet spare capacity uninitialized; zero words only when they become logical.
+
+- Remove duplicate clearing after calloc-backed XML and Temporal allocations.
+
+- Avoid zero-initializing fully overwritten byte copies in BinaryReader, SQLite blobs, Encoding, crypto buffers, and HTTP.
+
+- Use raw allocation for Process argument/environment tables and fully written copies.
+
+- Use raw allocation for fully written BigInteger and BigDecimal text buffers.
+
+- Use raw allocation for fully written file and database path buffers.
+
+- Use raw allocation for fully copied HTTP request and response strings.
+
+- Use raw allocation for Text.parseDouble's fully copied input.
+
+- Reject non-ASCII LSP header bytes before parsing Content-Length.
+- Publish a source diagnostic when an open LSP document exceeds the source limit.
+- Treat CR, LF, and CRLF consistently as source and LSP line endings, including
+  single-line comments and UTF-16 position mapping.
+- Resolve unprefixed XSLT `element-available()` QNames in no namespace, regardless
+  of the stylesheet's default namespace.
+
+- Correct ignored LLVM test commands to use the actual Cargo target name.
+
+- Sanitize control characters in compiler diagnostic snippets and omit carriage
+  returns from displayed CRLF source lines.
+
+- Use the same four-space tab expansion for reported source columns.
+- Align rendered diagnostic carets to Unicode display width while retaining
+  source-column semantics used by debug locations.
+
+- Bound aggregate manifest reads during dependency-cycle checks to limit memory growth.
+
+- Cover manifest permission preservation when adding a local dependency.
+- Reject symlinked dependency manifests before path canonicalization can hide them.
+- Cover invalid UTF-8 SQLite text rejection without losing current-row access.
+
+- Grant CI workflows read-only repository-content permissions.
+
+- Run Clippy with warnings denied across all Rust targets and the fuzzing feature in CI.
+
+- Discard test stdout and bound test/benchmark child output capture.
+
+- Bound native C/LLVM compiler and linker subprocess capture to 64 KiB per stream.
+  Truncated diagnostics are marked, incomplete cache probes skip caching, and
+  `emit-llvm` retains the complete IR output.
+
+- Fingerprint included-file contents for direct LLVM runtime-bitcode cache
+  entries. Header changes rebuild the runtime; incomplete dependency scans
+  bypass caching.
+
+- Bound each TCP `readSome` call to 64 KiB and defer buffer growth until the
+  socket is ready; timeouts no longer allocate from the full request size.
+
+- Bound `UdpSocket.receiveFrom` to 64 KiB and defer buffer growth until a
+  datagram is ready; timeouts no longer reserve the caller's full `maxBytes`.
+
+- Clamp the TCP and UDP 64 KiB receive limit before checking destination append
+  arithmetic, so large positive limits remain valid with nonempty buffers.
+
+- Align Tree-sitter, Zed, and VS Code syntax support with trait/impl declarations,
+  bounded type parameters, and async/await; capture Zed's named shift-right token.
+
+- Reject legacy JSON LSP source roots with an intermediate symlink, preventing
+  configured source loading from traversing outside the project tree.
+- Canonicalize resolved implementation class names before generic-bound checks,
+  allowing named-module types to satisfy valid trait bounds.
+- Resolve implementation trait names and generic trait bounds to
+  module-qualified identities, preventing same-named traits in other modules
+  from satisfying a bound.
+- Enforce module privacy when resolving trait implementations and bounds;
+  private traits cannot be used by other modules.
+- Validate trait implementations against exact method signatures, resolving
+  types in the trait and impl source units and checking borrowing modes, receiver
+  mutability, visibility, and synchronous instance behavior.
+- Retain imports from the impl source unit when resolving implementation method
+  signatures and bodies, including when the class is declared in another file.
+- Bound CLI source-directory discovery to the same 4,096-entry limit as the LSP,
+  preventing unrelated files from bypassing the traversal resource cap.
+- Cache Unit-mutex dependency discovery as specializations are requested,
+  avoiding a full request-set scan after each expansion.
+- Count concrete user types incrementally during generic expansion instead of
+  rescanning the accumulated class list after each specialization.
+- Index interface implementers during contract checking, avoiding repeated
+  whole-program scans in sendability and construction analysis.
+- Propagate local-view status through reverse dependencies rather than rescanning
+  all classes until the closure stabilizes.
+- Stream enum variant initializer signatures and bodies directly into the
+  generated output buffer, eliminating temporary parameter and initializer strings.
+- Stream native and virtual pointer-slot runtime adapters directly into their
+  output, avoiding per-parameter vectors and joined call strings.
+- Stream direct LLVM C-ABI function prototypes without temporary parameter
+  vectors or joined strings.
+- Stream direct interface dispatchers into generated C without temporary
+  parameter and argument vectors or joined strings.
+- Stream direct user adapter signatures and call arguments into the destination
+  buffer instead of allocating temporary vectors and joined strings.
+- Emit LLVM runtime signatures directly into IR, avoiding temporary parameter
+  vectors and joined strings.
+- Stream interface thunk argument lists directly into generated C, avoiding
+  temporary `Vec<String>` values and joined strings.
+- Write class-support C directly to its destination, avoiding temporary
+  formatted strings and joined interface parameter lists.
+- Select builtin generic templates by borrowed minimum qualified name, avoiding
+  per-definition string clones and candidate sorting.
+- Avoid the discarded second token clone when parsing identifiers; advance the
+  cursor directly after extracting the retained name.
+- Avoid temporary ownership-state copies on identity control-flow nodes; only
+  state-changing transfers clone an output buffer.
+- Avoid copying complete local type maps at every nested block during iterator
+  specialization discovery; track and restore only bindings introduced in each
+  scope.
+- Borrow names for direct concrete-class lookups during generic inference,
+  avoiding a temporary owned string for named and non-generic borrowed types.
+- Share LSP query source loading across document-symbol, hover, and definition
+  requests; borrow the active document slice from its source bundle rather than
+  cloning it for each request.
+- Key cached C executables by compiler version/target and included header contents;
+  isolate concurrent cache writes and clean failed staging files.
+- Append generated C directly into the source-map buffer, avoiding a second full
+  translation-unit allocation and copy for project compilation.
+- Reuse the parsed AST and typed IR in test/benchmark runners, avoiding repeated
+  parsing and type-checking before native compilation.
+- Keep Clang-only strict qualifier warnings on the direct-LLVM side of parity
+  tests, leaving the GCC/C fixture invocation with supported compiler options.
 - Record matched JSON, string, binary-streaming, map, Sudoku, and Life benchmarks
   against Rust, including cache-disabled native build times, RSS/allocation
   samples, and controlled optimization counters with explicit measurement limits.
@@ -359,6 +503,9 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   certificates own independent copies of the available leaf and peer chain, so
   their PEM remains exportable after the stream closes. Crypto, key signatures,
   streaming digest, and MAC share the same exact six-name digest allowlist.
+- `Certificate.matchesHost` and `verify` match IP literals only against
+  `iPAddress` SANs, including scoped IPv6; DNS names remain SAN-only with no
+  common-name fallback.
 - Secret-returning PEM, agreement, KDF, and decryption values remain ordinary
   caller-owned objects without a clear/drop wiping guarantee; documentation
   distinguishes those results from explicitly cleansed internal scratch.
@@ -492,6 +639,8 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   `ws`/`wss` upgrades, masked client frames, bounded message assembly, ping, and
   peer close handshakes. Both surfaces reuse shared socket, DNS, IDNA, and path
   helpers rather than duplicating platform conversion logic.
+  The loopback test verifies automatic Pong replies between UTF-8 message
+  fragments.
   Each SSL attempt isolates OpenSSL error-queue state and scopes SIGPIPE to its
   calling thread without changing process-wide signal handling. Shared deadline
   checks bound continuously successful frame processing, and WSS shutdown keeps
@@ -511,6 +660,8 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   list or recursive expression visitor, and template slices reuse the shared
   borrowed helper. URI/DNS parameter and Result substitutions follow one naming
   convention; native linking and CI install the URI and SQLite prerequisites.
+- Reject legacy base-0 IPv4 spellings in `Dns.idna` before `Dns.resolve` can let
+  `getaddrinfo` reinterpret them; canonical IPv4 forms remain supported.
 - Design-principles review keeps TCP, UDP and address resolution in one cohesive
   networking unit, hides descriptor/sockaddr state, and keeps Datagram source
   ownership closed over its value. Results report timeouts; TCP EOF is Ok(0),
@@ -522,8 +673,11 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   redirects/retries, copied request bodies, and bounded binary response capture.
   Response headers are parsed with an explicit byte/count bound, duplicate fields
   use last-value lookup, interim blocks are discarded, and non-2xx status codes
-  remain successful transport results. Loopback tests cover methods, headers,
-  binary bodies, malformed inputs/headers, limits, timeouts, and local-CA TLS.
+  remain successful transport results. The status parser rejects prohibited
+  control bytes in reason phrases. Bounded body growth uses the runtime realloc
+  helper instead of explicit allocate/copy/free. Loopback tests cover methods,
+  headers, binary bodies, growth beyond initial capacity, malformed inputs and
+  status lines, limits, timeouts, and local-CA TLS.
 
 - Tree-sitter, Zed and VS Code syntax now cover module/import paths, qualified
   generic static calls, native scalar literals and casts, and postfix Result

@@ -239,7 +239,7 @@ static ncr_obj_@PARSE_DOUBLE_RESULT@ @TEXT_PARSE_DOUBLE@(ncr_obj_@ID@ *p, size_t
         && !ncr_text_double_special_@ID@(p->bytes, length)) {
         return @ERROR_PARSE_DOUBLE_RESULT@(error_message, sizeof(error_message) - 1, line, column);
     }
-    char *buffer = ncr_allocate(length + 1, line, column);
+    char *buffer = ncr_allocate_raw(length + 1, line, column);
     if (length > 0) { memcpy(buffer, p->bytes, length); }
     buffer[length] = '\0';
     char *end = NULL;

@@ -9,6 +9,9 @@
 #include <unicode/utypes.h>
 
 #define NCR_DT_MAX_EXACT_MILLIS INT64_C(9007199254740991)
+#define NCR_DT_MILLIS_PER_DAY INT64_C(86400000)
+/* One seed plus two offsets at each of two transitions for two references. */
+#define NCR_DT_MAX_WALL_CANDIDATES 9
 #define NCR_DT_RESULT_ERROR(result_id, message, line, column) \
     ncr_result_error_##result_id((message), sizeof(message) - 1, (line), (column))
 
@@ -21,6 +24,8 @@ struct ncr_dt_fields {
     int32_t second;
     int32_t millisecond;
 };
+
+static int64_t ncr_dt_gregorian_days_from_date(int64_t year, int32_t month, int32_t day);
 
 static bool ncr_dt_epoch_in_range(int64_t value) {
     return value >= -NCR_DT_MAX_EXACT_MILLIS && value <= NCR_DT_MAX_EXACT_MILLIS;
@@ -309,6 +314,175 @@ static bool ncr_dt_wall_matches(
         && actual.millisecond == millisecond;
 }
 
+static bool ncr_dt_offset_at_epoch(UCalendar *calendar, int64_t epoch, int64_t *result) {
+    if (!ncr_dt_epoch_in_range(epoch)) {
+        return false;
+    }
+    UErrorCode status = U_ZERO_ERROR;
+    ucal_setMillis(calendar, (UDate)epoch, &status);
+    if (U_FAILURE(status)) {
+        return false;
+    }
+    status = U_ZERO_ERROR;
+    int64_t offset = (int64_t)ucal_get(calendar, UCAL_ZONE_OFFSET, &status)
+        + (int64_t)ucal_get(calendar, UCAL_DST_OFFSET, &status);
+    if (U_FAILURE(status)) {
+        return false;
+    }
+    *result = offset;
+    return true;
+}
+
+static void ncr_dt_record_wall_candidate(
+    UCalendar *calendar,
+    int32_t year,
+    int32_t month,
+    int32_t day,
+    int32_t hour,
+    int32_t minute,
+    int32_t second,
+    int32_t millisecond,
+    int64_t local_millis,
+    int64_t offset_millis,
+    int64_t candidates[NCR_DT_MAX_WALL_CANDIDATES],
+    size_t *candidate_count
+) {
+    int64_t epoch = local_millis - offset_millis;
+    if (!ncr_dt_local_epoch_in_range(epoch, offset_millis)) {
+        return;
+    }
+    UErrorCode status = U_ZERO_ERROR;
+    ucal_setMillis(calendar, (UDate)epoch, &status);
+    if (U_FAILURE(status) || !ncr_dt_wall_matches(calendar, year, month, day,
+        hour, minute, second, millisecond)) {
+        return;
+    }
+    for (size_t index = 0; index < *candidate_count; ++index) {
+        if (candidates[index] == epoch) {
+            return;
+        }
+    }
+    if (*candidate_count < NCR_DT_MAX_WALL_CANDIDATES) {
+        candidates[(*candidate_count)++] = epoch;
+    }
+}
+
+static bool ncr_dt_record_transition_candidates(
+    UCalendar *calendar,
+    int64_t reference,
+    int32_t year,
+    int32_t month,
+    int32_t day,
+    int32_t hour,
+    int32_t minute,
+    int32_t second,
+    int32_t millisecond,
+    int64_t local_millis,
+    int64_t candidates[NCR_DT_MAX_WALL_CANDIDATES],
+    size_t *candidate_count
+) {
+    UErrorCode status = U_ZERO_ERROR;
+    ucal_setMillis(calendar, (UDate)reference, &status);
+    if (U_FAILURE(status)) {
+        return false;
+    }
+    static const UTimeZoneTransitionType transitions[] = {
+        UCAL_TZ_TRANSITION_PREVIOUS,
+        UCAL_TZ_TRANSITION_NEXT
+    };
+    for (size_t index = 0; index < sizeof(transitions) / sizeof(transitions[0]); ++index) {
+        UDate transition = 0.0;
+        status = U_ZERO_ERROR;
+        UBool found = ucal_getTimeZoneTransitionDate(calendar, transitions[index],
+            &transition, &status);
+        if (U_FAILURE(status)) {
+            return false;
+        }
+        int64_t transition_epoch = 0;
+        if (!found || !ncr_dt_udate_to_epoch(transition, &transition_epoch)) {
+            continue;
+        }
+        if (transition_epoch > -NCR_DT_MAX_EXACT_MILLIS) {
+            int64_t before_offset = 0;
+            if (ncr_dt_offset_at_epoch(calendar, transition_epoch - 1, &before_offset)) {
+                ncr_dt_record_wall_candidate(calendar, year, month, day, hour, minute,
+                    second, millisecond, local_millis, before_offset, candidates,
+                    candidate_count);
+            }
+        }
+        int64_t after_offset = 0;
+        if (ncr_dt_offset_at_epoch(calendar, transition_epoch, &after_offset)) {
+            ncr_dt_record_wall_candidate(calendar, year, month, day, hour, minute,
+                second, millisecond, local_millis, after_offset, candidates,
+                candidate_count);
+        }
+    }
+    return true;
+}
+
+static bool ncr_dt_resolve_wall_wide(
+    UCalendar *calendar,
+    int32_t year,
+    int32_t month,
+    int32_t day,
+    int32_t hour,
+    int32_t minute,
+    int32_t second,
+    int32_t millisecond,
+    bool prefer_later,
+    bool reject_overlap,
+    int64_t *result
+) {
+    /* ICU's field-to-millisecond range is narrower than UDate's. Reconstruct
+     * exact-range candidates and verify each against the requested wall time.
+     */
+    int64_t day_number = ncr_dt_gregorian_days_from_date(year, month, day);
+    int64_t maximum_day = NCR_DT_MAX_EXACT_MILLIS / NCR_DT_MILLIS_PER_DAY;
+    if (day_number < -maximum_day - 1 || day_number > maximum_day) {
+        return false;
+    }
+    int64_t millis_in_day = (((int64_t)hour * 60 + minute) * 60 + second) * 1000
+        + millisecond;
+    int64_t local_millis = day_number * NCR_DT_MILLIS_PER_DAY + millis_in_day;
+    if (!ncr_dt_epoch_in_range(local_millis)) {
+        return false;
+    }
+
+    int64_t local_offset = 0;
+    if (!ncr_dt_offset_at_epoch(calendar, local_millis, &local_offset)) {
+        return false;
+    }
+    int64_t seed_epoch = local_millis - local_offset;
+    int64_t candidates[NCR_DT_MAX_WALL_CANDIDATES];
+    size_t candidate_count = 0;
+    ncr_dt_record_wall_candidate(calendar, year, month, day, hour, minute, second,
+        millisecond, local_millis, local_offset, candidates, &candidate_count);
+
+    int64_t references[] = { local_millis, seed_epoch };
+    size_t reference_count = ncr_dt_epoch_in_range(seed_epoch) && seed_epoch != local_millis
+        ? 2 : 1;
+    for (size_t index = 0; index < reference_count; ++index) {
+        if (!ncr_dt_record_transition_candidates(calendar, references[index], year,
+            month, day, hour, minute, second, millisecond, local_millis,
+            candidates, &candidate_count)) {
+            return false;
+        }
+    }
+    if (candidate_count == 0 || (reject_overlap && candidate_count != 1)) {
+        return false;
+    }
+
+    size_t selected = 0;
+    for (size_t index = 1; index < candidate_count; ++index) {
+        if ((prefer_later && candidates[index] > candidates[selected])
+            || (!prefer_later && candidates[index] < candidates[selected])) {
+            selected = index;
+        }
+    }
+    *result = candidates[selected];
+    return true;
+}
+
 static bool ncr_dt_resolve_wall(
     UCalendar *calendar,
     int32_t year,
@@ -328,28 +502,31 @@ static bool ncr_dt_resolve_wall(
     UErrorCode status = U_ZERO_ERROR;
     UDate instant = ucal_getMillis(calendar, &status);
     int64_t epoch = 0;
-    if (U_FAILURE(status) || !ncr_dt_wall_matches(calendar, year, month, day, hour, minute,
-        second, millisecond) || !ncr_dt_udate_to_epoch(instant, &epoch)) {
-        return false;
-    }
-
-    if (reject_overlap) {
-        UCalendar *later = ucal_clone(calendar, &status);
-        if (U_FAILURE(status) || later == NULL) {
-            if (later != NULL) { ucal_close(later); }
-            return false;
+    bool valid = U_SUCCESS(status)
+        && ncr_dt_wall_matches(calendar, year, month, day, hour, minute, second, millisecond)
+        && ncr_dt_udate_to_epoch(instant, &epoch)
+        && ncr_dt_calendar_epoch_exact(calendar, epoch);
+    if (valid) {
+        if (reject_overlap) {
+            UCalendar *later = ucal_clone(calendar, &status);
+            if (U_FAILURE(status) || later == NULL) {
+                if (later != NULL) { ucal_close(later); }
+                return false;
+            }
+            ncr_dt_set_wall_fields(later, year, month, day, hour, minute, second, millisecond,
+                UCAL_WALLTIME_LAST, UCAL_WALLTIME_FIRST);
+            status = U_ZERO_ERROR;
+            UDate later_instant = ucal_getMillis(later, &status);
+            ucal_close(later);
+            if (U_FAILURE(status) || later_instant != instant) {
+                return false;
+            }
         }
-        ncr_dt_set_wall_fields(later, year, month, day, hour, minute, second, millisecond,
-            UCAL_WALLTIME_LAST, UCAL_WALLTIME_FIRST);
-        status = U_ZERO_ERROR;
-        UDate later_instant = ucal_getMillis(later, &status);
-        ucal_close(later);
-        if (U_FAILURE(status) || later_instant != instant) {
-            return false;
-        }
+        *result = epoch;
+        return true;
     }
-    *result = epoch;
-    return true;
+    return ncr_dt_resolve_wall_wide(calendar, year, month, day, hour, minute, second,
+        millisecond, prefer_later, reject_overlap, result);
 }
 
 static bool ncr_dt_days_in_month(int32_t year, int32_t month, int32_t *result) {

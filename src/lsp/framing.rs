@@ -19,6 +19,10 @@ pub(super) fn read_frame(reader: &mut impl BufRead, max_message_bytes: usize) ->
         let line = line.strip_suffix(b"\r").unwrap_or(line);
         let line = std::str::from_utf8(line)
             .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "header is not ASCII"))?;
+        if !line.is_ascii() {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "header is not ASCII"));
+        }
+
         let Some((name, value)) = line.split_once(':') else {
             return Err(io::Error::new(io::ErrorKind::InvalidData, "malformed header"));
         };
@@ -86,5 +90,12 @@ mod tests {
         assert!(read_frame(&mut allowed, 2).unwrap().is_none());
         let mut rejected = Cursor::new(frame);
         assert_eq!(read_frame(&mut rejected, 1).unwrap_err().kind(), ErrorKind::InvalidData);
+    }
+
+    #[test]
+    fn rejects_non_ascii_utf8_header() {
+        let frame = b"Content-Length: \xc2\xa02\r\n\r\n{}";
+        let mut input = Cursor::new(frame);
+        assert_eq!(read_frame(&mut input, 2).unwrap_err().kind(), ErrorKind::InvalidData);
     }
 }

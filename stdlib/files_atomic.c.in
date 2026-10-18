@@ -14,7 +14,7 @@ static ncr_obj_@RESULT_UNIT_ATOMIC@ @FILES_WRITE_TEXT_ATOMIC@(ncr_obj_@TEXT_ID@ 
         ncr_deallocate(target);
         NCR_FS_RETURN_ERROR(@RESULT_UNIT_ATOMIC@, "Files.writeTextAtomic path", EOVERFLOW, line, column);
     }
-    char *temporary = ncr_allocate(path_length + sizeof(suffix), line, column);
+    char *temporary = ncr_allocate_raw(path_length + sizeof(suffix), line, column);
     memcpy(temporary, target, path_length);
     memcpy(temporary + path_length, suffix, sizeof(suffix));
 

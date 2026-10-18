@@ -363,6 +363,16 @@ fn transfer(op: Op, state: &mut [u8]) {
     state[id] = transferred(op, id, state[id]);
 }
 
+fn join(state: &mut [u8], output: &[u8]) -> bool {
+    let mut changed = false;
+    for (cell, value) in state.iter_mut().zip(output) {
+        let joined = *cell | *value;
+        changed |= joined != *cell;
+        *cell = joined;
+    }
+    changed
+}
+
 fn solve(graph: &Graph, function: &t::Function) -> Result<States, Diagnostic> {
     // Bound memory explicitly, including functions with no locals. This is a
     // prototype limit, not an arbitrary loop-iteration limit for the analysis.
@@ -380,24 +390,36 @@ fn solve(graph: &Graph, function: &t::Function) -> Result<States, Diagnostic> {
     queued[graph.entry] = true;
     while let Some(id) = queue.pop_front() {
         queued[id] = false;
-        let mut output = incoming[id].as_ref().expect("reachable work item").clone();
-        transfer(graph.nodes[id].op, &mut output);
+        // Most nodes do not change local state. Take the input so identity nodes
+        // propagate it without allocating an intermediate state vector.
+        let mut input = incoming[id].take().expect("reachable work item");
+        let op = graph.nodes[id].op;
+        let output = match op {
+            Op::Declare(_) | Op::Write(_) | Op::Move { .. } | Op::Cleanup(_) => {
+                let mut output = input.clone();
+                transfer(op, &mut output);
+                Some(output)
+            }
+            _ => None,
+        };
+        let mut self_changed = false;
         for &next in &graph.nodes[id].next {
+            if next == id {
+                if let Some(output) = &output {
+                    self_changed |= join(&mut input, output);
+                }
+                continue;
+            }
+            let output_state = output.as_deref().unwrap_or(&input);
             let slot = &mut incoming[next];
             let changed = match slot {
-                None => { *slot = Some(output.clone()); true }
-                Some(state) => {
-                    let mut changed = false;
-                    for (cell, value) in state.iter_mut().zip(&output) {
-                        let joined = *cell | *value;
-                        changed |= joined != *cell;
-                        *cell = joined;
-                    }
-                    changed
-                }
+                None => { *slot = Some(output_state.to_vec()); true }
+                Some(state) => join(state, output_state),
             };
             if changed && !queued[next] { queue.push_back(next); queued[next] = true; }
         }
+        incoming[id] = Some(input);
+        if self_changed && !queued[id] { queue.push_back(id); queued[id] = true; }
     }
     Ok(incoming)
 }
@@ -611,6 +633,20 @@ mod tests {
             }
             assert_eq!(actual, expected);
         }
+    }
+
+    #[test]
+    fn self_loop_joins_transferred_state_and_reaches_fixed_point() {
+        let f = function();
+        let graph = Graph { entry: 0, nodes: vec![
+            Node { op: Op::Nop("entry"), next: vec![1] },
+            Node { op: Op::Write(1), next: vec![1, 2] },
+            Node { op: Op::Read { id: 1, span: Span::default(), borrow: false }, next: vec![] },
+        ] };
+        let states = solve(&graph, &f).unwrap();
+        assert_eq!(states[1].as_deref(), Some(&[READY, UNINIT | READY][..]));
+        assert_eq!(states[2].as_deref(), Some(&[READY, READY][..]));
+        verify(&graph, &f, &states).unwrap();
     }
 
     #[test]

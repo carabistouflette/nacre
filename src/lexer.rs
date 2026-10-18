@@ -105,7 +105,7 @@ impl Lexer<'_> {
         loop {
             while self.peek().is_some_and(char::is_whitespace) { self.bump(); }
             if self.source[self.pos..].starts_with("//") {
-                while self.peek().is_some_and(|c| c != '\n') { self.bump(); }
+                while self.peek().is_some_and(|c| c != '\n' && c != '\r') { self.bump(); }
             } else if self.source[self.pos..].starts_with("/*") {
                 let start = self.pos;
                 self.pos += 2;

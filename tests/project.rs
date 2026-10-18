@@ -130,6 +130,37 @@ fn diagnostic_offsets_round_down_to_utf8_boundaries() {
         assert_eq!((line, column), expected);
     }
 }
+
+#[test]
+fn diagnostic_carets_follow_unicode_display_width() {
+    let text = "A界B";
+    let start = text.find('B').unwrap();
+    let diagnostic = Diagnostic::new(Span::new(start, start + 1), "wide character");
+    let rendered = diagnostic.render("unicode", text);
+
+    assert!(rendered.starts_with("unicode:1:3: error: wide character\n"), "{rendered:?}");
+    assert_eq!(line_column(text, start), (1, 3));
+    assert!(rendered.contains("  |    ^\n"), "{rendered:?}");
+
+    let wide_span = Diagnostic::new(Span::new(1, 4), "wide span").render("unicode", text);
+    assert!(wide_span.contains("  |  ^^\n"), "{wide_span:?}");
+}
+#[test]
+fn rendered_diagnostics_sanitize_control_characters_in_crlf_source() {
+    let source = "void main() {\r\n\t\x1b[31mtrue\r\n}";
+    let start = source.find('\x1b').unwrap();
+    let span = Span::new(start, start + 1);
+    let diagnostic = Diagnostic::new(span, "invalid token").with_note(span, "same location");
+    let rendered = diagnostic.render("control.ncr", source);
+
+    assert!(rendered.starts_with("control.ncr:2:5:"), "{rendered:?}");
+
+    assert!(!rendered.contains('\x1b'), "{rendered:?}");
+    assert!(!rendered.contains('\r'), "{rendered:?}");
+    assert!(rendered.contains("    �[31mtrue"), "{rendered:?}");
+    assert!(rendered.contains("  |     ^\n"), "{rendered:?}");
+}
+
 #[test]
 fn directory_sources_are_sorted_and_outputs_excluded() {
     let t=Temp::new();t.file("B.ncr","class B{}");t.file("A.ncr","void main(){}");
@@ -158,6 +189,31 @@ fn directory_sources_are_sorted_and_outputs_excluded() {
     assert_eq!(b.paths().map(|path| path.strip_prefix(&t.0).unwrap().to_owned()).collect::<Vec<_>>(), expected);
     b.validate().unwrap();
 }
+
+#[test]
+fn directory_scan_limit_is_enforced_at_the_boundary() {
+    use nacre::project::MAX_DIRECTORY_ENTRIES;
+
+    let temp = Temp::new();
+    temp.file("Main.ncr", "void main() {}");
+    for index in 0..(MAX_DIRECTORY_ENTRIES - 1) {
+        temp.file(&format!("ignored-{index:04}.txt"), "");
+    }
+    SourceBundle::from_paths(std::slice::from_ref(&temp.0))
+        .unwrap()
+        .validate()
+        .unwrap();
+
+    temp.file("one-too-many.txt", "");
+    let error = SourceBundle::from_paths(std::slice::from_ref(&temp.0)).unwrap_err();
+    assert!(
+        error.contains(&format!(
+            "directory scan limit is {MAX_DIRECTORY_ENTRIES} entries"
+        )),
+        "{error}"
+    );
+}
+
 #[test]
 fn duplicate_disk_input_is_rejected() {
     let t=Temp::new();let p=t.file("main.ncr","void main(){}");assert!(SourceBundle::from_paths(&[p.clone(),p]).is_err());

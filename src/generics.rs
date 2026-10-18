@@ -75,6 +75,7 @@ struct Request { template: String, name: String, args: Vec<Type>, span: Span }
 struct Expander {
     definitions: HashMap<String, a::Class>,
     requested: HashSet<String>,
+    unit_mutex_required: bool,
     user_specializations: usize,
     pending: VecDeque<Request>,
     names: Vec<String>,
@@ -86,6 +87,7 @@ pub fn expand(mut program: a::Program) -> Result<(a::Program, Vec<String>), Diag
         return Err(Diagnostic::new(Span::default(), "limit: 128 user classes or interfaces per program, including templates"));
     }
     let mut expander = Expander { definitions: HashMap::new(), requested: HashSet::new(),
+        unit_mutex_required: false,
         user_specializations: 0, pending: VecDeque::new(), names: Vec::new() };
     for class in &program.classes {
         if matches!(class.name.as_str(), "System" | "println") {
@@ -106,8 +108,10 @@ pub fn expand(mut program: a::Program) -> Result<(a::Program, Vec<String>), Diag
     let empty = Environment::new();
     for function in &mut program.functions { expander.function(function, &empty)?; }
     let mut concrete = Vec::new();
+    let mut concrete_user_class_count = 0;
     for mut class in program.classes {
         if class.type_params.is_empty() && class.native.is_none() {
+            if !class.is_builtin { concrete_user_class_count += 1; }
             expander.class(&mut class, &empty)?;
             concrete.push(class);
         }
@@ -145,8 +149,9 @@ pub fn expand(mut program: a::Program) -> Result<(a::Program, Vec<String>), Diag
         expander.class(&mut class, &env).map_err(|d| d.with_note(request.span,
             format!("specialization `{}` requested here", request.name)))?;
         expander.request_unit_mutex_if_needed(&empty, request.span)?;
+        if !class.is_builtin { concrete_user_class_count += 1; }
         concrete.push(class);
-        if concrete.iter().filter(|c| !c.is_builtin).count() > 128 {
+        if concrete_user_class_count > 128 {
             return Err(Diagnostic::new(request.span, "[E4199] limit of 128 concrete types, including specializations"));
         }
     }
@@ -189,10 +194,15 @@ fn append_type_arguments(output: &mut String, args: &[Type]) {
 }
 
 impl Expander {
+    fn enqueue_request(&mut self, template: String, name: String, args: Vec<Type>, span: Span) {
+        self.unit_mutex_required |= crate::stdlib::uses_unit_mutex(&name);
+        self.requested.insert(name.clone());
+        self.names.push(name.clone());
+        self.pending.push_back(Request { template, name, args, span });
+    }
+
     fn request_unit_mutex_if_needed(&mut self, env: &Environment, span: Span) -> Result<(), Diagnostic> {
-        let required = self.requested.iter()
-            .any(|name| crate::stdlib::uses_unit_mutex(name));
-        if required && !self.requested.contains("Mutex<Unit>") {
+        if self.unit_mutex_required && !self.requested.contains("Mutex<Unit>") {
             self.ty(&Type::Applied {
                 name: "Mutex".to_owned(),
                 args: vec![Type::Unit],
@@ -210,9 +220,7 @@ impl Expander {
                 if let Some(replacement) = env.get(name) { return Ok(replacement.clone()); }
                 if self.definitions.get(name).is_some_and(|c|
                     c.native.is_some() && c.type_params.is_empty()) && !self.requested.contains(name) {
-                    self.requested.insert(name.clone());
-                    self.names.push(name.clone());
-                    self.pending.push_back(Request { template: name.clone(), name: name.clone(), args: Vec::new(), span });
+                    self.enqueue_request(name.clone(), name.clone(), Vec::new(), span);
                 }
                 if self.definitions.get(name).is_some_and(|c| !c.type_params.is_empty()) {
                     return Err(Diagnostic::new(span, format!("[E4102] `{name}` requires explicit type arguments")));
@@ -250,9 +258,7 @@ impl Expander {
                         }
                         self.user_specializations += 1;
                     }
-                    self.requested.insert(key.clone());
-                    self.names.push(key.clone());
-                    self.pending.push_back(Request { template: name.clone(), name: key.clone(), args, span });
+                    self.enqueue_request(name.clone(), key.clone(), args, span);
                 }
                 Ok(Type::Named(key))
             }
@@ -592,24 +598,30 @@ impl Expander {
 }
 
 fn builtin_template(expander: &Expander, name: &str, arity: usize) -> Option<String> {
-    let mut candidates: Vec<_> = expander.definitions.iter().filter_map(|(qualified, class)| {
+    expander.definitions.iter().filter_map(|(qualified, class)| {
         let base = qualified.rsplit("::").next().unwrap_or(qualified);
-        (class.is_builtin && class.type_params.len() == arity && base == name)
-            .then_some(qualified.clone())
-    }).collect();
-    candidates.sort();
-    candidates.into_iter().next()
+        if class.is_builtin && class.type_params.len() == arity && base == name {
+            Some(qualified.as_str())
+        } else {
+            None
+        }
+    }).min().map(str::to_owned)
+}
+
+fn concrete_class_by_name<'a>(name: &str, classes: &'a [a::Class]) -> Option<&'a a::Class> {
+    classes.iter().find(|class| class.qualified_name == name || class.name == name)
 }
 
 fn concrete_class_for_type<'a>(ty: &Type, classes: &'a [a::Class]) -> Option<&'a a::Class> {
     let name = match ty {
-        Type::Named(name) => name.clone(),
+        Type::Named(name) => return concrete_class_by_name(name, classes),
         Type::Applied { .. } => {
             let mut name = String::new();
             append_type_name(&mut name, ty);
             name
         }
-        Type::Borrow { name, args, .. } if args.is_empty() => name.clone(),
+        Type::Borrow { name, args, .. } if args.is_empty() =>
+            return concrete_class_by_name(name, classes),
         Type::Borrow { name, args, .. } => {
             let mut full = name.clone();
             append_type_arguments(&mut full, args);
@@ -617,8 +629,9 @@ fn concrete_class_for_type<'a>(ty: &Type, classes: &'a [a::Class]) -> Option<&'a
         }
         _ => return None,
     };
-    classes.iter().find(|class| class.qualified_name == name || class.name == name)
+    concrete_class_by_name(&name, classes)
 }
+
 
 fn inferred_expression_type(
     expr: &a::Expr,
@@ -728,10 +741,41 @@ fn iterator_item_type(
     }
 }
 
-fn bind_pattern_types(
-    pattern: &a::Pattern,
+type LocalScopeChanges<'ast> = Vec<(&'ast str, Option<Type>)>;
+
+fn bind_local_type<'ast>(
+    locals: &mut HashMap<String, Type>,
+    changes: &mut LocalScopeChanges<'ast>,
+    name: &'ast str,
+    ty: &Type,
+) {
+    let previous = locals.insert(name.to_owned(), ty.clone());
+    changes.push((name, previous));
+}
+
+fn restore_local_scope<'ast>(
+    locals: &mut HashMap<String, Type>,
+    changes: &mut LocalScopeChanges<'ast>,
+    checkpoint: usize,
+) {
+    while changes.len() > checkpoint {
+        let (name, previous) = changes.pop().expect("scope change exists above checkpoint");
+        match previous {
+            Some(previous) => {
+                *locals.get_mut(name).expect("scoped local remains present") = previous;
+            }
+            None => {
+                locals.remove(name);
+            }
+        }
+    }
+}
+
+fn bind_pattern_types<'ast>(
+    pattern: &'ast a::Pattern,
     ty: &Type,
     locals: &mut HashMap<String, Type>,
+    changes: &mut LocalScopeChanges<'ast>,
     classes: &[a::Class],
 ) {
     match &pattern.kind {
@@ -742,7 +786,7 @@ fn bind_pattern_types(
                 .is_some_and(|variants| variants.iter().any(|variant| variant.name == variant_name)) {
                 return;
             }
-            locals.insert(name.clone(), ty.clone());
+            bind_local_type(locals, changes, name, ty);
         }
         a::PatternKind::Variant { name, fields } => {
             let Some(class) = concrete_class_for_type(ty, classes) else { return; };
@@ -750,26 +794,27 @@ fn bind_pattern_types(
             let variant_name = name.rsplit('.').next().unwrap_or(name);
             let Some(variant) = variants.iter().find(|variant| variant.name == variant_name) else { return; };
             for (pattern, field_type) in fields.iter().zip(&variant.fields) {
-                bind_pattern_types(pattern, field_type, locals, classes);
+                bind_pattern_types(pattern, field_type, locals, changes, classes);
             }
         }
         a::PatternKind::Record { fields, .. } => {
             let Some(class) = concrete_class_for_type(ty, classes) else { return; };
             for (name, pattern) in fields {
                 if let Some(field) = class.fields.iter().find(|field| field.name == *name) {
-                    bind_pattern_types(pattern, &field.ty, locals, classes);
+                    bind_pattern_types(pattern, &field.ty, locals, changes, classes);
                 }
             }
         }
         a::PatternKind::Tuple(first, second) => {
             let Some(class) = concrete_class_for_type(ty, classes) else { return; };
             if class.fields.len() == 2 {
-                bind_pattern_types(first, &class.fields[0].ty, locals, classes);
-                bind_pattern_types(second, &class.fields[1].ty, locals, classes);
+                bind_pattern_types(first, &class.fields[0].ty, locals, changes, classes);
+                bind_pattern_types(second, &class.fields[1].ty, locals, changes, classes);
             }
         }
     }
 }
+
 
 fn scan_iterator_expr(
     expander: &mut Expander,
@@ -812,69 +857,82 @@ fn scan_iterator_expr(
     Ok(())
 }
 
-fn scan_iterator_block(
+fn scan_iterator_block<'ast>(
     expander: &mut Expander,
-    block: &a::Block,
+    block: &'ast a::Block,
     locals: &mut HashMap<String, Type>,
+    changes: &mut LocalScopeChanges<'ast>,
     context: &IteratorContext<'_>,
 ) -> Result<(), Diagnostic> {
     let IteratorContext { current_class, classes, functions, .. } = *context;
     use a::StmtKind as S;
-    let saved = locals.clone();
-    for statement in block {
-        match &statement.kind {
-            S::Let { ty, name, value } => {
-                if let Some(value) = value {
+    let checkpoint = changes.len();
+    let result = (|| {
+        for statement in block {
+            match &statement.kind {
+                S::Let { ty, name, value } => {
+                    if let Some(value) = value {
+                        scan_iterator_expr(expander, value, locals, context)?;
+                    }
+                    bind_local_type(locals, changes, name, ty);
+                }
+                S::Assign { target, value } => {
+                    scan_iterator_expr(expander, target, locals, context)?;
                     scan_iterator_expr(expander, value, locals, context)?;
                 }
-                locals.insert(name.clone(), ty.clone());
-            }
-            S::Assign { target, value } => {
-                scan_iterator_expr(expander, target, locals, context)?;
-                scan_iterator_expr(expander, value, locals, context)?;
-            }
-            S::Expr(expr) => scan_iterator_expr(expander, expr, locals, context)?,
-            S::If { condition, then_block, else_block } => {
-                scan_iterator_expr(expander, condition, locals, context)?;
-                let mut branch = locals.clone();
-                scan_iterator_block(expander, then_block, &mut branch, context)?;
-                if let Some(other) = else_block {
-                    let mut branch = locals.clone();
-                    scan_iterator_block(expander, other, &mut branch, context)?;
-                }
-            }
-            S::While { condition, body } => {
-                scan_iterator_expr(expander, condition, locals, context)?;
-                let mut loop_locals = locals.clone();
-                scan_iterator_block(expander, body, &mut loop_locals, context)?;
-            }
-            S::ForEach { ty, name, key, collection, body, .. } => {
-                scan_iterator_expr(expander, collection, locals, context)?;
-                let mut loop_locals = locals.clone();
-                loop_locals.insert(name.clone(), ty.clone());
-                if let Some((key_type, key_name)) = key { loop_locals.insert(key_name.clone(), key_type.clone()); }
-                scan_iterator_block(expander, body, &mut loop_locals, context)?;
-            }
-            S::Match { value, arms } => {
-                scan_iterator_expr(expander, value, locals, context)?;
-                let value_type = inferred_expression_type(value, locals, current_class, classes, functions);
-                for arm in arms {
-                    let mut arm_locals = locals.clone();
-                    if let Some(ty) = &value_type { bind_pattern_types(&arm.pattern, ty, &mut arm_locals, classes); }
-                    if let Some(guard) = &arm.guard {
-                        scan_iterator_expr(expander, guard, &arm_locals, context)?;
+                S::Expr(expr) => scan_iterator_expr(expander, expr, locals, context)?,
+                S::If { condition, then_block, else_block } => {
+                    scan_iterator_expr(expander, condition, locals, context)?;
+                    scan_iterator_block(expander, then_block, locals, changes, context)?;
+                    if let Some(other) = else_block {
+                        scan_iterator_block(expander, other, locals, changes, context)?;
                     }
-                    scan_iterator_block(expander, &arm.body, &mut arm_locals, context)?;
                 }
+                S::While { condition, body } => {
+                    scan_iterator_expr(expander, condition, locals, context)?;
+                    scan_iterator_block(expander, body, locals, changes, context)?;
+                }
+                S::ForEach { ty, name, key, collection, body, .. } => {
+                    scan_iterator_expr(expander, collection, locals, context)?;
+                    let loop_checkpoint = changes.len();
+                    bind_local_type(locals, changes, name, ty);
+                    if let Some((key_type, key_name)) = key {
+                        bind_local_type(locals, changes, key_name, key_type);
+                    }
+                    let result = scan_iterator_block(expander, body, locals, changes, context);
+                    restore_local_scope(locals, changes, loop_checkpoint);
+                    result?;
+                }
+                S::Match { value, arms } => {
+                    scan_iterator_expr(expander, value, locals, context)?;
+                    let value_type = inferred_expression_type(value, locals, current_class, classes, functions);
+                    for arm in arms {
+                        let arm_checkpoint = changes.len();
+                        let result = (|| {
+                            if let Some(ty) = &value_type {
+                                bind_pattern_types(&arm.pattern, ty, locals, changes, classes);
+                            }
+                            if let Some(guard) = &arm.guard {
+                                scan_iterator_expr(expander, guard, locals, context)?;
+                            }
+                            scan_iterator_block(expander, &arm.body, locals, changes, context)?;
+                            Ok(())
+                        })();
+                        restore_local_scope(locals, changes, arm_checkpoint);
+                        result?;
+                    }
+                }
+                S::Return(Some(expr)) => scan_iterator_expr(expander, expr, locals, context)?,
+                S::Block(inner) => scan_iterator_block(expander, inner, locals, changes, context)?,
+                S::Return(None) | S::Break | S::Continue => {}
             }
-            S::Return(Some(expr)) => scan_iterator_expr(expander, expr, locals, context)?,
-            S::Block(inner) => scan_iterator_block(expander, inner, locals, context)?,
-            S::Return(None) | S::Break | S::Continue => {}
         }
-    }
-    *locals = saved;
-    Ok(())
+        Ok(())
+    })();
+    restore_local_scope(locals, changes, checkpoint);
+    result
 }
+
 
 fn discover_iterator_specializations(
     expander: &mut Expander,
@@ -891,7 +949,8 @@ fn discover_iterator_specializations(
     for function in functions {
         let mut locals: HashMap<_, _> = function.params.iter()
             .map(|param| (param.name.clone(), param.ty.clone())).collect();
-        scan_iterator_block(expander, &function.body, &mut locals, &context)?;
+        let mut changes = Vec::new();
+        scan_iterator_block(expander, &function.body, &mut locals, &mut changes, &context)?;
     }
     for class in classes {
         let context = IteratorContext { current_class: Some(class), ..context };
@@ -904,13 +963,66 @@ fn discover_iterator_specializations(
         if let Some(constructor) = &class.constructor {
             let mut locals: HashMap<_, _> = constructor.params.iter()
                 .map(|param| (param.name.clone(), param.ty.clone())).collect();
-            scan_iterator_block(expander, &constructor.body, &mut locals, &context)?;
+            let mut changes = Vec::new();
+            scan_iterator_block(expander, &constructor.body, &mut locals, &mut changes, &context)?;
         }
         for method in &class.methods {
             let mut locals: HashMap<_, _> = method.params.iter()
                 .map(|param| (param.name.clone(), param.ty.clone())).collect();
-            scan_iterator_block(expander, &method.body, &mut locals, &context)?;
+            let mut changes = Vec::new();
+            scan_iterator_block(expander, &method.body, &mut locals, &mut changes, &context)?;
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn builtin_class(qualified_name: &str, arity: usize, is_builtin: bool) -> a::Class {
+        a::Class {
+            native: None,
+            is_builtin,
+            is_builtin_result: false,
+            name: qualified_name.rsplit("::").next().unwrap_or(qualified_name).to_owned(),
+            span: Span::default(),
+            fields: Vec::new(),
+            type_params: (0..arity).map(|index| format!("T{index}")).collect(),
+            type_bounds: vec![None; arity],
+            implements: Vec::new(),
+            is_interface: false,
+            variants: None,
+            methods: Vec::new(),
+            constructor: None,
+            qualified_name: qualified_name.to_owned(),
+            unit: 0,
+            visibility: a::Visibility::Public,
+        }
+    }
+
+    fn test_expander(classes: impl IntoIterator<Item = a::Class>) -> Expander {
+        let definitions = classes.into_iter()
+            .map(|class| (class.qualified_name.clone(), class)).collect();
+        Expander {
+            definitions,
+            requested: HashSet::new(),
+            unit_mutex_required: false,
+            user_specializations: 0,
+            pending: VecDeque::new(),
+            names: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn builtin_template_selects_lexically_first_eligible_class() {
+        let expander = test_expander([
+            builtin_class("z::Pair", 2, true),
+            builtin_class("a::Pair", 2, true),
+            builtin_class("0::Pair", 2, false),
+            builtin_class("00::Pair", 1, true),
+        ]);
+        assert_eq!(builtin_template(&expander, "Pair", 2).as_deref(), Some("a::Pair"));
+        assert_eq!(builtin_template(&expander, "Pair", 3), None);
+    }
 }

@@ -49,7 +49,6 @@ struct ncr_tv_fields {
 
 static ncr_obj_@TEMPORAL_ID@ *ncr_tv_new(int32_t kind, size_t line, size_t column) {
     ncr_obj_@TEMPORAL_ID@ *value = ncr_allocate(sizeof(*value), line, column);
-    memset(value, 0, sizeof(*value));
     value->kind = kind;
     value->calendar = NCR_TV_GREGORIAN;
     return value;

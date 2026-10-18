@@ -1,13 +1,11 @@
 //! Project configuration and bounded filesystem admission for LSP sources.
 //! Document overlays and diagnostic publication remain with the server.
+use super::file_uri::normalize_path;
+use crate::project::{MAX_FILES, is_excluded_name, is_source_file, read_directory_entries};
+use serde_json::Value;
 use std::fs;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
-use serde_json::Value;
-use crate::project::{is_excluded_name, is_source_file, MAX_FILES};
-use super::file_uri::normalize_path;
-
-const MAX_DIRECTORY_ENTRIES: usize = 4096;
 
 pub(super) fn configured_source_roots(root: &Path) -> Result<Vec<PathBuf>, String> {
     let manifest = root.join("Nacre.toml");
@@ -38,6 +36,7 @@ pub(super) fn configured_source_roots(root: &Path) -> Result<Vec<PathBuf>, Strin
         if source.is_absolute() { return Err(format!("{} source paths must be relative", config.display())); }
         let path = normalize_path(&root.join(source));
         if !path.starts_with(root) { return Err(format!("{} source path escapes the project root", config.display())); }
+        reject_symlink_path(&path, root)?;
         roots.push(path);
     }
     Ok(roots)
@@ -79,7 +78,7 @@ pub(super) fn collect_recursive(path: &Path, depth: usize, visited: &mut usize, 
         return Ok(());
     }
     if !metadata.is_dir() { return Ok(()); }
-    for entry in directory_entries(path, visited)? {
+    for entry in read_directory_entries(path, visited)? {
         if is_excluded_name(entry.file_name().unwrap_or_default()) { continue; }
         let kind = fs::symlink_metadata(&entry).map_err(|error| format!("{}: {error}", entry.display()))?;
         if kind.is_dir() { collect_recursive(&entry, depth + 1, visited, output)?; }
@@ -89,18 +88,6 @@ pub(super) fn collect_recursive(path: &Path, depth: usize, visited: &mut usize, 
         }
     }
     Ok(())
-}
-
-fn directory_entries(path: &Path, visited: &mut usize) -> Result<Vec<PathBuf>, String> {
-    let entries = fs::read_dir(path).map_err(|error| format!("{}: {error}", path.display()))?;
-    let mut output = Vec::new();
-    for entry in entries {
-        *visited += 1;
-        if *visited > MAX_DIRECTORY_ENTRIES { return Err(format!("directory scan limit is {MAX_DIRECTORY_ENTRIES} entries")); }
-        output.push(entry.map_err(|error| format!("{}: {error}", path.display()))?.path());
-    }
-    output.sort();
-    Ok(output)
 }
 
 fn push_source(output: &mut Vec<PathBuf>, path: PathBuf) -> Result<(), String> {

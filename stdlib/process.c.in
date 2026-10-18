@@ -41,7 +41,7 @@ static char *ncr_process_text_c_copy(
 ) {
     size_t length = (size_t)text->length;
     if (length == SIZE_MAX) { *failure = EOVERFLOW; return NULL; }
-    char *copy = ncr_allocate(length + 1, line, column);
+    char *copy = ncr_allocate_raw(length + 1, line, column);
     if (length > 0) { memcpy(copy, text->bytes, length); }
     copy[length] = '\0';
     return copy;
@@ -79,7 +79,7 @@ static ncr_obj_@ENV_GET_RESULT@ @ENV_GET@(
         if (value_length > (size_t)INT32_MAX) {
             copy_failure = EOVERFLOW;
         } else if (value_length > 0) {
-            copy = ncr_allocate(value_length, ncr_line, ncr_column);
+            copy = ncr_allocate_raw(value_length, ncr_line, ncr_column);
             memcpy(copy, value, value_length);
         }
     }
@@ -217,10 +217,7 @@ static void ncr_process_reserve_texts(
         grown *= 2;
     }
     if (grown > SIZE_MAX / sizeof(**items)) { ncr_fail("Command argument capacity overflow", line, column); }
-    ncr_obj_@TEXT_CLASS@ **next = ncr_allocate(grown * sizeof(*next), line, column);
-    if (*capacity > 0) { memcpy(next, *items, *capacity * sizeof(*next)); }
-    ncr_deallocate(*items);
-    *items = next;
+    *items = ncr_reallocate(*items, grown * sizeof(**items), line, column);
     *capacity = grown;
 }
 
@@ -235,16 +232,8 @@ static void ncr_process_reserve_environment(
         grown *= 2;
     }
     if (grown > SIZE_MAX / sizeof(**names)) { ncr_fail("Command environment capacity overflow", line, column); }
-    ncr_obj_@TEXT_CLASS@ **next_names = ncr_allocate(grown * sizeof(*next_names), line, column);
-    ncr_obj_@TEXT_CLASS@ **next_values = ncr_allocate(grown * sizeof(*next_values), line, column);
-    if (*capacity > 0) {
-        memcpy(next_names, *names, *capacity * sizeof(*next_names));
-        memcpy(next_values, *values, *capacity * sizeof(*next_values));
-    }
-    ncr_deallocate(*names);
-    ncr_deallocate(*values);
-    *names = next_names;
-    *values = next_values;
+    *names = ncr_reallocate(*names, grown * sizeof(**names), line, column);
+    *values = ncr_reallocate(*values, grown * sizeof(**values), line, column);
     *capacity = grown;
 }
 
@@ -454,7 +443,7 @@ static bool ncr_process_snapshot_environment(
         else { *failure = EOVERFLOW; }
         return false;
     }
-    char **environment = ncr_allocate(capacity * sizeof(*environment), line, column);
+    char **environment = ncr_allocate_raw(capacity * sizeof(*environment), line, column);
     size_t count = 0;
     if (!command->clear_environment && environ != NULL) {
         for (char **entry = environ; *entry != NULL; ++entry) {
@@ -467,7 +456,7 @@ static bool ncr_process_snapshot_environment(
                 else { *failure = EOVERFLOW; }
                 return false;
             }
-            char *copy = ncr_allocate(length + 1, line, column);
+            char *copy = ncr_allocate_raw(length + 1, line, column);
             memcpy(copy, *entry, length + 1);
             environment[count++] = copy;
         }
@@ -490,7 +479,7 @@ static bool ncr_process_snapshot_environment(
             return false;
         }
         size_t length = name_length + value_length + 1;
-        char *entry = ncr_allocate(length + 1, line, column);
+        char *entry = ncr_allocate_raw(length + 1, line, column);
         if (name_length > 0) { memcpy(entry, name->bytes, name_length); }
         entry[name_length] = '=';
         if (value_length > 0) { memcpy(entry + name_length + 1, value->bytes, value_length); }
@@ -533,7 +522,7 @@ static bool ncr_process_build_argv(
     size_t argument_count = command->argument_count + 1;
     size_t pointer_count = argument_count + 1;
     if (pointer_count > SIZE_MAX / sizeof(char *)) { *failure = EOVERFLOW; return false; }
-    char **arguments = ncr_allocate(pointer_count * sizeof(*arguments), line, column);
+    char **arguments = ncr_allocate_raw(pointer_count * sizeof(*arguments), line, column);
     arguments[0] = ncr_process_text_c_copy(command->executable->text, line, column, failure);
     if (arguments[0] == NULL) {
         ncr_deallocate(arguments);
@@ -661,7 +650,7 @@ static int ncr_process_spawn_resolved(
             ncr_deallocate(default_path);
             return EOVERFLOW;
         }
-        char *candidate = ncr_allocate(candidate_length + 1, line, column);
+        char *candidate = ncr_allocate_raw(candidate_length + 1, line, column);
         if (directory_length > 0) {
             memcpy(candidate, search_path + begin, directory_length);
             candidate[directory_length] = '/';

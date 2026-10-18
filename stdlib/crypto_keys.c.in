@@ -12,6 +12,7 @@
 #include <openssl/x509.h>
 #include <openssl/x509_vfy.h>
 #include <openssl/x509v3.h>
+#include <arpa/inet.h>
 #include <errno.h>
 #include <limits.h>
 #include <stdint.h>
@@ -111,7 +112,7 @@ static @BUFFER_TYPE@ ncr_cryptokeys_buffer_copy(const unsigned char *bytes, size
     size_t line, size_t column) {
     unsigned char *owned = NULL;
     if (length > 0) {
-        owned = ncr_allocate(length, line, column);
+        owned = ncr_allocate_raw(length, line, column);
         memcpy(owned, bytes, length);
     }
     return ncr_cryptokeys_buffer_take(owned, length, length, line, column);
@@ -568,6 +569,31 @@ static @MAC_FINISH_RESULT@ @CRYPTO_MAC_FINISH@(@MAC_TYPE@ ncr_self, size_t line,
 /* CRYPTOKEYS_GROUP_END MAC */
 
 /* CRYPTOKEYS_GROUP CERTIFICATE */
+
+/* Returns raw IPv4/IPv6 bytes; an optional IPv6 zone is not part of identity. */
+static size_t ncr_cryptokeys_ip_address(const unsigned char *host, size_t length,
+    unsigned char address[16]) {
+    if (host == NULL || length == 0 || memchr(host, 0, length) != NULL) { return 0; }
+    const unsigned char *zone = memchr(host, '%', length);
+    if (zone != NULL && (size_t)(zone - host) + 1 >= length) { return 0; }
+    size_t address_length = zone == NULL ? length : (size_t)(zone - host);
+    if (address_length == 0 || address_length >= INET6_ADDRSTRLEN) { return 0; }
+    char text[INET6_ADDRSTRLEN];
+    memcpy(text, host, address_length);
+    text[address_length] = '\0';
+    struct in_addr ipv4;
+    if (zone == NULL && inet_pton(AF_INET, text, &ipv4) == 1) {
+        memcpy(address, &ipv4, sizeof(ipv4));
+        return sizeof(ipv4);
+    }
+    struct in6_addr ipv6;
+    if (inet_pton(AF_INET6, text, &ipv6) == 1) {
+        memcpy(address, &ipv6, sizeof(ipv6));
+        return sizeof(ipv6);
+    }
+    return 0;
+}
+
 static void ncr_cryptokeys_certificate_destroy(void *certificate, void *chain) {
     if (certificate != NULL) { X509_free((X509 *)certificate); }
     if (chain != NULL) { sk_X509_pop_free((STACK_OF(X509) *)chain, X509_free); }
@@ -769,15 +795,21 @@ static @CERTIFICATE_HOST_RESULT@ @CERTIFICATE_MATCHES_HOST@(@CERTIFICATE_TYPE@ n
     @TEXT_TYPE@ ncr_v_@CERTIFICATE_MATCHES_HOST_ID@, size_t line, size_t column) {
     if (ncr_v_@CERTIFICATE_MATCHES_HOST_ID@ == NULL || ncr_v_@CERTIFICATE_MATCHES_HOST_ID@->length <= 0 ||
         ncr_cryptokeys_text_has_nul(ncr_v_@CERTIFICATE_MATCHES_HOST_ID@)) {
-        return ncr_result_error_@CERTIFICATE_HOST_ERROR_RESULT@("hostname must be nonempty and contain no NUL", sizeof("hostname must be nonempty and contain no NUL") - 1, line, column);
+        return ncr_result_error_@CERTIFICATE_HOST_ERROR_RESULT@("host must be nonempty and contain no NUL", sizeof("host must be nonempty and contain no NUL") - 1, line, column);
     }
-    int matched = X509_check_host((X509 *)ncr_self->certificate,
-        (const char *)ncr_v_@CERTIFICATE_MATCHES_HOST_ID@->bytes,
-        (size_t)ncr_v_@CERTIFICATE_MATCHES_HOST_ID@->length,
-        X509_CHECK_FLAG_NEVER_CHECK_SUBJECT, NULL);
+    unsigned char address[sizeof(struct in6_addr)];
+    size_t address_length = ncr_cryptokeys_ip_address(
+        ncr_v_@CERTIFICATE_MATCHES_HOST_ID@->bytes,
+        (size_t)ncr_v_@CERTIFICATE_MATCHES_HOST_ID@->length, address);
+    int matched = address_length == 0
+        ? X509_check_host((X509 *)ncr_self->certificate,
+            (const char *)ncr_v_@CERTIFICATE_MATCHES_HOST_ID@->bytes,
+            (size_t)ncr_v_@CERTIFICATE_MATCHES_HOST_ID@->length,
+            X509_CHECK_FLAG_NEVER_CHECK_SUBJECT, NULL)
+        : X509_check_ip((X509 *)ncr_self->certificate, address, address_length, 0);
     if (matched == 1) { return (@CERTIFICATE_HOST_RESULT@){ .tag = @CERTIFICATE_HOST_OK_TAG@, .data.v@CERTIFICATE_HOST_OK_TAG@.f0 = true }; }
     if (matched == 0) { return (@CERTIFICATE_HOST_RESULT@){ .tag = @CERTIFICATE_HOST_OK_TAG@, .data.v@CERTIFICATE_HOST_OK_TAG@.f0 = false }; }
-    return ncr_result_error_@CERTIFICATE_HOST_ERROR_RESULT@("hostname check failed", sizeof("hostname check failed") - 1, line, column);
+    return ncr_result_error_@CERTIFICATE_HOST_ERROR_RESULT@("host check failed", sizeof("host check failed") - 1, line, column);
 }
 
 static @CERTIFICATE_VERIFY_RESULT@ @CERTIFICATE_VERIFY@(@CERTIFICATE_TYPE@ ncr_self,
@@ -788,7 +820,7 @@ static @CERTIFICATE_VERIFY_RESULT@ @CERTIFICATE_VERIFY@(@CERTIFICATE_TYPE@ ncr_s
         ncr_cryptokeys_text_has_nul(ncr_v_@CERTIFICATE_VERIFY_HOST_ID@) || ncr_v_@CERTIFICATE_VERIFY_CA_ID@ == NULL ||
         ncr_v_@CERTIFICATE_VERIFY_CA_ID@->text == NULL || ncr_v_@CERTIFICATE_VERIFY_CA_ID@->text->length <= 0 ||
         ncr_cryptokeys_text_has_nul(ncr_v_@CERTIFICATE_VERIFY_CA_ID@->text)) {
-        return ncr_result_error_@CERTIFICATE_VERIFY_ERROR_RESULT@("hostname and CA file path must be nonempty and contain no NUL", sizeof("hostname and CA file path must be nonempty and contain no NUL") - 1, line, column);
+        return ncr_result_error_@CERTIFICATE_VERIFY_ERROR_RESULT@("host and CA file path must be nonempty and contain no NUL", sizeof("host and CA file path must be nonempty and contain no NUL") - 1, line, column);
     }
     time_t verify_time = (time_t)ncr_v_@CERTIFICATE_VERIFY_TIME_ID@;
     if ((int64_t)verify_time != ncr_v_@CERTIFICATE_VERIFY_TIME_ID@) {
@@ -812,10 +844,16 @@ static @CERTIFICATE_VERIFY_RESULT@ @CERTIFICATE_VERIFY@(@CERTIFICATE_TYPE@ ncr_s
         X509_STORE_free(store);
         return ncr_result_error_@CERTIFICATE_VERIFY_ERROR_RESULT@("unable to initialize certificate trust verification", sizeof("unable to initialize certificate trust verification") - 1, line, column);
     }
+    unsigned char address[sizeof(struct in6_addr)];
+    size_t address_length = ncr_cryptokeys_ip_address(
+        ncr_v_@CERTIFICATE_VERIFY_HOST_ID@->bytes,
+        (size_t)ncr_v_@CERTIFICATE_VERIFY_HOST_ID@->length, address);
     X509_VERIFY_PARAM *parameters = X509_STORE_CTX_get0_param(context);
-    bool parameters_set = parameters != NULL &&
-        X509_VERIFY_PARAM_set1_host(parameters, (const char *)ncr_v_@CERTIFICATE_VERIFY_HOST_ID@->bytes,
-            (size_t)ncr_v_@CERTIFICATE_VERIFY_HOST_ID@->length) == 1;
+    bool parameters_set = parameters != NULL && (address_length == 0
+        ? X509_VERIFY_PARAM_set1_host(parameters,
+            (const char *)ncr_v_@CERTIFICATE_VERIFY_HOST_ID@->bytes,
+            (size_t)ncr_v_@CERTIFICATE_VERIFY_HOST_ID@->length) == 1
+        : X509_VERIFY_PARAM_set1_ip(parameters, address, address_length) == 1);
     if (parameters_set) {
         X509_VERIFY_PARAM_set_hostflags(parameters, X509_CHECK_FLAG_NEVER_CHECK_SUBJECT);
         parameters_set = X509_VERIFY_PARAM_set_purpose(parameters, X509_PURPOSE_SSL_SERVER) == 1;

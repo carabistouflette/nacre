@@ -8,6 +8,7 @@
     { "include": "#character-literals" },
     { "include": "#enum-declarations" },
     { "include": "#class-interface-declarations" },
+    { "include": "#trait-declarations" },
     { "include": "#new-expressions" },
     { "include": "#generic-types" },
     { "include": "#keywords" },
@@ -147,6 +148,18 @@
         }
       ]
     },
+
+    "trait-declarations": {
+      "patterns": [
+        {
+          "match": "\\b(trait)(\\s+)([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": { "name": "storage.type.trait.nacre" },
+            "3": { "name": "entity.name.type.trait.nacre" }
+          }
+        }
+      ]
+    },
     "new-expressions": {
       "patterns": [
         {
@@ -257,15 +270,15 @@
         },
         {
           "name": "storage.modifier.nacre",
-          "match": "\\b(?:public|private|static|readonly)\\b"
+          "match": "\\b(?:public|private|static|readonly|async)\\b"
         },
         {
           "name": "keyword.control.nacre",
-          "match": "\\b(?:enum|match|if|else|while|for|return|break|continue)\\b"
+          "match": "\\b(?:enum|match|if|else|while|for|return|break|continue|await)\\b"
         },
         {
           "name": "keyword.other.nacre",
-          "match": "\\b(?:implements|this|module|import)\\b"
+          "match": "\\b(?:implements|this|module|import|trait|impl)\\b"
         },
         {
           "name": "keyword.operator.new.nacre",

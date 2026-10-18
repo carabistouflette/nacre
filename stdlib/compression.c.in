@@ -24,6 +24,14 @@ static @RESULT_TYPE@ ncr_compression_deflate_run_@BUFFER_CLASS_ID@(
         goto failed;
     }
     initialized = true;
+    const size_t growth_chunk = 16384;
+    size_t initial_growth = growth_chunk;
+    if (input->length < growth_chunk) {
+        uLong bound = deflateBound(&stream, (uLong)input->length);
+        if (bound > 0 && bound < (uLong)growth_chunk) {
+            initial_growth = (size_t)bound;
+        }
+    }
     size_t input_offset = 0;
     for (;;) {
         if (stream.avail_in == 0 && input_offset < input->length) {
@@ -39,7 +47,8 @@ static @RESULT_TYPE@ ncr_compression_deflate_run_@BUFFER_CLASS_ID@(
                 goto failed;
             }
             size_t remaining = output_limit - output->length;
-            size_t growth = remaining < 16384 ? remaining : 16384;
+            size_t growth_limit = output->length == 0 ? initial_growth : growth_chunk;
+            size_t growth = remaining < growth_limit ? remaining : growth_limit;
             if (!ncr_byte_buffer_reserve_limited_@BUFFER_CLASS_ID@(
                 output, output->length + growth, output_limit, line, column
             )) {

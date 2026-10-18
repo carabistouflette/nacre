@@ -125,6 +125,26 @@ void test_failed() {
     assert_eq!(failed["status"], "failed");
     assert!(failed["failure"].as_str().unwrap().contains("json failure detail"));
     assert!(payload["duration_seconds"].as_f64().is_some());
+    let large_message = "x".repeat(256 * 1024);
+    let large_test = temp_dir.join("large_output.ncr");
+    fs::write(
+        &large_test,
+        format!(
+            "void test_large_failure() {{ println(\"{large_message}\"); assert(false, \"{large_message}\"); }}\n"
+        ),
+    ).unwrap();
+    let large_output = std::process::Command::new(env!("CARGO_BIN_EXE_nacre"))
+        .args(["test", "--json"])
+        .arg(&large_test)
+        .output()
+        .unwrap();
+    assert_eq!(large_output.status.code(), Some(1));
+    let large_payload: serde_json::Value = serde_json::from_slice(&large_output.stdout).unwrap();
+    let large_failure = large_payload["tests"][0]["failure"].as_str().unwrap();
+    assert!(large_failure.contains(
+        "child output capture exceeded 65536 bytes per stream (stderr); excess bytes were discarded"
+    ));
+    assert!(large_failure.len() <= 64 * 1024 + 160);
 
     let empty_output = std::process::Command::new(env!("CARGO_BIN_EXE_nacre"))
         .args(["test", "--json"])
@@ -163,6 +183,23 @@ void bench_simple_math() {
     assert_eq!(exit_code, 0);
     let exit_code_json = nacre::bench_runner::run_benchmarks(&[bench_file], None, false, false, false, true).unwrap();
     assert_eq!(exit_code_json, 0);
+    let noisy_bench = temp_dir.join("noisy_bench.ncr");
+    let noisy_output = "x".repeat(16 * 1024);
+    fs::write(
+        &noisy_bench,
+        format!("void bench_chatty() {{ println(\"{noisy_output}\"); }}\n"),
+    ).unwrap();
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_nacre"))
+        .args(["bench", "--json"])
+        .arg(&noisy_bench)
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    let payload: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(payload["failed"], 1);
+    assert!(payload["benchmarks"][0]["failure"].as_str().unwrap().contains(
+        "child output capture exceeded 65536 bytes per stream (stdout); excess bytes were discarded"
+    ));
 
     let _ = fs::remove_dir_all(&temp_dir);
 }
@@ -363,6 +400,126 @@ void main() {
 }
 
 #[test]
+fn trait_implementations_reject_parameter_type_mismatches() {
+    let source = r#"
+trait Converter {
+    int convert(int value);
+}
+
+class ConverterImpl {}
+impl Converter for ConverterImpl {
+    int convert(boolean value) { return 1; }
+}
+
+void main() {}
+"#;
+    let err = validate(source).unwrap_err();
+    assert!(
+        err.message.contains("parameter") && err.message.contains("convert"),
+        "{err}"
+    );
+}
+
+#[test]
+fn trait_implementations_compare_resolved_parameter_type_names() {
+    let values = r#"
+module api.values;
+public class Value {}
+"#;
+    let contract = r#"
+module api.contracts;
+import api.values.*;
+public trait Consumer { void accept(Value value); }
+"#;
+    let model_values = r#"
+module model.values;
+public class Value {}
+"#;
+    let model = r#"
+module model;
+import api.contracts.*;
+import model.values.*;
+
+public class Item {}
+impl Consumer for Item { void accept(Value value) {} }
+public void main() {}
+"#;
+    let bundle = nacre::project::SourceBundle::from_sources(vec![
+        ("values.ncr".to_owned(), values.to_owned()),
+        ("contract.ncr".to_owned(), contract.to_owned()),
+        ("model_values.ncr".to_owned(), model_values.to_owned()),
+        ("model.ncr".to_owned(), model.to_owned()),
+    ])
+    .unwrap();
+    let err = bundle.validate().unwrap_err();
+    assert!(
+        err.message.contains("parameter 1") && err.message.contains("api.values::Value"),
+        "{err}"
+    );
+}
+
+#[test]
+fn impl_methods_resolve_imports_from_the_impl_source_unit() {
+    let class = r#"
+module model;
+public class Item {}
+"#;
+    let values = r#"
+module api.values;
+public class Value {}
+"#;
+    let contract = r#"
+module api.contracts;
+import api.values.*;
+public trait Consumer { void accept(Value value); }
+"#;
+    let implementation = r#"
+module model;
+import api.contracts.*;
+import api.values.*;
+impl Consumer for Item { void accept(Value value) {} }
+public void main() {}
+"#;
+    let bundle = nacre::project::SourceBundle::from_sources(vec![
+        ("class.ncr".to_owned(), class.to_owned()),
+        ("values.ncr".to_owned(), values.to_owned()),
+        ("contract.ncr".to_owned(), contract.to_owned()),
+        ("impl.ncr".to_owned(), implementation.to_owned()),
+    ])
+    .unwrap();
+    bundle.validate().unwrap();
+}
+
+#[test]
+fn trait_implementations_match_receiver_mutability() {
+    let source = r#"
+trait Readable { readonly int read(); }
+class Value {}
+impl Readable for Value { int read() { return 1; } }
+void main() {}
+"#;
+    let err = validate(source).unwrap_err();
+    assert!(
+        err.message
+            .contains("requires a readonly receiver"),
+        "{err}"
+    );
+}
+
+#[test]
+fn trait_implementations_match_method_visibility() {
+    let source = r#"
+trait Runnable { void run(); }
+class Worker {}
+impl Runnable for Worker { private void run() {} }
+void main() {}
+"#;
+    let err = validate(source).unwrap_err();
+    assert!(err.message.contains("requires public visibility"), "{err}");
+}
+
+
+#[test]
 fn multi_module_trait_and_impl_resolution() {
     let source_a = r#"
 module geometry.traits;
@@ -398,6 +555,149 @@ public void main() {
     ]).unwrap();
     let program = support::compile(&bundle, &[]).unwrap();
     assert!(program.output().unwrap().status.success());
+}
+
+#[test]
+fn generic_trait_bounds_accept_named_module_implementations() {
+    let contracts = r#"
+module library.contracts;
+public trait Marker {}
+"#;
+    let model = r#"
+module library.model;
+import library.contracts.*;
+
+public class Item {}
+impl Marker for Item {}
+
+public class Holder<T: Marker> {
+    private T item;
+    public Holder(T item) { this.item = item; }
+    public int value() { return 42; }
+}
+"#;
+    let app = r#"
+module app;
+import library.model.*;
+
+public void main() {
+    Item item = new Item();
+    Holder<Item> holder = new Holder<Item>(item);
+    println(holder.value());
+}
+"#;
+    let bundle = nacre::project::SourceBundle::from_sources(vec![
+        ("contracts.ncr".to_owned(), contracts.to_owned()),
+        ("model.ncr".to_owned(), model.to_owned()),
+        ("app.ncr".to_owned(), app.to_owned()),
+    ]).unwrap();
+    let program = support::compile(&bundle, &[]).unwrap();
+    let output = program.output().unwrap();
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert_eq!(output.stdout, b"42\n");
+}
+
+#[test]
+fn generic_trait_bounds_reject_same_named_trait_from_other_module() {
+    let api_a = r#"
+module api.a;
+public trait Marker { void markA(); }
+"#;
+    let api_b = r#"
+module api.b;
+public trait Marker { void markB(); }
+"#;
+    let model = r#"
+module model;
+import api.a.*;
+
+public class Item {}
+impl Marker for Item { void markA() {} }
+"#;
+    let consumer = r#"
+module consumer;
+import api.b.*;
+import model.*;
+
+public class Box<T: Marker> {
+    private T item;
+    public Box(T item) { this.item = item; }
+}
+
+public void main() {
+    Item item = new Item();
+    Box<Item> box = new Box<Item>(item);
+}
+"#;
+    let bundle = nacre::project::SourceBundle::from_sources(vec![
+        ("api_a.ncr".to_owned(), api_a.to_owned()),
+        ("api_b.ncr".to_owned(), api_b.to_owned()),
+        ("model.ncr".to_owned(), model.to_owned()),
+        ("consumer.ncr".to_owned(), consumer.to_owned()),
+    ]).unwrap();
+    let err = bundle.validate().unwrap_err();
+    assert!(err.message.contains("does not satisfy trait bound"), "{err}");
+    assert!(err.message.contains("api.b::Marker"), "{err}");
+}
+
+#[test]
+fn private_imported_trait_cannot_be_used_as_generic_bound() {
+    let private_api = r#"
+module private_api;
+private trait Marker {}
+"#;
+    let consumer = r#"
+module consumer;
+import private_api.*;
+
+public class Holder<T: Marker> {}
+public void main() {}
+"#;
+    let bundle = nacre::project::SourceBundle::from_sources(vec![
+        ("private_api.ncr".to_owned(), private_api.to_owned()),
+        ("consumer.ncr".to_owned(), consumer.to_owned()),
+    ]).unwrap();
+    let err = bundle.validate().unwrap_err();
+    assert!(err.message.contains("trait `Marker` is private to module `private_api`"), "{err}");
+}
+
+#[test]
+fn private_imported_trait_cannot_be_implemented_outside_its_module() {
+    let private_api = r#"
+module private_api;
+private trait Marker {}
+"#;
+    let consumer = r#"
+module consumer;
+import private_api.*;
+
+public class Item {}
+impl Marker for Item {}
+public void main() {}
+"#;
+    let bundle = nacre::project::SourceBundle::from_sources(vec![
+        ("private_api.ncr".to_owned(), private_api.to_owned()),
+        ("consumer.ncr".to_owned(), consumer.to_owned()),
+    ]).unwrap();
+    let err = bundle.validate().unwrap_err();
+    assert!(err.message.contains("trait `Marker` is private to module `private_api`"), "{err}");
+}
+
+#[test]
+fn private_root_trait_cannot_be_used_from_named_module() {
+    let private_api = "private trait Marker {}\n";
+    let consumer = r#"
+module consumer;
+public class Item {}
+impl Marker for Item {}
+public void main() {}
+"#;
+    let bundle = nacre::project::SourceBundle::from_sources(vec![
+        ("private_api.ncr".to_owned(), private_api.to_owned()),
+        ("consumer.ncr".to_owned(), consumer.to_owned()),
+    ]).unwrap();
+    let err = bundle.validate().unwrap_err();
+    assert!(err.message.contains("trait `Marker` is private to the unnamed module"), "{err}");
 }
 
 #[test]

@@ -61,46 +61,29 @@ pub fn resolve(program: &mut a::Program) -> Result<(), Diagnostic> {
         tr.qualified_name = qualify(module, &tr.name);
     }
 
-    let mut trait_map = HashMap::new();
-    for tr in &program.traits {
+    let mut trait_map: HashMap<&str, HashMap<&str, (usize, &a::Trait)>> = HashMap::new();
+    for (index, tr) in program.traits.iter().enumerate() {
         let module = &program.units[tr.unit].module;
-        let key = (module.clone(), tr.name.clone());
-        if trait_map.insert(key, tr).is_some() {
+        let traits = trait_map.entry(module.as_str()).or_default();
+        if traits.insert(tr.name.as_str(), (index, tr)).is_some() {
             return Err(Diagnostic::new(tr.span, format!("duplicate trait `{}` in module `{}`", tr.name, module)));
         }
     }
 
-    for imp in &program.impls {
-        let imp_module = &program.units[imp.unit].module;
-        let mut tr = trait_map.get(&(imp_module.clone(), imp.trait_name.clone()))
-            .or_else(|| trait_map.get(&(String::new(), imp.trait_name.clone())))
-            .copied();
-        if tr.is_none() {
-            let mut matches = Vec::new();
-            for import in &program.units[imp.unit].imports {
-                if import.wildcard {
-                    if let Some(found) = trait_map.get(&(import.path.clone(), imp.trait_name.clone()))
-                        && !matches.iter().any(|m: &&a::Trait| m.qualified_name == found.qualified_name) {
-                            matches.push(*found);
-                        }
-                } else if let Some((mod_path, name)) = import.path.rsplit_once('.')
-                    && name == imp.trait_name
-                        && let Some(found) = trait_map.get(&(mod_path.to_string(), imp.trait_name.clone()))
-                            && !matches.iter().any(|m: &&a::Trait| m.qualified_name == found.qualified_name) {
-                                matches.push(*found);
-                            }
-            }
-            if matches.len() > 1 {
-                return Err(Diagnostic::new(
-                    imp.span,
-                    format!("ambiguous trait `{}`: found multiple matching traits in imported modules", imp.trait_name),
-                ));
-            }
-            tr = matches.first().copied();
+    for class in &mut program.classes {
+        let unit = &program.units[class.unit];
+        for name in class.type_bounds.iter_mut().flatten() {
+            let (_, tr) = resolve_trait(&trait_map, unit, name, class.span)?;
+            tr.qualified_name.clone_into(name);
         }
-        let tr = tr.ok_or_else(|| {
-            Diagnostic::new(imp.span, format!("unknown trait `{}`", imp.trait_name))
-        })?;
+    }
+
+    let mut trait_impl_targets = Vec::with_capacity(program.impls.len());
+
+    for imp in &mut program.impls {
+        let unit = &program.units[imp.unit];
+        let (trait_index, tr) = resolve_trait(&trait_map, unit, &imp.trait_name, imp.span)?;
+        let imp_module = &unit.module;
         let qualified_class = qualify(imp_module, &imp.target_class);
         let mut class_candidates = Vec::new();
         for (i, c) in program.classes.iter().enumerate() {
@@ -120,21 +103,14 @@ pub fn resolve(program: &mut a::Program) -> Result<(), Diagnostic> {
             }
             [(_, idx), ..] => *idx,
         };
+        trait_impl_targets.push((trait_index, target_idx));
         let class = &mut program.classes[target_idx];
+        class.qualified_name.clone_into(&mut imp.target_class);
+        tr.qualified_name.clone_into(&mut imp.trait_name);
         for req in &tr.methods {
-            let imp_method = imp.methods.iter().find(|m| m.name == req.name).ok_or_else(|| {
-                Diagnostic::new(imp.span, format!("missing method `{}` required by trait `{}`", req.name, tr.name))
-            })?;
-            if imp_method.params.len() != req.params.len() {
-                return Err(Diagnostic::new(imp_method.span, format!(
-                    "method `{}` has {} parameters but trait `{}` expects {}",
-                    req.name, imp_method.params.len(), tr.name, req.params.len()
-                )));
-            }
-            if imp_method.return_type != req.return_type {
-                return Err(Diagnostic::new(imp_method.span, format!(
-                    "method `{}` has return type {:?} but trait `{}` expects {:?}",
-                    req.name, imp_method.return_type, tr.name, req.return_type
+            if !imp.methods.iter().any(|method| method.name == req.name) {
+                return Err(Diagnostic::new(imp.span, format!(
+                    "missing method `{}` required by trait `{}`", req.name, tr.name
                 )));
             }
         }
@@ -145,19 +121,217 @@ pub fn resolve(program: &mut a::Program) -> Result<(), Diagnostic> {
                     "duplicate method `{}` on class `{}`", method.name, class.name
                 )));
             }
-            method.unit = class.unit;
+            // Implementation methods use imports from the source unit declaring the impl.
+            method.unit = imp.unit;
             method.qualified_name = format!("{}::{}", class.qualified_name, method.name);
             class.methods.push(method);
         }
     }
 
+    drop(trait_map);
     let resolver = Resolver::new(program)?;
     for function in &mut program.functions {
         function.qualified_name = qualify(&program.units[function.unit].module, &function.name);
     }
     for class in &mut program.classes { resolver.class(class)?; }
     for function in &mut program.functions { resolver.function(function, None, &[])?; }
+    check_trait_implementations(program, &resolver, &trait_impl_targets)?;
     Ok(())
+}
+
+fn resolve_trait<'a>(
+    trait_map: &HashMap<&str, HashMap<&str, (usize, &'a a::Trait)>>,
+    unit: &a::SourceUnit,
+    name: &str,
+    span: Span,
+) -> Result<(usize, &'a a::Trait), Diagnostic> {
+    let local = trait_map.get(unit.module.as_str()).and_then(|traits| traits.get(name)).copied();
+    if let Some(found) = local {
+        return Ok(found);
+    }
+    let root = trait_map.get("").and_then(|traits| traits.get(name)).copied();
+    if let Some((index, tr)) = root {
+        if tr.visibility == Visibility::Private && !unit.module.is_empty() {
+            return Err(private_trait_error(tr, span));
+        }
+        return Ok((index, tr));
+    }
+
+    let mut matched: Option<(usize, &'a a::Trait)> = None;
+    let mut private_match: Option<(usize, &'a a::Trait)> = None;
+    for import in &unit.imports {
+        let module = if import.wildcard {
+            Some(import.path.as_str())
+        } else if let Some((module, imported_name)) = import.path.rsplit_once('.')
+            && imported_name == name {
+                Some(module)
+            } else {
+                None
+            };
+        let Some(module) = module else { continue; };
+        let Some((index, tr)) = trait_map.get(module).and_then(|traits| traits.get(name)).copied() else { continue; };
+        if tr.visibility == Visibility::Private {
+            private_match.get_or_insert((index, tr));
+            continue;
+        }
+        if let Some((_, previous)) = matched
+            && previous.qualified_name != tr.qualified_name {
+                return Err(Diagnostic::new(
+                    span,
+                    format!("ambiguous trait `{name}`: found multiple matching traits in imported modules"),
+                ));
+            }
+        matched = Some((index, tr));
+    }
+
+    if let Some(found) = matched {
+        Ok(found)
+    } else if let Some((_, tr)) = private_match {
+        Err(private_trait_error(tr, span))
+    } else {
+        Err(Diagnostic::new(span, format!("unknown trait `{name}`")))
+    }
+}
+
+fn check_trait_implementations(
+    program: &mut a::Program,
+    resolver: &Resolver,
+    trait_impl_targets: &[(usize, usize)],
+) -> Result<(), Diagnostic> {
+    for tr in &mut program.traits {
+        let unit = tr.unit;
+        for method in &mut tr.methods {
+            method.unit = unit;
+            resolver.function(method, None, &[])?;
+        }
+    }
+
+    for (imp, &(trait_index, class_index)) in program.impls.iter().zip(trait_impl_targets) {
+        let tr = &program.traits[trait_index];
+        let class = &program.classes[class_index];
+        for req in &tr.methods {
+            let implementation = class
+                .methods
+                .iter()
+                .find(|method| method.name == req.name)
+                .ok_or_else(|| {
+                    Diagnostic::new(
+                        imp.span,
+                        format!(
+                            "missing method `{}` required by trait `{}`",
+                            req.name, tr.name
+                        ),
+                    )
+                })?;
+            if implementation.params.len() != req.params.len() {
+                return Err(Diagnostic::new(
+                    implementation.span,
+                    format!(
+                        "method `{}` has {} parameters but trait `{}` expects {}",
+                        req.name,
+                        implementation.params.len(),
+                        tr.name,
+                        req.params.len()
+                    ),
+                ));
+            }
+            for (index, (expected, actual)) in
+                req.params.iter().zip(&implementation.params).enumerate()
+            {
+                if expected.ty != actual.ty {
+                    return Err(Diagnostic::new(
+                        actual.span,
+                        format!(
+                            "parameter {} of method `{}` has type {:?}, but trait `{}` expects {:?}",
+                            index + 1,
+                            req.name,
+                            actual.ty,
+                            tr.name,
+                            expected.ty
+                        ),
+                    ));
+                }
+            }
+            if implementation.return_type != req.return_type {
+                return Err(Diagnostic::new(
+                    implementation.span,
+                    format!(
+                        "method `{}` has return type {:?} but trait `{}` expects {:?}",
+                        req.name, implementation.return_type, tr.name, req.return_type
+                    ),
+                ));
+            }
+            if implementation.readonly != req.readonly {
+                let actual = if implementation.readonly {
+                    "readonly"
+                } else {
+                    "mutable"
+                };
+                let expected = if req.readonly { "readonly" } else { "mutable" };
+                return Err(Diagnostic::new(
+                    implementation.span,
+                    format!(
+                        "method `{}` has a {actual} receiver but trait `{}` requires a {expected} receiver",
+                        req.name, tr.name
+                    ),
+                ));
+            }
+            if implementation.visibility != req.visibility {
+                let actual = if implementation.visibility == Visibility::Public {
+                    "public"
+                } else {
+                    "private"
+                };
+                let expected = if req.visibility == Visibility::Public {
+                    "public"
+                } else {
+                    "private"
+                };
+                return Err(Diagnostic::new(
+                    implementation.span,
+                    format!(
+                        "method `{}` is {actual} but trait `{}` requires {expected} visibility",
+                        req.name, tr.name
+                    ),
+                ));
+            }
+            if implementation.is_static != req.is_static {
+                let expected = if req.is_static { "static" } else { "instance" };
+                return Err(Diagnostic::new(
+                    implementation.span,
+                    format!(
+                        "method `{}` must be {expected} to implement trait `{}`",
+                        req.name, tr.name
+                    ),
+                ));
+            }
+            if implementation.is_async != req.is_async {
+                let expected = if req.is_async {
+                    "asynchronous"
+                } else {
+                    "synchronous"
+                };
+                return Err(Diagnostic::new(
+                    implementation.span,
+                    format!(
+                        "method `{}` must be {expected} to implement trait `{}`",
+                        req.name, tr.name
+                    ),
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn private_trait_error(tr: &a::Trait, span: Span) -> Diagnostic {
+    let module = tr.qualified_name.rsplit_once("::").map_or("", |(module, _)| module);
+    let message = if module.is_empty() {
+        format!("trait `{}` is private to the unnamed module", tr.name)
+    } else {
+        format!("trait `{}` is private to module `{module}`", tr.name)
+    };
+    Diagnostic::new(span, message).with_note(tr.span, "private declaration is here")
 }
 
 fn qualify(module: &str, name: &str) -> String {

@@ -609,10 +609,12 @@ after `notAfter` are rejected during parsing.
 stored chain member in preserved order. Both serialize the owned X.509 certificates
 as canonical PEM rather than retaining input whitespace, preserving the certificate
 content, public keys, signatures, subjects, serials, and validity values for
-round-trip parsing and verification. Hostname checks use subject alternative names
-without falling back to the common name. `verify` checks the supplied CA file trust
-store, stored chain, server purpose, explicit Unix time, and SAN hostname; it does
-not fetch certificates or use the network.
+round-trip parsing and verification. `matchesHost` and `verify` match DNS names
+against `dNSName` subject alternative names and IPv4/IPv6 literals against
+`iPAddress` subject alternative names; IPv6 zone identifiers do not affect
+certificate identity. Neither falls back to the common name. `verify` checks the
+supplied CA file trust store, stored chain, server purpose, and explicit Unix
+time; it does not fetch certificates or use the network.
 
 ## `Database` and `SqlStatement`
 
@@ -668,8 +670,10 @@ message.
 
 Binding indices are one-based SQLite parameter indices; invalid indices return
 `Err`. Text and ByteBuffer inputs are copied using SQLite's transient-binding
-semantics, preserving embedded NUL in values. `step` returns `Ok(true)` for a row,
-`Ok(false)` at completion, or `Err` on SQLite failure. Completion is terminal:
+semantics, preserving embedded NUL in values. Bindings over `INT_MAX` bytes return
+`Err`; SQLite may impose a lower runtime size limit. `step` returns `Ok(true)` for
+a row, `Ok(false)` at completion, or `Err` on SQLite failure. Completion is
+terminal:
 repeated `step` calls return `Ok(false)` without rerunning the statement until
 `reset`. After a failed step, another `step` returns `Err` until `reset`. `reset`
 rewinds only its own statement and reports a prior evaluation error; call it
@@ -1630,7 +1634,8 @@ search across the full legal 65,557-byte EOCD/comment range. Invalid EOCD signat
 inside a comment do not stop the search; Zip64 locators are read separately when
 they precede that window. Self-extracting prefixes preserve relative entry offsets,
 including Zip64 offset expansion. See README for compile/runtime library paths.
-Both file and memory readers use the same strict seekable format.
+Both file and memory readers use the same strict seekable format. The file reader
+uses explicit seek callbacks; outer compression filters are unsupported.
 
 `ZipReader` and `ZipWriter` use libarchive's ZIP support, including Zip64. They
 operate on archive entries only: no method extracts to the filesystem. UTF-8-flagged
@@ -1896,15 +1901,16 @@ the day to each target month), then calendar days while retaining local wall
 time. It returns `Err` if the result is invalid, falls in a daylight-saving gap
 or overlap, or exceeds ICU's exact-millisecond range.
 
-ICU represents time as a double millisecond value. Calendar conversions accept
-only epoch milliseconds from -9007199254740991 through 9007199254740991; the
-offset-adjusted local milliseconds must also lie inside that range before civil
-fields or formatted text are accepted. `durationMillis` is instead a fixed
-signed `end - start` calculation, independent of calendar days, and returns
-`Err` on signed overflow. `DateFields.offsetSeconds` is the total zone offset
-from UTC; `isDst` reports ICU's daylight-time status. `DateFields` is an owned
-affine result with primitive fields and readonly accessors; only the native
-temporal factories construct it.
+ICU represents time as a double millisecond value. Calendar epochs and their
+offset-adjusted local milliseconds must both lie from -9007199254740991 through
+9007199254740991. `fromParts` and `addCalendar` use checked proleptic-Gregorian
+millisecond arithmetic with ICU's zone offsets, so field-to-instant conversion
+covers that exact range without ICU's narrower calendar-field conversion limit.
+`durationMillis` is a fixed signed `end - start` calculation, independent of
+calendar days, and returns `Err` on signed overflow. `DateFields.offsetSeconds` is
+the total zone offset from UTC; `isDst` reports ICU's daylight-time status.
+`DateFields` is an owned affine result with primitive fields and readonly
+accessors; only the native temporal factories construct it.
 
 `zone` must be a known ICU system time-zone ID (for example `UTC` or
 `America/New_York`); custom offsets, unknown IDs, and embedded NUL are rejected.
@@ -2405,21 +2411,26 @@ Listener `bind` requires a positive backlog. `localAddress` reports an ephemeral
 port selected by the OS. TCP `connect` and listener `accept` accept zero for an
 unbounded wait (unlike synchronizers, where zero polls and `-1` is unbounded), a
 positive monotonic millisecond timeout, and return `Err` for negative values. A timeout
-closes an in-progress connect descriptor. TCP reads
-append to the existing destination and return a positive count, `0` for orderly
+closes an in-progress connect descriptor. TCP reads append at most `maxBytes`
+and no more than 64 KiB per call. They return a positive count, `0` for orderly
 EOF, or `Err` (including timeout); a zero maximum returns zero immediately.
 `writeSome` returns one partial count. `writeAll` retries partial progress against
 one end-to-end deadline; `Err` can follow bytes already sent. A peer close reports
 an error rather than raising process-wide SIGPIPE.
 
 `UdpSocket.sendTo` sends one datagram; it does not retry or split a message and a
-short send is an error. `receiveFrom` consumes one datagram, appends at most
-`maxBytes`, and reports the number of bytes copied, its owned source address, and
-whether it was truncated. A zero-length datagram is a successful `Datagram` with
+short send is an error. `receiveFrom` consumes one datagram and appends at most
+`maxBytes` (capped at 64 KiB per call). It reports the byte count, owned source
+address, and truncation status. A zero-length datagram is a successful
+`Datagram` with
 `bytesRead() == 0`, not stream EOF. Oversized datagrams are consumed once and
 reported as truncated. Both UDP methods use the same timeout convention as TCP;
 timeout is `Err`. No automatic datagram retry or network service discovery is
 provided.
+
+Both TCP and UDP receive methods clamp the requested limit to 64 KiB before
+checking append-length arithmetic, so a large positive `maxBytes` remains valid
+when the destination already contains data.
 
 ## HTTP(S)
 
@@ -2457,11 +2468,12 @@ allowing only an empty body. The write callback checks the bound before growing
 the response buffer, so a failed oversized response never escapes in a partial
 `HttpResponse`. Response headers have a separate 64 KiB total wire-byte limit and
 a limit of 1024 distinct fields. Fields from interim status blocks such as `100
-Continue` are discarded. Header lookup is ASCII case-insensitive, returns an
-owned copy, and uses the last value for duplicate field names; values that are not
-valid UTF-8 make the response malformed. `bodyText` performs strict UTF-8
-validation and returns `Err` for binary bodies that are not valid UTF-8. Embedded
-NUL is valid UTF-8 and remains part of the resulting `Text`.
+Continue` are discarded. Malformed status lines, including prohibited control
+bytes in reason phrases, are rejected. Header lookup is ASCII case-insensitive,
+returns an owned copy and uses the last value for duplicate field names; values
+that are not valid UTF-8 make the response malformed. `bodyText` performs strict
+UTF-8 validation and returns `Err` for binary bodies that are not valid UTF-8.
+Embedded NUL is valid UTF-8 and remains part of the resulting `Text`.
 
 HTTP status codes, including non-2xx responses, are successful transport results.
 TLS peer and hostname verification are always enabled, using system trust by
@@ -2518,13 +2530,14 @@ including NUL and invalid UTF-8. A literal `+` is never treated as a space.
 `Dns.idna` percent-decodes host bytes, applies ICU UTS #46 nontransitional
 ToASCII processing with STD3, BIDI, and ContextJ checks, preserves a trailing
 root dot, and rejects encoded inputs longer than 3072 bytes or decoded inputs
-longer than 1024 bytes. Numeric IPv4 and IPv6 literals are canonicalized
-directly; an IPv6 zone identifier is retained after the address, so URI
-authority hosts must encode its leading percent as `%25`. `Dns.resolve`
-normalizes through `Dns.idna` and delegates to `SocketAddress.resolve` with
-passive lookup disabled. It returns all resolved addresses and is synchronous,
-without a timeout; any connection deadline begins only after resolution
-completes.
+longer than 1024 bytes. Canonical IPv4 and IPv6 literals are normalized directly;
+`Dns.idna` rejects noncanonical numeric IPv4 spellings (including shortened,
+octal, and hexadecimal forms) to avoid resolver reinterpretation. IPv6 zone
+identifiers are retained after the address, so URI authority hosts must encode
+their leading percent as `%25`. `Dns.resolve` normalizes through `Dns.idna` and
+delegates to `SocketAddress.resolve` with passive lookup disabled. It returns all
+resolved addresses and is synchronous, without a timeout; any connection deadline
+begins only after resolution completes.
 `Dns.reverse` requires a name lookup (it does not fall back to a numeric
 address), and `localHostName` returns the system hostname.
 
@@ -2615,8 +2628,10 @@ readonly Result<Text, Text> WebSocketMessage.asText()
 explicit TLS configuration handle. Both perform the HTTP upgrade and validate the
 peer response before returning an affine connection. `maxMessageBytes` limits an
 incoming message. `receive` returns `Ok(None)` after an orderly close; protocol,
-UTF-8, I/O, and timeout failures are owned `Err(Text)` values. `close` sends a
-close frame and completes the peer close handshake, then releases the transport.
+UTF-8, I/O, and timeout failures are owned `Err(Text)` values. Fragmented data
+frames are reassembled before a message is returned; incoming ping frames are
+answered with Pong. `close` sends a close frame and completes the peer close
+handshake, then releases the transport.
 Each positive WebSocket timeout is one monotonic deadline through frame and control
 processing, including WSS TLS shutdown; zero means unbounded waiting.
 

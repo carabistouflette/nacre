@@ -481,7 +481,6 @@ static ncr_obj_@LONG_RESULT@ @XML_DOCUMENT_SET_TEXT@(ncr_obj_@XML_DOCUMENT_ID@ *
     int value_length = ncr_v_@SET_TEXT_VALUE@->length;
     xmlNodePtr *replacement = count == 0 ? NULL :
         ncr_allocate(count * sizeof(xmlNodePtr), ncr_line, ncr_column);
-    if (replacement != NULL) { memset(replacement, 0, count * sizeof(xmlNodePtr)); }
     for (size_t index = 0; index < count; ++index) {
         xmlNodePtr node = nodes[index];
         if ((node->type == XML_ELEMENT_NODE || node->type == XML_ATTRIBUTE_NODE) &&
@@ -782,7 +781,6 @@ static ncr_obj_@LONG_RESULT@ @XML_DOCUMENT_APPEND_XML@(ncr_obj_@XML_DOCUMENT_ID@
     }
     xmlNodePtr *fragments = parent_count == 0 ? NULL :
         ncr_allocate(parent_count * sizeof(xmlNodePtr), ncr_line, ncr_column);
-    if (fragments != NULL) { memset(fragments, 0, parent_count * sizeof(xmlNodePtr)); }
     int fragment_length = ncr_v_@APPEND_FRAGMENT@->length;
     for (size_t index = 0; index < parent_count; ++index) {
         if (!ncr_xml_parse_fragment(parents[index], ncr_v_@APPEND_FRAGMENT@->bytes,

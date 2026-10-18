@@ -2,7 +2,6 @@
 //! Discovers parameterless void functions matching `test_*` or `test*` and runs them in isolation.
 
 use std::path::PathBuf;
-use std::process::Command;
 use std::time::Instant;
 use crate::ir::Type;
 use crate::native;
@@ -16,8 +15,8 @@ pub fn run_tests(
     jemalloc: bool,
     json_output: bool,
 ) -> Result<i32, String> {
-    let bundle = SourceBundle::from_test_paths(sources)?;
-    let typed = bundle.typed().map_err(|d| bundle.render(&d))?;
+    let (bundle, parsed) = SourceBundle::from_test_paths(sources)?;
+    let typed = crate::check_parsed(parsed).map_err(|d| bundle.render(&d))?;
 
     // Discover test functions: void functions with no parameters starting with test
     let mut all_tests = Vec::new();
@@ -57,7 +56,7 @@ pub fn run_tests(
     }
 
     // Compile bundle to C
-    let mut c_source = bundle.compile_to_c().map_err(|d| bundle.render(&d))?;
+    let mut c_source = bundle.compile_to_c_with_typed(&typed);
     c_source.insert_str(0, "#define NACRE_MEMORY_STATS 1\n");
 
     // Replace the default main() with our test dispatcher main()
@@ -95,8 +94,7 @@ pub fn run_tests(
             print!("test {name} ... ");
         }
         let test_start = Instant::now();
-        let output = Command::new(program.path()).arg(name).output()
-            .map_err(|e| format!("failed to execute test process: {e}"))?;
+        let output = program.output_limited(&[name.as_str()], native::OUTPUT_CAPTURE_LIMIT_BYTES, native::StdoutCapture::Discard)?;
         let test_duration = test_start.elapsed();
 
         if output.status.success() {
@@ -115,16 +113,23 @@ pub fn run_tests(
             let failure_lines: Vec<_> = stderr.lines()
                 .filter(|line| !line.starts_with("NACRE_MEMORY"))
                 .collect();
+            let mut failure = failure_lines.join("\n");
+            if let Some(note) = output.truncation_note(native::OUTPUT_CAPTURE_LIMIT_BYTES) {
+                if !failure.is_empty() {
+                    failure.push('\n');
+                }
+                failure.push_str(&note);
+            }
             if json_output {
                 test_results.push(serde_json::json!({
                     "name": name,
                     "status": "failed",
                     "duration_seconds": test_duration.as_secs_f64(),
-                    "failure": failure_lines.join("\n")
+                    "failure": failure
                 }));
             } else {
                 println!("FAILED");
-                for line in failure_lines {
+                for line in failure.lines() {
                     eprintln!("    {line}");
                 }
             }

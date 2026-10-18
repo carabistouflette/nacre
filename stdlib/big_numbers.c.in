@@ -398,7 +398,7 @@ static ncr_obj_@BIGINT_PARSE_RESULT@ @BIGINT_PARSE@(ncr_obj_@TEXT_CLASS@ *ncr_v_
     bool negative = bytes[0] == '-';
     size_t digit_length = length - significant_begin;
     size_t parsed_length = digit_length + (negative ? 1 : 0);
-    char *digits = ncr_allocate(parsed_length + 1, ncr_line, ncr_column);
+    char *digits = ncr_allocate_raw(parsed_length + 1, ncr_line, ncr_column);
     size_t cursor = 0;
     if (negative) { digits[cursor++] = '-'; }
     memcpy(digits + cursor, bytes + significant_begin, digit_length);
@@ -748,7 +748,7 @@ static ncr_obj_@BIGDECIMAL_TO_TEXT_RESULT@ @BIGDECIMAL_TO_TEXT@(ncr_obj_@BIGDECI
         ncr_deallocate(coefficient);
         return NCR_RESULT_ERROR(@BIGDECIMAL_TO_TEXT_RESULT@, "BigDecimal text exceeds the configured size limit");
     }
-    unsigned char *output = ncr_allocate(output_length, ncr_line, ncr_column);
+    unsigned char *output = ncr_allocate_raw(output_length, ncr_line, ncr_column);
     size_t cursor = 0;
     if (negative) { output[cursor++] = '-'; }
     if (scale <= 0) {

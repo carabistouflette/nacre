@@ -2,7 +2,6 @@
 //! Discovers parameterless void functions matching `bench_*` or `bench*` and measures throughput.
 
 use std::path::PathBuf;
-use std::process::Command;
 use std::time::Instant;
 use crate::ir::Type;
 use crate::native;
@@ -16,8 +15,8 @@ pub fn run_benchmarks(
     jemalloc: bool,
     json_output: bool,
 ) -> Result<i32, String> {
-    let bundle = SourceBundle::from_test_paths(sources)?;
-    let typed = bundle.typed().map_err(|d| bundle.render(&d))?;
+    let (bundle, parsed) = SourceBundle::from_test_paths(sources)?;
+    let typed = crate::check_parsed(parsed).map_err(|d| bundle.render(&d))?;
 
     // Discover benchmark functions: void functions with no parameters starting with bench
     let mut all_benches = Vec::new();
@@ -57,7 +56,7 @@ pub fn run_benchmarks(
     }
 
     // Compile bundle to C
-    let mut c_source = bundle.compile_to_c().map_err(|d| bundle.render(&d))?;
+    let mut c_source = bundle.compile_to_c_with_typed(&typed);
     c_source.insert_str(0, "#define NACRE_MEMORY_STATS 1\n#include <time.h>\n");
 
     // Replace the default main() with our benchmark dispatcher main()
@@ -137,10 +136,9 @@ static void ncr_run_bench_{id}(const char *name) {{
         if !json_output {
             print!("test {name} ... ");
         }
-        let output = Command::new(program.path()).arg(name).output()
-            .map_err(|e| format!("failed to execute benchmark process: {e}"))?;
-
-        if output.status.success() {
+        let output = program.output_limited(&[name.as_str()], native::OUTPUT_CAPTURE_LIMIT_BYTES, native::StdoutCapture::Capture)?;
+        let truncation_note = output.truncation_note(native::OUTPUT_CAPTURE_LIMIT_BYTES);
+        if output.status.success() && truncation_note.is_none() {
             let stdout = String::from_utf8_lossy(&output.stdout);
             let mut reported = false;
             for line in stdout.lines() {
@@ -176,12 +174,32 @@ static void ncr_run_bench_{id}(const char *name) {{
             }
             passed += 1;
         } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
             if json_output {
-                bench_results.push(serde_json::json!({ "name": name, "status": "failed" }));
+                if let Some(note) = &truncation_note {
+                    let mut failure = stderr.into_owned();
+                    if !failure.is_empty() {
+                        failure.push('\n');
+                    }
+                    failure.push_str(note);
+                    bench_results.push(serde_json::json!({
+                        "name": name,
+                        "status": "failed",
+                        "failure": failure
+                    }));
+                } else {
+                    bench_results.push(serde_json::json!({ "name": name, "status": "failed" }));
+                }
             } else {
+                let mut failure = stderr.into_owned();
+                if let Some(note) = truncation_note {
+                    if !failure.is_empty() {
+                        failure.push('\n');
+                    }
+                    failure.push_str(&note);
+                }
                 println!("FAILED");
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                for line in stderr.lines() {
+                for line in failure.lines() {
                     eprintln!("    {line}");
                 }
             }

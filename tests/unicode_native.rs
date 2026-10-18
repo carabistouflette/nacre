@@ -124,6 +124,47 @@ void main() {
 }
 
 #[test]
+fn unicode_graphemes_cover_empty_combining_and_index_boundaries() {
+    let output = execute(r#"
+void main() {
+    Text empty = new Text("");
+    match (Unicode.graphemeCount(empty)) {
+        Ok(count) { println(count == 0); }
+        Err(error) { println("EMPTY_COUNT_ERR"); drop(error); }
+    }
+    match (Unicode.graphemeAt(empty, 0)) {
+        Ok(grapheme) { println("EMPTY_INDEX_ACCEPTED"); drop(grapheme); }
+        Err(error) { println("EMPTY_INDEX_ERR"); drop(error); }
+    }
+
+    Text clusters = new Text("éx");
+    match (Unicode.graphemeCount(clusters)) {
+        Ok(count) { println(count == 2); }
+        Err(error) { println("CLUSTER_COUNT_ERR"); drop(error); }
+    }
+    match (Unicode.graphemeAt(clusters, 0)) {
+        Ok(grapheme) { println(grapheme.equalsString("é")); }
+        Err(error) { println("FIRST_CLUSTER_ERR"); drop(error); }
+    }
+    match (Unicode.graphemeAt(clusters, 1)) {
+        Ok(grapheme) { println(grapheme.equalsString("x")); }
+        Err(error) { println("LAST_CLUSTER_ERR"); drop(error); }
+    }
+    match (Unicode.graphemeAt(clusters, 2)) {
+        Ok(grapheme) { println("END_INDEX_ACCEPTED"); drop(grapheme); }
+        Err(error) { println("END_INDEX_ERR"); drop(error); }
+    }
+    match (Unicode.graphemeAt(clusters, -1)) {
+        Ok(grapheme) { println("NEGATIVE_INDEX_ACCEPTED"); drop(grapheme); }
+        Err(error) { println("NEGATIVE_INDEX_ERR"); drop(error); }
+    }
+}
+"#, SANITIZERS);
+    assert_clean(&output);
+    assert_eq!(output.stdout, b"true\nEMPTY_INDEX_ERR\ntrue\ntrue\ntrue\nEND_INDEX_ERR\nNEGATIVE_INDEX_ERR\n");
+}
+
+#[test]
 fn charset_conversions_are_strict_and_preserve_explicit_endian_data() {
     let output = execute(r#"
 void main() {

@@ -6,7 +6,7 @@ use super::support::{
 
 pub(super) fn fields(program: &t::Program, class: C) -> String {
     match class {
-        C::ZipReader => "    void *archive;\n    void (*release)(void *, void *);\n    void *locale;\n    unsigned char *memory;\n    bool entry_active;\n    bool entry_read;\n    bool eof;\n".to_owned(),
+        C::ZipReader => "    void *archive;\n    void (*release)(void *, void *);\n    void *locale;\n    void *source_file;\n    unsigned char *source_buffer;\n    unsigned char *memory;\n    bool entry_active;\n    bool entry_read;\n    bool eof;\n".to_owned(),
         C::ZipWriter => "    void *archive;\n    void (*release)(void *, void *);\n    void *locale;\n    bool failed;\n".to_owned(),
         C::ZipEntry => {
             let text = text_class(program).expect("ZipEntry requires Text");
@@ -18,7 +18,7 @@ pub(super) fn fields(program: &t::Program, class: C) -> String {
 
 pub(super) fn drop_fields(program: &t::Program, class: C) -> String {
     match class {
-        C::ZipReader => "    if (p->archive != NULL && p->release != NULL) { p->release(p->archive, p->locale); }\n    p->archive = NULL;\n    p->release = NULL;\n    p->locale = NULL;\n    free(p->memory);\n    p->memory = NULL;\n".to_owned(),
+        C::ZipReader => "    if (p->archive != NULL && p->release != NULL) { p->release(p->archive, p->locale); }\n    p->archive = NULL;\n    p->release = NULL;\n    p->locale = NULL;\n    if (p->source_file != NULL) { (void)fclose((FILE *)p->source_file); }\n    p->source_file = NULL;\n    ncr_deallocate(p->source_buffer);\n    p->source_buffer = NULL;\n    free(p->memory);\n    p->memory = NULL;\n".to_owned(),
         C::ZipWriter => "    if (p->archive != NULL && p->release != NULL) { p->release(p->archive, p->locale); }\n    p->archive = NULL;\n    p->release = NULL;\n    p->locale = NULL;\n".to_owned(),
         C::ZipEntry => {
             let text = text_class(program).expect("ZipEntry requires Text");

@@ -9,6 +9,8 @@ use crate::diagnostic::{line_column, Diagnostic, Span};
 
 pub const MAX_SOURCE_BYTES: usize = 1024 * 1024;
 pub const MAX_FILES: usize = 64;
+/// Maximum number of directory entries inspected during source discovery.
+pub const MAX_DIRECTORY_ENTRIES: usize = 4096;
 #[derive(Debug)]
 struct Unit { path: PathBuf, start: usize, end: usize, first_line: usize }
 #[derive(Debug)]
@@ -47,9 +49,9 @@ impl SourceBundle {
 
     /// Loads source units for test harnesses, verifying if `main` exists at AST level.
     /// If no entry point exists, injects a synthetic `void main() {}` while strictly enforcing limits.
-    pub(crate) fn from_test_paths(paths: &[PathBuf]) -> Result<Self, String> {
+    pub(crate) fn from_test_paths(paths: &[PathBuf]) -> Result<(Self, ast::Program), String> {
         let mut bundle = Self::from_paths(paths)?;
-        let parsed = bundle.parse().map_err(|d| bundle.render(&d))?;
+        let mut parsed = bundle.parse().map_err(|d| bundle.render(&d))?;
         let has_main = parsed.functions.iter().any(|f| f.name == "main")
             || parsed.classes.iter().any(|c| c.methods.iter().any(|m| m.is_static && m.name == "main"));
         if !has_main {
@@ -69,8 +71,10 @@ impl SourceBundle {
                 end,
                 first_line: bundle.text.bytes().filter(|&b| b == b'\n').count() + 1,
             });
+            Self::append_parsed_unit(&mut parsed, &bundle.text[start..end], start)
+                .map_err(|d| bundle.render(&d))?;
         }
-        Ok(bundle)
+        Ok((bundle, parsed))
     }
 
     fn from_units(
@@ -97,32 +101,51 @@ impl SourceBundle {
     pub fn paths(&self) -> impl Iterator<Item = &Path> { self.units.iter().map(|u| u.path.as_path()) }
     pub fn source_count(&self) -> usize { self.units.len() }
     pub fn combined_source(&self) -> &str { &self.text }
+    /// Borrow the text for an exact source path in this bundle.
+    pub(crate) fn source_for_path(&self, path: &Path) -> Option<&str> {
+        let unit = self.units.iter().find(|unit| unit.path.as_path() == path)?;
+        Some(&self.text[unit.start..unit.end])
+    }
 
+    fn append_parsed_unit(
+        program: &mut ast::Program,
+        source: &str,
+        source_start: usize,
+    ) -> Result<(), Diagnostic> {
+        let mut tokens = crate::lexer::lex(source).map_err(|mut error| {
+            error.span.start += source_start;
+            error.span.end += source_start;
+            error
+        })?;
+        for token in &mut tokens {
+            token.span.start += source_start;
+            token.span.end += source_start;
+        }
+        let mut parsed = crate::parser::parse(tokens)?;
+        let unit_id = program.units.len();
+        for function in &mut parsed.functions { function.unit = unit_id; }
+        for class in &mut parsed.classes {
+            class.unit = unit_id;
+            for method in &mut class.methods { method.unit = unit_id; }
+            if let Some(constructor) = &mut class.constructor { constructor.unit = unit_id; }
+        }
+        for tr in &mut parsed.traits { tr.unit = unit_id; }
+        for imp in &mut parsed.impls { imp.unit = unit_id; }
+        program.units.append(&mut parsed.units);
+        program.functions.extend(parsed.functions);
+        program.classes.extend(parsed.classes);
+        program.traits.extend(parsed.traits);
+        program.impls.extend(parsed.impls);
+        Ok(())
+    }
     pub(crate) fn parse(&self) -> Result<ast::Program, Diagnostic> {
         let mut program = ast::Program { units: Vec::new(), functions: Vec::new(), classes: Vec::new(), traits: Vec::new(), impls: Vec::new() };
         for source_unit in &self.units {
-            let source = &self.text[source_unit.start..source_unit.end];
-            let mut tokens = crate::lexer::lex(source).map_err(|mut error| {
-                error.span.start += source_unit.start; error.span.end += source_unit.start; error
-            })?;
-            for token in &mut tokens {
-                token.span.start += source_unit.start; token.span.end += source_unit.start;
-            }
-            let mut parsed = crate::parser::parse(tokens)?;
-            let unit_id = program.units.len();
-            for function in &mut parsed.functions { function.unit = unit_id; }
-            for class in &mut parsed.classes {
-                class.unit = unit_id;
-                for method in &mut class.methods { method.unit = unit_id; }
-                if let Some(constructor) = &mut class.constructor { constructor.unit = unit_id; }
-            }
-            for tr in &mut parsed.traits { tr.unit = unit_id; }
-            for imp in &mut parsed.impls { imp.unit = unit_id; }
-            program.units.append(&mut parsed.units);
-            program.functions.extend(parsed.functions);
-            program.classes.extend(parsed.classes);
-            program.traits.extend(parsed.traits);
-            program.impls.extend(parsed.impls);
+            Self::append_parsed_unit(
+                &mut program,
+                &self.text[source_unit.start..source_unit.end],
+                source_unit.start,
+            )?;
         }
         Ok(program)
     }
@@ -130,13 +153,20 @@ impl SourceBundle {
     pub fn validate(&self) -> Result<(), Diagnostic> { self.typed().map(|_| ()) }
     pub fn compile_to_c(&self) -> Result<String, Diagnostic> {
         let typed = self.typed()?;
-        let mut result = self.runtime_source_map();
-        result.push_str(&crate::codegen::generate_mapped(&typed, &self.text, |span| {
-            let loc = self.locate(span);
-            let (line, _) = crate::diagnostic::line_column(loc.source, loc.span.start);
-            (line, Some(loc.path.to_string_lossy().into_owned()))
-        }));
-        Ok(result)
+        Ok(self.compile_to_c_with_typed(&typed))
+    }
+    /// Emit C from a typed program already checked against this bundle.
+    pub(crate) fn compile_to_c_with_typed(&self, typed: &crate::ir::Program) -> String {
+        crate::codegen::generate_mapped(
+            typed,
+            &self.text,
+            self.runtime_source_map(),
+            |span| {
+                let loc = self.locate(span);
+                let (line, _) = crate::diagnostic::line_column(loc.source, loc.span.start);
+                (line, Some(loc.path.to_string_lossy().into_owned()))
+            },
+        )
     }
     pub fn emit_llvm_direct(&self) -> Result<String, Diagnostic> {
         let typed = self.typed()?;
@@ -253,27 +283,62 @@ pub(crate) fn is_source_file(path: &Path) -> bool {
 pub(crate) fn is_excluded_name(name: &std::ffi::OsStr) -> bool {
     name.as_encoded_bytes().starts_with(b".") || name == "out" || name == "target"
 }
+pub(crate) fn read_directory_entries(
+    path: &Path,
+    visited: &mut usize,
+) -> Result<Vec<PathBuf>, String> {
+    let entries = fs::read_dir(path).map_err(|error| format!("{}: {error}", path.display()))?;
+    let mut output = Vec::new();
+    for entry in entries {
+        *visited += 1;
+        if *visited > MAX_DIRECTORY_ENTRIES {
+            return Err(format!(
+                "directory scan limit is {MAX_DIRECTORY_ENTRIES} entries"
+            ));
+        }
+        let entry = entry.map_err(|error| format!("{}: {error}", path.display()))?;
+        output.push(entry.path());
+    }
+    output.sort();
+    Ok(output)
+}
 
-fn collect(path: &Path, depth: usize, output: &mut Vec<PathBuf>) -> Result<(), String> {
-    if depth > 32 { return Err("source directory nesting limit is 32".to_owned()); }
-    let meta = fs::symlink_metadata(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    if meta.file_type().is_symlink() { return Err(format!("symbolic-link source is not allowed: {}", path.display())); }
+fn collect(
+    path: &Path,
+    depth: usize,
+    visited: &mut usize,
+    output: &mut Vec<PathBuf>,
+) -> Result<(), String> {
+    if depth > 32 {
+        return Err("source directory nesting limit is 32".to_owned());
+    }
+    let meta =
+        fs::symlink_metadata(path).map_err(|error| format!("{}: {error}", path.display()))?;
+    if meta.file_type().is_symlink() {
+        return Err(format!(
+            "symbolic-link source is not allowed: {}",
+            path.display()
+        ));
+    }
     if meta.is_file() {
         output.push(path.to_owned());
-        if output.len() > MAX_FILES { return Err("source file limit is 64".to_owned()); }
+        if output.len() > MAX_FILES {
+            return Err("source file limit is 64".to_owned());
+        }
     } else if meta.is_dir() {
-        let mut entries: Vec<_> = fs::read_dir(path).map_err(|e| format!("{}: {e}", path.display()))?
-            .map(|r| r.map(|e| e.path())).collect::<Result<_, _>>()
-            .map_err(|e| format!("{}: {e}", path.display()))?;
-        entries.sort();
-        for entry in entries {
-            if is_excluded_name(entry.file_name().unwrap_or_default()) { continue; }
-            let kind = fs::symlink_metadata(&entry).map_err(|e| format!("{}: {e}", entry.display()))?;
+        for entry in read_directory_entries(path, visited)? {
+            if is_excluded_name(entry.file_name().unwrap_or_default()) {
+                continue;
+            }
+            let kind = fs::symlink_metadata(&entry)
+                .map_err(|error| format!("{}: {error}", entry.display()))?;
             if kind.is_dir() || is_source_file(&entry) {
-                collect(&entry, depth + 1, output)?;
+                collect(&entry, depth + 1, visited, output)?;
             }
         }
-    } else { return Err(format!("not a regular source file: {}", path.display())); }
+    } else {
+        return Err(format!("not a regular source file: {}", path.display()));
+    }
     Ok(())
 }
 fn c_string(text: &str) -> String {
@@ -294,13 +359,14 @@ pub fn resolve_inputs(paths: &[PathBuf]) -> Result<Vec<PathBuf>, String> {
     let mut graph = PackageGraph::default();
     let mut files = Vec::new();
     let mut seen = HashSet::new();
+    let mut visited_entries = 0usize;
     for path in paths {
         if let Some(manifest) = manifest_path(path) {
             let start = graph.roots.len();
             graph.visit(&manifest, None, 0)?;
             for root in &graph.roots[start..] {
                 let mut package_files = Vec::new();
-                collect(root, 0, &mut package_files)?;
+                collect(root, 0, &mut visited_entries, &mut package_files)?;
                 for file in package_files {
                     let canonical = file.canonicalize().map_err(|e| format!("{}: {e}", file.display()))?;
                     if seen.insert(canonical) { files.push(file); }
@@ -308,7 +374,7 @@ pub fn resolve_inputs(paths: &[PathBuf]) -> Result<Vec<PathBuf>, String> {
             }
         } else {
             let mut raw_files = Vec::new();
-            collect(path, 0, &mut raw_files)?;
+            collect(path, 0, &mut visited_entries, &mut raw_files)?;
             for file in raw_files {
                 let canonical = file.canonicalize().map_err(|e| format!("{}: {e}", file.display()))?;
                 if !seen.insert(canonical) { return Err(format!("duplicate source: {}", file.display())); }

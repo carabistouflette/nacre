@@ -347,7 +347,7 @@ static ncr_obj_@DB_OPEN_RESULT@ @DATABASE_OPEN@(
     if (path_length == SIZE_MAX) {
         return NCR_DB_ERROR(@DB_OPEN_RESULT@, "Database.open path is too large", ncr_line, ncr_column);
     }
-    char *filename = ncr_allocate(path_length + 1, ncr_line, ncr_column);
+    char *filename = ncr_allocate_raw(path_length + 1, ncr_line, ncr_column);
     memcpy(filename, path->bytes, path_length);
     filename[path_length] = '\0';
     sqlite3 *handle = NULL;
@@ -510,12 +510,15 @@ static ncr_obj_@STATEMENT_UNIT_RESULT@ @SQL_STATEMENT_BIND_TEXT@(
         NCR_SQL_STATEMENT_FAIL(mutex, @STATEMENT_UNIT_RESULT@, "SqlStatement bind index is out of range", ncr_line, ncr_column);
     }
     ncr_obj_@TEXT_CLASS_ID@ *value = ncr_v_@STMT_BIND_TEXT_VALUE_ID@;
+    if (value != NULL && value->length > INT_MAX) {
+        NCR_SQL_STATEMENT_FAIL(mutex, @STATEMENT_UNIT_RESULT@, "SqlStatement.bindText value is too large", ncr_line, ncr_column);
+    }
     if (!ncr_database_text_valid_@DATABASE_CLASS_ID@(value, false)) {
         NCR_SQL_STATEMENT_FAIL(mutex, @STATEMENT_UNIT_RESULT@, "SqlStatement.bindText requires valid UTF-8 Text", ncr_line, ncr_column);
     }
     const char *bytes = value->length == 0 ? "" : (const char *)value->bytes;
     if (sqlite3_bind_text(statement, ncr_v_@STMT_BIND_TEXT_INDEX_ID@, bytes,
-            value->length, SQLITE_TRANSIENT) != SQLITE_OK) {
+            (int)value->length, SQLITE_TRANSIENT) != SQLITE_OK) {
         NCR_SQL_STATEMENT_FAIL(mutex, @STATEMENT_UNIT_RESULT@, "SqlStatement.bindText failed", ncr_line, ncr_column);
     }
     ncr_sql_statement_leave_@STATEMENT_CLASS_ID@(mutex);
@@ -846,7 +849,7 @@ static ncr_obj_@STATEMENT_COLUMN_BLOB_RESULT@ @SQL_STATEMENT_COLUMN_BLOB@(
         copy->length = (size_t)count;
         copy->capacity = (size_t)count;
         if (count > 0) {
-            copy->bytes = ncr_allocate((size_t)count, ncr_line, ncr_column);
+            copy->bytes = ncr_allocate_raw((size_t)count, ncr_line, ncr_column);
             memcpy(copy->bytes, bytes, (size_t)count);
         }
         option.tag = @STATEMENT_COLUMN_BLOB_SOME_TAG@;

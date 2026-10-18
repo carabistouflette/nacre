@@ -269,8 +269,11 @@ bodies and literal data remain in the per-program LLVM module, not the C support
 Clang 23/`llvm-link` 22 pair failed, while matching version 22 tools succeeded.
 The direct runtime-bitcode cache stores generated C support, not user bodies,
 literal data, the per-program LLVM module, or the final executable. Its key
-includes the compiler/linker identities and versions, target, runtime source,
-compilation inputs, and relevant header/environment inputs. It defaults to
+includes compiler/linker identities and versions, target, runtime source,
+compilation flags and environment, and resolved dependency paths and contents.
+Each cache lookup rescans dependencies; incomplete or over-limit scans bypass
+caching. Changed included-file contents therefore cannot reuse stale runtime
+bitcode. The cache defaults to
 `$XDG_CACHE_HOME/nacre` (or `$HOME/.cache/nacre`), `NACRE_CACHE_DIR` overrides
 that location, and `NACRE_NO_CACHE` disables it. PGO builds bypass runtime-bitcode
 caching. Direct native builds retain the selected optimization and native/link
@@ -288,6 +291,10 @@ on representative inputs before rebuilding the same sources with
 generated-C source identity across temporary directories, including the source
 locations used in profile checksums. Profile builds bypass executable and
 runtime-bitcode caches because training data is mutable external input.
+The default C executable cache keys generated source, compiler command/version/
+target, flags, and resolved dependency paths and contents. If dependency scanning
+cannot establish those inputs, that build bypasses the cache. Per-call staging
+paths isolate concurrent cache writes; failed writes remove their temporary files.
 
 
 The private `native/dependencies.rs` module owns the fixed catalog for exact
@@ -414,6 +421,9 @@ exhaustive proof. See [VALIDATION.md](VALIDATION.md) for the recorded evidence.
 compiler, on bounded snapshots of disk sources and open buffers. Frontend byte
 positions are converted to LSP UTF-16 positions; notes become related
 information.
+Document-symbol, hover, and definition requests share one scope loader and borrow
+the requested file's source slice from the bundle, avoiding an extra text copy.
+
 
 The private `lsp/diagnostics.rs` module owns diagnostic JSON, related information,
 and UTF-16 ranges. It receives a borrowed path-to-URI query rather than server
