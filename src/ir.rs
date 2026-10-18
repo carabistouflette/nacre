@@ -221,7 +221,7 @@ pub enum NativeClass {
     AtomicInt, AtomicLong, AtomicBoolean, Semaphore, CountDownLatch, Barrier, CancellationToken,
     XmlDocument, XmlReader, XmlEvent, XmlWriter, XsltStylesheet,
 }
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum NativeMethod {
     ListNew, ListAdd, ListSize, ListCapacity, ListIsEmpty, ListGet, ListGetRef, ListGetMut,
     ListSet, ListPop, ListRemove, ListTryGet, ListTryPop, ListTryRemove, ListClear, ListReserve,

@@ -19,6 +19,8 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   check instead of rescanning every impl for each specialization.
 - Index imported traits once per referenced source unit, preserving private and
   ambiguous-match semantics without rescanning imports for each bound or impl.
+- Build a lazy native-method index for LLVM iterator lowering instead of
+  rescanning all functions for each List, Array, or Map operation.
 
 - End local borrowed bindings and retained view loans after their last
   control-flow use. Backward liveness follows branch alternatives and loop
