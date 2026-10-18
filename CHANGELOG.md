@@ -3,6 +3,8 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Stream direct user adapter signatures and call arguments into the destination
+  buffer instead of allocating temporary vectors and joined strings.
 - Emit LLVM runtime signatures directly into IR, avoiding temporary parameter
   vectors and joined strings.
 - Stream interface thunk argument lists directly into generated C, avoiding

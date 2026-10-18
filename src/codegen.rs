@@ -293,7 +293,13 @@ pub(crate) fn direct_runtime_references(
 }
 
 fn direct_function_symbol(id: usize) -> String {
-    format!("ncr_llvm_fn_{id}")
+    let mut symbol = String::new();
+    write_direct_function_symbol(&mut symbol, id);
+    symbol
+}
+
+fn write_direct_function_symbol(out: &mut String, id: usize) {
+    write!(out, "ncr_llvm_fn_{id}").unwrap();
 }
 
 fn direct_input_parameters(program: &t::Program, function: &t::Function) -> String {
@@ -338,47 +344,60 @@ fn direct_user_adapters(program: &t::Program) -> String {
     let mut out = String::from("\n/* C-ABI entry points for user functions; bodies remain LLVM-only. */\n");
     for function in &program.functions {
         if function.native.is_some() || function.virtual_slot.is_some() { continue; }
-        let mut call_args = vec![
-            if function.return_type == Type::Void { "NULL".to_owned() } else { "&ncr_result".to_owned() }
-        ];
-        if let Some(class) = function.receiver {
-            call_args.push(if program.classes[class].variants.is_some() {
-                "&ncr_self".to_owned()
-            } else {
-                "ncr_self".to_owned()
-            });
-        }
-        // Erase only address-ABI inputs; thin pointers and scalars stay typed values.
-        call_args.extend(function.params.iter().map(|(id, ty)| match direct_input_abi(program, *ty) {
-            DirectInputAbi::Value => format!("ncr_v_{id}"),
-            DirectInputAbi::Address => format!("(void *)&ncr_v_{id}"),
-        }));
-        let params = c_params_signature(program, function);
-        let return_type = ctype(program, function.return_type);
         if function.return_type == Type::Void {
-            out.push_str(&format!(
-                "static inline void ncr_fn_{}({}) {{ {}({}); }}\n",
-                function.id, params, direct_function_symbol(function.id), call_args.join(", "),
-            ));
+            write!(out, "static inline void ncr_fn_{}(", function.id).unwrap();
+            write_c_params_signature(&mut out, program, function);
+            out.push_str(") { ");
+            write_direct_function_symbol(&mut out, function.id);
+            out.push('(');
+            write_direct_user_call_arguments(&mut out, program, function);
+            out.push_str("); }\n");
         } else {
-            out.push_str(&format!(
-                "static inline {} ncr_fn_{}({}) {{ {} ncr_result; {}({}); return ncr_result; }}\n",
-                return_type, function.id, params, return_type,
-                direct_function_symbol(function.id), call_args.join(", "),
-            ));
+            let return_type = ctype(program, function.return_type);
+            write!(out, "static inline {} ncr_fn_{}(", return_type, function.id).unwrap();
+            write_c_params_signature(&mut out, program, function);
+            write!(out, ") {{ {} ncr_result; ", return_type).unwrap();
+            write_direct_function_symbol(&mut out, function.id);
+            out.push('(');
+            write_direct_user_call_arguments(&mut out, program, function);
+            out.push_str("); return ncr_result; }\n");
         }
     }
     out
 }
 
-fn c_params_signature(program: &t::Program, function: &t::Function) -> String {
-    let mut params = Vec::new();
+fn write_direct_user_call_arguments(
+    out: &mut String,
+    program: &t::Program,
+    function: &t::Function,
+) {
+    out.push_str(if function.return_type == Type::Void { "NULL" } else { "&ncr_result" });
     if let Some(class) = function.receiver {
-        params.push(format!("{} ncr_self", ctype(program, Type::Object(class))));
+        out.push_str(", ");
+        out.push_str(if program.classes[class].variants.is_some() { "&ncr_self" } else { "ncr_self" });
     }
-    params.extend(function.params.iter().map(|(id, ty)|
-        format!("{} ncr_v_{id}", ctype_param(program, *ty))));
-    if params.is_empty() { "void".to_owned() } else { params.join(", ") }
+    // Erase only address-ABI inputs; thin pointers and scalars stay typed values.
+    for (id, ty) in &function.params {
+        out.push_str(", ");
+        match direct_input_abi(program, *ty) {
+            DirectInputAbi::Value => write!(out, "ncr_v_{id}").unwrap(),
+            DirectInputAbi::Address => write!(out, "(void *)&ncr_v_{id}").unwrap(),
+        }
+    }
+}
+
+fn write_c_params_signature(out: &mut String, program: &t::Program, function: &t::Function) {
+    let mut has_params = false;
+    if let Some(class) = function.receiver {
+        write!(out, "{} ncr_self", ctype(program, Type::Object(class))).unwrap();
+        has_params = true;
+    }
+    for (id, ty) in &function.params {
+        if has_params { out.push_str(", "); }
+        write!(out, "{} ncr_v_{id}", ctype_param(program, *ty)).unwrap();
+        has_params = true;
+    }
+    if !has_params { out.push_str("void"); }
 }
 
 fn direct_type_code(ty: Type) -> String {
