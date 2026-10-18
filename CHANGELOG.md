@@ -17,6 +17,8 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   mutability, visibility, and synchronous instance behavior.
 - Retain imports from the impl source unit when resolving implementation method
   signatures and bodies, including when the class is declared in another file.
+- Bound CLI source-directory discovery to the same 4,096-entry limit as the LSP,
+  preventing unrelated files from bypassing the traversal resource cap.
 - Cache Unit-mutex dependency discovery as specializations are requested,
   avoiding a full request-set scan after each expansion.
 - Count concrete user types incrementally during generic expansion instead of

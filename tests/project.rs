@@ -158,6 +158,31 @@ fn directory_sources_are_sorted_and_outputs_excluded() {
     assert_eq!(b.paths().map(|path| path.strip_prefix(&t.0).unwrap().to_owned()).collect::<Vec<_>>(), expected);
     b.validate().unwrap();
 }
+
+#[test]
+fn directory_scan_limit_is_enforced_at_the_boundary() {
+    use nacre::project::MAX_DIRECTORY_ENTRIES;
+
+    let temp = Temp::new();
+    temp.file("Main.ncr", "void main() {}");
+    for index in 0..(MAX_DIRECTORY_ENTRIES - 1) {
+        temp.file(&format!("ignored-{index:04}.txt"), "");
+    }
+    SourceBundle::from_paths(std::slice::from_ref(&temp.0))
+        .unwrap()
+        .validate()
+        .unwrap();
+
+    temp.file("one-too-many.txt", "");
+    let error = SourceBundle::from_paths(std::slice::from_ref(&temp.0)).unwrap_err();
+    assert!(
+        error.contains(&format!(
+            "directory scan limit is {MAX_DIRECTORY_ENTRIES} entries"
+        )),
+        "{error}"
+    );
+}
+
 #[test]
 fn duplicate_disk_input_is_rejected() {
     let t=Temp::new();let p=t.file("main.ncr","void main(){}");assert!(SourceBundle::from_paths(&[p.clone(),p]).is_err());

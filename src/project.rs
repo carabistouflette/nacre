@@ -9,6 +9,8 @@ use crate::diagnostic::{line_column, Diagnostic, Span};
 
 pub const MAX_SOURCE_BYTES: usize = 1024 * 1024;
 pub const MAX_FILES: usize = 64;
+/// Maximum number of directory entries inspected during source discovery.
+pub const MAX_DIRECTORY_ENTRIES: usize = 4096;
 #[derive(Debug)]
 struct Unit { path: PathBuf, start: usize, end: usize, first_line: usize }
 #[derive(Debug)]
@@ -281,27 +283,62 @@ pub(crate) fn is_source_file(path: &Path) -> bool {
 pub(crate) fn is_excluded_name(name: &std::ffi::OsStr) -> bool {
     name.as_encoded_bytes().starts_with(b".") || name == "out" || name == "target"
 }
+pub(crate) fn read_directory_entries(
+    path: &Path,
+    visited: &mut usize,
+) -> Result<Vec<PathBuf>, String> {
+    let entries = fs::read_dir(path).map_err(|error| format!("{}: {error}", path.display()))?;
+    let mut output = Vec::new();
+    for entry in entries {
+        *visited += 1;
+        if *visited > MAX_DIRECTORY_ENTRIES {
+            return Err(format!(
+                "directory scan limit is {MAX_DIRECTORY_ENTRIES} entries"
+            ));
+        }
+        let entry = entry.map_err(|error| format!("{}: {error}", path.display()))?;
+        output.push(entry.path());
+    }
+    output.sort();
+    Ok(output)
+}
 
-fn collect(path: &Path, depth: usize, output: &mut Vec<PathBuf>) -> Result<(), String> {
-    if depth > 32 { return Err("source directory nesting limit is 32".to_owned()); }
-    let meta = fs::symlink_metadata(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    if meta.file_type().is_symlink() { return Err(format!("symbolic-link source is not allowed: {}", path.display())); }
+fn collect(
+    path: &Path,
+    depth: usize,
+    visited: &mut usize,
+    output: &mut Vec<PathBuf>,
+) -> Result<(), String> {
+    if depth > 32 {
+        return Err("source directory nesting limit is 32".to_owned());
+    }
+    let meta =
+        fs::symlink_metadata(path).map_err(|error| format!("{}: {error}", path.display()))?;
+    if meta.file_type().is_symlink() {
+        return Err(format!(
+            "symbolic-link source is not allowed: {}",
+            path.display()
+        ));
+    }
     if meta.is_file() {
         output.push(path.to_owned());
-        if output.len() > MAX_FILES { return Err("source file limit is 64".to_owned()); }
+        if output.len() > MAX_FILES {
+            return Err("source file limit is 64".to_owned());
+        }
     } else if meta.is_dir() {
-        let mut entries: Vec<_> = fs::read_dir(path).map_err(|e| format!("{}: {e}", path.display()))?
-            .map(|r| r.map(|e| e.path())).collect::<Result<_, _>>()
-            .map_err(|e| format!("{}: {e}", path.display()))?;
-        entries.sort();
-        for entry in entries {
-            if is_excluded_name(entry.file_name().unwrap_or_default()) { continue; }
-            let kind = fs::symlink_metadata(&entry).map_err(|e| format!("{}: {e}", entry.display()))?;
+        for entry in read_directory_entries(path, visited)? {
+            if is_excluded_name(entry.file_name().unwrap_or_default()) {
+                continue;
+            }
+            let kind = fs::symlink_metadata(&entry)
+                .map_err(|error| format!("{}: {error}", entry.display()))?;
             if kind.is_dir() || is_source_file(&entry) {
-                collect(&entry, depth + 1, output)?;
+                collect(&entry, depth + 1, visited, output)?;
             }
         }
-    } else { return Err(format!("not a regular source file: {}", path.display())); }
+    } else {
+        return Err(format!("not a regular source file: {}", path.display()));
+    }
     Ok(())
 }
 fn c_string(text: &str) -> String {
@@ -322,13 +359,14 @@ pub fn resolve_inputs(paths: &[PathBuf]) -> Result<Vec<PathBuf>, String> {
     let mut graph = PackageGraph::default();
     let mut files = Vec::new();
     let mut seen = HashSet::new();
+    let mut visited_entries = 0usize;
     for path in paths {
         if let Some(manifest) = manifest_path(path) {
             let start = graph.roots.len();
             graph.visit(&manifest, None, 0)?;
             for root in &graph.roots[start..] {
                 let mut package_files = Vec::new();
-                collect(root, 0, &mut package_files)?;
+                collect(root, 0, &mut visited_entries, &mut package_files)?;
                 for file in package_files {
                     let canonical = file.canonicalize().map_err(|e| format!("{}: {e}", file.display()))?;
                     if seen.insert(canonical) { files.push(file); }
@@ -336,7 +374,7 @@ pub fn resolve_inputs(paths: &[PathBuf]) -> Result<Vec<PathBuf>, String> {
             }
         } else {
             let mut raw_files = Vec::new();
-            collect(path, 0, &mut raw_files)?;
+            collect(path, 0, &mut visited_entries, &mut raw_files)?;
             for file in raw_files {
                 let canonical = file.canonicalize().map_err(|e| format!("{}: {e}", file.display()))?;
                 if !seen.insert(canonical) { return Err(format!("duplicate source: {}", file.display())); }
