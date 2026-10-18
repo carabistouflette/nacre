@@ -45,6 +45,7 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 
 - Cover manifest permission preservation when adding a local dependency.
 - Reject symlinked dependency manifests before path canonicalization can hide them.
+- Cover invalid UTF-8 SQLite text rejection without losing current-row access.
 
 - Grant CI workflows read-only repository-content permissions.
 

@@ -713,3 +713,39 @@ void main() {
     assert_eq!(output.stdout, b"true\ntrue\ntrue\n");
     assert_memory_balanced(&output);
 }
+
+#[test]
+fn sqlite_text_rejects_invalid_utf8_without_poisoning_current_row() {
+    let source = r#"
+Result<Unit, Text> exercise() {
+    Text memory = new Text(":memory:");
+    Database database = Database.open(memory)?;
+    Text query = new Text("SELECT CAST(x'80' AS TEXT), 'valid'");
+    SqlStatement statement = database.prepare(query)?;
+    if (!statement.step()?) {
+        return new Result<Unit, Text>.Err(new Text("expected SQLite row"));
+    }
+    match (statement.columnText(0)) {
+        Err(error) { println("INVALID_UTF8_REJECTED"); drop(error); }
+        Ok(value) { println("INVALID_UTF8_ACCEPTED"); drop(value); }
+    }
+    Option<Text> validText = statement.columnText(1)?;
+    match (validText) {
+        None { println("VALID_COLUMN_MISSING"); }
+        Some(value) { println(value.equalsString("valid")); drop(value); }
+    }
+    println(!statement.step()?);
+    statement.close()?;
+    database.close()?;
+    return new Result<Unit, Text>.Ok(());
+}
+void main() {
+    match (exercise()) {
+        Ok(unit) {}
+        Err(error) { error.print(); }
+    }
+}
+"#;
+    let output = run_memory(source);
+    assert_eq!(output.stdout, b"INVALID_UTF8_REJECTED\ntrue\ntrue\n");
+}
