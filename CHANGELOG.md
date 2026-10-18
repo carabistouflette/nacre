@@ -7,6 +7,9 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   configured source loading from traversing outside the project tree.
 - Canonicalize resolved implementation class names before generic-bound checks,
   allowing named-module types to satisfy valid trait bounds.
+- Resolve implementation trait names and generic trait bounds to
+  module-qualified identities, preventing same-named traits in other modules
+  from satisfying a bound.
 - Cache Unit-mutex dependency discovery as specializations are requested,
   avoiding a full request-set scan after each expansion.
 - Count concrete user types incrementally during generic expansion instead of

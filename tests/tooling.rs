@@ -441,6 +441,49 @@ public void main() {
 }
 
 #[test]
+fn generic_trait_bounds_reject_same_named_trait_from_other_module() {
+    let api_a = r#"
+module api.a;
+public trait Marker { void markA(); }
+"#;
+    let api_b = r#"
+module api.b;
+public trait Marker { void markB(); }
+"#;
+    let model = r#"
+module model;
+import api.a.*;
+
+public class Item {}
+impl Marker for Item { void markA() {} }
+"#;
+    let consumer = r#"
+module consumer;
+import api.b.*;
+import model.*;
+
+public class Box<T: Marker> {
+    private T item;
+    public Box(T item) { this.item = item; }
+}
+
+public void main() {
+    Item item = new Item();
+    Box<Item> box = new Box<Item>(item);
+}
+"#;
+    let bundle = nacre::project::SourceBundle::from_sources(vec![
+        ("api_a.ncr".to_owned(), api_a.to_owned()),
+        ("api_b.ncr".to_owned(), api_b.to_owned()),
+        ("model.ncr".to_owned(), model.to_owned()),
+        ("consumer.ncr".to_owned(), consumer.to_owned()),
+    ]).unwrap();
+    let err = bundle.validate().unwrap_err();
+    assert!(err.message.contains("does not satisfy trait bound"), "{err}");
+    assert!(err.message.contains("api.b::Marker"), "{err}");
+}
+
+#[test]
 fn ambiguous_imported_traits_are_rejected() {
     let source_a = "module mod_a;\npublic trait SharedTrait { void run(); }\n";
     let source_b = "module mod_b;\npublic trait SharedTrait { void run(); }\n";

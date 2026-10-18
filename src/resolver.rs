@@ -61,46 +61,27 @@ pub fn resolve(program: &mut a::Program) -> Result<(), Diagnostic> {
         tr.qualified_name = qualify(module, &tr.name);
     }
 
-    let mut trait_map = HashMap::new();
+    let mut trait_map: HashMap<&str, HashMap<&str, &a::Trait>> = HashMap::new();
     for tr in &program.traits {
         let module = &program.units[tr.unit].module;
-        let key = (module.clone(), tr.name.clone());
-        if trait_map.insert(key, tr).is_some() {
+        let traits = trait_map.entry(module.as_str()).or_default();
+        if traits.insert(tr.name.as_str(), tr).is_some() {
             return Err(Diagnostic::new(tr.span, format!("duplicate trait `{}` in module `{}`", tr.name, module)));
         }
     }
 
-    for imp in &mut program.impls {
-        let imp_module = &program.units[imp.unit].module;
-        let mut tr = trait_map.get(&(imp_module.clone(), imp.trait_name.clone()))
-            .or_else(|| trait_map.get(&(String::new(), imp.trait_name.clone())))
-            .copied();
-        if tr.is_none() {
-            let mut matches = Vec::new();
-            for import in &program.units[imp.unit].imports {
-                if import.wildcard {
-                    if let Some(found) = trait_map.get(&(import.path.clone(), imp.trait_name.clone()))
-                        && !matches.iter().any(|m: &&a::Trait| m.qualified_name == found.qualified_name) {
-                            matches.push(*found);
-                        }
-                } else if let Some((mod_path, name)) = import.path.rsplit_once('.')
-                    && name == imp.trait_name
-                        && let Some(found) = trait_map.get(&(mod_path.to_string(), imp.trait_name.clone()))
-                            && !matches.iter().any(|m: &&a::Trait| m.qualified_name == found.qualified_name) {
-                                matches.push(*found);
-                            }
-            }
-            if matches.len() > 1 {
-                return Err(Diagnostic::new(
-                    imp.span,
-                    format!("ambiguous trait `{}`: found multiple matching traits in imported modules", imp.trait_name),
-                ));
-            }
-            tr = matches.first().copied();
+    for class in &mut program.classes {
+        let unit = &program.units[class.unit];
+        for name in class.type_bounds.iter_mut().flatten() {
+            let tr = resolve_trait(&trait_map, unit, name, class.span)?;
+            tr.qualified_name.clone_into(name);
         }
-        let tr = tr.ok_or_else(|| {
-            Diagnostic::new(imp.span, format!("unknown trait `{}`", imp.trait_name))
-        })?;
+    }
+
+    for imp in &mut program.impls {
+        let unit = &program.units[imp.unit];
+        let tr = resolve_trait(&trait_map, unit, &imp.trait_name, imp.span)?;
+        let imp_module = &unit.module;
         let qualified_class = qualify(imp_module, &imp.target_class);
         let mut class_candidates = Vec::new();
         for (i, c) in program.classes.iter().enumerate() {
@@ -122,6 +103,7 @@ pub fn resolve(program: &mut a::Program) -> Result<(), Diagnostic> {
         };
         let class = &mut program.classes[target_idx];
         class.qualified_name.clone_into(&mut imp.target_class);
+        tr.qualified_name.clone_into(&mut imp.trait_name);
         for req in &tr.methods {
             let imp_method = imp.methods.iter().find(|m| m.name == req.name).ok_or_else(|| {
                 Diagnostic::new(imp.span, format!("missing method `{}` required by trait `{}`", req.name, tr.name))
@@ -159,6 +141,43 @@ pub fn resolve(program: &mut a::Program) -> Result<(), Diagnostic> {
     for class in &mut program.classes { resolver.class(class)?; }
     for function in &mut program.functions { resolver.function(function, None, &[])?; }
     Ok(())
+}
+
+fn resolve_trait<'a>(
+    trait_map: &HashMap<&str, HashMap<&str, &'a a::Trait>>,
+    unit: &a::SourceUnit,
+    name: &str,
+    span: Span,
+) -> Result<&'a a::Trait, Diagnostic> {
+    let local = trait_map.get(unit.module.as_str()).and_then(|traits| traits.get(name)).copied();
+    let root = trait_map.get("").and_then(|traits| traits.get(name)).copied();
+    if let Some(tr) = local.or(root) {
+        return Ok(tr);
+    }
+
+    let mut matched: Option<&a::Trait> = None;
+    for import in &unit.imports {
+        let module = if import.wildcard {
+            Some(import.path.as_str())
+        } else if let Some((module, imported_name)) = import.path.rsplit_once('.')
+            && imported_name == name {
+                Some(module)
+            } else {
+                None
+            };
+        let Some(module) = module else { continue; };
+        let Some(tr) = trait_map.get(module).and_then(|traits| traits.get(name)).copied() else { continue; };
+        if let Some(previous) = matched
+            && previous.qualified_name != tr.qualified_name {
+                return Err(Diagnostic::new(
+                    span,
+                    format!("ambiguous trait `{name}`: found multiple matching traits in imported modules"),
+                ));
+            }
+        matched = Some(tr);
+    }
+
+    matched.ok_or_else(|| Diagnostic::new(span, format!("unknown trait `{name}`")))
 }
 
 fn qualify(module: &str, name: &str) -> String {
