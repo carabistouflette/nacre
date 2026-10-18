@@ -75,3 +75,15 @@ fn receiver_reservation_and_activation_have_correct_order() {
     let activation = main.find("activate receiver").unwrap();
     assert!(first_reservation < second_reservation && second_reservation < activation);
 }
+
+#[test]
+fn transitive_view_propagation_rejects_outer_fields_before_inner_fields() {
+    let source = "class Outer {\n    Middle middle;\n}\nclass Middle {\n    View view;\n}\nclass View {\n    borrow Target target;\n}\nclass Target {}\nvoid main() {}";
+    let error = validate(source).expect_err("a transitive local view was stored by value");
+    assert!(
+        error.message.contains("[E3007]"),
+        "{}",
+        error.render("case.ncr", source)
+    );
+    assert_eq!(error.span.start, source.find("Middle middle").unwrap());
+}

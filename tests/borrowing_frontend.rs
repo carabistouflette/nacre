@@ -742,14 +742,6 @@ fn view_cannot_be_nested_owned() {
 }
 
 #[test]
-fn transitive_view_propagation_rejects_outer_fields_before_inner_fields() {
-    let source = "class Outer {\n    Middle middle;\n}\nclass Middle {\n    View view;\n}\nclass View {\n    borrow Target target;\n}\nclass Target {}\nvoid main() {}";
-    let error = validate(source).expect_err("a transitive local view was stored by value");
-    assert!(error.message.contains("[E3007]"), "{}", error.render("case.ncr", source));
-    assert_eq!(error.span.start, source.find("Middle middle").unwrap());
-}
-
-#[test]
 fn view_cannot_be_nested_borrowed() {
     let source = "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } class V { borrow C target; V(borrow C target) { this.target = target; } readonly int get() { return target.get(); } } class W { borrow V view; W(borrow V view) { this.view = view; } } void main() {}";
     let _error = validate(source).expect_err("invalid source accepted");
