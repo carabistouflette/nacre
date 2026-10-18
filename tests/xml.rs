@@ -330,6 +330,45 @@ void main() {
 }
 
 #[test]
+fn set_text_updates_selected_attributes_without_touching_nested_freed_nodes() {
+    let output = execute(r#"
+Result<Unit, Text> exercise() {
+    Text source = new Text("<root id='old'>old</root>");
+    XmlDocument document = XmlDocument.parse(source)?;
+    Text selected = new Text("/root | /root/@id");
+    Text replacement = new Text("new");
+    println(document.setText(selected, replacement)?);
+    Text textPath = new Text("/root/text()");
+    Text attributePath = new Text("/root/@id");
+    List<Text> textValues = document.queryText(textPath)?;
+    List<Text> attributeValues = document.queryText(attributePath)?;
+    borrow Text text = textValues.getRef(0);
+    borrow Text attribute = attributeValues.getRef(0);
+    text.print();
+    attribute.print();
+
+    Text nestedSource = new Text("<root><item id='nested'>old</item></root>");
+    XmlDocument nested = XmlDocument.parse(nestedSource)?;
+    Text nestedSelection = new Text("/root | /root/item/@id");
+    println(nested.setText(nestedSelection, replacement)?);
+    List<Text> nestedTextValues = nested.queryText(textPath)?;
+    borrow Text nestedText = nestedTextValues.getRef(0);
+    nestedText.print();
+    return new Result<Unit, Text>.Ok(());
+}
+void main() {
+    match (exercise()) {
+        Ok(_) {}
+        Err(error) { error.print(); }
+    }
+}
+"#);
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert_eq!(output.stdout, b"2\nnew\nnew\n1\nnew\n");
+    assert_memory_balanced(&output);
+}
+
+#[test]
 fn pull_reader_keeps_owned_events_and_distinguishes_truncation_from_eof() {
     let output = execute(r#"
 Result<Unit, Text> exercise() {

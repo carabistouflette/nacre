@@ -725,6 +725,11 @@ and return independent owned values. `serialize`, mutation, escaping, and XSD
 validation operate on that document; XInclude is not processed and schema
 includes/imports are rejected.
 
+`XmlDocument.setText` treats its value literally and accepts element, attribute,
+and text-node selections. Selecting an element and a descendant applies the
+element replacement once because it removes that descendant; an attribute owned
+directly by the selected element remains a separate target and is updated.
+
 `XmlReader` is a pull reader over an in-memory `Text` or `ByteBuffer`:
 
 ```java

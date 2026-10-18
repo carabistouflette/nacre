@@ -179,8 +179,9 @@ static bool ncr_xml_node_is_descendant(xmlNodePtr node, xmlNodePtr ancestor) {
     return false;
 }
 
-static xmlNodePtr *ncr_xml_snapshot_nodes(xmlXPathObjectPtr selection, bool collapse_descendants,
-        size_t line, size_t column, size_t *count, const char **failure) {
+static xmlNodePtr *ncr_xml_snapshot_nodes(xmlXPathObjectPtr selection,
+        bool preserve_attributes_of_selected_elements, size_t line, size_t column,
+        size_t *count, const char **failure) {
     if (selection == NULL || selection->type != XPATH_NODESET) {
         *failure = "XmlDocument: XPath expression must select nodes";
         return NULL;
@@ -202,23 +203,26 @@ static xmlNodePtr *ncr_xml_snapshot_nodes(xmlXPathObjectPtr selection, bool coll
             return NULL;
         }
     }
-    if (collapse_descendants) {
-        size_t kept = 0;
-        for (size_t index = 0; index < total; ++index) {
-            bool covered = false;
-            for (size_t other = 0; other < total; ++other) {
-                xmlNodePtr candidate_ancestor = node_set->nodeTab[other];
-                if (index != other && candidate_ancestor != NULL &&
-                    candidate_ancestor->type == XML_ELEMENT_NODE &&
-                    ncr_xml_node_is_descendant(snapshot[index], candidate_ancestor)) {
-                    covered = true;
-                    break;
-                }
+    size_t kept = 0;
+    for (size_t index = 0; index < total; ++index) {
+        bool covered = false;
+        for (size_t other = 0; other < total; ++other) {
+            xmlNodePtr candidate_ancestor = node_set->nodeTab[other];
+            bool attribute_survives_replacement =
+                preserve_attributes_of_selected_elements &&
+                snapshot[index]->type == XML_ATTRIBUTE_NODE &&
+                snapshot[index]->parent == candidate_ancestor;
+            if (index != other && candidate_ancestor != NULL &&
+                candidate_ancestor->type == XML_ELEMENT_NODE &&
+                !attribute_survives_replacement &&
+                ncr_xml_node_is_descendant(snapshot[index], candidate_ancestor)) {
+                covered = true;
+                break;
             }
-            if (!covered) { snapshot[kept++] = snapshot[index]; }
         }
-        *count = kept;
+        if (!covered) { snapshot[kept++] = snapshot[index]; }
     }
+    *count = kept;
     return snapshot;
 }
 
@@ -608,7 +612,7 @@ static ncr_obj_@LONG_RESULT@ @XML_DOCUMENT_REMOVE@(ncr_obj_@XML_DOCUMENT_ID@ *nc
         }
     }
     size_t count = 0;
-    xmlNodePtr *nodes = ncr_xml_snapshot_nodes(selection, true, ncr_line, ncr_column, &count, &failure);
+    xmlNodePtr *nodes = ncr_xml_snapshot_nodes(selection, false, ncr_line, ncr_column, &count, &failure);
     if (count > 0 && nodes == NULL) {
         xmlXPathFreeObject(selection);
         return @LONG_ERROR@(failure, strlen(failure), ncr_line, ncr_column);

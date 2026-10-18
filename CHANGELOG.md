@@ -43,6 +43,9 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 
 - Remove duplicate clearing after calloc-backed XML and Temporal allocations.
 
+- Update attributes selected with an element in `XmlDocument.setText`, while
+  collapsing descendants removed by the element replacement.
+
 - Avoid zero-initializing fully overwritten byte copies in BinaryReader, SQLite blobs, Encoding, crypto buffers, and HTTP.
 
 - Use raw allocation for Process argument/environment tables and fully written copies.
