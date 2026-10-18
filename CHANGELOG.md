@@ -648,6 +648,8 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   list or recursive expression visitor, and template slices reuse the shared
   borrowed helper. URI/DNS parameter and Result substitutions follow one naming
   convention; native linking and CI install the URI and SQLite prerequisites.
+- Reject legacy base-0 IPv4 spellings in `Dns.idna` before `Dns.resolve` can let
+  `getaddrinfo` reinterpret them; canonical IPv4 forms remain supported.
 - Design-principles review keeps TCP, UDP and address resolution in one cohesive
   networking unit, hides descriptor/sockaddr state, and keeps Datagram source
   ownership closed over its value. Results report timeouts; TCP EOF is Ok(0),

@@ -13,6 +13,57 @@ static bool ncr_dns_unreserved(unsigned char byte) {
         || (byte >= '0' && byte <= '9') || byte == '-' || byte == '.' || byte == '_' || byte == '~';
 }
 
+/* Recognize legacy one-to-four-part base-0 IPv4 spellings without allocation. */
+static bool ncr_dns_ipv4_component(const unsigned char *input, size_t start,
+    size_t end, uint32_t *value) {
+    if (start >= end) { return false; }
+    unsigned base = 10;
+    if (input[start] == '0') {
+        base = 8;
+        if (start + 1 < end && (input[start + 1] == 'x' || input[start + 1] == 'X')) {
+            base = 16;
+            start += 2;
+        }
+    }
+    if (start >= end) { return false; }
+    uint64_t parsed = 0;
+    for (size_t index = start; index < end; ++index) {
+        unsigned digit;
+        unsigned char byte = input[index];
+        if (byte >= '0' && byte <= '9') { digit = (unsigned)(byte - '0'); }
+        else if (base == 16 && byte >= 'a' && byte <= 'f') { digit = (unsigned)(byte - 'a') + 10; }
+        else if (base == 16 && byte >= 'A' && byte <= 'F') { digit = (unsigned)(byte - 'A') + 10; }
+        else { return false; }
+        if (digit >= base || parsed > ((uint64_t)UINT32_MAX - digit) / base) { return false; }
+        parsed = parsed * base + digit;
+    }
+    *value = (uint32_t)parsed;
+    return true;
+}
+
+static bool ncr_dns_legacy_ipv4_literal(const unsigned char *input, size_t length) {
+    if (input == NULL || length == 0) { return false; }
+    uint32_t parts[4];
+    size_t part_count = 0;
+    size_t start = 0;
+    for (size_t cursor = 0; cursor <= length; ++cursor) {
+        if (cursor != length && input[cursor] != '.') { continue; }
+        if (part_count == 4 || !ncr_dns_ipv4_component(input, start, cursor, &parts[part_count])) {
+            return false;
+        }
+        ++part_count;
+        if (cursor == length) { break; }
+        start = cursor + 1;
+    }
+    if (part_count == 1) { return true; }
+    if (part_count == 2) { return parts[0] <= 0xffU && parts[1] <= 0xffffffU; }
+    if (part_count == 3) {
+        return parts[0] <= 0xffU && parts[1] <= 0xffU && parts[2] <= 0xffffU;
+    }
+    return part_count == 4 && parts[0] <= 0xffU && parts[1] <= 0xffU
+        && parts[2] <= 0xffU && parts[3] <= 0xffU;
+}
+
 @IDNA_CORE_SIGNATURE@ {
     *ncr_ascii = NULL;
     *ncr_error = NULL;
@@ -140,6 +191,11 @@ static bool ncr_dns_unreserved(unsigned char byte) {
         return ncr_dns_idna_fail(ncr_error, message, sizeof(message) - 1, ncr_line, ncr_column);
     }
 
+    if (ncr_dns_legacy_ipv4_literal(decoded, decoded_length)) {
+        ncr_deallocate(decoded);
+        static const char message[] = "Dns.idna: noncanonical IPv4 literal";
+        return ncr_dns_idna_fail(ncr_error, message, sizeof(message) - 1, ncr_line, ncr_column);
+    }
     UErrorCode status = U_ZERO_ERROR;
     UIDNA *idna = uidna_openUTS46(
         UIDNA_USE_STD3_RULES | UIDNA_CHECK_BIDI | UIDNA_CHECK_CONTEXTJ

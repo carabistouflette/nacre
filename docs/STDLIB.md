@@ -2522,13 +2522,14 @@ including NUL and invalid UTF-8. A literal `+` is never treated as a space.
 `Dns.idna` percent-decodes host bytes, applies ICU UTS #46 nontransitional
 ToASCII processing with STD3, BIDI, and ContextJ checks, preserves a trailing
 root dot, and rejects encoded inputs longer than 3072 bytes or decoded inputs
-longer than 1024 bytes. Numeric IPv4 and IPv6 literals are canonicalized
-directly; an IPv6 zone identifier is retained after the address, so URI
-authority hosts must encode its leading percent as `%25`. `Dns.resolve`
-normalizes through `Dns.idna` and delegates to `SocketAddress.resolve` with
-passive lookup disabled. It returns all resolved addresses and is synchronous,
-without a timeout; any connection deadline begins only after resolution
-completes.
+longer than 1024 bytes. Canonical IPv4 and IPv6 literals are normalized directly;
+`Dns.idna` rejects noncanonical numeric IPv4 spellings (including shortened,
+octal, and hexadecimal forms) to avoid resolver reinterpretation. IPv6 zone
+identifiers are retained after the address, so URI authority hosts must encode
+their leading percent as `%25`. `Dns.resolve` normalizes through `Dns.idna` and
+delegates to `SocketAddress.resolve` with passive lookup disabled. It returns all
+resolved addresses and is synchronous, without a timeout; any connection deadline
+begins only after resolution completes.
 `Dns.reverse` requires a name lookup (it does not fall back to a numeric
 address), and `localHostName` returns the system hostname.
 
