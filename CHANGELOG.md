@@ -31,6 +31,8 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   metadata clones with constant-time lookups.
 - Index Pair and `Option<long>` specializations once instead of scanning every
   class for each iterator use.
+- Reuse a lazy native-method index while emitting Array templates and zeroed
+  factories instead of rescanning the full function table per method.
 
 - End local borrowed bindings and retained view loans after their last
   control-flow use. Backward liveness follows branch alternatives and loop

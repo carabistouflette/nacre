@@ -29,15 +29,16 @@ pub(super) fn drop_utility_fields() -> String {
     String::new()
 }
 
-fn array_function(program: &t::Program, class_id: usize, wanted: M) -> Option<&t::Function> {
-    program.functions.iter().find(|function| {
-        function.receiver == Some(class_id) && function.native == Some(wanted)
-    })
+fn array_function<'a>(
+    program: &'a t::Program, method_ids: &t::NativeMethodIndex, class_id: usize, wanted: M,
+) -> Option<&'a t::Function> {
+    program.functions.get(method_ids.get(class_id, wanted)?)
 }
 
 fn borrowed_methods(program: &t::Program, class_id: usize, element: Type) -> String {
     let Type::Object(element_class) = element else { return String::new(); };
     let mut out = String::new();
+    // These accessors can have multiple overloads with the same native method.
     for function in program.functions.iter().filter(|function| {
         function.receiver == Some(class_id)
             && matches!(function.native, Some(M::ArrayGetRef | M::ArrayGetMut))
@@ -68,8 +69,8 @@ fn borrowed_methods(program: &t::Program, class_id: usize, element: Type) -> Str
     out
 }
 
-fn try_get_method(program: &t::Program, class_id: usize, element: Type) -> String {
-    let Some(function) = array_function(program, class_id, M::ArrayTryGet) else {
+fn try_get_method(program: &t::Program, method_ids: &t::NativeMethodIndex, class_id: usize, element: Type) -> String {
+    let Some(function) = array_function(program, method_ids, class_id, M::ArrayTryGet) else {
         return String::new();
     };
     assert!(element.is_copy(), "Array.tryGet must be pruned for affine elements");
@@ -94,8 +95,10 @@ fn try_get_method(program: &t::Program, class_id: usize, element: Type) -> Strin
     )
 }
 
-pub(super) fn array_implementation(program: &t::Program, class_id: usize, element: Type) -> String {
-    let constructor = array_function(program, class_id, M::ArrayNew)
+pub(super) fn array_implementation(
+    program: &t::Program, method_ids: &t::NativeMethodIndex, class_id: usize, element: Type,
+) -> String {
+    let constructor = array_function(program, method_ids, class_id, M::ArrayNew)
         .expect("compiler-owned Array constructor is present");
     let Type::Object(list_class) = constructor.params.first().expect("Array constructor List parameter").1 else {
         unreachable!("Array constructor consumes a List owner");
@@ -103,7 +106,7 @@ pub(super) fn array_implementation(program: &t::Program, class_id: usize, elemen
     assert!(matches!(program.classes[list_class].native, Some(t::NativeClass::List(list_element)) if list_element == element),
         "Array constructor List element must match the Array element");
 
-    let get = array_function(program, class_id, M::ArrayGet).map_or_else(String::new, |_| {
+    let get = array_function(program, method_ids, class_id, M::ArrayGet).map_or_else(String::new, |_| {
         replace_placeholders(
             include_str!("../../stdlib/array_get.c.in").to_owned(),
             &[
@@ -112,7 +115,7 @@ pub(super) fn array_implementation(program: &t::Program, class_id: usize, elemen
             ],
         )
     });
-    let set = array_function(program, class_id, M::ArraySet)
+    let set = array_function(program, method_ids, class_id, M::ArraySet)
         .expect("compiler-owned Array.set method is present");
     let set_index = set.params.first().expect("Array.set index parameter").1;
     let set_value = set.params.get(1).expect("Array.set value parameter").1;
@@ -127,7 +130,7 @@ pub(super) fn array_implementation(program: &t::Program, class_id: usize, elemen
         ("@ARRAY_SIZE@", Cow::Borrowed(marker(M::ArraySize))),
         ("@ARRAY_GET_METHOD@", Cow::Owned(get)),
         ("@BORROWED_GETTERS@", Cow::Owned(borrowed_methods(program, class_id, element))),
-        ("@TRY_GET_METHOD@", Cow::Owned(try_get_method(program, class_id, element))),
+        ("@TRY_GET_METHOD@", Cow::Owned(try_get_method(program, method_ids, class_id, element))),
         ("@ARRAY_SET@", Cow::Borrowed(marker(M::ArraySet))),
         ("@DROP_AT_INDEX@", Cow::Owned(drop_element(element, "p->items[index]"))),
     ];
@@ -145,7 +148,7 @@ pub(super) fn array_implementation(program: &t::Program, class_id: usize, elemen
     body
 }
 
-pub(super) fn zeroed_implementations(program: &t::Program) -> String {
+pub(super) fn zeroed_implementations(program: &t::Program, method_ids: &t::NativeMethodIndex) -> String {
     let factories = [
         M::ArraysBytes,
         M::ArraysChars,
@@ -157,9 +160,9 @@ pub(super) fn zeroed_implementations(program: &t::Program) -> String {
     ];
     let mut out = String::new();
     for method in factories {
-        let Some(function) = program.functions.iter().find(|function| function.native == Some(method)) else {
-            continue;
-        };
+        let Some(function_id) = method_ids.get_static(method) else { continue; };
+        let function = program.functions.get(function_id)
+            .expect("native method index contains a valid function ID");
         let Type::Object(array_class) = function.return_type else {
             unreachable!("Arrays zeroed factory returns an owned Array");
         };

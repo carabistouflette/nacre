@@ -206,7 +206,10 @@ pub(crate) fn map_slot_expression(
     collections::map_slot_expression(program, map_class, map, index, kind, value_type)
 }
 
-fn append_body(program: &t::Program, out: &mut String, class: &t::Class, native: C) {
+fn append_body(
+    program: &t::Program, out: &mut String, class: &t::Class, native: C,
+    native_method_ids: &mut Option<t::NativeMethodIndex>,
+) {
     if matches!(native, C::DateTime) && !date_time::is_used(program) {
         return;
     }
@@ -226,7 +229,10 @@ fn append_body(program: &t::Program, out: &mut String, class: &t::Class, native:
             body.push_str(&iterators::list_implementation(program, class.id, element));
             body
         }
-        C::Array(element) => arrays::array_implementation(program, class.id, element),
+        C::Array(element) => {
+            let method_ids = native_method_ids.get_or_insert_with(|| t::NativeMethodIndex::new(program));
+            arrays::array_implementation(program, method_ids, class.id, element)
+        }
         C::Deque(element) => deque::implementation(program, class.id, element),
         C::Map { key, value, hasher } => collections::map_implementation(program, class.id, key, value, hasher),
         C::Set { key, hasher } => set::implementation(program, class.id, key, hasher),
@@ -245,7 +251,10 @@ fn append_body(program: &t::Program, out: &mut String, class: &t::Class, native:
         C::Time => time::implementation(program),
         C::DateTime => date_time::implementation(program),
         C::Temporal => temporal::implementation(program),
-        C::Arrays => arrays::zeroed_implementations(program),
+        C::Arrays => {
+            let method_ids = native_method_ids.get_or_insert_with(|| t::NativeMethodIndex::new(program));
+            arrays::zeroed_implementations(program, method_ids)
+        }
         C::ByteBuffer => buffer::implementation(program, class.id),
         C::Uuid => uuid::implementation(program, class.id),
         C::BinaryReader | C::BinaryWriter => binary::implementation(program, class.id, native),
@@ -279,6 +288,7 @@ fn append_body(program: &t::Program, out: &mut String, class: &t::Class, native:
 }
 
 pub fn implementations(program: &t::Program) -> String {
+    let mut native_method_ids = None;
     let mut out = String::new();
     out.push_str(&monotonic::implementation());
     out.push('\n');
@@ -294,26 +304,26 @@ pub fn implementations(program: &t::Program) -> String {
     // Emit that storage core before wrappers, independently of class numbering.
     for class in &program.classes {
         if let Some(native @ C::ByteBuffer) = class.native {
-            append_body(program, &mut out, class, native);
+            append_body(program, &mut out, class, native, &mut native_method_ids);
         }
     }
     // Set invokes these specialized table-core functions directly; emit the
     // authoritative Map instantiations before their composing Set wrappers.
     for class in &program.classes {
         if let Some(native @ C::Map { .. }) = class.native {
-            append_body(program, &mut out, class, native);
+            append_body(program, &mut out, class, native, &mut native_method_ids);
         }
     }
     // OrderedSet reuses the native core of its hidden OrderedMap<K, Unit> specialization.
     for class in &program.classes {
         if let Some(native @ C::OrderedMap(_, _)) = class.native {
-            append_body(program, &mut out, class, native);
+            append_body(program, &mut out, class, native, &mut native_method_ids);
         }
     }
     for class in &program.classes {
         if let Some(native) = class.native
             && !matches!(native, C::Map { .. } | C::OrderedMap(_, _) | C::ByteBuffer) {
-                append_body(program, &mut out, class, native);
+                append_body(program, &mut out, class, native, &mut native_method_ids);
             }
     }
     out.push_str(&compression::implementation(program));

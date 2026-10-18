@@ -407,19 +407,23 @@ pub enum NativeMethod {
     XsltStylesheetCompile, XsltStylesheetTransform, XsltStylesheetTransformBytes,
 }
 
-pub(crate) struct NativeMethodIndex(HashMap<(usize, NativeMethod), usize>);
+pub(crate) struct NativeMethodIndex(HashMap<(Option<usize>, NativeMethod), usize>);
 impl NativeMethodIndex {
     pub(crate) fn new(program: &Program) -> Self {
         let mut methods = HashMap::new();
         for function in &program.functions {
-            if let (Some(receiver), Some(method)) = (function.receiver, function.native) {
-                methods.entry((receiver, method)).or_insert(function.id);
+            if let Some(method) = function.native {
+                methods.entry((function.receiver, method)).or_insert(function.id);
             }
         }
         Self(methods)
     }
 
     pub(crate) fn get(&self, class: usize, method: NativeMethod) -> Option<usize> {
-        self.0.get(&(class, method)).copied()
+        self.0.get(&(Some(class), method)).copied()
+    }
+
+    pub(crate) fn get_static(&self, method: NativeMethod) -> Option<usize> {
+        self.0.get(&(None, method)).copied()
     }
 }
