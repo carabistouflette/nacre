@@ -2,6 +2,8 @@
 
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
+- Encode file URIs from Unix filesystem bytes, preserving non-UTF-8 source
+  paths so the LSP can open them and publish diagnostics.
 
 - Keep file-backed ZIP readers on libarchive's strict seekable path with explicit
   read/seek callbacks, and drain warning-rejected headers before returning errors

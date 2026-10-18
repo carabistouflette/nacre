@@ -24,10 +24,22 @@ pub struct SourceLocation<'a> {
 impl SourceBundle {
     /// Source paths are diagnostic identities; `module` headers define namespaces.
     pub fn from_sources(sources: Vec<(String, String)>) -> Result<Self, String> {
+        Self::from_unique_sources(sources.into_iter().map(|(name, source)| {
+            (PathBuf::from(name), source)
+        }))
+    }
+    pub(crate) fn from_path_sources(sources: Vec<(PathBuf, String)>) -> Result<Self, String> {
+        Self::from_unique_sources(sources.into_iter())
+    }
+    fn from_unique_sources(
+        sources: impl ExactSizeIterator<Item = (PathBuf, String)>,
+    ) -> Result<Self, String> {
         let mut names = HashSet::new();
-        Self::from_units(sources.into_iter().map(|(name, source)| {
-            if !names.insert(name.clone()) { return Err(format!("duplicate source: {name}")); }
-            Ok((PathBuf::from(name), source))
+        Self::from_units(sources.map(|(path, source)| {
+            if !names.insert(path.clone()) {
+                return Err(format!("duplicate source: {}", path.display()));
+            }
+            Ok((path, source))
         }))
     }
     /// Resolve manifests and recursively collect .ncr files in deterministic order.
