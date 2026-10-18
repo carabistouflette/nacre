@@ -2641,7 +2641,7 @@ impl Checker<'_> {
 
     fn method_expression(&mut self, receiver: &a::Expr, name: &str, args: &[a::Expr], span: Span) -> Result<(t::ExprKind, Type), Diagnostic> {
         use a::ExprKind as E;
-        if is_iterator_chain(receiver) {
+        if crate::iterator_fusion::is_iterator_chain(receiver) {
             match name {
                 "fold" => return self.iterator_fold_expression(receiver, args, span),
                 "sizeHint" => return self.iterator_size_hint_expression(receiver, args, span),
@@ -2768,12 +2768,6 @@ impl Checker<'_> {
         }
         Ok((t::ExprKind::Binary { op, left: Box::new(left), right: Box::new(right) }, ty))
     }
-}
-fn is_iterator_chain(expr: &a::Expr) -> bool {
-    let a::ExprKind::MethodCall { receiver, name, .. } = &expr.kind else { return false; };
-    if name == "iter" { return true; }
-    matches!(name.as_str(), "map" | "filter" | "take" | "enumerate" | "zip")
-        && is_iterator_chain(receiver)
 }
 
 fn iterator_borrowed_item_type(item: Type) -> Type {

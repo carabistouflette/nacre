@@ -7,6 +7,16 @@ use crate::ir::{
 };
 use crate::diagnostic::Span;
 
+/// Returns whether an expression is a supported fused-iterator chain.
+pub(crate) fn is_iterator_chain(expr: &crate::ast::Expr) -> bool {
+    let crate::ast::ExprKind::MethodCall { receiver, name, .. } = &expr.kind else {
+        return false;
+    };
+    name == "iter"
+        || (matches!(name.as_str(), "map" | "filter" | "take" | "enumerate" | "zip")
+            && is_iterator_chain(receiver))
+}
+
 /// Creates a pipeline rooted at one finite List, Array, or Map.
 pub(crate) fn source(
     source: IteratorSource,

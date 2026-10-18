@@ -7,6 +7,8 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   avoiding repeated template copies while preserving ordered nested expansion.
 - Resolve method-ID placeholders from markers present in each template, avoiding
   a full-template scan for every program function.
+- Share iterator-chain recognition between generic specialization and type checking,
+  keeping fused-pipeline recognition consistent.
 
 - End local borrowed bindings and retained view loans after their last
   control-flow use. Backward liveness follows branch alternatives and loop

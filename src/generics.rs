@@ -680,12 +680,6 @@ fn inferred_expression_type(
     }
 }
 
-fn iterator_chain(expr: &a::Expr) -> bool {
-    let a::ExprKind::MethodCall { receiver, name, .. } = &expr.kind else { return false; };
-    if name == "iter" { return true; }
-    matches!(name.as_str(), "map" | "filter" | "take" | "enumerate" | "zip")
-        && iterator_chain(receiver)
-}
 
 fn request_pair(
     expander: &mut Expander, template: &str, first: Type, second: Type, span: Span,
@@ -832,7 +826,8 @@ fn scan_iterator_expr(
     let IteratorContext { pair_template, option_template, .. } = *context;
     use a::ExprKind as E;
     if let E::MethodCall { receiver, name, .. } = &expr.kind
-        && matches!(name.as_str(), "fold" | "sizeHint") && iterator_chain(receiver) {
+        && matches!(name.as_str(), "fold" | "sizeHint")
+        && crate::iterator_fusion::is_iterator_chain(receiver) {
             let _ = iterator_item_type(expander, receiver, locals, context, 0)?;
             if name == "sizeHint" {
                 let option = expander.ty(&Type::Applied {
