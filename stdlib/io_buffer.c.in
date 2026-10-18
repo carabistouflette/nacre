@@ -1,4 +1,4 @@
-static bool @IO_RESERVE@(unsigned char **bytes, size_t *capacity, size_t required, size_t used, size_t line, size_t column) {
+static bool @IO_RESERVE@(unsigned char **bytes, size_t *capacity, size_t required, size_t line, size_t column) {
     if (required > (size_t)INT32_MAX) { return false; }
     if (required <= *capacity) { return true; }
     size_t grown = *capacity == 0 ? 16 : *capacity;
