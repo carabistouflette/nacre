@@ -708,14 +708,64 @@ pub(super) fn replace_method_ids(
     body
 }
 
-pub(super) fn replace_placeholders(mut body: String, substitutions: &[(impl AsRef<str>, String)]) -> String {
-    for (placeholder, replacement) in substitutions {
-        let placeholder = placeholder.as_ref();
-        if body.contains(placeholder) {
-            body = body.replace(placeholder, replacement.as_str());
-        }
+pub(super) fn replace_placeholders(
+    body: String,
+    substitutions: &[(impl AsRef<str>, String)],
+) -> String {
+    let mut output = None;
+    let mut copied_until = 0;
+    let mut search_from = 0;
+    while let Some(relative_start) = body[search_from..].find('@') {
+        let start = search_from + relative_start;
+        let Some(relative_end) = body[start + 1..].find('@') else { break };
+        let end = start + relative_end + 2;
+        let marker = &body[start..end];
+        let replacement = substitutions.iter()
+            .find(|(placeholder, _)| placeholder.as_ref() == marker)
+            .map(|(_, replacement)| replacement.as_str());
+        let Some(replacement) = replacement else {
+            search_from = start + 1;
+            continue;
+        };
+        let output = output.get_or_insert_with(|| String::with_capacity(body.len()));
+        output.push_str(&body[copied_until..start]);
+        output.push_str(replacement);
+        copied_until = end;
+        search_from = end;
     }
-    body
+    match output {
+        Some(mut output) => {
+            output.push_str(&body[copied_until..]);
+            output
+        }
+        None => body,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::replace_placeholders;
+
+    #[test]
+    fn replacement_values_are_not_reprocessed() {
+        let result = replace_placeholders(
+            "π=@FIRST@ | @MISSING@ | @FIRST@".to_owned(),
+            &[
+                ("@FIRST@", "value @SECOND@".to_owned()),
+                ("@SECOND@", "second".to_owned()),
+            ],
+        );
+        assert_eq!(result, "π=value @SECOND@ | @MISSING@ | value @SECOND@");
+    }
+
+    #[test]
+    fn unmatched_placeholders_are_preserved() {
+        let input = "before @UNMATCHED@ after";
+        assert_eq!(
+            replace_placeholders(input.to_owned(), &[("@KNOWN@", "value".to_owned())]),
+            input,
+        );
+    }
 }
 
 
