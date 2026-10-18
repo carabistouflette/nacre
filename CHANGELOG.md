@@ -27,6 +27,8 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   lookups; owner-aware scans remain for generic static factories and drain helpers.
 - Resolve native template method IDs in one function pass per template instead
   of scanning all functions for each distinct placeholder.
+- Resolve numeric native class IDs and feature presence in single class-table
+  passes instead of rescanning declarations for each lookup.
 - Resolve the shared Mutex<Unit> class once during concurrency drop-helper
   generation instead of rescanning all classes for every handle type.
 - Index class field names once, replacing repeated linear scans and per-pattern

@@ -68,7 +68,9 @@ fn class_is_used(program: &t::Program, bigint: bool) -> bool {
 }
 
 pub(super) fn is_used(program: &t::Program) -> bool {
-    class_is_used(program, true) || class_is_used(program, false)
+    program.classes.iter().any(|class| {
+        matches!(class.native, Some(C::BigInt | C::BigDecimal))
+    })
 }
 
 pub(super) fn fields(class: C) -> String {
@@ -119,18 +121,30 @@ fn selected_template(bigint: bool, decimal: bool) -> String {
 }
 
 pub(super) fn implementation(program: &t::Program) -> String {
-    let bigint = program.classes.iter().find(|class| matches!(class.native, Some(C::BigInt)))
-        .map(|class| class.id);
-    let decimal = program.classes.iter().find(|class| matches!(class.native, Some(C::BigDecimal)))
-        .map(|class| class.id);
-    let bigint_used = bigint.is_some() && class_is_used(program, true);
-    let decimal_used = decimal.is_some() && class_is_used(program, false);
+    let mut bigint = None;
+    let mut decimal = None;
+    let mut text = None;
+    let mut rounding = None;
+    for class in &program.classes {
+        if bigint.is_none() && matches!(class.native, Some(C::BigInt)) {
+            bigint = Some(class.id);
+        }
+        if decimal.is_none() && matches!(class.native, Some(C::BigDecimal)) {
+            decimal = Some(class.id);
+        }
+        if text.is_none() && matches!(class.native, Some(C::Text)) {
+            text = Some(class.id);
+        }
+        if rounding.is_none() && class.name == "RoundingMode" {
+            rounding = Some(class.id);
+        }
+    }
+    let bigint_used = bigint.is_some();
+    let decimal_used = decimal.is_some();
     if !bigint_used && !decimal_used { return String::new(); }
 
-    let text = program.classes.iter().find(|class| matches!(class.native, Some(C::Text)))
-        .expect("numeric prelude requires Text").id;
-    let rounding = decimal_used.then(|| program.classes.iter()
-        .find(|class| class.name == "RoundingMode").expect("BigDecimal API requires RoundingMode").id);
+    let text = text.expect("numeric prelude requires Text");
+    let rounding = decimal_used.then(|| rounding.expect("BigDecimal API requires RoundingMode"));
 
     let mut substitutions: Vec<(Cow<'static, str>, String)> = Vec::new();
     if let Some(bigint) = bigint {
