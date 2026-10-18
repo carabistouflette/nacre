@@ -9,8 +9,8 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   a full-template scan for every program function.
 - Share iterator-chain recognition between generic specialization and type checking,
   keeping fused-pipeline recognition consistent.
-- Build borrowed name indexes once for generic iterator inference instead of
-  rescanning class and function declarations for each inferred expression.
+- Build borrowed class, member, and function indexes once for generic iterator
+  inference instead of rescanning declarations for each inferred expression.
 - Group public wildcard-import declarations by module once per resolver pass
   instead of rescanning all declarations for every wildcard import.
 - Index trait-implementation class candidates by name, preserving the existing

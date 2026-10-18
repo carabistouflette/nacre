@@ -190,6 +190,39 @@ void main() {
 "#);
     assert_eq!(output.stdout, b"6\n");
 }
+
+#[test]
+fn iterator_inference_resolves_callback_fields_and_methods() {
+    let output = run(r#"
+class Doubler implements Mapper<int, int> {
+    public int apply(int value) { return value * 2; }
+}
+class Sum implements Folder<int, int> {
+    public int apply(int total, int value) { return total + value; }
+}
+class Pipeline {
+    private Doubler callback;
+    public Pipeline() { this.callback = new Doubler(); }
+    public borrow mut Doubler mapper() { return callback; }
+    public int sumByField() {
+        List<int> values = new List<int>();
+        values.add(2); values.add(3);
+        return values.iter().map(borrow mut this.callback).fold(0, new Sum());
+    }
+    public int sumByMethod() {
+        List<int> values = new List<int>();
+        values.add(2); values.add(3);
+        return values.iter().map(this.mapper()).fold(0, new Sum());
+    }
+}
+void main() {
+    Pipeline pipeline = new Pipeline();
+    println(pipeline.sumByField());
+    println(pipeline.sumByMethod());
+}
+"#);
+    assert_eq!(output.stdout, b"10\n10\n");
+}
 #[test]
 fn zip_enumerate_and_map_sources_use_the_shared_pair_representation() {
     let output = run(r#"

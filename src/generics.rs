@@ -615,20 +615,37 @@ fn builtin_template(expander: &Expander, name: &str, arity: usize) -> Option<Str
     }).min().map(str::to_owned)
 }
 
+struct ClassMembers<'a> {
+    fields: HashMap<&'a str, &'a a::Field>,
+    methods: HashMap<&'a str, &'a a::Function>,
+}
 struct NameIndex<'a> {
     class_names: HashMap<&'a str, &'a a::Class>,
     qualified_class_names: HashMap<&'a str, &'a a::Class>,
     function_names: HashMap<&'a str, &'a a::Function>,
+    members_by_class: HashMap<&'a str, ClassMembers<'a>>,
 }
 
 impl<'a> NameIndex<'a> {
     fn new(classes: &'a [a::Class], functions: &'a [a::Function]) -> Self {
         let mut class_names = HashMap::with_capacity(classes.len().saturating_mul(2));
         let mut qualified_classes = HashMap::with_capacity(classes.len());
+        let mut members_by_class = HashMap::with_capacity(classes.len());
         for class in classes {
             class_names.entry(class.qualified_name.as_str()).or_insert(class);
             class_names.entry(class.name.as_str()).or_insert(class);
             qualified_classes.entry(class.qualified_name.as_str()).or_insert(class);
+            members_by_class.entry(class.qualified_name.as_str()).or_insert_with(|| {
+                let mut fields = HashMap::with_capacity(class.fields.len());
+                for field in &class.fields {
+                    fields.entry(field.name.as_str()).or_insert(field);
+                }
+                let mut methods = HashMap::with_capacity(class.methods.len());
+                for method in &class.methods {
+                    methods.entry(method.name.as_str()).or_insert(method);
+                }
+                ClassMembers { fields, methods }
+            });
         }
 
         let mut function_names = HashMap::with_capacity(functions.len().saturating_mul(2));
@@ -637,7 +654,7 @@ impl<'a> NameIndex<'a> {
             function_names.entry(function.name.as_str()).or_insert(function);
         }
 
-        Self { class_names, qualified_class_names: qualified_classes, function_names }
+        Self { class_names, qualified_class_names: qualified_classes, function_names, members_by_class }
     }
 
     fn class(&self, name: &str) -> Option<&'a a::Class> {
@@ -650,6 +667,13 @@ impl<'a> NameIndex<'a> {
 
     fn function(&self, name: &str) -> Option<&'a a::Function> {
         self.function_names.get(name).copied()
+    }
+    fn field(&self, class: &a::Class, name: &str) -> Option<&'a a::Field> {
+        self.members_by_class.get(class.qualified_name.as_str())?.fields.get(name).copied()
+    }
+
+    fn method(&self, class: &a::Class, name: &str) -> Option<&'a a::Function> {
+        self.members_by_class.get(class.qualified_name.as_str())?.methods.get(name).copied()
     }
 }
 
@@ -684,14 +708,13 @@ fn inferred_expression_type(
     match &expr.kind {
         E::Var(name) => locals.get(name).cloned()
             .or_else(|| current_class.and_then(|class|
-                class.fields.iter().find(|field| field.name == *name).map(|field| field.ty.clone())))
+                names.field(class, name).map(|field| field.ty.clone())))
             .or_else(|| names.qualified_class(name)
                 .map(|class| Type::Named(class.qualified_name.clone()))),
         E::This => current_class.map(|class| Type::Named(class.qualified_name.clone())),
         E::Field { base, name } => {
             let base = inferred_expression_type(base, locals, current_class, names)?;
-            concrete_class_for_type(&base, names)?.fields.iter()
-                .find(|field| field.name == *name).map(|field| field.ty.clone())
+            names.field(concrete_class_for_type(&base, names)?, name).map(|field| field.ty.clone())
         }
         E::New { class, .. } | E::Variant { class, .. } => Some(Type::Named(class.clone())),
         E::Borrow { expr, .. } => inferred_expression_type(expr, locals, current_class, names),
@@ -700,12 +723,12 @@ fn inferred_expression_type(
             .map(|function| function.return_type.clone()),
         E::MethodCall { receiver, name, .. } => {
             let receiver = inferred_expression_type(receiver, locals, current_class, names)?;
-            concrete_class_for_type(&receiver, names)?.methods.iter()
-                .find(|method| method.name == *name).map(|method| method.return_type.clone())
+            names.method(concrete_class_for_type(&receiver, names)?, name)
+                .map(|method| method.return_type.clone())
         }
         E::StaticCall { class, name, .. } =>
-            concrete_class_for_type(&Type::Named(class.clone()), names)?.methods.iter()
-                .find(|method| method.name == *name).map(|method| method.return_type.clone()),
+            names.method(concrete_class_for_type(&Type::Named(class.clone()), names)?, name)
+                .map(|method| method.return_type.clone()),
         E::Char(_) => Some(Type::Char), E::Int(_) => Some(Type::Int), E::Long(_) => Some(Type::Long),
         E::Double(_) => Some(Type::Double), E::Unit => Some(Type::Unit), E::Boolean(_) => Some(Type::Boolean),
         E::String(_) => Some(Type::String),
@@ -764,8 +787,7 @@ fn iterator_item_type(
                 return Ok(None);
             };
             let Some(callback) = concrete_class_for_type(&callback_type, names) else { return Ok(None); };
-            Ok(callback.methods.iter().find(|method| method.name == "apply")
-                .map(|method| method.return_type.clone()))
+            Ok(names.method(callback, "apply").map(|method| method.return_type.clone()))
         }
         "filter" | "take" if args.len() == 1 => iterator_item_type(expander, receiver, locals, context, depth + 1),
         "enumerate" if args.is_empty() => {
@@ -840,7 +862,7 @@ fn bind_pattern_types<'ast>(
         a::PatternKind::Record { fields, .. } => {
             let Some(class) = concrete_class_for_type(ty, names) else { return; };
             for (name, pattern) in fields {
-                if let Some(field) = class.fields.iter().find(|field| field.name == *name) {
+                if let Some(field) = names.field(class, name) {
                     bind_pattern_types(pattern, &field.ty, locals, changes, names);
                 }
             }
