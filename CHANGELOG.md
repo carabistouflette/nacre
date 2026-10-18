@@ -10,6 +10,8 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   isolate concurrent cache writes and clean failed staging files.
 - Append generated C directly into the source-map buffer, avoiding a second full
   translation-unit allocation and copy for project compilation.
+- Reuse the parsed AST and typed IR in test/benchmark runners, avoiding repeated
+  parsing and type-checking before native compilation.
 - Keep Clang-only strict qualifier warnings on the direct-LLVM side of parity
   tests, leaving the GCC/C fixture invocation with supported compiler options.
 - Record matched JSON, string, binary-streaming, map, Sudoku, and Life benchmarks

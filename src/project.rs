@@ -47,9 +47,9 @@ impl SourceBundle {
 
     /// Loads source units for test harnesses, verifying if `main` exists at AST level.
     /// If no entry point exists, injects a synthetic `void main() {}` while strictly enforcing limits.
-    pub(crate) fn from_test_paths(paths: &[PathBuf]) -> Result<Self, String> {
+    pub(crate) fn from_test_paths(paths: &[PathBuf]) -> Result<(Self, ast::Program), String> {
         let mut bundle = Self::from_paths(paths)?;
-        let parsed = bundle.parse().map_err(|d| bundle.render(&d))?;
+        let mut parsed = bundle.parse().map_err(|d| bundle.render(&d))?;
         let has_main = parsed.functions.iter().any(|f| f.name == "main")
             || parsed.classes.iter().any(|c| c.methods.iter().any(|m| m.is_static && m.name == "main"));
         if !has_main {
@@ -69,8 +69,10 @@ impl SourceBundle {
                 end,
                 first_line: bundle.text.bytes().filter(|&b| b == b'\n').count() + 1,
             });
+            Self::append_parsed_unit(&mut parsed, &bundle.text[start..end], start)
+                .map_err(|d| bundle.render(&d))?;
         }
-        Ok(bundle)
+        Ok((bundle, parsed))
     }
 
     fn from_units(
@@ -103,31 +105,45 @@ impl SourceBundle {
         Some(&self.text[unit.start..unit.end])
     }
 
+    fn append_parsed_unit(
+        program: &mut ast::Program,
+        source: &str,
+        source_start: usize,
+    ) -> Result<(), Diagnostic> {
+        let mut tokens = crate::lexer::lex(source).map_err(|mut error| {
+            error.span.start += source_start;
+            error.span.end += source_start;
+            error
+        })?;
+        for token in &mut tokens {
+            token.span.start += source_start;
+            token.span.end += source_start;
+        }
+        let mut parsed = crate::parser::parse(tokens)?;
+        let unit_id = program.units.len();
+        for function in &mut parsed.functions { function.unit = unit_id; }
+        for class in &mut parsed.classes {
+            class.unit = unit_id;
+            for method in &mut class.methods { method.unit = unit_id; }
+            if let Some(constructor) = &mut class.constructor { constructor.unit = unit_id; }
+        }
+        for tr in &mut parsed.traits { tr.unit = unit_id; }
+        for imp in &mut parsed.impls { imp.unit = unit_id; }
+        program.units.append(&mut parsed.units);
+        program.functions.extend(parsed.functions);
+        program.classes.extend(parsed.classes);
+        program.traits.extend(parsed.traits);
+        program.impls.extend(parsed.impls);
+        Ok(())
+    }
     pub(crate) fn parse(&self) -> Result<ast::Program, Diagnostic> {
         let mut program = ast::Program { units: Vec::new(), functions: Vec::new(), classes: Vec::new(), traits: Vec::new(), impls: Vec::new() };
         for source_unit in &self.units {
-            let source = &self.text[source_unit.start..source_unit.end];
-            let mut tokens = crate::lexer::lex(source).map_err(|mut error| {
-                error.span.start += source_unit.start; error.span.end += source_unit.start; error
-            })?;
-            for token in &mut tokens {
-                token.span.start += source_unit.start; token.span.end += source_unit.start;
-            }
-            let mut parsed = crate::parser::parse(tokens)?;
-            let unit_id = program.units.len();
-            for function in &mut parsed.functions { function.unit = unit_id; }
-            for class in &mut parsed.classes {
-                class.unit = unit_id;
-                for method in &mut class.methods { method.unit = unit_id; }
-                if let Some(constructor) = &mut class.constructor { constructor.unit = unit_id; }
-            }
-            for tr in &mut parsed.traits { tr.unit = unit_id; }
-            for imp in &mut parsed.impls { imp.unit = unit_id; }
-            program.units.append(&mut parsed.units);
-            program.functions.extend(parsed.functions);
-            program.classes.extend(parsed.classes);
-            program.traits.extend(parsed.traits);
-            program.impls.extend(parsed.impls);
+            Self::append_parsed_unit(
+                &mut program,
+                &self.text[source_unit.start..source_unit.end],
+                source_unit.start,
+            )?;
         }
         Ok(program)
     }
@@ -135,8 +151,12 @@ impl SourceBundle {
     pub fn validate(&self) -> Result<(), Diagnostic> { self.typed().map(|_| ()) }
     pub fn compile_to_c(&self) -> Result<String, Diagnostic> {
         let typed = self.typed()?;
-        Ok(crate::codegen::generate_mapped(
-            &typed,
+        Ok(self.compile_to_c_with_typed(&typed))
+    }
+    /// Emit C from a typed program already checked against this bundle.
+    pub(crate) fn compile_to_c_with_typed(&self, typed: &crate::ir::Program) -> String {
+        crate::codegen::generate_mapped(
+            typed,
             &self.text,
             self.runtime_source_map(),
             |span| {
@@ -144,7 +164,7 @@ impl SourceBundle {
                 let (line, _) = crate::diagnostic::line_column(loc.source, loc.span.start);
                 (line, Some(loc.path.to_string_lossy().into_owned()))
             },
-        ))
+        )
     }
     pub fn emit_llvm_direct(&self) -> Result<String, Diagnostic> {
         let typed = self.typed()?;

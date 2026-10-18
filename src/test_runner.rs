@@ -16,8 +16,8 @@ pub fn run_tests(
     jemalloc: bool,
     json_output: bool,
 ) -> Result<i32, String> {
-    let bundle = SourceBundle::from_test_paths(sources)?;
-    let typed = bundle.typed().map_err(|d| bundle.render(&d))?;
+    let (bundle, parsed) = SourceBundle::from_test_paths(sources)?;
+    let typed = crate::check_parsed(parsed).map_err(|d| bundle.render(&d))?;
 
     // Discover test functions: void functions with no parameters starting with test
     let mut all_tests = Vec::new();
@@ -57,7 +57,7 @@ pub fn run_tests(
     }
 
     // Compile bundle to C
-    let mut c_source = bundle.compile_to_c().map_err(|d| bundle.render(&d))?;
+    let mut c_source = bundle.compile_to_c_with_typed(&typed);
     c_source.insert_str(0, "#define NACRE_MEMORY_STATS 1\n");
 
     // Replace the default main() with our test dispatcher main()
