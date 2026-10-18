@@ -125,6 +125,7 @@ fn missing_and_ambiguous_imports_are_rejected() {
 
     let wildcard = bundle(&[
         ("library.ncr", "module shared.tools; public class Utility {} public int answer() { return 42; }"),
+        ("unrelated.ncr", "module unrelated.tools; public class Utility {} public int answer() { return 0; }"),
         ("main.ncr", "module app.main; import shared.tools.*; void main() { Utility value = new Utility(); println(answer()); }"),
     ]);
     wildcard.validate().unwrap();

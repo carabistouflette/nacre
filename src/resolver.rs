@@ -376,6 +376,24 @@ impl Resolver {
     }
 
     fn build_imports(&mut self, program: &a::Program) -> Result<(), Diagnostic> {
+        let has_wildcard_imports = program.units.iter()
+            .any(|unit| unit.imports.iter().any(|import| import.wildcard));
+        let mut classes_by_module: HashMap<&str, Vec<&a::Class>> = HashMap::new();
+        let mut functions_by_module: HashMap<&str, Vec<&a::Function>> = HashMap::new();
+        if has_wildcard_imports {
+            for class in &program.classes {
+                if class.visibility == Visibility::Public {
+                    classes_by_module.entry(program.units[class.unit].module.as_str())
+                        .or_default().push(class);
+                }
+            }
+            for function in &program.functions {
+                if function.visibility == Visibility::Public {
+                    functions_by_module.entry(program.units[function.unit].module.as_str())
+                        .or_default().push(function);
+                }
+            }
+        }
         for (unit_id, unit) in program.units.iter().enumerate() {
             let mut seen = HashSet::new();
             for import in &unit.imports {
@@ -386,18 +404,34 @@ impl Resolver {
                     if !self.modules.contains(&import.path) {
                         return Err(Diagnostic::new(import.span, format!("module `{}` does not exist", import.path)));
                     }
-                    for class in &program.classes {
-                        let module = &self.unit_modules[class.unit];
-                        if module == &import.path && class.visibility == Visibility::Public {
-                            let binding = ImportBinding { qualified: qualify(module, &class.name), span: import.span };
-                            Self::add_import(&mut self.imports[unit_id].types, &class.name, binding, import.span, "type")?;
+                    if let Some(classes) = classes_by_module.get(import.path.as_str()) {
+                        for class in classes {
+                            let binding = ImportBinding {
+                                qualified: qualify(&import.path, &class.name),
+                                span: import.span,
+                            };
+                            Self::add_import(
+                                &mut self.imports[unit_id].types,
+                                &class.name,
+                                binding,
+                                import.span,
+                                "type",
+                            )?;
                         }
                     }
-                    for function in &program.functions {
-                        let module = &self.unit_modules[function.unit];
-                        if module == &import.path && function.visibility == Visibility::Public {
-                            let binding = ImportBinding { qualified: qualify(module, &function.name), span: import.span };
-                            Self::add_import(&mut self.imports[unit_id].functions, &function.name, binding, import.span, "function")?;
+                    if let Some(functions) = functions_by_module.get(import.path.as_str()) {
+                        for function in functions {
+                            let binding = ImportBinding {
+                                qualified: qualify(&import.path, &function.name),
+                                span: import.span,
+                            };
+                            Self::add_import(
+                                &mut self.imports[unit_id].functions,
+                                &function.name,
+                                binding,
+                                import.span,
+                                "function",
+                            )?;
                         }
                     }
                     continue;
