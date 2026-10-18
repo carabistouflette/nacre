@@ -27,6 +27,8 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   of scanning all functions for each distinct placeholder.
 - Resolve the shared Mutex<Unit> class once during concurrency drop-helper
   generation instead of rescanning all classes for every handle type.
+- Index class field names once, replacing repeated linear scans and per-pattern
+  metadata clones with constant-time lookups.
 
 - End local borrowed bindings and retained view loans after their last
   control-flow use. Backward liveness follows branch alternatives and loop

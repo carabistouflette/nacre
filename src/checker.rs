@@ -18,7 +18,8 @@ struct FieldInfo { name: String, ty: Type, visibility: Visibility }
 struct ClassInfo {
     native: Option<t::NativeClass>,
     static_native: bool,
-    name: String, fields: Vec<FieldInfo>, variants: Option<Vec<t::Variant>>,
+    name: String, fields: Vec<FieldInfo>, field_indices: HashMap<String, usize>,
+    variants: Option<Vec<t::Variant>>,
     result: Option<t::ResultLayout>,
     methods: HashMap<String, usize>, constructor: Option<usize>, has_borrow: bool,
     is_interface: bool, interface_methods: Vec<usize>, implementations: Vec<(usize, Vec<usize>)>,
@@ -418,7 +419,7 @@ fn check_inner(program: &a::Program, collect_references: bool) -> Result<(t::Pro
         let static_native = class.is_builtin && class.native.is_some() && !class.is_interface
             && class.constructor.is_none() && class.methods.iter().all(|method| method.is_static);
         tables.classes.push(ClassInfo { native: None, static_native, name: class.qualified_name.clone(), fields: Vec::new(),
-            variants: None, result: None, methods: HashMap::new(), constructor: None, has_borrow: false,
+            field_indices: HashMap::new(), variants: None, result: None, methods: HashMap::new(), constructor: None, has_borrow: false,
             is_interface: class.is_interface, interface_methods: Vec::new(), implementations: Vec::new() });
     }
     for (id, class) in program.classes.iter().enumerate() {
@@ -639,12 +640,12 @@ fn check_inner(program: &a::Program, collect_references: bool) -> Result<(t::Pro
             })
         } else { None };
         tables.classes[id].result = result;
-        let mut names = HashSet::new();
         for field in &class.fields {
             if field.name == "System" {
                 return Err(Diagnostic::new(field.span, "`System` is a reserved name"));
             }
-            if !names.insert(&field.name) {
+            let field_index = tables.classes[id].fields.len();
+            if tables.classes[id].field_indices.insert(field.name.clone(), field_index).is_some() {
                 return Err(Diagnostic::new(field.span, format!("field `{}` is already declared", field.name)));
             }
             let ty = tables.resolve_type(&field.ty, field.span)?;
@@ -1090,8 +1091,6 @@ impl Checker<'_> {
                 let is_enum = self.tables.classes[class].variants.is_some();
                 let is_native = self.tables.classes[class].native.is_some();
                 let is_interface = self.tables.classes[class].is_interface;
-                let info_fields: Vec<_> = self.tables.classes[class].fields.iter()
-                    .map(|field| (field.name.clone(), field.ty, field.visibility)).collect();
                 if base_type_name(name) != base_type_name(&info_name) {
                     return Err(Diagnostic::new(pattern.span, format!(
                         "record pattern `{name}` does not match value type `{info_name}`")));
@@ -1107,11 +1106,15 @@ impl Checker<'_> {
                         return Err(Diagnostic::new(field_pattern.span,
                             format!("field `{field_name}` appears more than once in the record pattern")));
                     }
-                    let field = info_fields.iter().position(|known| known.0 == *field_name)
+                    let field = self.tables.classes[class].field_indices.get(field_name).copied()
                         .ok_or_else(|| Diagnostic::new(field_pattern.span, format!(
                             "unknown field `{field_name}` in `{info_name}`")))?;
-                    self.accessible(info_fields[field].2, class, field_pattern.span, "field")?;
-                    let field_type = projected_record_type(expected, info_fields[field].1);
+                    let (visibility, field_type) = {
+                        let info_field = &self.tables.classes[class].fields[field];
+                        (info_field.visibility, info_field.ty)
+                    };
+                    self.accessible(visibility, class, field_pattern.span, "field")?;
+                    let field_type = projected_record_type(expected, field_type);
                     checked_fields.push((field, self.checked_pattern(field_pattern, field_type)?));
                 }
                 (t::PatternKind::Record { class, fields: checked_fields }, None)
@@ -2041,7 +2044,7 @@ impl Checker<'_> {
     fn field_place(&self, base: Place, name: &str, span: Span, write: bool) -> Result<Place, Diagnostic> {
         let Some(class_id) = base.ty.object_class() else { return Err(Diagnostic::new(span, "cannot access a field on a value that is not an object")); };
         let class = &self.tables.classes[class_id];
-        let field = class.fields.iter().position(|f| f.name == name)
+        let field = class.field_indices.get(name).copied()
             .ok_or_else(|| Diagnostic::new(span, format!("field `{name}` is unknown in `{}`", class.name)))?;
         let info = &class.fields[field];
         self.accessible(info.visibility, class_id, span, "field")?;
@@ -2055,7 +2058,7 @@ impl Checker<'_> {
             a::ExprKind::Var(name) => {
                 if let Some(id) = self.lookup(name) {
                     Ok(Place { kind: PlaceKind::Var(id), ty: self.variables[id].ty })
-                } else if self.owner.is_some_and(|c| self.tables.classes[c].fields.iter().any(|f| f.name == *name)) {
+                } else if self.owner.is_some_and(|c| self.tables.classes[c].field_indices.contains_key(name)) {
                     let base = self.this_place(expr.span)?;
                     self.field_place(base, name, expr.span, write)
                 } else { Err(Diagnostic::new(expr.span, format!("variable `{name}` is not declared"))) }
@@ -2652,7 +2655,7 @@ impl Checker<'_> {
             E::Field { base, name } if name == "out" && matches!(&base.kind, E::Var(s) if s == "System"));
         if system_println { return self.builtin(args, span); }
         let static_class = match &receiver.kind {
-            E::Var(n) if self.lookup(n).is_none() && !self.owner.is_some_and(|c| self.tables.classes[c].fields.iter().any(|f| &f.name == n)) => self.tables.names.get(n).copied(),
+            E::Var(n) if self.lookup(n).is_none() && !self.owner.is_some_and(|c| self.tables.classes[c].field_indices.contains_key(n)) => self.tables.names.get(n).copied(),
             _ => None,
         };
         let (class, receiver) = if let Some(class) = static_class {

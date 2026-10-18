@@ -76,6 +76,26 @@ void main() {
 }
 
 #[test]
+fn record_pattern_fields_keep_declaration_indices() {
+    assert_program(r#"
+class Point {
+    int x;
+    int y;
+    Point(int x, int y) { this.x = x; this.y = y; }
+}
+int readY(Point point) {
+    match (point) {
+        Point { y: value } { return value; }
+    }
+}
+void main() {
+    Point point = new Point(3, 5);
+    println(point.y + readY(point));
+}
+"#, b"10\n");
+}
+
+#[test]
 fn nested_pair_patterns_destructure_both_levels() {
     let source = r#"
 int sum(Pair<int, Pair<int, int>> pair) {
