@@ -571,6 +571,42 @@ void main() {
 }
 
 #[test]
+fn sqlite_trigger_case_end_after_prior_statement_is_not_command_end() {
+    let output = run_memory(r#"
+boolean countIs(Option<long> value, long expected) {
+    match (value) { Some(actual) { return actual == expected; } None { return false; } }
+}
+Result<Unit, Text> exercise() {
+    Text memory = new Text(":memory:");
+    Database database = Database.open(memory)?;
+    Text auditTable = new Text("CREATE TABLE audit(payload TEXT)");
+    Text inputTable = new Text("CREATE TABLE input(value INTEGER)");
+    database.execute(auditTable)?;
+    database.execute(inputTable)?;
+    Text trigger = new Text("CREATE TRIGGER audit_input AFTER INSERT ON input BEGIN INSERT INTO audit VALUES('first'); INSERT INTO audit SELECT CASE WHEN NEW.value = 33 THEN 'case' ELSE 'other' END; END;");
+    database.execute(trigger)?;
+    Text insert = new Text("INSERT INTO input VALUES(33)");
+    database.execute(insert)?;
+    Text query = new Text("SELECT COUNT(*) FROM audit WHERE payload IN ('first', 'case')");
+    SqlStatement statement = database.prepare(query)?;
+    println(statement.step()?);
+    println(countIs(statement.columnLong(0)?, 2L));
+    statement.step()?;
+    statement.close()?;
+    database.close()?;
+    return new Result<Unit, Text>.Ok(());
+}
+void main() {
+    match (exercise()) {
+        Ok(unit) {}
+        Err(error) { error.print(); }
+    }
+}
+"#);
+    assert_eq!(output.stdout, b"true\ntrue\n");
+}
+
+#[test]
 fn sqlite_statements_interleave_and_finalize_in_any_owner_order() {
     let source = r#"
 boolean optionLongEquals(Option<long> option, long expected) {
