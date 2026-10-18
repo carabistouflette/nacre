@@ -421,9 +421,9 @@ impl Server {
         };
         // SourceBundle owns the text; keep only the file metadata for publishing.
         let source_list = files.iter_mut().map(|file| {
-            (file.path.to_str().expect("URI paths are UTF-8").to_owned(), std::mem::take(&mut file.text))
+            (file.path.clone(), std::mem::take(&mut file.text))
         }).collect();
-        let bundle = match SourceBundle::from_sources(source_list) {
+        let bundle = match SourceBundle::from_path_sources(source_list) {
             Ok(bundle) => bundle,
             Err(message) => {
                 self.log(output, 2, &format!("Nacre validation unavailable for {}: {message}", scope.root.display()))?;
@@ -527,7 +527,7 @@ impl Server {
             let uri = if let Some(document) = document {
                 document.uri.clone()
             } else {
-                path_to_uri(&path).ok_or_else(|| format!("{} is not a UTF-8 file path", path.display()))?
+                path_to_uri(&path).ok_or_else(|| format!("{} cannot be represented as a local file URI", path.display()))?
             };
             let source_bytes = text.len();
             files.push(SourceFile {
@@ -542,12 +542,8 @@ impl Server {
     }
     fn load_scope_bundle(&self, scope: &ProjectScope) -> Result<SourceBundle, String> {
         let files = self.load_scope_files(scope)?;
-        let mut sources = Vec::with_capacity(files.len());
-        for file in files {
-            let path = file.path.to_str().expect("URI paths are UTF-8").to_owned();
-            sources.push((path, file.text));
-        }
-        SourceBundle::from_sources(sources)
+        let sources = files.into_iter().map(|file| (file.path, file.text)).collect();
+        SourceBundle::from_path_sources(sources)
     }
 
     fn scope_for(&self, path: &Path) -> ProjectScope {

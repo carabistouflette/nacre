@@ -124,9 +124,15 @@ impl Drop for Client {
 
 fn uri(path: &Path) -> String {
     let mut result = String::from("file://");
-    let path = path.to_str().unwrap();
-    if !path.starts_with('/') { result.push('/'); }
-    for byte in path.bytes() {
+    #[cfg(unix)]
+    let path = {
+        use std::os::unix::ffi::OsStrExt;
+        path.as_os_str().as_bytes()
+    };
+    #[cfg(not(unix))]
+    let path = path.to_str().unwrap().as_bytes();
+    if !path.starts_with(b"/") { result.push('/'); }
+    for &byte in path {
         if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~' | b'/' | b':') {
             result.push(byte as char);
         } else {
@@ -547,6 +553,52 @@ fn lsp_does_not_resolve_through_intermediate_symlinked_source_roots() {
 
     client.send(json!({ "jsonrpc": "2.0", "id": 3, "method": "shutdown" }));
     assert!(client.response(3)["result"].is_null());
+    client.send(json!({ "jsonrpc": "2.0", "method": "exit" }));
+    client.finish();
+}
+#[cfg(unix)]
+#[test]
+fn lsp_opens_non_utf8_source_paths_and_publishes_diagnostics() {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+
+    let temp = TempDir::new();
+    let source_dir = temp.0.join("src");
+    fs::create_dir(&source_dir).unwrap();
+    fs::write(temp.0.join("nacre.json"), r#"{"sources":["src"]}"#).unwrap();
+
+    let main_path = source_dir.join("Main.ncr");
+    let main_source = "void main() {}\n";
+    fs::write(&main_path, main_source).unwrap();
+    let invalid_path = source_dir.join(OsString::from_vec(b"Invalid-\xff.ncr".to_vec()));
+    let invalid_source = "void broken() { int value = true; }\n";
+    fs::write(&invalid_path, invalid_source).unwrap();
+    let invalid_uri = uri(&invalid_path);
+    assert!(invalid_uri.ends_with("Invalid-%FF.ncr"), "{invalid_uri}");
+
+    let mut client = Client::spawn();
+    client.send(json!({
+        "jsonrpc": "2.0", "id": 1, "method": "initialize",
+        "params": { "rootUri": uri(&temp.0), "capabilities": {} }
+    }));
+    client.response(1);
+    client.send(json!({ "jsonrpc": "2.0", "method": "initialized", "params": {} }));
+    client.send(json!({
+        "jsonrpc": "2.0", "method": "textDocument/didOpen",
+        "params": { "textDocument": { "uri": uri(&main_path), "languageId": "nacre", "version": 1, "text": main_source } }
+    }));
+    client.send(json!({
+        "jsonrpc": "2.0", "method": "textDocument/didOpen",
+        "params": { "textDocument": { "uri": invalid_uri.clone(), "languageId": "nacre", "version": 1, "text": invalid_source } }
+    }));
+
+    let published = client.diagnostics(&invalid_uri);
+    let diagnostics = published["diagnostics"].as_array().expect("diagnostics array");
+    assert!(!diagnostics.is_empty(), "{published}");
+    assert_eq!(diagnostics[0]["severity"].as_u64(), Some(1));
+
+    client.send(json!({ "jsonrpc": "2.0", "id": 2, "method": "shutdown" }));
+    assert!(client.response(2)["result"].is_null());
     client.send(json!({ "jsonrpc": "2.0", "method": "exit" }));
     client.finish();
 }

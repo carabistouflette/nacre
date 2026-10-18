@@ -1,6 +1,8 @@
 //! Local file-URI encoding and decoding with lexical path normalization.
 //! This module does not resolve symlinks or enforce workspace/source policies.
 use std::path::{Component, Path, PathBuf};
+#[cfg(unix)]
+use std::os::unix::ffi::{OsStrExt, OsStringExt};
 
 const MAX_URI_BYTES: usize = 16 * 1024;
 
@@ -28,18 +30,23 @@ pub(super) fn uri_to_path(uri: &str) -> Option<PathBuf> {
         }
     }
     if bytes.contains(&0) { return None; }
-    let decoded = String::from_utf8(bytes).ok()?;
-    let path = Path::new(&decoded);
+    #[cfg(unix)]
+    let path = PathBuf::from(std::ffi::OsString::from_vec(bytes));
+    #[cfg(not(unix))]
+    let path = PathBuf::from(String::from_utf8(bytes).ok()?);
     if !path.is_absolute() { return None; }
-    Some(normalize_path(path))
+    Some(normalize_path(&path))
 }
 
 pub(super) fn path_to_uri(path: &Path) -> Option<String> {
     let path = normalize_path(path);
-    let path = path.to_str()?;
+    #[cfg(unix)]
+    let path = path.as_os_str().as_bytes();
+    #[cfg(not(unix))]
+    let path = path.to_str()?.as_bytes();
     let mut uri = String::from("file://");
-    if !path.starts_with('/') { uri.push('/'); }
-    for byte in path.bytes() {
+    if !path.starts_with(b"/") { uri.push('/'); }
+    for &byte in path {
         if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~' | b'/' | b':') {
             uri.push(byte as char);
         } else {
@@ -96,12 +103,20 @@ mod tests {
     }
 
     #[test]
+    fn round_trips_non_utf8_path_bytes() {
+        let path = PathBuf::from(std::ffi::OsString::from_vec(b"/tmp/name-\xff.ncr".to_vec()));
+        let uri = "file:///tmp/name-%FF.ncr";
+        assert_eq!(path_to_uri(&path).as_deref(), Some(uri));
+        assert_eq!(uri_to_path(uri), Some(path));
+    }
+
+    #[test]
     fn rejects_nonlocal_ambiguous_and_malformed_uris() {
         for uri in [
             "https://localhost/tmp/a.ncr", "file://remote/tmp/a.ncr",
             "file://localhost", "file:///tmp/a.ncr?query", "file:///tmp/a.ncr#fragment",
             "file:///tmp/%", "file:///tmp/%A", "file:///tmp/%GG",
-            "file:///tmp/%00.ncr", "file:///tmp/%FF.ncr",
+            "file:///tmp/%00.ncr",
         ] {
             assert_eq!(uri_to_path(uri), None, "{uri}");
         }
