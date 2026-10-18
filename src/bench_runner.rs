@@ -2,7 +2,6 @@
 //! Discovers parameterless void functions matching `bench_*` or `bench*` and measures throughput.
 
 use std::path::PathBuf;
-use std::process::Command;
 use std::time::Instant;
 use crate::ir::Type;
 use crate::native;
@@ -137,10 +136,9 @@ static void ncr_run_bench_{id}(const char *name) {{
         if !json_output {
             print!("test {name} ... ");
         }
-        let output = Command::new(program.path()).arg(name).output()
-            .map_err(|e| format!("failed to execute benchmark process: {e}"))?;
-
-        if output.status.success() {
+        let output = program.output_limited(&[name.as_str()], native::OUTPUT_CAPTURE_LIMIT_BYTES, native::StdoutCapture::Capture)?;
+        let truncation_note = output.truncation_note(native::OUTPUT_CAPTURE_LIMIT_BYTES);
+        if output.status.success() && truncation_note.is_none() {
             let stdout = String::from_utf8_lossy(&output.stdout);
             let mut reported = false;
             for line in stdout.lines() {
@@ -176,12 +174,32 @@ static void ncr_run_bench_{id}(const char *name) {{
             }
             passed += 1;
         } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
             if json_output {
-                bench_results.push(serde_json::json!({ "name": name, "status": "failed" }));
+                if let Some(note) = &truncation_note {
+                    let mut failure = stderr.into_owned();
+                    if !failure.is_empty() {
+                        failure.push('\n');
+                    }
+                    failure.push_str(note);
+                    bench_results.push(serde_json::json!({
+                        "name": name,
+                        "status": "failed",
+                        "failure": failure
+                    }));
+                } else {
+                    bench_results.push(serde_json::json!({ "name": name, "status": "failed" }));
+                }
             } else {
+                let mut failure = stderr.into_owned();
+                if let Some(note) = truncation_note {
+                    if !failure.is_empty() {
+                        failure.push('\n');
+                    }
+                    failure.push_str(&note);
+                }
                 println!("FAILED");
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                for line in stderr.lines() {
+                for line in failure.lines() {
                     eprintln!("    {line}");
                 }
             }

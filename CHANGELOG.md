@@ -42,6 +42,8 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 
 - Run Clippy with warnings denied across all Rust targets and the fuzzing feature in CI.
 
+- Discard test stdout and bound test/benchmark child output capture.
+
 - Align Tree-sitter, Zed, and VS Code syntax support with trait/impl declarations,
   bounded type parameters, and async/await; capture Zed's named shift-right token.
 

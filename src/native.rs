@@ -4,8 +4,9 @@ use std::ffi::OsString;
 use std::fs;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitStatus, Output};
+use std::process::{Command, ExitStatus, Output, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::thread::{self, JoinHandle};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 mod dependencies;
@@ -13,6 +14,7 @@ pub mod toolchain;
 use dependencies::NativeLibraries;
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(0);
+pub(crate) const OUTPUT_CAPTURE_LIMIT_BYTES: usize = 64 * 1024;
 const RUNTIME_C_FLAGS: &[&str] = &[
     "-std=c11",
     "-pthread",
@@ -66,11 +68,157 @@ impl NativeProgram {
     pub fn output(&self) -> Result<Output, String> {
         Command::new(&self.executable).output().map_err(|e| format!("failed to run program: {e}"))
     }
+    pub(crate) fn output_limited(
+        &self,
+        args: &[&str],
+        max_bytes: usize,
+        stdout_capture: StdoutCapture,
+    ) -> Result<LimitedOutput, String> {
+        let mut command = Command::new(&self.executable);
+        command.args(args);
+        capture_limited_output(command, max_bytes, stdout_capture)
+    }
     pub fn save(&self, output: &Path) -> Result<(), String> {
         create_parent(output)?;
         fs::copy(&self.executable, output).map_err(|e| format!("failed to write {}: {e}", output.display()))?;
         Ok(())
     }
+}
+#[derive(Clone, Copy)]
+pub(crate) enum StdoutCapture {
+    Discard,
+    Capture,
+}
+pub(crate) struct LimitedOutput {
+    pub(crate) status: ExitStatus,
+    pub(crate) stdout: Vec<u8>,
+    pub(crate) stderr: Vec<u8>,
+    stdout_truncated: bool,
+    stderr_truncated: bool,
+}
+
+impl LimitedOutput {
+    pub(crate) fn truncation_note(&self, max_bytes: usize) -> Option<String> {
+        let streams = match (self.stdout_truncated, self.stderr_truncated) {
+            (false, false) => return None,
+            (true, false) => "stdout",
+            (false, true) => "stderr",
+            (true, true) => "stdout and stderr",
+        };
+        Some(format!(
+            "child output capture exceeded {max_bytes} bytes per stream ({streams}); excess bytes were discarded"
+        ))
+    }
+}
+
+struct CappedStream {
+    bytes: Vec<u8>,
+    truncated: bool,
+}
+
+fn read_capped<R: Read>(mut reader: R, max_bytes: usize) -> std::io::Result<CappedStream> {
+    let mut bytes = Vec::new();
+    let mut truncated = false;
+    let mut chunk = [0u8; 8192];
+    loop {
+        let count = match reader.read(&mut chunk) {
+            Ok(0) => break,
+            Ok(count) => count,
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(error) => return Err(error),
+        };
+        let copied = count.min(max_bytes.saturating_sub(bytes.len()));
+        bytes.extend_from_slice(&chunk[..copied]);
+        truncated |= copied < count;
+    }
+    Ok(CappedStream { bytes, truncated })
+}
+
+fn spawn_capped_reader<R: Read + Send + 'static>(
+    reader: R,
+    stream: &'static str,
+    max_bytes: usize,
+) -> std::io::Result<JoinHandle<std::io::Result<CappedStream>>> {
+    thread::Builder::new()
+        .name(format!("nacre-{stream}-capture"))
+        .spawn(move || read_capped(reader, max_bytes))
+}
+
+fn join_capped_reader(
+    reader: JoinHandle<std::io::Result<CappedStream>>,
+    stream: &str,
+) -> Result<CappedStream, String> {
+    reader.join()
+        .map_err(|_| format!("{stream} capture thread panicked"))?
+        .map_err(|error| format!("failed to read child {stream}: {error}"))
+}
+
+fn capture_limited_output(
+    mut command: Command,
+    max_bytes: usize,
+    stdout_capture: StdoutCapture,
+) -> Result<LimitedOutput, String> {
+    let mut child = command
+        .stdin(Stdio::null())
+        .stdout(match stdout_capture {
+            StdoutCapture::Capture => Stdio::piped(),
+            StdoutCapture::Discard => Stdio::null(),
+        })
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|error| format!("failed to execute program: {error}"))?;
+    let stdout = match stdout_capture {
+        StdoutCapture::Capture => Some(child.stdout.take().expect("stdout is piped")),
+        StdoutCapture::Discard => None,
+    };
+    let stderr = child.stderr.take().expect("stderr is piped");
+    let stdout_reader = if let Some(stdout) = stdout {
+        match spawn_capped_reader(stdout, "stdout", max_bytes) {
+            Ok(reader) => Some(reader),
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(format!("failed to start stdout capture: {error}"));
+            }
+        }
+    } else {
+        None
+    };
+    let stderr_reader = match spawn_capped_reader(stderr, "stderr", max_bytes) {
+        Ok(reader) => reader,
+        Err(error) => {
+            let _ = child.kill();
+            let _ = child.wait();
+            if let Some(reader) = stdout_reader {
+                let _ = reader.join();
+            }
+            return Err(format!("failed to start stderr capture: {error}"));
+        }
+    };
+    let status = match child.wait() {
+        Ok(status) => status,
+        Err(error) => {
+            let _ = child.kill();
+            let _ = child.wait();
+            if let Some(reader) = stdout_reader {
+                let _ = reader.join();
+            }
+            let _ = stderr_reader.join();
+            return Err(format!("failed to wait for program: {error}"));
+        }
+    };
+    let stdout = match stdout_reader {
+        Some(reader) => join_capped_reader(reader, "stdout")?,
+        None => CappedStream { bytes: Vec::new(), truncated: false },
+    };
+    let stderr = join_capped_reader(stderr_reader, "stderr")?;
+    Ok(LimitedOutput {
+        status,
+        stdout: stdout.bytes,
+        stderr: stderr.bytes,
+        stdout_truncated: stdout.truncated,
+        stderr_truncated: stderr.truncated,
+    })
 }
 
 pub fn find_c_compiler() -> Result<OsString, String> {

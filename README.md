@@ -317,6 +317,10 @@ nacre add <path> [--manifest-path <file>]
 nacre doctor [--direct] [--zip]
 nacre lsp
 ```
+`nacre test` discards child stdout and captures at most 64 KiB of stderr. The
+`nacre bench` runner captures at most 64 KiB per stream; it drains and discards
+excess. Failed tests report truncated stderr; benchmarks exceeding the cap fail.
+
 Commands accept multiple sources or recursively collected directories, resolving
 their module namespaces together as one whole-program compilation. `init` and
 `new` create projects; `init` is an alias. Existing outputs are replaced except

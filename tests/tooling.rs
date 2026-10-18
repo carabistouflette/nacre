@@ -125,6 +125,26 @@ void test_failed() {
     assert_eq!(failed["status"], "failed");
     assert!(failed["failure"].as_str().unwrap().contains("json failure detail"));
     assert!(payload["duration_seconds"].as_f64().is_some());
+    let large_message = "x".repeat(256 * 1024);
+    let large_test = temp_dir.join("large_output.ncr");
+    fs::write(
+        &large_test,
+        format!(
+            "void test_large_failure() {{ println(\"{large_message}\"); assert(false, \"{large_message}\"); }}\n"
+        ),
+    ).unwrap();
+    let large_output = std::process::Command::new(env!("CARGO_BIN_EXE_nacre"))
+        .args(["test", "--json"])
+        .arg(&large_test)
+        .output()
+        .unwrap();
+    assert_eq!(large_output.status.code(), Some(1));
+    let large_payload: serde_json::Value = serde_json::from_slice(&large_output.stdout).unwrap();
+    let large_failure = large_payload["tests"][0]["failure"].as_str().unwrap();
+    assert!(large_failure.contains(
+        "child output capture exceeded 65536 bytes per stream (stderr); excess bytes were discarded"
+    ));
+    assert!(large_failure.len() <= 64 * 1024 + 160);
 
     let empty_output = std::process::Command::new(env!("CARGO_BIN_EXE_nacre"))
         .args(["test", "--json"])
@@ -163,6 +183,23 @@ void bench_simple_math() {
     assert_eq!(exit_code, 0);
     let exit_code_json = nacre::bench_runner::run_benchmarks(&[bench_file], None, false, false, false, true).unwrap();
     assert_eq!(exit_code_json, 0);
+    let noisy_bench = temp_dir.join("noisy_bench.ncr");
+    let noisy_output = "x".repeat(16 * 1024);
+    fs::write(
+        &noisy_bench,
+        format!("void bench_chatty() {{ println(\"{noisy_output}\"); }}\n"),
+    ).unwrap();
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_nacre"))
+        .args(["bench", "--json"])
+        .arg(&noisy_bench)
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    let payload: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(payload["failed"], 1);
+    assert!(payload["benchmarks"][0]["failure"].as_str().unwrap().contains(
+        "child output capture exceeded 65536 bytes per stream (stdout); excess bytes were discarded"
+    ));
 
     let _ = fs::remove_dir_all(&temp_dir);
 }
