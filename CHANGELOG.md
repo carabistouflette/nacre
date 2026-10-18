@@ -3,6 +3,8 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Avoid temporary ownership-state copies on identity control-flow nodes; only
+  state-changing transfers clone an output buffer.
 - Avoid copying complete local type maps at every nested block during iterator
   specialization discovery; track and restore only bindings introduced in each
   scope.
