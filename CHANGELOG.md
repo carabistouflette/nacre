@@ -3,6 +3,9 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Use zlib's bound as the initial growth target for short deflate/gzip inputs,
+  avoiding the fixed 16 KiB reservation when the bound is smaller.
+
 - Use `ncr_reallocate` for ByteBuffer, console input, and readLink growth,
   replacing manual allocation-copy-free cycles.
 
