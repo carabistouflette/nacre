@@ -291,16 +291,12 @@ impl Server {
         let Some(uri) = document.get("uri").and_then(Value::as_str) else { return Ok(json!([])); };
         let Some(path) = uri_to_path(uri) else { return Ok(json!([])); };
         let scope = self.scope_for(&path);
-        let mut files = match self.load_scope_files(&scope) {
-            Ok(files) => files,
+        let bundle = match self.load_scope_bundle(&scope) {
+            Ok(bundle) => bundle,
             Err(_) => return Ok(json!([])),
         };
-        let file_source = files.iter().find(|f| f.path == path).map(|f| f.text.clone()).unwrap_or_default();
-        let source_list = files.iter_mut().map(|file| {
-            (file.path.to_str().expect("URI paths are UTF-8").to_owned(), std::mem::take(&mut file.text))
-        }).collect();
-        let Ok(bundle) = SourceBundle::from_sources(source_list) else { return Ok(json!([])); };
-        let symbols = queries::document_symbols(&bundle, &path, &file_source);
+        let Some(file_source) = bundle.source_for_path(&path) else { return Ok(json!([])); };
+        let symbols = queries::document_symbols(&bundle, &path, file_source);
         Ok(json!(symbols))
     }
 
@@ -314,16 +310,12 @@ impl Server {
             pos.get("character").and_then(Value::as_u64),
         ) else { return Ok(Value::Null); };
         let scope = self.scope_for(&path);
-        let mut files = match self.load_scope_files(&scope) {
-            Ok(files) => files,
+        let bundle = match self.load_scope_bundle(&scope) {
+            Ok(bundle) => bundle,
             Err(_) => return Ok(Value::Null),
         };
-        let file_source = files.iter().find(|f| f.path == path).map(|f| f.text.clone()).unwrap_or_default();
-        let source_list = files.iter_mut().map(|file| {
-            (file.path.to_str().expect("URI paths are UTF-8").to_owned(), std::mem::take(&mut file.text))
-        }).collect();
-        let Ok(bundle) = SourceBundle::from_sources(source_list) else { return Ok(Value::Null); };
-        let hover_value = queries::hover(&bundle, &path, &file_source, line as usize, character as usize);
+        let Some(file_source) = bundle.source_for_path(&path) else { return Ok(Value::Null); };
+        let hover_value = queries::hover(&bundle, &path, file_source, line as usize, character as usize);
         Ok(hover_value.unwrap_or(Value::Null))
     }
 
@@ -337,18 +329,13 @@ impl Server {
             pos.get("character").and_then(Value::as_u64),
         ) else { return Ok(Value::Null); };
         let scope = self.scope_for(&path);
-        let mut files = match self.load_scope_files(&scope) {
-            Ok(files) => files,
+        let bundle = match self.load_scope_bundle(&scope) {
+            Ok(bundle) => bundle,
             Err(_) => return Ok(Value::Null),
         };
-        let file_source = files.iter().find(|f| f.path == path).map(|f| f.text.clone()).unwrap_or_default();
-        let file_map: HashMap<PathBuf, String> = files.iter().map(|f| (f.path.clone(), f.uri.clone())).collect();
-        let source_list = files.iter_mut().map(|file| {
-            (file.path.to_str().expect("URI paths are UTF-8").to_owned(), std::mem::take(&mut file.text))
-        }).collect();
-        let Ok(bundle) = SourceBundle::from_sources(source_list) else { return Ok(Value::Null); };
-        let def = queries::definition(&bundle, &path, &file_source, line as usize, character as usize, |p| {
-            file_map.get(p).cloned().or_else(|| path_to_uri(p))
+        let Some(file_source) = bundle.source_for_path(&path) else { return Ok(Value::Null); };
+        let def = queries::definition(&bundle, &path, file_source, line as usize, character as usize, |p| {
+            self.documents.get(p).map(|document| document.uri.clone()).or_else(|| path_to_uri(p))
         });
         Ok(def.unwrap_or(Value::Null))
     }
@@ -539,6 +526,15 @@ impl Server {
         }
         if files.is_empty() { return Err("no Nacre source files in project scope".to_owned()); }
         Ok(files)
+    }
+    fn load_scope_bundle(&self, scope: &ProjectScope) -> Result<SourceBundle, String> {
+        let files = self.load_scope_files(scope)?;
+        let mut sources = Vec::with_capacity(files.len());
+        for file in files {
+            let path = file.path.to_str().expect("URI paths are UTF-8").to_owned();
+            sources.push((path, file.text));
+        }
+        SourceBundle::from_sources(sources)
     }
 
     fn scope_for(&self, path: &Path) -> ProjectScope {

@@ -331,12 +331,13 @@ instruction extensions (`-march=native`); `--lto` enables link-time optimization
 (`-flto`); `--jemalloc` links jemalloc (`-ljemalloc`). These options and the
 selected optimization also apply to `--direct` native builds.
 
-The default C `run`/`build` path caches completed executables, keyed by generated
-C source, compiler, optimization level, and flags. The cache defaults to
-`$XDG_CACHE_HOME/nacre` (or `$HOME/.cache/nacre`); `NACRE_CACHE_DIR` overrides
-the location and `NACRE_NO_CACHE` disables caching. PGO builds bypass the cache.
-Direct native builds use a separate runtime-bitcode cache only; they do not cache
-the per-program user LLVM module or final executable.
+The default C `run`/`build` path caches completed executables. Its key includes
+generated C, compiler command/version/target, flags, and resolved header paths
+and contents. If dependency scanning fails, the build safely bypasses the cache.
+The cache defaults to `$XDG_CACHE_HOME/nacre` (or `$HOME/.cache/nacre`);
+`NACRE_CACHE_DIR` overrides the location and `NACRE_NO_CACHE` disables caching.
+PGO builds bypass the cache. Direct native builds use a separate runtime-bitcode
+cache only; their user LLVM module and final executable are not cached.
 
 `emit-llvm` uses Clang's C frontend by default. With `--direct`, it emits the
 typed-IR user functions and `main` as LLVM; `--memory-stats` is unavailable for

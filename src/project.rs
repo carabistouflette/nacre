@@ -97,6 +97,11 @@ impl SourceBundle {
     pub fn paths(&self) -> impl Iterator<Item = &Path> { self.units.iter().map(|u| u.path.as_path()) }
     pub fn source_count(&self) -> usize { self.units.len() }
     pub fn combined_source(&self) -> &str { &self.text }
+    /// Borrow the text for an exact source path in this bundle.
+    pub(crate) fn source_for_path(&self, path: &Path) -> Option<&str> {
+        let unit = self.units.iter().find(|unit| unit.path.as_path() == path)?;
+        Some(&self.text[unit.start..unit.end])
+    }
 
     pub(crate) fn parse(&self) -> Result<ast::Program, Diagnostic> {
         let mut program = ast::Program { units: Vec::new(), functions: Vec::new(), classes: Vec::new(), traits: Vec::new(), impls: Vec::new() };

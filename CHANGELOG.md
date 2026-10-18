@@ -3,6 +3,13 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Share LSP query source loading across document-symbol, hover, and definition
+  requests; borrow the active document slice from its source bundle rather than
+  cloning it for each request.
+- Key cached C executables by compiler version/target and included header contents;
+  isolate concurrent cache writes and clean failed staging files.
+- Keep Clang-only strict qualifier warnings on the direct-LLVM side of parity
+  tests, leaving the GCC/C fixture invocation with supported compiler options.
 - Record matched JSON, string, binary-streaming, map, Sudoku, and Life benchmarks
   against Rust, including cache-disabled native build times, RSS/allocation
   samples, and controlled optimization counters with explicit measurement limits.

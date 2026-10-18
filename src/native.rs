@@ -2,7 +2,7 @@
 use std::env;
 use std::ffi::OsString;
 use std::fs;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Output};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -74,19 +74,34 @@ impl NativeProgram {
 }
 
 pub fn find_c_compiler() -> Result<OsString, String> {
+    find_c_compiler_with_version().map(|(compiler, _)| compiler)
+}
+
+fn find_c_compiler_with_version() -> Result<(OsString, Vec<u8>), String> {
     for variable in ["NACRE_CC", "CC"] {
         if let Some(cc) = env::var_os(variable) {
-            let available = Command::new(&cc).arg("--version").output().is_ok_and(|o| o.status.success());
-            if available { return Ok(cc); }
+            if let Some(version) = c_compiler_version(&cc) {
+                return Ok((cc, version));
+            }
             return Err(format!("{variable}={cc:?}: C compiler not found. Set it to a compiler executable only, without options (for example, CC=clang)."));
         }
     }
     for cc in ["cc", "clang", "gcc"] {
-        if Command::new(cc).arg("--version").output().is_ok_and(|o| o.status.success()) {
-            return Ok(OsString::from(cc));
+        let compiler = OsString::from(cc);
+        if let Some(version) = c_compiler_version(&compiler) {
+            return Ok((compiler, version));
         }
     }
     Err("no C compiler found. Install GCC or Clang with C headers and a linker, then check `cc --version`. `check` and `emit-c` do not require a C compiler.".to_owned())
+}
+
+fn c_compiler_version(compiler: &std::ffi::OsStr) -> Option<Vec<u8>> {
+    let output = Command::new(compiler).arg("--version").output().ok()?;
+    if !output.status.success() { return None; }
+    let mut version = Vec::new();
+    append_identity_part(&mut version, &output.stdout);
+    append_identity_part(&mut version, &output.stderr);
+    Some(version)
 }
 
 pub fn compile_c(source: &str) -> Result<NativeProgram, String> {
@@ -120,38 +135,177 @@ fn cache_dir() -> Option<PathBuf> {
         .map(|p| p.join("nacre"))
 }
 
-fn compute_cache_key(compiler: &std::ffi::OsStr, optimization: &str, flags: &[&str], source: &str) -> String {
-    let mut h: u128 = 0xcbf29ce484222325u64 as u128;
-    let prime: u128 = 0x100000001b3u64 as u128;
-    for b in compiler.as_encoded_bytes() {
-        h = (h ^ (*b as u128)).wrapping_mul(prime);
-    }
-    for b in optimization.as_bytes() {
-        h = (h ^ (*b as u128)).wrapping_mul(prime);
-    }
-    for flag in flags {
-        for b in flag.as_bytes() {
-            h = (h ^ (*b as u128)).wrapping_mul(prime);
+fn append_identity_part(identity: &mut Vec<u8>, part: &[u8]) {
+    identity.extend_from_slice(&(part.len() as u64).to_le_bytes());
+    identity.extend_from_slice(part);
+}
+
+fn cache_compiler_identity(compiler: &std::ffi::OsStr, version: &[u8]) -> Vec<u8> {
+    let mut identity = Vec::new();
+    append_identity_part(&mut identity, version);
+    if Path::new(compiler).components().count() == 1
+        && let Some(path) = env::var_os("PATH") {
+            append_identity_part(&mut identity, path.as_encoded_bytes());
         }
-        h = (h ^ 0xff).wrapping_mul(prime);
+    if let Ok(target) = Command::new(compiler).arg("-dumpmachine").output()
+        && target.status.success() {
+            append_identity_part(&mut identity, &target.stdout);
+            append_identity_part(&mut identity, &target.stderr);
+        }
+    identity
+}
+
+fn update_cache_hash(hash: &mut u128, bytes: &[u8]) {
+    const PRIME: u128 = 0x100000001b3;
+    for byte in bytes {
+        *hash = (*hash ^ u128::from(*byte)).wrapping_mul(PRIME);
     }
-    for b in source.as_bytes() {
-        h = (h ^ (*b as u128)).wrapping_mul(prime);
+}
+
+fn hash_cache_part(hash: &mut u128, part: &[u8]) {
+    update_cache_hash(hash, &(part.len() as u128).to_le_bytes());
+    update_cache_hash(hash, part);
+}
+
+fn compute_cache_key(
+    compiler: &std::ffi::OsStr,
+    compiler_identity: &[u8],
+    optimization: &str,
+    flags: &[&str],
+    source: &str,
+    dependencies: u128,
+) -> String {
+    let mut hash = 0xcbf29ce484222325u64 as u128;
+    hash_cache_part(&mut hash, compiler.as_encoded_bytes());
+    hash_cache_part(&mut hash, compiler_identity);
+    hash_cache_part(&mut hash, optimization.as_bytes());
+    hash_cache_part(&mut hash, &(flags.len() as u128).to_le_bytes());
+    for flag in flags { hash_cache_part(&mut hash, flag.as_bytes()); }
+    hash_cache_part(&mut hash, source.as_bytes());
+    hash_cache_part(&mut hash, &dependencies.to_le_bytes());
+    format!("{hash:032x}")
+}
+
+fn parse_make_dependencies(output: &[u8]) -> Option<Vec<PathBuf>> {
+    let dependencies = std::str::from_utf8(output).ok()?.strip_prefix("nacre:")?.as_bytes();
+    let mut paths = Vec::new();
+    let mut path = Vec::new();
+    let mut index = 0;
+    while index < dependencies.len() {
+        let byte = dependencies[index];
+        if byte == b'\\' {
+            index += 1;
+            let escaped = *dependencies.get(index)?;
+            if escaped == b'\n' {
+                index += 1;
+                continue;
+            }
+            if escaped == b'\r' && dependencies.get(index + 1) == Some(&b'\n') {
+                index += 2;
+                continue;
+            }
+            path.push(escaped);
+            index += 1;
+        } else if byte.is_ascii_whitespace() {
+            if !path.is_empty() {
+                paths.push(PathBuf::from(String::from_utf8(std::mem::take(&mut path)).ok()?));
+            }
+            index += 1;
+        } else {
+            path.push(byte);
+            index += 1;
+        }
     }
-    format!("{h:032x}")
+    if !path.is_empty() {
+        paths.push(PathBuf::from(String::from_utf8(path).ok()?));
+    }
+    (!paths.is_empty()).then_some(paths)
+}
+
+fn c_compiler_command(
+    compiler: &std::ffi::OsStr,
+    optimization: &str,
+    libraries: &NativeLibraries,
+    flags: &[&str],
+) -> Command {
+    let mut command = Command::new(compiler);
+    command.arg(optimization)
+        .args(["-std=c11", "-pthread", "-g", "-fno-math-errno", "-Wall", "-Wextra", "-pedantic", "-Wno-unused-function", "-Wno-unused-variable", "-Wno-unused-parameter", "-Wno-unused-but-set-variable"])
+        .args(if cfg!(target_os = "linux") { &["-ffunction-sections", "-fdata-sections"][..] } else { &[][..] })
+        .args(libraries.header_flags())
+        .args(flags);
+    command
+}
+
+fn dependency_cache_fingerprint(
+    compiler: &std::ffi::OsStr,
+    optimization: &str,
+    flags: &[&str],
+    libraries: &NativeLibraries,
+    source_path: &Path,
+) -> Option<u128> {
+    let output = c_compiler_command(compiler, optimization, libraries, flags)
+        .args(["-M", "-MT", "nacre", "-MF", "-"])
+        .arg(source_path)
+        .output().ok()?;
+    if !output.status.success() { return None; }
+    let source_path = source_path.canonicalize().ok()?;
+    let mut paths = parse_make_dependencies(&output.stdout)?;
+    paths.sort();
+    paths.dedup();
+    let mut fingerprint = 0xcbf29ce484222325u64 as u128;
+    for path in paths {
+        let canonical = path.canonicalize().ok()?;
+        if canonical == source_path { continue; }
+        let metadata = fs::metadata(&canonical).ok()?;
+        let mut file = fs::File::open(&canonical).ok()?;
+        hash_cache_part(&mut fingerprint, path.as_os_str().as_encoded_bytes());
+        hash_cache_part(&mut fingerprint, &metadata.len().to_le_bytes());
+        let mut buffer = [0; 8192];
+        loop {
+            let bytes_read = file.read(&mut buffer).ok()?;
+            if bytes_read == 0 { break; }
+            update_cache_hash(&mut fingerprint, &buffer[..bytes_read]);
+        }
+    }
+    Some(fingerprint)
 }
 
 /// Compile at an explicitly selected level; flags are trusted separate arguments.
 pub fn compile_c_optimized(source: &str, optimization: &str, flags: &[&str]) -> Result<NativeProgram, String> {
     check_optimization(optimization)?;
-    let compiler = find_c_compiler()?;
-    let directory = TempDir::new()?;
-    let executable = directory.0.join(if cfg!(windows) { "program.exe" } else { "program" });
-
     let profile_directory = pgo_directory(flags);
     // Profiles are mutable external inputs, not part of the executable cache key.
     let cache = profile_directory.is_none().then(cache_dir).flatten();
-    let cache_entry = cache.as_ref().map(|c| c.join(compute_cache_key(&compiler, optimization, flags, source)));
+    let (compiler, compiler_version) = find_c_compiler_with_version()?;
+    let compiler_identity = cache.as_ref().map(|_| cache_compiler_identity(&compiler, &compiler_version));
+    let directory = TempDir::new()?;
+    let executable = directory.0.join(if cfg!(windows) { "program.exe" } else { "program" });
+
+    let c_path = directory.0.join("program.c");
+    let written = if profile_directory.is_some() {
+        fs::File::create(&c_path).and_then(|mut file| {
+            // GCC includes source locations in its profile checksums.
+            file.write_all(b"#line 1 \"program.c\"\n")?;
+            file.write_all(source.as_bytes())
+        })
+    } else {
+        fs::write(&c_path, source)
+    };
+    written.map_err(|e| format!("failed to write temporary C source: {e}"))?;
+    let libraries = NativeLibraries::from_source(source);
+    let cache_entry = match (&cache, &compiler_identity) {
+        (Some(cache), Some(identity)) => dependency_cache_fingerprint(
+            &compiler,
+            optimization,
+            flags,
+            &libraries,
+            &c_path,
+        ).map(|dependencies| cache.join(compute_cache_key(
+            &compiler, identity, optimization, flags, source, dependencies,
+        ))),
+        _ => None,
+    };
     if let Some(cached_path) = &cache_entry
         && cached_path.is_file()
     {
@@ -166,25 +320,7 @@ pub fn compile_c_optimized(source: &str, optimization: &str, flags: &[&str]) -> 
         }
     }
 
-    let c_path = directory.0.join("program.c");
-    let written = if profile_directory.is_some() {
-        fs::File::create(&c_path).and_then(|mut file| {
-            // GCC includes source locations in its profile checksums.
-            file.write_all(b"#line 1 \"program.c\"\n")?;
-            file.write_all(source.as_bytes())
-        })
-    } else {
-        fs::write(&c_path, source)
-    };
-    written.map_err(|e| format!("failed to write temporary C source: {e}"))?;
-    let libraries = NativeLibraries::from_source(source);
-    let mut command = Command::new(&compiler);
-    command
-        .arg(optimization)
-        .args(["-std=c11", "-pthread", "-g", "-fno-math-errno", "-Wall", "-Wextra", "-pedantic", "-Wno-unused-function", "-Wno-unused-variable", "-Wno-unused-parameter", "-Wno-unused-but-set-variable"])
-        .args(if cfg!(target_os = "linux") { &["-ffunction-sections", "-fdata-sections"][..] } else { &[][..] })
-        .args(libraries.header_flags())
-        .args(flags);
+    let mut command = c_compiler_command(&compiler, optimization, &libraries, flags);
     if let Some(profile_directory) = profile_directory {
         // Keep GCC's auxiliary identity stable across separate temporary builds.
         command.arg("-dumpdir").arg(Path::new(profile_directory).join("nacre-"))
@@ -203,13 +339,16 @@ pub fn compile_c_optimized(source: &str, optimization: &str, flags: &[&str]) -> 
         if let Some(parent) = cached_path.parent() {
             let _ = fs::create_dir_all(parent);
         }
+        let serial = NEXT_ID.fetch_add(1, Ordering::Relaxed);
         let tmp_cached = cached_path.with_file_name(format!(
-            "{}.tmp.{}",
+            "{}.tmp.{}.{}",
             cached_path.file_name().unwrap_or_default().to_string_lossy(),
-            std::process::id()
+            std::process::id(),
+            serial,
         ));
-        if fs::copy(&executable, &tmp_cached).is_ok() {
-            let _ = fs::rename(&tmp_cached, cached_path);
+        if fs::copy(&executable, &tmp_cached).is_err()
+            || fs::rename(&tmp_cached, cached_path).is_err() {
+                let _ = fs::remove_file(&tmp_cached);
         }
     }
     Ok(NativeProgram { executable, _directory: directory })

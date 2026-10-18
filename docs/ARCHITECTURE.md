@@ -288,6 +288,10 @@ on representative inputs before rebuilding the same sources with
 generated-C source identity across temporary directories, including the source
 locations used in profile checksums. Profile builds bypass executable and
 runtime-bitcode caches because training data is mutable external input.
+The default C executable cache keys generated source, compiler command/version/
+target, flags, and resolved dependency paths and contents. If dependency scanning
+cannot establish those inputs, that build bypasses the cache. Per-call staging
+paths isolate concurrent cache writes; failed writes remove their temporary files.
 
 
 The private `native/dependencies.rs` module owns the fixed catalog for exact
@@ -414,6 +418,9 @@ exhaustive proof. See [VALIDATION.md](VALIDATION.md) for the recorded evidence.
 compiler, on bounded snapshots of disk sources and open buffers. Frontend byte
 positions are converted to LSP UTF-16 positions; notes become related
 information.
+Document-symbol, hover, and definition requests share one scope loader and borrow
+the requested file's source slice from the bundle, avoiding an extra text copy.
+
 
 The private `lsp/diagnostics.rs` module owns diagnostic JSON, related information,
 and UTF-16 ranges. It receives a borrowed path-to-URI query rather than server

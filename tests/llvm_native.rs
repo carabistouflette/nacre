@@ -32,14 +32,23 @@ fn compile_c(source: &str, flags: &[&str]) -> NativeProgram {
 }
 
 fn assert_direct_matches_c(source: &str, expected: &[u8], flags: &[&str]) -> Output {
-    let c_output = compile_c(source, flags).output().unwrap();
+    assert_direct_matches_c_with_flags(source, expected, flags, flags)
+}
+
+fn assert_direct_matches_c_with_flags(
+    source: &str,
+    expected: &[u8],
+    c_flags: &[&str],
+    direct_flags: &[&str],
+) -> Output {
+    let c_output = compile_c(source, c_flags).output().unwrap();
     assert!(c_output.status.success(), "C backend failed: {}", String::from_utf8_lossy(&c_output.stderr));
     assert_eq!(c_output.stdout, expected);
 
-    let direct_output = compile_llvm_direct_with_flags(source, flags).unwrap().output().unwrap();
+    let direct_output = compile_llvm_direct_with_flags(source, direct_flags).unwrap().output().unwrap();
     assert!(direct_output.status.success(), "direct LLVM backend failed: {}", String::from_utf8_lossy(&direct_output.stderr));
     assert_eq!(direct_output.stdout, c_output.stdout);
-    if flags.contains(&"-DNACRE_MEMORY_STATS") {
+    if direct_flags.contains(&"-DNACRE_MEMORY_STATS") {
         assert_balanced_memory(&direct_output);
     }
     direct_output
@@ -265,14 +274,15 @@ void main() {
     suffix.print();
 }
 "##;
-    assert_direct_matches_c(
-        source,
-        b"go!#?\ndisabled\n!\n",
-        &[
-            "-O0", "-DNACRE_MEMORY_STATS", "-fsanitize=address,undefined",
-            "-fno-omit-frame-pointer", "-Werror=incompatible-pointer-types-discards-qualifiers",
-        ],
-    );
+    let c_flags = [
+        "-O0", "-DNACRE_MEMORY_STATS", "-fsanitize=address,undefined",
+        "-fno-omit-frame-pointer",
+    ];
+    let direct_flags = [
+        "-O0", "-DNACRE_MEMORY_STATS", "-fsanitize=address,undefined",
+        "-fno-omit-frame-pointer", "-Werror=incompatible-pointer-types-discards-qualifiers",
+    ];
+    assert_direct_matches_c_with_flags(source, b"go!#?\ndisabled\n!\n", &c_flags, &direct_flags);
 }
 
 #[test]
