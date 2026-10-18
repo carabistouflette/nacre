@@ -764,9 +764,39 @@ void main() {
                                                 && received.get(2L) == (byte)66);
                                         }
                                     }
-                                    match (socket.receiveFrom(received, 2L, 20L)) {
-                                        Err(error) { println("udp-deadline"); }
-                                        Ok(datagram) { println("udp-unexpected"); }
+                                    match (socket.sendTo(received, 0L, 1L, local, 0L)) {
+                                        Err(error) { println("bounded-send-error"); }
+                                        Ok(count) {
+                                            if (count == 1L) { println("bounded-send-ok"); }
+                                            else { println("bounded-send-error"); }
+                                        }
+                                    }
+                                    match (ByteBuffer.withCapacity(0L)) {
+                                        Err(error) { println("bounded-buffer-error"); }
+                                        Ok(bounded) {
+                                            match (socket.receiveFrom(bounded, 1048576L, 1000L)) {
+                                                Err(error) { println("bounded-receive-error"); }
+                                                Ok(datagram) {
+                                                    if (datagram.bytesRead() == 1L && !datagram.truncated()
+                                                        && bounded.length() == 1L && bounded.capacity() <= 131072L
+                                                        && bounded.get(0L) == (byte)90) {
+                                                        println("udp-read-bounded");
+                                                    } else { println("udp-read-unbounded"); }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    match (ByteBuffer.withCapacity(0L)) {
+                                        Err(error) { println("timeout-buffer-error"); }
+                                        Ok(timeout_buffer) {
+                                            match (socket.receiveFrom(timeout_buffer, 1048576L, 20L)) {
+                                                Err(error) { println("udp-deadline"); }
+                                                Ok(datagram) { println("udp-unexpected"); }
+                                            }
+                                            if (timeout_buffer.capacity() == 0L) {
+                                                println("udp-timeout-unallocated");
+                                            } else { println("udp-timeout-allocation"); }
+                                        }
                                     }
                                     match (socket.close()) {
                                         Ok(unit) { println("udp-closed"); }
@@ -800,7 +830,8 @@ void main() {
     for marker in [
         "udp-send-negative-rejected\nudp-receive-negative-rejected\n",
         "true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n",
-        "udp-deadline\nudp-closed\nclosed-udp-address-error\nclosed-udp-send-error\nclosed-udp-receive-error\n",
+        "bounded-send-ok\nudp-read-bounded\n",
+        "udp-deadline\nudp-timeout-unallocated\nudp-closed\nclosed-udp-address-error\nclosed-udp-send-error\nclosed-udp-receive-error\n",
     ] {
         assert!(stdout.contains(marker), "missing {marker:?} in {stdout}");
     }

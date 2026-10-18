@@ -55,6 +55,9 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 - Bound each TCP `readSome` call to 64 KiB and defer buffer growth until the
   socket is ready; timeouts no longer allocate from the full request size.
 
+- Bound `UdpSocket.receiveFrom` to 64 KiB and defer buffer growth until a
+  datagram is ready; timeouts no longer reserve the caller's full `maxBytes`.
+
 - Align Tree-sitter, Zed, and VS Code syntax support with trait/impl declarations,
   bounded type parameters, and async/await; capture Zed's named shift-right token.
 

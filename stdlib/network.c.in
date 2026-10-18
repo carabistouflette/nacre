@@ -14,6 +14,7 @@
     size_t ncr_network_length = ncr_network_format_gai(ncr_network_message, sizeof(ncr_network_message), operation, code, system_errno); \
     return ncr_result_error_ ## result_id(ncr_network_message, ncr_network_length, line, column); \
 } while (0)
+#define NCR_NETWORK_RECEIVE_CHUNK_MAX 65536U
 
 static size_t ncr_network_format_error(char *message, size_t capacity, const char *operation, int failure) {
     int written = snprintf(message, capacity, "%s failed (errno=%d)", operation, failure);
@@ -421,7 +422,7 @@ static ncr_obj_@LONG_RESULT_TYPE@ @TCP_STREAM_READ_SOME@(ncr_obj_@TCP_STREAM_ID@
         NCR_NETWORK_RETURN_ERROR(@LONG_RESULT_ID@, "TcpStream.readSome buffer length", EOVERFLOW, ncr_line, ncr_column);
     }
     /* Limit each receive and wait for readiness before growing the destination. */
-    if (requested > 65536U) { requested = 65536U; }
+    if (requested > NCR_NETWORK_RECEIVE_CHUNK_MAX) { requested = NCR_NETWORK_RECEIVE_CHUNK_MAX; }
     bool finite = false;
     int64_t deadline = 0;
     int failure = 0;
@@ -620,17 +621,20 @@ static ncr_obj_@DATAGRAM_RESULT_TYPE@ @UDP_SOCKET_RECEIVE_FROM@(ncr_obj_@UDP_SOC
         || requested > SIZE_MAX - ncr_v_@UDP_RECEIVE_DESTINATION_ID@->length) {
         NCR_NETWORK_RETURN_ERROR(@UDP_RECEIVE_RESULT_ID@, "UdpSocket.receiveFrom buffer length", EOVERFLOW, ncr_line, ncr_column);
     }
+    /* Bound packet copies and reserve only after the socket is ready. */
+    if (requested > NCR_NETWORK_RECEIVE_CHUNK_MAX) { requested = NCR_NETWORK_RECEIVE_CHUNK_MAX; }
     bool finite = false;
     int64_t deadline = 0;
     int failure = 0;
     if (!ncr_network_deadline(ncr_v_@UDP_RECEIVE_TIMEOUT_ID@, &finite, &deadline, &failure)) {
         NCR_NETWORK_RETURN_ERROR(@UDP_RECEIVE_RESULT_ID@, "UdpSocket.receiveFrom timeout", failure, ncr_line, ncr_column);
     }
-    @BUFFER_RESERVE@(ncr_v_@UDP_RECEIVE_DESTINATION_ID@, ncr_v_@UDP_RECEIVE_DESTINATION_ID@->length + requested, ncr_line, ncr_column);
     for (;;) {
         int ready = ncr_network_poll(p->fd, POLLIN, finite, deadline, &failure);
         if (ready == 0) { NCR_NETWORK_RETURN_TIMEOUT(@UDP_RECEIVE_RESULT_ID@, "UdpSocket.receiveFrom", ncr_line, ncr_column); }
         if (ready < 0) { NCR_NETWORK_RETURN_ERROR(@UDP_RECEIVE_RESULT_ID@, "UdpSocket.receiveFrom poll", failure, ncr_line, ncr_column); }
+        @BUFFER_RESERVE@(ncr_v_@UDP_RECEIVE_DESTINATION_ID@,
+            ncr_v_@UDP_RECEIVE_DESTINATION_ID@->length + requested, ncr_line, ncr_column);
         struct sockaddr_storage source_storage;
         memset(&source_storage, 0, sizeof(source_storage));
         struct iovec vector = {
@@ -699,3 +703,4 @@ static bool @DATAGRAM_TRUNCATED@(ncr_obj_@DATAGRAM_ID@ *p, size_t ncr_line, size
 #undef NCR_NETWORK_RETURN_ERROR
 #undef NCR_NETWORK_RETURN_TIMEOUT
 #undef NCR_NETWORK_RETURN_GAI
+#undef NCR_NETWORK_RECEIVE_CHUNK_MAX

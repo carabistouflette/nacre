@@ -2413,9 +2413,10 @@ one end-to-end deadline; `Err` can follow bytes already sent. A peer close repor
 an error rather than raising process-wide SIGPIPE.
 
 `UdpSocket.sendTo` sends one datagram; it does not retry or split a message and a
-short send is an error. `receiveFrom` consumes one datagram, appends at most
-`maxBytes`, and reports the number of bytes copied, its owned source address, and
-whether it was truncated. A zero-length datagram is a successful `Datagram` with
+short send is an error. `receiveFrom` consumes one datagram and appends at most
+`maxBytes` (capped at 64 KiB per call). It reports the byte count, owned source
+address, and truncation status. A zero-length datagram is a successful
+`Datagram` with
 `bytesRead() == 0`, not stream EOF. Oversized datagrams are consumed once and
 reported as truncated. Both UDP methods use the same timeout convention as TCP;
 timeout is `Err`. No automatic datagram retry or network service discovery is
