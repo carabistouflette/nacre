@@ -3,6 +3,9 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Resolve DateTime wall times across the full exact-millisecond range with checked
+  Gregorian arithmetic and ICU's local time-zone offset rules.
+
 - Use zlib's bound as the initial growth target for short deflate/gzip inputs,
   avoiding the fixed 16 KiB reservation when the bound is smaller.
 

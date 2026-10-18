@@ -1900,15 +1900,16 @@ the day to each target month), then calendar days while retaining local wall
 time. It returns `Err` if the result is invalid, falls in a daylight-saving gap
 or overlap, or exceeds ICU's exact-millisecond range.
 
-ICU represents time as a double millisecond value. Calendar conversions accept
-only epoch milliseconds from -9007199254740991 through 9007199254740991; the
-offset-adjusted local milliseconds must also lie inside that range before civil
-fields or formatted text are accepted. `durationMillis` is instead a fixed
-signed `end - start` calculation, independent of calendar days, and returns
-`Err` on signed overflow. `DateFields.offsetSeconds` is the total zone offset
-from UTC; `isDst` reports ICU's daylight-time status. `DateFields` is an owned
-affine result with primitive fields and readonly accessors; only the native
-temporal factories construct it.
+ICU represents time as a double millisecond value. Calendar epochs and their
+offset-adjusted local milliseconds must both lie from -9007199254740991 through
+9007199254740991. `fromParts` and `addCalendar` use checked proleptic-Gregorian
+millisecond arithmetic with ICU's zone offsets, so field-to-instant conversion
+covers that exact range without ICU's narrower calendar-field conversion limit.
+`durationMillis` is a fixed signed `end - start` calculation, independent of
+calendar days, and returns `Err` on signed overflow. `DateFields.offsetSeconds` is
+the total zone offset from UTC; `isDst` reports ICU's daylight-time status.
+`DateFields` is an owned affine result with primitive fields and readonly
+accessors; only the native temporal factories construct it.
 
 `zone` must be a known ICU system time-zone ID (for example `UTC` or
 `America/New_York`); custom offsets, unknown IDs, and embedded NUL are rejected.

@@ -143,6 +143,63 @@ void main() {
 }
 
 #[test]
+fn datetime_wall_construction_covers_extreme_years_and_dst_rules() {
+    let output = execute(
+        r#"
+Result<Unit, Text> check() {
+    Text utc = new Text("UTC");
+    Text newYork = new Text("America/New_York");
+    long maximum = 9007199254740991L;
+    long minimum = -9007199254740991L;
+
+    DateFields positiveEndpoint = DateTime.parts(maximum, utc)?;
+    long positiveRoundtrip = DateTime.fromParts(positiveEndpoint.year(), positiveEndpoint.month(), positiveEndpoint.day(), positiveEndpoint.hour(), positiveEndpoint.minute(), positiveEndpoint.second(), positiveEndpoint.millisecond(), utc, false)?;
+    println(positiveRoundtrip == maximum);
+
+    DateFields negativeEndpoint = DateTime.parts(minimum, utc)?;
+    long negativeRoundtrip = DateTime.fromParts(negativeEndpoint.year(), negativeEndpoint.month(), negativeEndpoint.day(), negativeEndpoint.hour(), negativeEndpoint.minute(), negativeEndpoint.second(), negativeEndpoint.millisecond(), utc, false)?;
+    println(negativeRoundtrip == minimum);
+
+    long distantFuture = DateTime.fromParts(145000, 1, 1, 0, 0, 0, 0, utc, false)?;
+    DateFields futureFields = DateTime.parts(distantFuture, utc)?;
+    println(futureFields.year());
+    long nextYear = DateTime.addCalendar(distantFuture, 1, 0, 0, utc)?;
+    DateFields nextYearFields = DateTime.parts(nextYear, utc)?;
+    println(nextYearFields.year());
+
+    long distantPast = DateTime.fromParts(-141000, 1, 1, 0, 0, 0, 0, utc, false)?;
+    DateFields pastFields = DateTime.parts(distantPast, utc)?;
+    println(pastFields.year());
+    long previousYear = DateTime.addCalendar(distantPast, -1, 0, 0, utc)?;
+    DateFields previousYearFields = DateTime.parts(previousYear, utc)?;
+    println(previousYearFields.year());
+
+    match (DateTime.fromParts(145000, 3, 9, 2, 30, 0, 0, newYork, false)) {
+        Ok(epoch) { println("FAR_GAP_ACCEPTED"); }
+        Err(error) { println("FAR_GAP_REJECTED"); }
+    }
+    long earlier = DateTime.fromParts(145000, 11, 2, 1, 30, 0, 0, newYork, false)?;
+    long later = DateTime.fromParts(145000, 11, 2, 1, 30, 0, 0, newYork, true)?;
+    println(later - earlier);
+
+    return new Result<Unit, Text>.Ok(());
+}
+void main() {
+    match (check()) {
+        Ok(unit) {}
+        Err(error) { error.print(); }
+    }
+}
+"#,
+    );
+    assert_native_success(&output);
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        "true\ntrue\n145000\n145001\n-141000\n-141001\nFAR_GAP_REJECTED\n3600000\n"
+    );
+}
+
+#[test]
 fn datetime_dst_gaps_overlap_choice_and_calendar_day_duration_are_explicit() {
     let output = execute(
         r#"
