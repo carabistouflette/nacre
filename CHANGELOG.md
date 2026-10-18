@@ -32,6 +32,8 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 
 - Reject non-ASCII LSP header bytes before parsing Content-Length.
 - Publish a source diagnostic when an open LSP document exceeds the source limit.
+- Treat CR, LF, and CRLF consistently as source and LSP line endings, including
+  single-line comments and UTF-16 position mapping.
 - Resolve unprefixed XSLT `element-available()` QNames in no namespace, regardless
   of the stylesheet's default namespace.
 

@@ -48,6 +48,11 @@ fn accepts_comments_and_crlf() {
 }
 
 #[test]
+fn accepts_comments_and_bare_cr_line_endings() {
+    validate("void main() { // hello\rprintln(2);\r}").unwrap();
+}
+
+#[test]
 fn generation_is_deterministic() {
     let source = include_str!("../examples/algorithms/fibonacci.ncr");
     assert_eq!(compile_to_c(source).unwrap(), compile_to_c(source).unwrap());

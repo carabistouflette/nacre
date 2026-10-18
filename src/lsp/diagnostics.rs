@@ -65,37 +65,62 @@ pub(super) fn range_json(source: &str, start: usize, end: usize) -> Value {
     })
 }
 
+fn line_ending_end(bytes: &[u8], offset: usize) -> Option<usize> {
+    match bytes.get(offset).copied() {
+        Some(b'\r') if bytes.get(offset + 1) == Some(&b'\n') => Some(offset + 2),
+        Some(b'\r' | b'\n') => Some(offset + 1),
+        _ => None,
+    }
+}
+
 pub(super) fn offset_position(source: &str, offset: usize) -> (usize, usize, usize) {
     let offset = char_boundary(source, offset);
-    let prefix = &source[..offset];
-    let line = prefix.bytes().filter(|byte| *byte == b'\n').count();
-    let line_start = prefix.rfind('\n').map_or(0, |index| index + 1);
-    let line_prefix = prefix[line_start..].strip_suffix('\r').unwrap_or(&prefix[line_start..]);
-    (line, line_prefix.encode_utf16().count(), offset)
+    let bytes = source.as_bytes();
+    let mut line = 0;
+    let mut line_start = 0;
+    let mut index = 0;
+    while index < offset {
+        if let Some(next_line_start) = line_ending_end(bytes, index) {
+            if next_line_start > offset { break; }
+            line += 1;
+            line_start = next_line_start;
+            index = next_line_start;
+        } else {
+            index += 1;
+        }
+    }
+    let mut line_end = line_start;
+    while line_end < bytes.len() && line_ending_end(bytes, line_end).is_none() {
+        line_end += 1;
+    }
+    let prefix_end = offset.min(line_end);
+    (line, source[line_start..prefix_end].encode_utf16().count(), offset)
 }
 
 pub(super) fn position_to_offset(source: &str, line: usize, character: usize) -> usize {
+    let bytes = source.as_bytes();
     let mut current_line = 0;
     let mut line_start = 0;
-    for (index, byte) in source.bytes().enumerate() {
-        if current_line == line {
-            break;
-        }
-        if byte == b'\n' {
+    let mut index = 0;
+    while current_line < line {
+        if index >= bytes.len() { return source.len(); }
+        if let Some(next_line_start) = line_ending_end(bytes, index) {
             current_line += 1;
-            line_start = index + 1;
+            line_start = next_line_start;
+            index = next_line_start;
+        } else {
+            index += 1;
         }
     }
-    if current_line < line {
-        return source.len();
+    let mut line_end = line_start;
+    while line_end < bytes.len() && line_ending_end(bytes, line_end).is_none() {
+        line_end += 1;
     }
-    let line_slice = &source[line_start..];
+    let line_slice = &source[line_start..line_end];
     let mut utf16_count = 0;
     let mut byte_offset = 0;
     for ch in line_slice.chars() {
-        if ch == '\n' || ch == '\r' || utf16_count >= character {
-            break;
-        }
+        if utf16_count >= character { break; }
         utf16_count += ch.len_utf16();
         byte_offset += ch.len_utf8();
     }
@@ -127,6 +152,16 @@ pub(super) fn word_at_offset(source: &str, offset: usize) -> Option<(&str, usize
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn positions_recognize_lf_crlf_and_cr() {
+        for (source, line_start) in [("a\nb", 2), ("a\r\nb", 3), ("a\rb", 2)] {
+            assert_eq!(position_to_offset(source, 1, 0), line_start);
+            assert_eq!(position_to_offset(source, 1, 1), line_start + 1);
+            assert_eq!(offset_position(source, line_start), (1, 0, line_start));
+        }
+        assert_eq!(offset_position("a\rb", 1), (0, 1, 1));
+    }
 
     #[test]
     fn ranges_use_utf16_and_clamp_utf8_crlf_and_reversed_offsets() {
