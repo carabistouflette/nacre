@@ -109,7 +109,8 @@ pub fn format_source(source: &str) -> Result<String, String> {
 
     let mut indent: usize = 0;
     let mut at_line_start = true;
-    let mut in_for_header = 0;
+    let mut paren_depth: usize = 0;
+    let mut for_header_paren_depth: Option<usize> = None;
     let mut prev_token: Option<&Token> = None;
 
     let mut i = 0;
@@ -205,7 +206,7 @@ pub fn format_source(source: &str) -> Result<String, String> {
             }
             Token::Semi => {
                 out.push(';');
-                if in_for_header > 0 {
+                if for_header_paren_depth.is_some() {
                     out.push(' ');
                 } else {
                     out.push('\n');
@@ -220,6 +221,9 @@ pub fn format_source(source: &str) -> Result<String, String> {
                 out.push(' ');
             }
             Token::Colon => {
+                if !out.ends_with(' ') {
+                    out.push(' ');
+                }
                 out.push(':');
                 out.push(' ');
             }
@@ -230,16 +234,17 @@ pub fn format_source(source: &str) -> Result<String, String> {
                             out.push(' ');
                         }
                         if kw == "for" {
-                            in_for_header += 1;
+                            for_header_paren_depth = Some(paren_depth + 1);
                         }
                     }
+                paren_depth += 1;
                 out.push('(');
             }
             Token::RParen => {
-                if in_for_header > 0 && prev_token.is_some() {
-                    // check if we are closing a for header
-                    // We can track balance
+                if for_header_paren_depth == Some(paren_depth) {
+                    for_header_paren_depth = None;
                 }
+                paren_depth = paren_depth.saturating_sub(1);
                 out.push(')');
             }
             Token::LBracket => {
@@ -476,17 +481,16 @@ fn tokenize(source: &str) -> Result<Vec<Token>, String> {
 
         // Operators and punctuation
         if pos + 1 < len {
-            let two = &source[pos..pos + 2];
-            match two {
-                "->" => { tokens.push(Token::Arrow); pos += 2; continue; }
-                "=>" => { tokens.push(Token::FatArrow); pos += 2; continue; }
-                "==" | "!=" | "<=" | ">=" | "&&" | "||" => {
-                    tokens.push(Token::BinaryOp(two.to_string()));
+            match (bytes[pos], bytes[pos + 1]) {
+                (b'-', b'>') => { tokens.push(Token::Arrow); pos += 2; continue; }
+                (b'=', b'>') => { tokens.push(Token::FatArrow); pos += 2; continue; }
+                (b'=', b'=') | (b'!', b'=') | (b'<', b'=') | (b'>', b'=') | (b'&', b'&') | (b'|', b'|') => {
+                    tokens.push(Token::BinaryOp(source[pos..pos + 2].to_string()));
                     pos += 2;
                     continue;
                 }
-                "+=" | "-=" | "*=" | "/=" | "%=" => {
-                    tokens.push(Token::AssignOp(two.to_string()));
+                (b'+', b'=') | (b'-', b'=') | (b'*', b'=') | (b'/', b'=') | (b'%', b'=') => {
+                    tokens.push(Token::AssignOp(source[pos..pos + 2].to_string()));
                     pos += 2;
                     continue;
                 }
@@ -512,8 +516,13 @@ fn tokenize(source: &str) -> Result<Vec<Token>, String> {
             b'-' => tokens.push(Token::UnaryOp("-".to_string())),
             b'!' => tokens.push(Token::UnaryOp("!".to_string())),
             _ => {
-                // Unknown character, pass through as ident/symbol
-                tokens.push(Token::Ident((b as char).to_string()));
+                let ch = source[pos..]
+                    .chars()
+                    .next()
+                    .ok_or_else(|| "unexpected end of source while tokenizing".to_owned())?;
+                tokens.push(Token::Ident(ch.to_string()));
+                pos += ch.len_utf8();
+                continue;
             }
         }
         pos += 1;
