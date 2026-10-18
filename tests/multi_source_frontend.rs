@@ -314,14 +314,14 @@ fn list_container_move() {
 
 #[test]
 fn list_drop_during_borrow() {
-    let source = "void main(){List<int> xs=new List<int>();borrow List<int> r=xs;drop(xs);}";
+    let source = "void main(){List<int> xs=new List<int>();borrow List<int> r=xs;drop(xs);println(r.size());}";
     let _error = validate(source).expect_err("invalid source accepted");
     assert!(_error.message.contains("E3002"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn list_mutate_during_shared_borrow() {
-    let source = "void main(){List<int> xs=new List<int>();borrow List<int> r=xs;xs.add(1);}";
+    let source = "void main(){List<int> xs=new List<int>();borrow List<int> r=xs;xs.add(1);println(r.size());}";
     let _error = validate(source).expect_err("invalid source accepted");
     assert!(_error.message.contains("E3001"), "{}", _error.render("case.ncr", source));
 }
@@ -335,7 +335,7 @@ fn list_mutate_through_shared_borrow() {
 
 #[test]
 fn list_get_during_exclusive_borrow() {
-    let source = "void main(){List<int> xs=new List<int>();borrow mut List<int> r=xs;println(xs.size());}";
+    let source = "void main(){List<int> xs=new List<int>();borrow mut List<int> r=xs;println(xs.size());println(r.size());}";
     let _error = validate(source).expect_err("invalid source accepted");
     assert!(_error.message.contains("E3001"), "{}", _error.render("case.ncr", source));
 }
@@ -385,7 +385,7 @@ fn text_move_is_not_copy() {
 
 #[test]
 fn text_mutate_during_borrow() {
-    let source = "void main(){Text t=new Text(\"x\");borrow Text r=t;t.append(\"y\");}";
+    let source = "void main(){Text t=new Text(\"x\");borrow Text r=t;t.append(\"y\");println(r.byteLength());}";
     let _error = validate(source).expect_err("invalid source accepted");
     assert!(_error.message.contains("E3001"), "{}", _error.render("case.ncr", source));
 }

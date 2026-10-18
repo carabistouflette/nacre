@@ -446,25 +446,25 @@
   },
   {
     "name": "borrow_upcast_blocks_drop",
-    "source": "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } void main(){C c=new C();borrow I r=c;drop(c);}",
+    "source": "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } void main(){C c=new C();borrow I r=c;drop(c);println(r.get());}",
     "valid": false,
     "error": "E3002"
   },
   {
     "name": "borrow_upcast_blocks_move",
-    "source": "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } void main(){C c=new C();borrow I r=c;I i=c;}",
+    "source": "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } void main(){C c=new C();borrow I r=c;I i=c;println(r.get());}",
     "valid": false,
     "error": "E3002"
   },
   {
     "name": "borrow_upcast_blocks_mutation",
-    "source": "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } void main(){C c=new C();borrow I r=c;c.inc();}",
+    "source": "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } void main(){C c=new C();borrow I r=c;c.inc();println(r.get());}",
     "valid": false,
     "error": "E3001"
   },
   {
     "name": "mutable_upcast_blocks_owner_read",
-    "source": "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } void main(){C c=new C();borrow mut I r=c;println(c.get());}",
+    "source": "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } void main(){C c=new C();borrow mut I r=c;println(c.get());println(r.get());}",
     "valid": false,
     "error": "E3001"
   },
@@ -607,7 +607,7 @@
   },
   {
     "name": "generic_borrow_blocks_drop",
-    "source": "class Box<T> { T value; Box(T value) { this.value = value; } readonly T get() { return this.value; } } void main(){Box<int> b=new Box<int>(1);borrow Box<int> r=b;drop(b);}",
+    "source": "class Box<T> { T value; Box(T value) { this.value = value; } readonly T get() { return this.value; } } void main(){Box<int> b=new Box<int>(1);borrow Box<int> r=b;drop(b);println(r.get());}",
     "valid": false,
     "error": "E3002"
   },

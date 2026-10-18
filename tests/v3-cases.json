@@ -277,61 +277,61 @@
   },
   {
     "name": "shared_then_mutable",
-    "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow C r = c; borrow mut C w = c; }",
+    "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow C r = c; borrow mut C w = c; println(r.get()); w.inc(); }",
     "valid": false,
     "error": "E3001"
   },
   {
     "name": "mutable_then_shared",
-    "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow mut C w = c; borrow C r = c; }",
+    "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow mut C w = c; borrow C r = c; w.inc(); println(r.get()); }",
     "valid": false,
     "error": "E3001"
   },
   {
     "name": "two_mutable",
-    "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow mut C a = c; borrow mut C b = c; }",
+    "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow mut C a = c; borrow mut C b = c; a.inc(); b.inc(); }",
     "valid": false,
     "error": "E3001"
   },
   {
     "name": "owner_read_during_mutable",
-    "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow mut C r = c; println(c.n); }",
+    "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow mut C r = c; println(c.n); println(r.n); }",
     "valid": false,
     "error": "E3001"
   },
   {
     "name": "owner_mutation_during_shared",
-    "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow C r = c; c.inc(); }",
+    "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow C r = c; c.inc(); println(r.get()); }",
     "valid": false,
     "error": "E3001"
   },
   {
     "name": "owner_field_write_during_shared",
-    "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow C r = c; c.n = 2; }",
+    "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow C r = c; c.n = 2; println(r.get()); }",
     "valid": false,
     "error": "E3001"
   },
   {
     "name": "owner_drop_during_shared",
-    "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow C r = c; drop(c); }",
+    "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow C r = c; drop(c); println(r.get()); }",
     "valid": false,
     "error": "E3002"
   },
   {
     "name": "owner_move_during_shared",
-    "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow C r = c; C moved = c; }",
+    "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow C r = c; C moved = c; println(r.get()); }",
     "valid": false,
     "error": "E3002"
   },
   {
     "name": "owner_replace_during_shared",
-    "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow C r = c; c = new C(); }",
+    "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow C r = c; c = new C(); println(r.get()); }",
     "valid": false,
     "error": "E3002"
   },
   {
     "name": "owner_drop_during_mutable",
-    "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow mut C r = c; drop(c); }",
+    "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow mut C r = c; drop(c); println(r.get()); }",
     "valid": false,
     "error": "E3002"
   },
@@ -367,27 +367,26 @@
   },
   {
     "name": "parent_mutable_frozen_by_child",
-    "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow mut C a = c; borrow C b = a; a.inc(); }",
+    "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow mut C a = c; borrow C b = a; a.inc(); println(b.get()); }",
     "valid": false,
     "error": "E3001"
   },
   {
     "name": "parent_read_frozen_by_mutable_child",
-    "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow mut C a = c; borrow mut C b = a; println(a.n); }",
+    "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow mut C a = c; borrow mut C b = a; println(a.n); b.inc(); }",
     "valid": false,
     "error": "E3001"
   },
   {
     "name": "sibling_mutable_reborrows",
-    "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow mut C a = c; borrow mut C b = a; borrow mut C d = a; }",
+    "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow mut C a = c; borrow mut C b = a; borrow mut C d = a; b.inc(); d.inc(); }",
     "valid": false,
     "error": "E3001"
   },
   {
-    "name": "no_nll_even_unused_reference",
+    "name": "unused_borrow_does_not_block_mutation",
     "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow C unused = c; c.inc(); }",
-    "valid": false,
-    "error": "E3001"
+    "valid": true
   },
   {
     "name": "borrow_uninitialized_owner",
@@ -594,31 +593,31 @@
   },
   {
     "name": "parent_and_child_root_conflict",
-    "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } class A { C left = new C(); C right = new C(); } void main() { A a = new A(); borrow mut C x = a.left; borrow mut C y = a.right; }",
+    "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } class A { C left = new C(); C right = new C(); } void main() { A a = new A(); borrow mut C x = a.left; borrow mut C y = a.right; println(x.get()); println(y.get()); }",
     "valid": false,
     "error": "E3001"
   },
   {
     "name": "borrowed_ancestor_cannot_drop",
-    "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } class A { C c = new C(); } void main() { A a = new A(); borrow C r = a.c; drop(a); }",
+    "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } class A { C c = new C(); } void main() { A a = new A(); borrow C r = a.c; drop(a); println(r.get()); }",
     "valid": false,
     "error": "E3002"
   },
   {
-    "name": "borrowed_owner_cannot_return",
-    "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } C f() { C c = new C(); borrow C r = c; return c; } void main() {}",
-    "valid": false,
-    "error": "E3002"
+    "name": "return_owner_after_unused_borrow",
+    "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } C f() { C c = new C(); borrow C r = c; return c; } void main() { C result = f(); println(result.get()); }",
+    "valid": true,
+    "stdout": "1\n"
   },
   {
     "name": "view_prevents_drop",
-    "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } class V { borrow C target; V(borrow C target) { this.target = target; } readonly int get() { return target.get(); } } void main() { C c = new C(); V v = new V(c); drop(c); }",
+    "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } class V { borrow C target; V(borrow C target) { this.target = target; } readonly int get() { return target.get(); } } void main() { C c = new C(); V v = new V(c); drop(c); println(v.get()); }",
     "valid": false,
     "error": "E3002"
   },
   {
     "name": "view_prevents_mutation",
-    "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } class V { borrow C target; V(borrow C target) { this.target = target; } readonly int get() { return target.get(); } } void main() { C c = new C(); V v = new V(c); c.inc(); }",
+    "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } class V { borrow C target; V(borrow C target) { this.target = target; } readonly int get() { return target.get(); } } void main() { C c = new C(); V v = new V(c); c.inc(); println(v.get()); }",
     "valid": false,
     "error": "E3001"
   },
@@ -751,7 +750,7 @@
   },
   {
     "name": "view_keeps_parent_reborrow_frozen",
-    "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } class V { borrow C target; V(borrow C target) { this.target = target; } readonly int get() { return target.get(); } } void main() { C c = new C(); borrow mut C r = c; V v = new V(r); r.inc(); }",
+    "source": "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } class V { borrow C target; V(borrow C target) { this.target = target; } readonly int get() { return target.get(); } } void main() { C c = new C(); borrow mut C r = c; V v = new V(r); r.inc(); println(v.get()); }",
     "valid": false,
     "error": "E3001"
   },

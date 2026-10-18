@@ -1,16 +1,18 @@
-//! Lexical borrow checking over the typed, structured IR.
+//! Control-flow-sensitive borrow checking over the typed, structured IR.
 //!
-//! Bindings of borrowed types are immutable and cannot escape. A local loan
-//! lasts until the end of its block, and an argument loan until its call ends.
-//! Owners and their owned fields are conservatively one alias domain. Reborrows
-//! carry a parent capability: children may use it, but conflicting sibling or
-//! parent accesses are rejected. Ownership/initialization across loops remains
-//! the separate CFG analysis in ownership.rs.
+//! Borrowed bindings are immutable and cannot escape their scope. Local loans
+//! remain live through their last use on every reachable control-flow path;
+//! argument loans remain active through the call. Owners and their owned fields
+//! are conservatively one alias domain. Reborrows carry a parent capability:
+//! children may use it, but conflicting sibling or parent accesses are rejected.
+//! Ownership/initialization across loops remains the separate CFG analysis in
+//! ownership.rs.
 //!
 //! Views (classes with shared borrowed fields) are non-movable, non-exportable
 //! local objects. Their constructor records which shared arguments are retained.
-//! This deliberately restricted rule makes their lifetimes lexical and inferred.
-//! Borrowed returns are tied to the receiver; there are no lifetime parameters or NLL.
+//! Borrowed returns are tied to the receiver; there are no lifetime parameters.
+//! A separate backward liveness pass handles local loan last uses across branches
+//! and loop back-edges.
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
 
@@ -35,10 +37,265 @@ enum Access { Read, Write, Destroy }
 #[derive(Debug)]
 struct Loan {
     root: Root, parent: Option<usize>, mutable: bool,
-    span: Span, label: String, active: bool,
+    span: Span, label: String, active: bool, holders: Vec<usize>,
 }
 #[derive(Clone, Copy)]
 struct Guard { root: Root, span: Span, projected: bool }
+type LiveSet = HashSet<usize>;
+
+/// Backward liveness for locals whose values can retain a borrow. The checker
+/// stores one live set per statement; structured branches get independent sets,
+/// and loops converge over their back-edge before the forward borrow walk.
+struct Liveness {
+    at: HashMap<*const t::Stmt, LiveSet>,
+    tracked: HashSet<usize>,
+    work: usize,
+}
+
+impl Liveness {
+    fn new(program: &t::Program, function: &t::Function) -> Self {
+        let tracked = function.locals.iter().enumerate().filter_map(|(id, local)| {
+            let is_view = local.ty.object_class()
+                .is_some_and(|class| program.classes[class].is_view());
+            (local.ty.is_borrow() || is_view).then_some(id)
+        }).collect();
+        Self { at: HashMap::new(), tracked, work: 0 }
+    }
+
+    fn span(function: &t::Function, stmt: &t::Stmt) -> Span {
+        match stmt {
+            t::Stmt::Let { id, .. } => function.locals[*id].span,
+            t::Stmt::Assign { value, .. } | t::Stmt::Expr(value) => value.span,
+            t::Stmt::If { condition, .. } | t::Stmt::While { condition, .. } => condition.span,
+            t::Stmt::Match { value, .. } => value.span,
+            t::Stmt::Return(Some(value)) => value.span,
+            t::Stmt::Return(None) | t::Stmt::Break | t::Stmt::Continue | t::Stmt::Block(_) =>
+                function.locals.first().map_or_else(Span::default, |local| local.span),
+        }
+    }
+
+    fn charge(&mut self, amount: usize, span: Span) -> Result<(), Diagnostic> {
+        self.work = self.work.saturating_add(amount);
+        if self.work > MAX_WORK {
+            Err(Diagnostic::new(span, "[E3099] borrow analysis is too complex; split the function into smaller blocks or functions"))
+        } else {
+            Ok(())
+        }
+    }
+
+    fn union(&mut self, into: &mut LiveSet, from: &LiveSet, span: Span)
+        -> Result<(), Diagnostic>
+    {
+        self.charge(from.len(), span)?;
+        into.extend(from.iter().copied());
+        Ok(())
+    }
+
+    fn use_local(&mut self, id: usize, live: &mut LiveSet, span: Span)
+        -> Result<(), Diagnostic>
+    {
+        self.charge(1, span)?;
+        if self.tracked.contains(&id) { live.insert(id); }
+        Ok(())
+    }
+
+    fn place(&mut self, place: &Place, live: &mut LiveSet, span: Span)
+        -> Result<(), Diagnostic>
+    {
+        if let Some(id) = place.root_var() { self.use_local(id, live, span)?; }
+        Ok(())
+    }
+
+    fn expression(&mut self, expr: &t::Expr, live: &mut LiveSet)
+        -> Result<(), Diagnostic>
+    {
+        self.charge(1, expr.span)?;
+        use t::ExprKind as E;
+        match &expr.kind {
+            E::Char(_) | E::Int(_) | E::Long(_) | E::Double(_) | E::Unit
+            | E::Boolean(_) | E::String(_) => {}
+            E::Read(place) | E::Borrow { place, .. } | E::MapCapacity(place) =>
+                self.place(place, live, expr.span)?,
+            E::MapSlot { map, index, .. } => {
+                self.place(map, live, expr.span)?;
+                self.expression(index, live)?;
+            }
+            E::IteratorFold { plan, initial, folder, .. } => {
+                self.iterator_plan(plan, live)?;
+                self.expression(initial, live)?;
+                self.expression(folder, live)?;
+            }
+            E::IteratorSizeHint { plan, .. } => self.iterator_plan(plan, live)?,
+            E::Move(id) => self.use_local(*id, live, expr.span)?,
+            E::Drop(inner) | E::Cast { value: inner } | E::Upcast { value: inner, .. }
+            | E::Unary { expr: inner, .. } | E::Try { value: inner, .. } =>
+                self.expression(inner, live)?,
+            E::New { args, .. } | E::Variant { args, .. } => {
+                for arg in args { self.expression(arg, live)?; }
+            }
+            E::Call { receiver, args, .. } => {
+                if let Some(receiver) = receiver { self.place(receiver, live, expr.span)?; }
+                for arg in args { self.expression(arg, live)?; }
+            }
+            E::Binary { left, right, .. } => {
+                self.expression(left, live)?;
+                self.expression(right, live)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn iterator_plan(&mut self, plan: &t::IteratorPlan, live: &mut LiveSet)
+        -> Result<(), Diagnostic>
+    {
+        self.charge(1, plan.span)?;
+        let receiver = match &plan.source {
+            t::IteratorSource::List { collection, .. }
+            | t::IteratorSource::Array { collection, .. }
+            | t::IteratorSource::Map { collection, .. } => collection,
+        };
+        match receiver {
+            t::IteratorReceiver::Borrowed(place) => self.place(place, live, plan.span)?,
+            t::IteratorReceiver::BorrowedExpr(value)
+            | t::IteratorReceiver::Owned(value) => self.expression(value, live)?,
+        }
+        for stage in &plan.stages {
+            match stage {
+                t::IteratorStage::Map { callback, .. }
+                | t::IteratorStage::Filter { callback, .. } => self.expression(callback, live)?,
+                t::IteratorStage::Take { count } => self.expression(count, live)?,
+                t::IteratorStage::Enumerate { .. } => {}
+                t::IteratorStage::Zip { right, .. } => self.iterator_plan(right, live)?,
+            }
+        }
+        Ok(())
+    }
+
+    fn statement(&mut self, stmt: &t::Stmt, after: &LiveSet, function: &t::Function)
+        -> Result<(LiveSet, LiveSet), Diagnostic>
+    {
+        use t::Stmt as S;
+        let span = Self::span(function, stmt);
+        self.charge(1, span)?;
+        let (before, during) = match stmt {
+            S::Let { id, value, .. } => {
+                let mut before = after.clone();
+                before.remove(id);
+                if let Some(value) = value { self.expression(value, &mut before)?; }
+                let mut during = before.clone();
+                self.union(&mut during, after, span)?;
+                (before, during)
+            }
+            S::Assign { target, value } => {
+                let mut before = after.clone();
+                match &target.kind {
+                    PlaceKind::Var(id) => { before.remove(id); }
+                    _ => self.place(target, &mut before, value.span)?,
+                }
+                self.expression(value, &mut before)?;
+                let mut during = before.clone();
+                self.union(&mut during, after, span)?;
+                (before, during)
+            }
+            S::Expr(expr) => {
+                let mut before = after.clone();
+                self.expression(expr, &mut before)?;
+                let mut during = before.clone();
+                self.union(&mut during, after, span)?;
+                (before, during)
+            }
+            S::If { condition, then_block, else_block } => {
+                let mut before = self.block(then_block, after, function)?;
+                if let Some(block) = else_block {
+                    let else_before = self.block(block, after, function)?;
+                    self.union(&mut before, &else_before, span)?;
+                }
+                self.expression(condition, &mut before)?;
+                let mut during = before.clone();
+                self.union(&mut during, after, span)?;
+                (before, during)
+            }
+            S::While { condition, body } => {
+                let mut condition_live = LiveSet::new();
+                self.expression(condition, &mut condition_live)?;
+                let mut header = after.clone();
+                loop {
+                    self.charge(1, span)?;
+                    let mut body_after = header.clone();
+                    self.union(&mut body_after, after, span)?;
+                    let body_before = self.block(body, &body_after, function)?;
+                    let mut next = after.clone();
+                    self.union(&mut next, &condition_live, span)?;
+                    self.union(&mut next, &body_before, span)?;
+                    if next == header { break; }
+                    header = next;
+                }
+                let mut during = header.clone();
+                self.union(&mut during, after, span)?;
+                (header, during)
+            }
+            S::Match { value, arms } => {
+                let mut before = after.clone();
+                let mut during = after.clone();
+                let mut value_live = LiveSet::new();
+                self.expression(value, &mut value_live)?;
+                self.union(&mut before, &value_live, value.span)?;
+                self.union(&mut during, &value_live, value.span)?;
+                for arm in arms {
+                    let mut arm_live = self.block(&arm.body, after, function)?;
+                    if let Some(guard) = &arm.guard { self.expression(guard, &mut arm_live)?; }
+                    self.union(&mut during, &arm_live, span)?;
+                    let mut arm_before = arm_live;
+                    let mut bindings = Vec::new();
+                    collect_match_bindings(&arm.pattern, &mut bindings);
+                    for (id, guard_id) in bindings {
+                        arm_before.remove(&id);
+                        if let Some(guard_id) = guard_id { arm_before.remove(&guard_id); }
+                    }
+                    self.union(&mut before, &arm_before, span)?;
+                }
+                self.union(&mut during, &before, span)?;
+                (before, during)
+            }
+            S::Return(value) => {
+                let mut before = LiveSet::new();
+                if let Some(value) = value { self.expression(value, &mut before)?; }
+                (before.clone(), before)
+            }
+            S::Break | S::Continue => (after.clone(), after.clone()),
+            S::Block(block) => {
+                let before = self.block(block, after, function)?;
+                let mut during = before.clone();
+                self.union(&mut during, after, span)?;
+                (before, during)
+            }
+        };
+        Ok((before, during))
+    }
+
+    fn block(&mut self, block: &t::Block, after: &LiveSet, function: &t::Function)
+        -> Result<LiveSet, Diagnostic>
+    {
+        let mut live = after.clone();
+        for stmt in block.iter().rev() {
+            let (before, during) = self.statement(stmt, &live, function)?;
+            self.at.insert(stmt as *const t::Stmt, during);
+            live = before;
+        }
+        for stmt in block {
+            if let t::Stmt::Let { id, .. } = stmt { live.remove(id); }
+        }
+        Ok(live)
+    }
+
+    fn analyze(mut self, function: &t::Function)
+        -> Result<HashMap<*const t::Stmt, LiveSet>, Diagnostic>
+    {
+        self.block(&function.body, &LiveSet::new(), function)?;
+        Ok(self.at)
+    }
+}
+
 
 struct Analyzer<'a> {
     program: &'a t::Program,
@@ -50,6 +307,8 @@ struct Analyzer<'a> {
     // Map row projections share one scoped origin, not independent slot loans.
     map_pairs: Vec<(usize, Origin)>,
     guards: Vec<Guard>,
+    live_at: HashMap<*const t::Stmt, LiveSet>,
+    current_stmt: Option<*const t::Stmt>,
     trace: String,
     work: usize,
 }
@@ -61,7 +320,13 @@ impl<'a> Analyzer<'a> {
             else { None }
         }).collect();
         Self { program, function, source, loans: Vec::new(), bindings,
-            views: HashMap::new(), map_pairs: Vec::new(), guards: Vec::new(), trace: String::new(), work: 0 }
+            views: HashMap::new(), map_pairs: Vec::new(), guards: Vec::new(),
+            live_at: HashMap::new(), current_stmt: None, trace: String::new(), work: 0 }
+    }
+    fn holder_is_live(&self, holder: usize) -> bool {
+        self.current_stmt
+            .and_then(|stmt| self.live_at.get(&stmt))
+            .map_or(true, |live| live.contains(&holder))
     }
 
     fn label(&self, root: Root) -> String {
@@ -121,7 +386,11 @@ impl<'a> Analyzer<'a> {
             self.charge(1, span)?;
         }
         for (id, loan) in self.loans.iter().enumerate() {
-            if !loan.active || loan.root != origin.root || ancestors.contains(&id) { continue; }
+            if !loan.active || loan.root != origin.root || ancestors.contains(&id)
+                || (!loan.holders.is_empty() &&
+                    !loan.holders.iter().any(|holder| self.holder_is_live(*holder))) {
+                continue;
+            }
             if mode == Access::Read && !loan.mutable { continue; }
             let code = if mode == Access::Destroy { "E3002" } else { "E3001" };
             let action = match mode {
@@ -132,7 +401,7 @@ impl<'a> Analyzer<'a> {
                 "[{code}] {action} of `{}` conflicts with an active {} borrow", self.label(origin.root),
                 if loan.mutable { "exclusive" } else { "shared" }))
                 .with_note(loan.span, format!("borrow #{} `{}` begins here", id, loan.label))
-                .with_help("put the borrow in a shorter block; it remains active until that block ends (or until the call ends for an argument)"));
+                .with_help("finish using the borrowed value before this access, or put its remaining uses in a shorter block"));
         }
         for guard in &self.guards {
             if guard.root != origin.root { continue; }
@@ -162,8 +431,17 @@ impl<'a> Analyzer<'a> {
         let id = self.loans.len();
         self.log(span, format!("loan #{id} {} <- {} parent={:?} holder={label}",
             if mutable { "exclusive" } else { "shared" }, self.label(origin.root), origin.via));
-        self.loans.push(Loan { root: origin.root, parent: origin.via, mutable, span, label, active: true });
+        self.loans.push(Loan {
+            root: origin.root, parent: origin.via, mutable, span, label, active: true,
+            holders: Vec::new(),
+        });
         Ok(Origin { root: origin.root, via: Some(id) })
+    }
+    fn hold(&mut self, origin: Origin, local: usize) {
+        if let Some(id) = origin.via {
+            let holders = &mut self.loans[id].holders;
+            if !holders.contains(&local) { holders.push(local); }
+        }
     }
     fn end_since(&mut self, first: usize, keep: &HashSet<usize>, reason: &str) {
         for id in (first..self.loans.len()).rev() {
@@ -178,6 +456,8 @@ impl<'a> Analyzer<'a> {
         ty.object_class().is_some_and(|id| self.program.classes[id].is_view())
     }
     fn run(&mut self) -> Result<(), Diagnostic> {
+        let live_at = Liveness::new(self.program, self.function).analyze(self.function)?;
+        self.live_at = live_at;
         let function = self.function;
         self.block(&function.body)?;
         // Borrowed parameters never deallocate their referents.
@@ -192,13 +472,14 @@ impl<'a> Analyzer<'a> {
     fn block(&mut self, block: &t::Block) -> Result<(), Diagnostic> {
         let mark = self.loans.len();
         let pair_mark = self.map_pairs.len();
+        let previous_stmt = self.current_stmt;
         let mut declared = Vec::new();
         for stmt in block {
+            self.current_stmt = Some(stmt as *const t::Stmt);
             self.statement(stmt)?;
             if let t::Stmt::Let { id, ty, .. } = stmt { declared.push((*id, *ty)); }
         }
-        // References cannot escape this scope; release their static loans
-        // before validating reverse-declaration-order owner cleanup.
+        self.current_stmt = previous_stmt;
         self.end_since(mark, &HashSet::new(), "scope exit");
         self.map_pairs.truncate(pair_mark);
         for (id, ty) in declared.into_iter().rev() {
@@ -218,11 +499,13 @@ impl<'a> Analyzer<'a> {
                 if let Some(value) = value {
                     if ty.is_borrow() {
                         let origin = self.reference(value, self.function.locals[*id].name.clone())?;
+                        self.hold(origin, *id);
                         self.bindings.insert(*id, origin);
                     } else if self.is_view(*ty) {
                         let t::ExprKind::New { class, constructor, args } = &value.kind
                             else { unreachable!("a view local is initialized directly with new") };
                         let fields = self.construct(*class, *constructor, args, value.span, true)?;
+                        for origin in fields.iter().flatten().copied() { self.hold(origin, *id); }
                         self.views.insert(*id, fields);
                     } else {
                         self.expression(value)?;
@@ -279,10 +562,12 @@ impl<'a> Analyzer<'a> {
                     if let Some(origin) = origin {
                         for (id, guard_id) in &bindings {
                             if self.function.locals[*id].ty.is_borrow() {
+                                self.hold(origin, *id);
                                 self.bindings.insert(*id, origin);
                             }
                             if let Some(guard_id) = guard_id
                                 && self.function.locals[*guard_id].ty.is_borrow() {
+                                    self.hold(origin, *guard_id);
                                     self.bindings.insert(*guard_id, origin);
                                 }
                         }
@@ -534,7 +819,7 @@ pub fn check(program: &t::Program) -> Result<(), Diagnostic> {
     Ok(())
 }
 pub fn dump(program: &t::Program, source: &str) -> Result<String, Diagnostic> {
-    let mut out = String::from("Nacre — lexical borrow analysis\nLoan lifetimes are lexical; root = owner and its owned fields.\nReceiver reservations precede arguments; activation follows them.\nReturned borrows retain receiver-derived loans.\n\n");
+    let mut out = String::from("Nacre — control-flow-sensitive borrow analysis\nLocal loan conflicts follow backward last-use liveness across branches and loops; root = owner and its owned fields.\nReceiver reservations precede arguments; activation follows them.\nReturned borrows retain receiver-derived loans.\n\n");
     for function in &program.functions {
         if function.native.is_some() { continue; }
         let mut analyzer = Analyzer::new(program, function, Some(source));

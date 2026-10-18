@@ -1,4 +1,4 @@
-# Ownership and lexical borrowing
+# Ownership and control-flow-sensitive borrowing
 
 Nacre separates owning values from shared/exclusive access. Ordinary objects
 own their heap allocation; enums are affine inline values; interfaces use an
@@ -12,10 +12,13 @@ borrow Contact reader = contacts.getRef(0);
 borrow mut Contact editor = contacts.getMut(0);
 ```
 
-A borrowed binding requires an initializer, cannot be reassigned, and lasts
-until the end of its lexical block. Borrowed arguments normally last through
-the call. There is no early-release operation, lifetime parameter, or non-lexical
-lifetime analysis: using a reference for the last time does not end its loan.
+A borrowed binding requires an initializer and cannot be reassigned. Its loan
+remains live through its last use on each reachable control-flow path, then
+releases before lexical scope exit when possible. Borrowed arguments normally
+remain active through the call. There is no explicit early-release operation or
+lifetime parameter. Backward liveness across branches and loop back-edges keeps
+a loan active wherever a later path may use it; loop-carried uses remain live
+across iterations.
 
 A named owner, parameter, `this`, or owned-field projection can supply a borrow.
 Explicit expressions use `borrow place` or `borrow mut place`. A temporary owner
@@ -33,8 +36,9 @@ parent. List elements share the complete list's domain, regardless of indices.
 Multiple shared loans may coexist. An exclusive loan blocks unrelated reads,
 writes, moves, replacement, and destruction. Reborrows retain a parent
 capability: derived access may use its ancestors, while conflicting sibling or
-parent access is rejected. A child loan ends at its own lexical boundary and
-then restores use of the parent capability.
+parent access is rejected. A child loan ends after its last use on the current
+path, or at scope exit, restoring direct parent access when the parent remains
+live.
 
 Shared access is transitive through owned fields. `readonly` methods cannot
 modify their receiver or call modifying methods through it; readonly is not
@@ -74,21 +78,18 @@ borrowed match bindings retain their proven origin. Locals, owning parameters,
 borrowed parameters, and a view's externally borrowed fields are not receiver
 origins and cannot escape through such a return.
 
-At the caller, the result retains a loan of the receiver's root for its lexical
-lifetime. Argument loans end when the call finishes; the result's loan does not.
-A returned reference may initialize a borrowed local, be passed as a borrowed
-argument, or be returned by another receiver-bound method. Discarded borrowed
-results end at the statement; argument results end at the outer call unless an
-existing supported local view captures them.
+At the caller, the result retains a loan of the receiver's root through its last
+reachable use. Argument loans end when the call finishes; the result's loan does
+not. A returned reference may initialize a borrowed local, be passed as a
+borrowed argument, or be returned by another receiver-bound method. Discarded
+borrowed results end at the statement; argument results end at the outer call
+unless an existing supported local view captures them.
 
 ```java
 Contact contact = new Contact(new Text("Ada"));
-{
-    borrow Text name = contact.getName();
-    name.print();
-    // contact.setName(new Text("Grace")); // rejected: active shared loan
-}
-contact.setName(new Text("Grace"));
+borrow Text name = contact.getName();
+name.print();
+contact.setName(new Text("Grace")); // allowed: name's last use is above
 ```
 
 Borrowed nominal upcasts preserve origins and mutability. An exclusive result
@@ -175,8 +176,9 @@ method. Copyable scalar values use copied `tryGet` instead of references.
 
 Maps stored beside another field share their containing owner's root. Shared
 traversal of an ID list may coexist with shared map lookup, but not mutation of
-that sibling map. End those scopes before mutation; there is no NLL or early
-release operation. A Catalog in the lending example follows this rule explicitly.
+that sibling map while a reachable path can still use the traversal. Last-use
+liveness releases local loans when no continuation can use them; it does not
+infer disjoint fields or indices. The lending example orders uses explicitly.
 
 Two-binding map traversal holds the same root loan across the whole loop. Scalar
 and static `String` keys are copied; owned `Text`, class, interface, and enum keys
@@ -245,7 +247,8 @@ stored, or otherwise escape the arm's lexical scope.
 A class containing shared borrowed fields is a local view. Its constructor must
 initialize each such field directly from a compatible shared borrowed parameter.
 The typed IR records which constructor parameter supplies each field. Call sites
-retain those actual argument loans for the view's lexical lifetime.
+retain those argument loans while a reachable path can still use the view; last-
+use liveness releases them before lexical scope exit when possible.
 
 Views may read borrowed targets and own other fields, but cannot be moved, passed
 as parameters, returned, reassigned, borrowed as a view, explicitly destroyed, or

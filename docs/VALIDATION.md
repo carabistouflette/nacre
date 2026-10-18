@@ -480,10 +480,11 @@ storage, direct borrowed enum operands, focused Console/Args/filesystem emission
 correct signal-state preservation, Guard representation access, exhaustive native
 sendability and independently emitted Process/ProcessOutput support.
 
-Native systems support is Linux-only. Loans remain lexical and root-wide; keys
-and sibling fields do not imply independent alias domains. Ordinary values have
-no GC, implicit cloning or implicit reference counting. Explicit synchronization
-controls can form cycles; locks and channels can deadlock. Thread drop can block
+Native systems support is Linux-only. Local loan liveness follows control flow;
+conflict roots remain conservative across owners and transitively owned fields.
+Ordinary values have no GC, implicit cloning or implicit reference counting.
+Explicit synchronization controls can form cycles; locks and channels can
+deadlock. Thread drop can block
 joining; unreaped Process drop SIGKILLs and synchronously reaps its child without
 a process-tree guarantee. Deep owned trees can exhaust the C cleanup stack.
 Hash tables do not promise hash-flooding resistance. Allocation failure and

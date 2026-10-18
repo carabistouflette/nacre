@@ -74,7 +74,7 @@ fn formatter_preserves_non_ascii_source_characters_outside_literals() {
 
 #[test]
 fn visual_borrow_diagnostics_display_secondary_spans() {
-    let source = "class C { int n = 1; void inc() { n = n + 1; } }\nvoid main() {\n    C c = new C();\n    borrow C r = c;\n    c.inc();\n}";
+    let source = "class C { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } }\nvoid main() {\n    C c = new C();\n    borrow C r = c;\n    c.inc();\n    println(r.get());\n}";
     let err = validate(source).unwrap_err();
     let rendered = err.render("test.ncr", source);
     assert!(rendered.contains("error: [E3001]"));

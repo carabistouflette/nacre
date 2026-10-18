@@ -279,70 +279,70 @@ fn two_views_same_referent() {
 
 #[test]
 fn shared_then_mutable() {
-    let source = "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow C r = c; borrow mut C w = c; }";
+    let source = "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow C r = c; borrow mut C w = c; println(r.get()); w.inc(); }";
     let _error = validate(source).expect_err("invalid source accepted");
     assert!(_error.message.contains("E3001"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn mutable_then_shared() {
-    let source = "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow mut C w = c; borrow C r = c; }";
+    let source = "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow mut C w = c; borrow C r = c; w.inc(); println(r.get()); }";
     let _error = validate(source).expect_err("invalid source accepted");
     assert!(_error.message.contains("E3001"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn two_mutable() {
-    let source = "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow mut C a = c; borrow mut C b = c; }";
+    let source = "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow mut C a = c; borrow mut C b = c; a.inc(); b.inc(); }";
     let _error = validate(source).expect_err("invalid source accepted");
     assert!(_error.message.contains("E3001"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn owner_read_during_mutable() {
-    let source = "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow mut C r = c; println(c.n); }";
+    let source = "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow mut C r = c; println(c.n); println(r.n); }";
     let _error = validate(source).expect_err("invalid source accepted");
     assert!(_error.message.contains("E3001"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn owner_mutation_during_shared() {
-    let source = "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow C r = c; c.inc(); }";
+    let source = "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow C r = c; c.inc(); println(r.get()); }";
     let _error = validate(source).expect_err("invalid source accepted");
     assert!(_error.message.contains("E3001"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn owner_field_write_during_shared() {
-    let source = "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow C r = c; c.n = 2; }";
+    let source = "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow C r = c; c.n = 2; println(r.get()); }";
     let _error = validate(source).expect_err("invalid source accepted");
     assert!(_error.message.contains("E3001"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn owner_drop_during_shared() {
-    let source = "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow C r = c; drop(c); }";
+    let source = "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow C r = c; drop(c); println(r.get()); }";
     let _error = validate(source).expect_err("invalid source accepted");
     assert!(_error.message.contains("E3002"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn owner_move_during_shared() {
-    let source = "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow C r = c; C moved = c; }";
+    let source = "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow C r = c; C moved = c; println(r.get()); }";
     let _error = validate(source).expect_err("invalid source accepted");
     assert!(_error.message.contains("E3002"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn owner_replace_during_shared() {
-    let source = "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow C r = c; c = new C(); }";
+    let source = "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow C r = c; c = new C(); println(r.get()); }";
     let _error = validate(source).expect_err("invalid source accepted");
     assert!(_error.message.contains("E3002"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn owner_drop_during_mutable() {
-    let source = "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow mut C r = c; drop(c); }";
+    let source = "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow mut C r = c; drop(c); println(r.get()); }";
     let _error = validate(source).expect_err("invalid source accepted");
     assert!(_error.message.contains("E3002"), "{}", _error.render("case.ncr", source));
 }
@@ -384,30 +384,29 @@ fn shared_cannot_pass_mutable() {
 
 #[test]
 fn parent_mutable_frozen_by_child() {
-    let source = "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow mut C a = c; borrow C b = a; a.inc(); }";
+    let source = "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow mut C a = c; borrow C b = a; a.inc(); println(b.get()); }";
     let _error = validate(source).expect_err("invalid source accepted");
     assert!(_error.message.contains("E3001"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn parent_read_frozen_by_mutable_child() {
-    let source = "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow mut C a = c; borrow mut C b = a; println(a.n); }";
+    let source = "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow mut C a = c; borrow mut C b = a; println(a.n); b.inc(); }";
     let _error = validate(source).expect_err("invalid source accepted");
     assert!(_error.message.contains("E3001"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn sibling_mutable_reborrows() {
-    let source = "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow mut C a = c; borrow mut C b = a; borrow mut C d = a; }";
+    let source = "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow mut C a = c; borrow mut C b = a; borrow mut C d = a; b.inc(); d.inc(); }";
     let _error = validate(source).expect_err("invalid source accepted");
     assert!(_error.message.contains("E3001"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
-fn no_nll_even_unused_reference() {
+fn unused_borrow_does_not_block_mutation() {
     let source = "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } void main() { C c = new C(); borrow C unused = c; c.inc(); }";
-    let _error = validate(source).expect_err("invalid source accepted");
-    assert!(_error.message.contains("E3001"), "{}", _error.render("case.ncr", source));
+    validate(source).unwrap_or_else(|e| panic!("{}", e.render("case.ncr", source)));
 }
 
 #[test]
@@ -652,35 +651,34 @@ fn readonly_receiver_conflicts_mutable_argument() {
 
 #[test]
 fn parent_and_child_root_conflict() {
-    let source = "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } class A { C left = new C(); C right = new C(); } void main() { A a = new A(); borrow mut C x = a.left; borrow mut C y = a.right; }";
+    let source = "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } class A { C left = new C(); C right = new C(); } void main() { A a = new A(); borrow mut C x = a.left; borrow mut C y = a.right; println(x.get()); println(y.get()); }";
     let _error = validate(source).expect_err("invalid source accepted");
     assert!(_error.message.contains("E3001"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn borrowed_ancestor_cannot_drop() {
-    let source = "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } class A { C c = new C(); } void main() { A a = new A(); borrow C r = a.c; drop(a); }";
+    let source = "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } class A { C c = new C(); } void main() { A a = new A(); borrow C r = a.c; drop(a); println(r.get()); }";
     let _error = validate(source).expect_err("invalid source accepted");
     assert!(_error.message.contains("E3002"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
-fn borrowed_owner_cannot_return() {
-    let source = "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } C f() { C c = new C(); borrow C r = c; return c; } void main() {}";
-    let _error = validate(source).expect_err("invalid source accepted");
-    assert!(_error.message.contains("E3002"), "{}", _error.render("case.ncr", source));
+fn return_owner_after_unused_borrow() {
+    let source = "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } C f() { C c = new C(); borrow C r = c; return c; } void main() { C result = f(); println(result.get()); }";
+    validate(source).unwrap_or_else(|e| panic!("{}", e.render("case.ncr", source)));
 }
 
 #[test]
 fn view_prevents_drop() {
-    let source = "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } class V { borrow C target; V(borrow C target) { this.target = target; } readonly int get() { return target.get(); } } void main() { C c = new C(); V v = new V(c); drop(c); }";
+    let source = "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } class V { borrow C target; V(borrow C target) { this.target = target; } readonly int get() { return target.get(); } } void main() { C c = new C(); V v = new V(c); drop(c); println(v.get()); }";
     let _error = validate(source).expect_err("invalid source accepted");
     assert!(_error.message.contains("E3002"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn view_prevents_mutation() {
-    let source = "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } class V { borrow C target; V(borrow C target) { this.target = target; } readonly int get() { return target.get(); } } void main() { C c = new C(); V v = new V(c); c.inc(); }";
+    let source = "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } class V { borrow C target; V(borrow C target) { this.target = target; } readonly int get() { return target.get(); } } void main() { C c = new C(); V v = new V(c); c.inc(); println(v.get()); }";
     let _error = validate(source).expect_err("invalid source accepted");
     assert!(_error.message.contains("E3001"), "{}", _error.render("case.ncr", source));
 }
@@ -836,7 +834,7 @@ fn borrowed_field_replacement() {
 
 #[test]
 fn view_keeps_parent_reborrow_frozen() {
-    let source = "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } class V { borrow C target; V(borrow C target) { this.target = target; } readonly int get() { return target.get(); } } void main() { C c = new C(); borrow mut C r = c; V v = new V(r); r.inc(); }";
+    let source = "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } class V { borrow C target; V(borrow C target) { this.target = target; } readonly int get() { return target.get(); } } void main() { C c = new C(); borrow mut C r = c; V v = new V(r); r.inc(); println(v.get()); }";
     let _error = validate(source).expect_err("invalid source accepted");
     assert!(_error.message.contains("E3001"), "{}", _error.render("case.ncr", source));
 }

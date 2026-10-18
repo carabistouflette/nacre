@@ -4,7 +4,7 @@ const CLASS: &str = "class C { int n = 1; readonly int get() { return n; } void 
 
 #[test]
 fn diagnostic_points_to_the_conflicting_loan() {
-    let source = format!("{CLASS}void main() {{ C c = new C(); borrow C reader = c; c.inc(); }}");
+    let source = format!("{CLASS}void main() {{ C c = new C(); borrow C reader = c; c.inc(); println(reader.get()); }}");
     let error = validate(&source).unwrap_err();
     assert!(error.message.contains("E3001"));
     let rendered = error.render("borrow.ncr", &source);
@@ -14,8 +14,13 @@ fn diagnostic_points_to_the_conflicting_loan() {
 }
 #[test]
 fn destruction_has_a_distinct_diagnostic() {
-    let source = format!("{CLASS}void main() {{ C c = new C(); borrow C r = c; drop(c); }}");
+    let source = format!("{CLASS}void main() {{ C c = new C(); borrow C r = c; drop(c); println(r.get()); }}");
     assert!(validate(&source).unwrap_err().message.contains("E3002"));
+}
+#[test]
+fn unused_borrow_does_not_block_owner_access() {
+    let source = format!("{CLASS}void main() {{ C c = new C(); borrow C unused = c; c.inc(); drop(c); }}");
+    validate(&source).unwrap_or_else(|e| panic!("{}", e.render("nll.ncr", &source)));
 }
 #[test]
 fn dump_is_deterministic_and_contains_real_loan_events() {
@@ -65,6 +70,52 @@ fn inner_borrows_do_not_escape_both_branches_or_loop_edges() {
     let source = format!("{CLASS}void main() {{ C c = new C(); int n = 0; while (n < 2) {{ borrow mut C r = c; r.inc(); n = n + 1; if (n == 1) {{ continue; }} else {{ break; }} }} c.inc(); }}");
     validate(&source).unwrap();
 }
+
+#[test]
+fn local_borrow_releases_after_its_last_use() {
+    let source = format!("{CLASS}void main() {{ C c = new C(); borrow C reader = c; println(reader.get()); c.inc(); }}");
+    validate(&source).unwrap_or_else(|e| panic!("{}", e.render("nll.ncr", &source)));
+}
+
+#[test]
+fn branch_last_uses_are_path_sensitive() {
+    let source = format!("{CLASS}void main() {{ C c = new C(); borrow C reader = c; boolean choose = true; if (choose) {{ c.inc(); }} else {{ println(reader.get()); }} }}");
+    validate(&source).unwrap_or_else(|e| panic!("{}", e.render("nll.ncr", &source)));
+}
+
+#[test]
+fn a_borrow_stays_live_for_a_later_use_in_the_same_branch() {
+    let source = format!("{CLASS}void main() {{ C c = new C(); borrow C reader = c; boolean choose = true; if (choose) {{ c.inc(); println(reader.get()); }} }}");
+    let error = validate(&source).unwrap_err();
+    assert!(error.message.contains("E3001"), "{}", error.render("nll.ncr", &source));
+}
+
+#[test]
+fn loop_carried_borrow_releases_after_loop_exit() {
+    let source = format!("{CLASS}void main() {{ C c = new C(); borrow C reader = c; int i = 0; while (i < 2) {{ println(reader.get()); i = i + 1; }} c.inc(); }}");
+    validate(&source).unwrap_or_else(|e| panic!("{}", e.render("nll.ncr", &source)));
+}
+
+#[test]
+fn loop_back_edge_keeps_borrow_live_for_next_iteration() {
+    let source = format!("{CLASS}void main() {{ C c = new C(); borrow C reader = c; int i = 0; while (i < 2) {{ c.inc(); println(reader.get()); i = i + 1; }} }}");
+    let error = validate(&source).unwrap_err();
+    assert!(error.message.contains("E3001"), "{}", error.render("nll.ncr", &source));
+}
+
+#[test]
+fn derived_borrow_and_local_view_release_after_last_use() {
+    let source = format!("{CLASS}class View {{ borrow C target; View(borrow C target) {{ this.target = target; }} readonly int get() {{ return this.target.get(); }} }} void main() {{ C c = new C(); borrow C parent = c; borrow C child = parent; println(child.get()); c.inc(); View view = new View(c); println(view.get()); c.inc(); }}");
+    validate(&source).unwrap_or_else(|e| panic!("{}", e.render("nll.ncr", &source)));
+}
+
+#[test]
+fn a_view_keeps_its_loan_while_a_later_use_remains() {
+    let source = format!("{CLASS}class View {{ borrow C target; View(borrow C target) {{ this.target = target; }} readonly int get() {{ return this.target.get(); }} }} void main() {{ C c = new C(); View view = new View(c); c.inc(); println(view.get()); }}");
+    let error = validate(&source).unwrap_err();
+    assert!(error.message.contains("E3001"), "{}", error.render("nll.ncr", &source));
+}
+
 #[test]
 fn receiver_reservation_and_activation_have_correct_order() {
     let source = "class C { int n = 1; int inc() { n = n + 1; return n; } void use(int n) {} } void main() { C c = new C(); c.use(c.inc()); }";

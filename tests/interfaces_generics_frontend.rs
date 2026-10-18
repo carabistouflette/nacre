@@ -470,28 +470,28 @@ fn interface_use_after_drop() {
 
 #[test]
 fn borrow_upcast_blocks_drop() {
-    let source = "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } void main(){C c=new C();borrow I r=c;drop(c);}";
+    let source = "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } void main(){C c=new C();borrow I r=c;drop(c);println(r.get());}";
     let _error = validate(source).expect_err("invalid source accepted");
     assert!(_error.message.contains("E3002"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn borrow_upcast_blocks_move() {
-    let source = "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } void main(){C c=new C();borrow I r=c;I i=c;}";
+    let source = "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } void main(){C c=new C();borrow I r=c;I i=c;println(r.get());}";
     let _error = validate(source).expect_err("invalid source accepted");
     assert!(_error.message.contains("E3002"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn borrow_upcast_blocks_mutation() {
-    let source = "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } void main(){C c=new C();borrow I r=c;c.inc();}";
+    let source = "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } void main(){C c=new C();borrow I r=c;c.inc();println(r.get());}";
     let _error = validate(source).expect_err("invalid source accepted");
     assert!(_error.message.contains("E3001"), "{}", _error.render("case.ncr", source));
 }
 
 #[test]
 fn mutable_upcast_blocks_owner_read() {
-    let source = "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } void main(){C c=new C();borrow mut I r=c;println(c.get());}";
+    let source = "interface I { readonly int get(); void inc(); } class C implements I { int n = 1; readonly int get() { return n; } void inc() { n = n + 1; } } class D implements I { int n = 10; readonly int get() { return n; } void inc() { n = n + 2; } } void main(){C c=new C();borrow mut I r=c;println(c.get());println(r.get());}";
     let _error = validate(source).expect_err("invalid source accepted");
     assert!(_error.message.contains("E3001"), "{}", _error.render("case.ncr", source));
 }
@@ -658,7 +658,7 @@ fn generic_move_enforced() {
 
 #[test]
 fn generic_borrow_blocks_drop() {
-    let source = "class Box<T> { T value; Box(T value) { this.value = value; } readonly T get() { return this.value; } } void main(){Box<int> b=new Box<int>(1);borrow Box<int> r=b;drop(b);}";
+    let source = "class Box<T> { T value; Box(T value) { this.value = value; } readonly T get() { return this.value; } } void main(){Box<int> b=new Box<int>(1);borrow Box<int> r=b;drop(b);println(r.get());}";
     let _error = validate(source).expect_err("invalid source accepted");
     assert!(_error.message.contains("E3002"), "{}", _error.render("case.ncr", source));
 }

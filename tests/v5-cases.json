@@ -299,13 +299,13 @@
   },
   {
     "name": "list_drop_during_borrow",
-    "source": "void main(){List<int> xs=new List<int>();borrow List<int> r=xs;drop(xs);}",
+    "source": "void main(){List<int> xs=new List<int>();borrow List<int> r=xs;drop(xs);println(r.size());}",
     "valid": false,
     "error": "E3002"
   },
   {
     "name": "list_mutate_during_shared_borrow",
-    "source": "void main(){List<int> xs=new List<int>();borrow List<int> r=xs;xs.add(1);}",
+    "source": "void main(){List<int> xs=new List<int>();borrow List<int> r=xs;xs.add(1);println(r.size());}",
     "valid": false,
     "error": "E3001"
   },
@@ -317,7 +317,7 @@
   },
   {
     "name": "list_get_during_exclusive_borrow",
-    "source": "void main(){List<int> xs=new List<int>();borrow mut List<int> r=xs;println(xs.size());}",
+    "source": "void main(){List<int> xs=new List<int>();borrow mut List<int> r=xs;println(xs.size());println(r.size());}",
     "valid": false,
     "error": "E3001"
   },
@@ -359,7 +359,7 @@
   },
   {
     "name": "text_mutate_during_borrow",
-    "source": "void main(){Text t=new Text(\"x\");borrow Text r=t;t.append(\"y\");}",
+    "source": "void main(){Text t=new Text(\"x\");borrow Text r=t;t.append(\"y\");println(r.byteLength());}",
     "valid": false,
     "error": "E3001"
   },

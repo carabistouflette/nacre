@@ -578,3 +578,22 @@ fn direct_unary_plus_preserves_negative_zero() {
         &[],
     );
 }
+
+#[test]
+fn direct_borrow_last_use_releases_before_owner_mutation() {
+    let source = r#"
+class C {
+    int value = 1;
+    void increment() { value = value + 1; }
+    readonly int get() { return value; }
+}
+void main() {
+    C value = new C();
+    borrow C reader = value;
+    println(reader.get());
+    value.increment();
+    println(value.get());
+}
+"#;
+    assert_direct_matches_c(source, b"1\n2\n", &["-DNACRE_MEMORY_STATS"]);
+}

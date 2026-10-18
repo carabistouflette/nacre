@@ -15,8 +15,8 @@ representations and shared cleanup paths over speculative abstractions.
 ## Current capabilities
 
 - Affine ownership and definite initialization for classes, interfaces, and
-  inline enums; lexical shared/exclusive borrowing, receiver-derived borrowed
-  returns, owned-field replacement, borrowed enum matching, and list/map
+  inline enums; control-flow-sensitive shared/exclusive borrowing, receiver-derived
+  borrowed returns, owned-field replacement, borrowed enum matching, and list/map
   traversal.
 - Generic nominal classes, interfaces, and enums, specialized before checking.
 - Source-unit modules and named or wildcard imports resolve across the complete
@@ -66,18 +66,18 @@ operations. Any addition must first have an explicit language and ownership
 contract and an end-to-end implementation; these are areas of exploration, not
 promised deliverables.
 
-First-class escaping borrowed iterators, non-lexical lifetimes, lifetime
-parameters, disjoint-entry borrowing, FFI, class inheritance, and external
-registry/Git/version-based dependency resolution remain outside the current
-language contract. Adding one would require a separate design and compatibility
-decision; it must not be inferred from built-in traversal or whole-program
-module imports.
+First-class escaping borrowed iterators, lifetime parameters, disjoint-entry
+borrowing, FFI, class inheritance, and external registry/Git/version-based
+dependency resolution remain outside the current language contract. Adding one
+would require a separate design and compatibility decision; it must not be
+inferred from built-in traversal or whole-program module imports.
 
 ## Safety boundaries
 
-Loans end at lexical scope boundaries, not at last use. Owners and transitively
-owned fields share a conservative root; local views remain non-movable and
-non-exportable. Partial moves are unsupported. Map traversal order is unspecified,
+Local borrowed bindings release loans after their last use on each reachable
+path, with scope exit as a fallback. Owners and transitively owned fields share
+a conservative root; local views remain non-movable and non-exportable. Partial
+moves are unsupported. Map traversal order is unspecified,
 and maps do not promise hash-flooding resistance. Very deep owned trees can
 exhaust the C stack during recursive destruction. Programs are not sandboxed;
 limits on compiler and LSP input do not make untrusted programs safe.

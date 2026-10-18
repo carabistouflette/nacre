@@ -212,7 +212,8 @@ void main() {
 Borrowed returns must derive from the method receiver or its transitively owned
 fields. Locals/parameters cannot be returned as receiver-derived references.
 Readonly receivers cannot return exclusive access. Shared/exclusive result loans
-remain active until their lexical block ends, not their last use.
+remain live while a reachable path can use them, then release after their last use
+when possible rather than waiting for lexical block exit.
 
 An owner and all its owned fields share one alias domain; list elements share the
 whole list. Conflicting loans block mutation, relocation, movement, replacement,

@@ -8,9 +8,9 @@
     "tests/big_numbers.rs": 6,
     "tests/binary_streaming_codec.rs": 3,
     "tests/binary_streams.rs": 6,
-    "tests/borrowing_diagnostics.rs": 9,
+    "tests/borrowing_diagnostics.rs": 17,
     "tests/borrowing_frontend.rs": 132,
-    "tests/borrowing_native.rs": 46,
+    "tests/borrowing_native.rs": 47,
     "tests/cli.rs": 30,
     "tests/collections_core.rs": 10,
     "tests/collections_lists.rs": 2,
@@ -35,7 +35,7 @@
     "tests/io.rs": 13,
     "tests/iteration_traversal.rs": 7,
     "tests/iterator_fusion.rs": 10,
-    "tests/llvm_native.rs": 17,
+    "tests/llvm_native.rs": 18,
     "tests/lsp.rs": 15,
     "tests/map_traversal.rs": 11,
     "tests/math_random_time.rs": 9,
@@ -79,5 +79,5 @@
     "src/ownership.rs": 5,
     "src/project.rs": 1
   },
-  "total": 1434
+  "total": 1444
 }

@@ -237,7 +237,7 @@ fn emits_borrow_analysis_to_stdout() {
     let out = nacre(&["emit-borrows", "examples/ownership/borrowing.ncr"]);
     assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
     let text = String::from_utf8_lossy(&out.stdout);
-    assert!(text.contains("lexical borrow analysis"));
+    assert!(text.contains("control-flow-sensitive borrow analysis"));
     assert!(text.contains("loan #"));
 }
 #[test]

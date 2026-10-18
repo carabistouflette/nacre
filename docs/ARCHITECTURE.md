@@ -142,10 +142,12 @@ states. Joins union states; a work queue computes a fixed point across loops.
 A read requires availability on every incoming path. Owning interface
 conversions transfer the source owner rather than creating another one.
 
-`borrowing.rs` then checks typed blocks. Local loans remain lexical, their targets
-are fixed, and argument loans last through the call unless captured by a view.
-Origins preserve roots and parent capabilities for reborrows. Interface upcasts
-do not change those origins or permit exclusive access beside a shared loan.
+`borrowing.rs` runs backward last-use liveness over the structured control flow
+before checking typed blocks. Local loans remain live while a reachable path can
+use their holder; argument loans last through the call unless captured by a
+view. Origins preserve roots and parent capabilities for reborrows. Interface
+upcasts do not change those origins or allow exclusive access alongside a
+shared loan.
 
 Virtual method signatures expose the same contracts as concrete methods; every
 implementation body is checked separately. Borrow analysis need not select a

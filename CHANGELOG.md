@@ -3,6 +3,10 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- End local borrowed bindings and retained view loans after their last
+  control-flow use. Backward liveness follows branch alternatives and loop
+  back-edges while preserving the existing root-wide alias model.
+
 - Reject partial DNS wildcards in `Certificate` hostname checks; `TlsStream.connect`
   now requires SAN-based identities, disables Common Name fallback, and accepts
   wildcards only as a complete leftmost label.

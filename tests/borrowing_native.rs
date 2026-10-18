@@ -471,3 +471,13 @@ fn two_views_same_referent() {
     assert_eq!(result.stdout, "2\n2\n".as_bytes());
     assert_memory_balanced(&result.stderr);
 }
+
+#[test]
+fn return_owner_after_unused_borrow() {
+    let source = "class C { int n = 1; void inc() { n = n + 1; } readonly int get() { return n; } } C f() { C c = new C(); borrow C r = c; return c; } void main() { C result = f(); println(result.get()); }";
+    let program = support::compile(source, &["-DNACRE_MEMORY_STATS"]).unwrap();
+    let result = program.output().unwrap();
+    assert!(result.status.success(), "{}", String::from_utf8_lossy(&result.stderr));
+    assert_eq!(result.stdout, "1\n".as_bytes());
+    assert_memory_balanced(&result.stderr);
+}

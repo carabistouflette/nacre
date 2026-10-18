@@ -870,7 +870,8 @@ Collections own their contents and are affine. `T` must be a copied scalar/stati
 `String` or an owned object, interface, or enum; borrows and local views cannot be
 stored. A collection's element references loan the complete collection root, not
 just one index or key. Structural mutation, movement, replacement, and destruction
-that conflict with a live loan are rejected until its lexical scope ends.
+that conflict with a live loan are rejected while a reachable path can still use
+it; last-use liveness releases local loans before scope exit when possible.
 
 ### `Pair<T, U>` and tuple syntax
 

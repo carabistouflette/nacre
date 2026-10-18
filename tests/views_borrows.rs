@@ -177,18 +177,18 @@ fn readonly_receiver_cannot_return_exclusive_access() {
 }
 
 #[test]
-fn field_replacement_is_blocked_by_a_returned_receiver_loan() {
-    assert_rejected(&format!("{HOLDER} void main() {{ Holder holder = new Holder(); borrow Text text = holder.view(); holder.replace(); }}"), "E3001");
+fn field_replacement_is_blocked_while_a_returned_loan_is_live() {
+    assert_rejected(&format!("{HOLDER} void main() {{ Holder holder = new Holder(); borrow Text text = holder.view(); holder.replace(); println(text.byteLength()); }}"), "E3001");
 }
 
 #[test]
-fn list_relocation_is_blocked_for_the_entire_lexical_element_loan() {
-    assert_rejected("void main() { List<Text> items = new List<Text>(); items.add(new Text(\"x\")); borrow Text item = items.getRef(0); println(item.byteLength()); items.reserve(100); }", "E3001");
+fn list_relocation_is_blocked_while_an_element_loan_is_live() {
+    assert_rejected("void main() { List<Text> items = new List<Text>(); items.add(new Text(\"x\")); borrow Text item = items.getRef(0); items.reserve(100); println(item.byteLength()); }", "E3001");
 }
 
 #[test]
-fn list_destruction_is_blocked_by_a_returned_element_loan() {
-    assert_rejected("void main() { List<Text> items = new List<Text>(); items.add(new Text(\"x\")); borrow Text item = items.getRef(0); drop(items); }", "E3002");
+fn list_destruction_is_blocked_while_an_element_loan_is_live() {
+    assert_rejected("void main() { List<Text> items = new List<Text>(); items.add(new Text(\"x\")); borrow Text item = items.getRef(0); drop(items); println(item.byteLength()); }", "E3002");
 }
 
 #[test]

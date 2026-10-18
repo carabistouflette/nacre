@@ -89,9 +89,10 @@ void update(borrow mut Writer writer) {
 ```
 
 Calling `inspect(counter)` borrows `counter`; it remains usable after the call.
-A local `borrow Reader reader = counter` keeps the shared loan until the end of
-its lexical block. `borrow mut Writer` is exclusive. An upcast cannot promote a
-shared borrow to exclusive access or turn a borrow into an owner.
+A local `borrow Reader reader = counter` keeps the shared loan through its last
+use on each control-flow path, then releases it before scope exit when possible.
+`borrow mut Writer` is exclusive. An upcast cannot promote a shared borrow to
+exclusive access or turn a borrow into an owner.
 
 Concrete access and an interface borrow of the same object remain in the same
 alias domain. The compiler tracks the original place, reborrows, and receiver
