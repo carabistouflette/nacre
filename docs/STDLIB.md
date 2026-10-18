@@ -670,8 +670,10 @@ message.
 
 Binding indices are one-based SQLite parameter indices; invalid indices return
 `Err`. Text and ByteBuffer inputs are copied using SQLite's transient-binding
-semantics, preserving embedded NUL in values. `step` returns `Ok(true)` for a row,
-`Ok(false)` at completion, or `Err` on SQLite failure. Completion is terminal:
+semantics, preserving embedded NUL in values. Bindings over `INT_MAX` bytes return
+`Err`; SQLite may impose a lower runtime size limit. `step` returns `Ok(true)` for
+a row, `Ok(false)` at completion, or `Err` on SQLite failure. Completion is
+terminal:
 repeated `step` calls return `Ok(false)` without rerunning the statement until
 `reset`. After a failed step, another `step` returns `Err` until `reset`. `reset`
 rewinds only its own statement and reports a prior evaluation error; call it
