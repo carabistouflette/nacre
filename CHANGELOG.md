@@ -9,6 +9,8 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   a full-template scan for every program function.
 - Share iterator-chain recognition between generic specialization and type checking,
   keeping fused-pipeline recognition consistent.
+- Build borrowed name indexes once for generic iterator inference instead of
+  rescanning class and function declarations for each inferred expression.
 
 - End local borrowed bindings and retained view loans after their last
   control-flow use. Backward liveness follows branch alternatives and loop

@@ -608,20 +608,54 @@ fn builtin_template(expander: &Expander, name: &str, arity: usize) -> Option<Str
     }).min().map(str::to_owned)
 }
 
-fn concrete_class_by_name<'a>(name: &str, classes: &'a [a::Class]) -> Option<&'a a::Class> {
-    classes.iter().find(|class| class.qualified_name == name || class.name == name)
+struct NameIndex<'a> {
+    class_names: HashMap<&'a str, &'a a::Class>,
+    qualified_class_names: HashMap<&'a str, &'a a::Class>,
+    function_names: HashMap<&'a str, &'a a::Function>,
 }
 
-fn concrete_class_for_type<'a>(ty: &Type, classes: &'a [a::Class]) -> Option<&'a a::Class> {
+impl<'a> NameIndex<'a> {
+    fn new(classes: &'a [a::Class], functions: &'a [a::Function]) -> Self {
+        let mut class_names = HashMap::with_capacity(classes.len().saturating_mul(2));
+        let mut qualified_classes = HashMap::with_capacity(classes.len());
+        for class in classes {
+            class_names.entry(class.qualified_name.as_str()).or_insert(class);
+            class_names.entry(class.name.as_str()).or_insert(class);
+            qualified_classes.entry(class.qualified_name.as_str()).or_insert(class);
+        }
+
+        let mut function_names = HashMap::with_capacity(functions.len().saturating_mul(2));
+        for function in functions {
+            function_names.entry(function.qualified_name.as_str()).or_insert(function);
+            function_names.entry(function.name.as_str()).or_insert(function);
+        }
+
+        Self { class_names, qualified_class_names: qualified_classes, function_names }
+    }
+
+    fn class(&self, name: &str) -> Option<&'a a::Class> {
+        self.class_names.get(name).copied()
+    }
+
+    fn qualified_class(&self, name: &str) -> Option<&'a a::Class> {
+        self.qualified_class_names.get(name).copied()
+    }
+
+    fn function(&self, name: &str) -> Option<&'a a::Function> {
+        self.function_names.get(name).copied()
+    }
+}
+
+fn concrete_class_for_type<'a>(ty: &Type, names: &NameIndex<'a>) -> Option<&'a a::Class> {
     let name = match ty {
-        Type::Named(name) => return concrete_class_by_name(name, classes),
+        Type::Named(name) => return names.class(name),
         Type::Applied { .. } => {
             let mut name = String::new();
             append_type_name(&mut name, ty);
             name
         }
         Type::Borrow { name, args, .. } if args.is_empty() =>
-            return concrete_class_by_name(name, classes),
+            return names.class(name),
         Type::Borrow { name, args, .. } => {
             let mut full = name.clone();
             append_type_arguments(&mut full, args);
@@ -629,7 +663,7 @@ fn concrete_class_for_type<'a>(ty: &Type, classes: &'a [a::Class]) -> Option<&'a
         }
         _ => return None,
     };
-    concrete_class_by_name(&name, classes)
+    names.class(&name)
 }
 
 
@@ -637,41 +671,40 @@ fn inferred_expression_type(
     expr: &a::Expr,
     locals: &HashMap<String, Type>,
     current_class: Option<&a::Class>,
-    classes: &[a::Class],
-    functions: &[a::Function],
+    names: &NameIndex<'_>,
 ) -> Option<Type> {
     use a::ExprKind as E;
     match &expr.kind {
         E::Var(name) => locals.get(name).cloned()
             .or_else(|| current_class.and_then(|class|
                 class.fields.iter().find(|field| field.name == *name).map(|field| field.ty.clone())))
-            .or_else(|| classes.iter().find(|class| class.qualified_name == *name)
+            .or_else(|| names.qualified_class(name)
                 .map(|class| Type::Named(class.qualified_name.clone()))),
         E::This => current_class.map(|class| Type::Named(class.qualified_name.clone())),
         E::Field { base, name } => {
-            let base = inferred_expression_type(base, locals, current_class, classes, functions)?;
-            concrete_class_for_type(&base, classes)?.fields.iter()
+            let base = inferred_expression_type(base, locals, current_class, names)?;
+            concrete_class_for_type(&base, names)?.fields.iter()
                 .find(|field| field.name == *name).map(|field| field.ty.clone())
         }
         E::New { class, .. } | E::Variant { class, .. } => Some(Type::Named(class.clone())),
-        E::Borrow { expr, .. } => inferred_expression_type(expr, locals, current_class, classes, functions),
+        E::Borrow { expr, .. } => inferred_expression_type(expr, locals, current_class, names),
         E::Cast { ty, .. } => Some(ty.clone()),
-        E::Call { name, .. } => functions.iter().find(|function|
-            function.qualified_name == *name || function.name == *name)
+        E::Call { name, .. } => names.function(name)
             .map(|function| function.return_type.clone()),
         E::MethodCall { receiver, name, .. } => {
-            let receiver = inferred_expression_type(receiver, locals, current_class, classes, functions)?;
-            concrete_class_for_type(&receiver, classes)?.methods.iter()
+            let receiver = inferred_expression_type(receiver, locals, current_class, names)?;
+            concrete_class_for_type(&receiver, names)?.methods.iter()
                 .find(|method| method.name == *name).map(|method| method.return_type.clone())
         }
-        E::StaticCall { class, name, .. } => concrete_class_for_type(&Type::Named(class.clone()), classes)?
-            .methods.iter().find(|method| method.name == *name).map(|method| method.return_type.clone()),
+        E::StaticCall { class, name, .. } =>
+            concrete_class_for_type(&Type::Named(class.clone()), names)?.methods.iter()
+                .find(|method| method.name == *name).map(|method| method.return_type.clone()),
         E::Char(_) => Some(Type::Char), E::Int(_) => Some(Type::Int), E::Long(_) => Some(Type::Long),
         E::Double(_) => Some(Type::Double), E::Unit => Some(Type::Unit), E::Boolean(_) => Some(Type::Boolean),
         E::String(_) => Some(Type::String),
         E::Try(inner) => {
-            let source_type = inferred_expression_type(inner, locals, current_class, classes, functions)?;
-            let source = concrete_class_for_type(&source_type, classes)?;
+            let source_type = inferred_expression_type(inner, locals, current_class, names)?;
+            let source = concrete_class_for_type(&source_type, names)?;
             if !source.is_builtin_result { return None; }
             source.variants.as_ref()?.iter()
                 .find(|variant| variant.name == "Ok")?.fields.first().cloned()
@@ -688,30 +721,29 @@ fn request_pair(
         &Environment::new(), span, 0)
 }
 
-struct IteratorContext<'a> {
-    current_class: Option<&'a a::Class>,
-    classes: &'a [a::Class],
-    functions: &'a [a::Function],
-    pair_template: &'a str,
-    option_template: &'a str,
+struct IteratorContext<'source, 'lookup> {
+    current_class: Option<&'source a::Class>,
+    names: &'lookup NameIndex<'source>,
+    pair_template: &'lookup str,
+    option_template: &'lookup str,
 }
 
 fn iterator_item_type(
     expander: &mut Expander,
     expr: &a::Expr,
     locals: &HashMap<String, Type>,
-    context: &IteratorContext<'_>,
+    context: &IteratorContext<'_, '_>,
     depth: usize,
 ) -> Result<Option<Type>, Diagnostic> {
-    let IteratorContext { current_class, classes, functions, pair_template, .. } = *context;
+    let IteratorContext { current_class, names, pair_template, .. } = *context;
     if depth >= 128 { return Ok(None); }
     let a::ExprKind::MethodCall { receiver, name, args, .. } = &expr.kind else { return Ok(None); };
     match name.as_str() {
         "iter" => {
-            let Some(receiver_type) = inferred_expression_type(receiver, locals, current_class, classes, functions) else {
+            let Some(receiver_type) = inferred_expression_type(receiver, locals, current_class, names) else {
                 return Ok(None);
             };
-            let Some(class) = concrete_class_for_type(&receiver_type, classes) else { return Ok(None); };
+            let Some(class) = concrete_class_for_type(&receiver_type, names) else { return Ok(None); };
             Ok(match &class.native {
                 Some(a::NativeClass::List(element) | a::NativeClass::Array(element)) => Some(element.clone()),
                 Some(a::NativeClass::Map { key, value, .. }) =>
@@ -721,10 +753,10 @@ fn iterator_item_type(
         }
         "map" if args.len() == 1 => {
             let _ = iterator_item_type(expander, receiver, locals, context, depth + 1)?;
-            let Some(callback_type) = inferred_expression_type(&args[0], locals, current_class, classes, functions) else {
+            let Some(callback_type) = inferred_expression_type(&args[0], locals, current_class, names) else {
                 return Ok(None);
             };
-            let Some(callback) = concrete_class_for_type(&callback_type, classes) else { return Ok(None); };
+            let Some(callback) = concrete_class_for_type(&callback_type, names) else { return Ok(None); };
             Ok(callback.methods.iter().find(|method| method.name == "apply")
                 .map(|method| method.return_type.clone()))
         }
@@ -777,40 +809,40 @@ fn bind_pattern_types<'ast>(
     ty: &Type,
     locals: &mut HashMap<String, Type>,
     changes: &mut LocalScopeChanges<'ast>,
-    classes: &[a::Class],
+    names: &NameIndex<'_>,
 ) {
     match &pattern.kind {
         a::PatternKind::Name(name) => {
             if name == "_" { return; }
             let variant_name = name.rsplit('.').next().unwrap_or(name);
-            if concrete_class_for_type(ty, classes).and_then(|class| class.variants.as_ref())
+            if concrete_class_for_type(ty, names).and_then(|class| class.variants.as_ref())
                 .is_some_and(|variants| variants.iter().any(|variant| variant.name == variant_name)) {
                 return;
             }
             bind_local_type(locals, changes, name, ty);
         }
         a::PatternKind::Variant { name, fields } => {
-            let Some(class) = concrete_class_for_type(ty, classes) else { return; };
+            let Some(class) = concrete_class_for_type(ty, names) else { return; };
             let Some(variants) = &class.variants else { return; };
             let variant_name = name.rsplit('.').next().unwrap_or(name);
             let Some(variant) = variants.iter().find(|variant| variant.name == variant_name) else { return; };
             for (pattern, field_type) in fields.iter().zip(&variant.fields) {
-                bind_pattern_types(pattern, field_type, locals, changes, classes);
+                bind_pattern_types(pattern, field_type, locals, changes, names);
             }
         }
         a::PatternKind::Record { fields, .. } => {
-            let Some(class) = concrete_class_for_type(ty, classes) else { return; };
+            let Some(class) = concrete_class_for_type(ty, names) else { return; };
             for (name, pattern) in fields {
                 if let Some(field) = class.fields.iter().find(|field| field.name == *name) {
-                    bind_pattern_types(pattern, &field.ty, locals, changes, classes);
+                    bind_pattern_types(pattern, &field.ty, locals, changes, names);
                 }
             }
         }
         a::PatternKind::Tuple(first, second) => {
-            let Some(class) = concrete_class_for_type(ty, classes) else { return; };
+            let Some(class) = concrete_class_for_type(ty, names) else { return; };
             if class.fields.len() == 2 {
-                bind_pattern_types(first, &class.fields[0].ty, locals, changes, classes);
-                bind_pattern_types(second, &class.fields[1].ty, locals, changes, classes);
+                bind_pattern_types(first, &class.fields[0].ty, locals, changes, names);
+                bind_pattern_types(second, &class.fields[1].ty, locals, changes, names);
             }
         }
     }
@@ -821,7 +853,7 @@ fn scan_iterator_expr(
     expander: &mut Expander,
     expr: &a::Expr,
     locals: &HashMap<String, Type>,
-    context: &IteratorContext<'_>,
+    context: &IteratorContext<'_, '_>,
 ) -> Result<(), Diagnostic> {
     let IteratorContext { pair_template, option_template, .. } = *context;
     use a::ExprKind as E;
@@ -864,9 +896,9 @@ fn scan_iterator_block<'ast>(
     block: &'ast a::Block,
     locals: &mut HashMap<String, Type>,
     changes: &mut LocalScopeChanges<'ast>,
-    context: &IteratorContext<'_>,
+    context: &IteratorContext<'_, '_>,
 ) -> Result<(), Diagnostic> {
-    let IteratorContext { current_class, classes, functions, .. } = *context;
+    let IteratorContext { current_class, names, .. } = *context;
     use a::StmtKind as S;
     let checkpoint = changes.len();
     let result = (|| {
@@ -907,12 +939,12 @@ fn scan_iterator_block<'ast>(
                 }
                 S::Match { value, arms } => {
                     scan_iterator_expr(expander, value, locals, context)?;
-                    let value_type = inferred_expression_type(value, locals, current_class, classes, functions);
+                    let value_type = inferred_expression_type(value, locals, current_class, names);
                     for arm in arms {
                         let arm_checkpoint = changes.len();
                         let result = (|| {
                             if let Some(ty) = &value_type {
-                                bind_pattern_types(&arm.pattern, ty, locals, changes, classes);
+                                bind_pattern_types(&arm.pattern, ty, locals, changes, names);
                             }
                             if let Some(guard) = &arm.guard {
                                 scan_iterator_expr(expander, guard, locals, context)?;
@@ -944,9 +976,12 @@ fn discover_iterator_specializations(
 ) -> Result<(), Diagnostic> {
     let Some(pair_template) = builtin_template(expander, "Pair", 2) else { return Ok(()); };
     let option_template = builtin_template(expander, "Option", 1).unwrap_or_default();
+    let names = NameIndex::new(classes, functions);
     let context = IteratorContext {
-        current_class: None, classes, functions,
-        pair_template: &pair_template, option_template: &option_template,
+        current_class: None,
+        names: &names,
+        pair_template: &pair_template,
+        option_template: &option_template,
     };
     for function in functions {
         let mut locals: HashMap<_, _> = function.params.iter()
@@ -1003,6 +1038,21 @@ mod tests {
         }
     }
 
+    fn function(name: &str, qualified_name: &str) -> a::Function {
+        a::Function {
+            name: name.to_owned(),
+            span: Span::default(),
+            return_type: Type::Unit,
+            params: Vec::new(),
+            body: Vec::new(),
+            visibility: a::Visibility::Public,
+            is_static: false,
+            readonly: false,
+            qualified_name: qualified_name.to_owned(),
+            unit: 0,
+        }
+    }
+
     fn test_expander(classes: impl IntoIterator<Item = a::Class>) -> Expander {
         let definitions = classes.into_iter()
             .map(|class| (class.qualified_name.clone(), class)).collect();
@@ -1027,4 +1077,30 @@ mod tests {
         assert_eq!(builtin_template(&expander, "Pair", 2).as_deref(), Some("a::Pair"));
         assert_eq!(builtin_template(&expander, "Pair", 3), None);
     }
+    #[test]
+    fn name_index_preserves_first_matching_name() {
+        let classes = vec![
+            builtin_class("pkg::Thing", 0, true),
+            builtin_class("Thing", 0, true),
+        ];
+        let functions = vec![
+            function("call", "pkg::call"),
+            function("other", "call"),
+        ];
+        let names = NameIndex::new(&classes, &functions);
+
+        assert_eq!(
+            names.class("Thing").map(|class| class.qualified_name.as_str()),
+            Some("pkg::Thing"),
+        );
+        assert_eq!(
+            names.qualified_class("Thing").map(|class| class.qualified_name.as_str()),
+            Some("Thing"),
+        );
+        assert_eq!(
+            names.function("call").map(|function| function.qualified_name.as_str()),
+            Some("pkg::call"),
+        );
+    }
+
 }
