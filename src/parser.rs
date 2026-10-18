@@ -38,17 +38,14 @@ impl Parser {
     }
     fn ident(&mut self) -> Result<(String, Span), Diagnostic> {
         let token = self.current().clone();
-        match token.kind {
-            K::Ident(name) => {
-                self.bump();
-                Ok((name, token.span))
-            }
-            K::Await => {
-                self.bump();
-                Ok(("await".to_owned(), token.span))
-            }
-            _ => Err(Diagnostic::new(self.current().span, "identifier expected")),
-        }
+        let name = match token.kind {
+            K::Ident(name) => name,
+            K::Await => "await".to_owned(),
+            _ => return Err(Diagnostic::new(self.current().span, "identifier expected")),
+        };
+        // Accepted identifier kinds are physical, non-EOF tokens; virtual `>` tokens cannot match.
+        self.position.index += 1;
+        Ok((name, token.span))
     }
     fn qualified_ident(&mut self) -> Result<(String, Span), Diagnostic> {
         let (mut path, mut span) = self.ident()?;

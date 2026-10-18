@@ -3,6 +3,8 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Avoid the discarded second token clone when parsing identifiers; advance the
+  cursor directly after extracting the retained name.
 - Avoid temporary ownership-state copies on identity control-flow nodes; only
   state-changing transfers clone an output buffer.
 - Avoid copying complete local type maps at every nested block during iterator
