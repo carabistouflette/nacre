@@ -98,6 +98,7 @@ pub fn resolve(program: &mut a::Program) -> Result<(), Diagnostic> {
         }
     }
 
+    let mut class_method_names_by_class: HashMap<usize, HashSet<String>> = HashMap::new();
     for imp in &mut program.impls {
         let unit = &program.units[imp.unit];
         let (trait_index, tr) = resolve_trait(&trait_map, &imported_traits[imp.unit], unit, &imp.trait_name, imp.span)?;
@@ -138,11 +139,16 @@ pub fn resolve(program: &mut a::Program) -> Result<(), Diagnostic> {
             Some((_, idx)) => idx,
         };
         trait_impl_targets.push((trait_index, target_idx));
+        let known_method_names = class_method_names_by_class.entry(target_idx).or_insert_with(|| {
+            program.classes[target_idx].methods.iter().map(|method| method.name.clone()).collect()
+        });
         let class = &mut program.classes[target_idx];
         class.qualified_name.clone_into(&mut imp.target_class);
         tr.qualified_name.clone_into(&mut imp.trait_name);
+        let implementation_method_names: HashSet<&str> =
+            imp.methods.iter().map(|method| method.name.as_str()).collect();
         for req in &tr.methods {
-            if !imp.methods.iter().any(|method| method.name == req.name) {
+            if !implementation_method_names.contains(req.name.as_str()) {
                 return Err(Diagnostic::new(imp.span, format!(
                     "missing method `{}` required by trait `{}`", req.name, tr.name
                 )));
@@ -150,7 +156,7 @@ pub fn resolve(program: &mut a::Program) -> Result<(), Diagnostic> {
         }
 
         for mut method in imp.methods.clone() {
-            if class.methods.iter().any(|m| m.name == method.name) {
+            if !known_method_names.insert(method.name.clone()) {
                 return Err(Diagnostic::new(method.span, format!(
                     "duplicate method `{}` on class `{}`", method.name, class.name
                 )));
@@ -284,16 +290,22 @@ fn check_trait_implementations(
             resolver.function(method, None, &[])?;
         }
     }
+    let mut methods_by_class: HashMap<usize, HashMap<&str, &a::Function>> = HashMap::new();
+    for &(_, class_index) in trait_impl_targets {
+        methods_by_class.entry(class_index).or_insert_with(|| {
+            let mut methods = HashMap::new();
+            for method in &program.classes[class_index].methods {
+                methods.entry(method.name.as_str()).or_insert(method);
+            }
+            methods
+        });
+    }
 
     for (imp, &(trait_index, class_index)) in program.impls.iter().zip(trait_impl_targets) {
         let tr = &program.traits[trait_index];
-        let class = &program.classes[class_index];
+        let methods = methods_by_class.get(&class_index).expect("trait implementation class was indexed");
         for req in &tr.methods {
-            let implementation = class
-                .methods
-                .iter()
-                .find(|method| method.name == req.name)
-                .ok_or_else(|| {
+            let implementation = methods.get(req.name.as_str()).copied().ok_or_else(|| {
                     Diagnostic::new(
                         imp.span,
                         format!(

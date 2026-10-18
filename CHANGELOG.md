@@ -33,6 +33,8 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   class for each iterator use.
 - Reuse a lazy native-method index while emitting Array templates and zeroed
   factories instead of rescanning the full function table per method.
+- Index trait method checks by name, avoiding nested declaration scans while
+  preserving impl-local membership and first-match diagnostics.
 
 - End local borrowed bindings and retained view loans after their last
   control-flow use. Backward liveness follows branch alternatives and loop

@@ -327,6 +327,13 @@ fn missing_method() {
 }
 
 #[test]
+fn trait_impl_requires_its_own_method_definitions() {
+    let source = "trait T { void run(); } class C { void run() {} } impl T for C {} void main() {}";
+    let error = validate(source).expect_err("class method must not satisfy an omitted impl method");
+    assert_eq!(error.span.start, source.find("impl T for C").unwrap());
+}
+
+#[test]
 fn wrong_return() {
     let source = "interface I {readonly int get();}class C implements I {readonly boolean get(){return true;}}void main(){}";
     let _error = validate(source).expect_err("invalid source accepted");
