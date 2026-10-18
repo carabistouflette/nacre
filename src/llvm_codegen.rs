@@ -459,6 +459,12 @@ struct LlvmEmitter<'a> {
     current_receiver: Option<usize>,
 }
 
+fn append_pointer_parameters(out: &mut String, count: usize) {
+    for _ in 0..count {
+        out.push_str(", ptr");
+    }
+}
+
 impl<'a> LlvmEmitter<'a> {
     fn new(
         program: &'a t::Program,
@@ -573,10 +579,9 @@ impl<'a> LlvmEmitter<'a> {
                         writeln!(out,
                             "declare ptr @ncr_llvm_variant_field_{id}_{variant_id}_{field_id}(ptr)").unwrap();
                     }
-                    let params = (0..variant.fields.len()).map(|_| "ptr").collect::<Vec<_>>().join(", ");
-                    let suffix = if params.is_empty() { String::new() } else { format!(", {params}") };
-                    writeln!(out,
-                        "declare void @ncr_llvm_variant_init_{id}_{variant_id}(ptr{suffix})").unwrap();
+                    write!(out, "declare void @ncr_llvm_variant_init_{id}_{variant_id}(ptr").unwrap();
+                    append_pointer_parameters(&mut out, variant.fields.len());
+                    out.push_str(")\n");
                 }
             }
             if !class.is_interface && class.variants.is_none() {
@@ -594,14 +599,13 @@ impl<'a> LlvmEmitter<'a> {
         }
         for function in &self.program.functions {
             if function.native.is_some() {
-                let mut params = vec!["ptr".to_owned(), "ptr".to_owned()];
-                params.extend(function.params.iter().map(|_| "ptr".to_owned()));
-                params.extend(["i64".to_owned(), "i64".to_owned()]);
-                writeln!(out, "declare void @ncr_llvm_native_{}({})", function.id, params.join(", ")).unwrap();
+                write!(out, "declare void @ncr_llvm_native_{}(ptr, ptr", function.id).unwrap();
+                append_pointer_parameters(&mut out, function.params.len());
+                out.push_str(", i64, i64)\n");
             } else if function.virtual_slot.is_some() {
-                let mut params = vec!["ptr".to_owned(), "ptr".to_owned()];
-                params.extend(function.params.iter().map(|_| "ptr".to_owned()));
-                writeln!(out, "declare void @ncr_llvm_call_{}({})", function.id, params.join(", ")).unwrap();
+                write!(out, "declare void @ncr_llvm_call_{}(ptr, ptr", function.id).unwrap();
+                append_pointer_parameters(&mut out, function.params.len());
+                out.push_str(")\n");
             }
         }
         for class in &self.program.classes {
