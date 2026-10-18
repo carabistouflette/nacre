@@ -26,6 +26,7 @@ struct ClassInfo {
 struct Tables {
     names: HashMap<String, usize>, classes: Vec<ClassInfo>,
     globals: HashMap<String, usize>, signatures: Vec<Signature>,
+    interface_implementers: Vec<Vec<usize>>,
 }
 impl Tables {
     fn resolve_type(&self, ty: &a::Type, span: Span) -> Result<Type, Diagnostic> {
@@ -75,18 +76,14 @@ impl Tables {
             let class = &tables.classes[id];
             let mut sendable = !class.has_borrow;
             if sendable && class.is_interface {
-                let mut has_implementation = false;
-                for (candidate, implementation) in tables.classes.iter().enumerate() {
-                    if implementation.implementations.iter().any(|(interface, _)|
-                        *interface == id) {
-                        has_implementation = true;
-                        if !class_sendable(tables, candidate, states) {
-                            sendable = false;
-                            break;
-                        }
+                let implementers = &tables.interface_implementers[id];
+                sendable &= !implementers.is_empty();
+                for &candidate in implementers {
+                    if !class_sendable(tables, candidate, states) {
+                        sendable = false;
+                        break;
                     }
                 }
-                sendable &= has_implementation;
             } else if sendable {
                 let (native_first, native_second, native_third) = match class.native {
                     Some(t::NativeClass::List(element)
@@ -337,7 +334,11 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
     if program.classes.iter().filter(|c| !c.is_builtin).count() > 128 {
         return Err(Diagnostic::new(Span::default(), "limit: 128 user classes per program"));
     }
-    let mut tables = Tables { names: HashMap::new(), classes: Vec::new(), globals: HashMap::new(), signatures: Vec::new() };
+    let mut tables = Tables {
+        names: HashMap::new(), classes: Vec::new(),
+        globals: HashMap::new(), signatures: Vec::new(),
+        interface_implementers: vec![Vec::new(); program.classes.len()],
+    };
     for (id, class) in program.classes.iter().enumerate() {
         if class.name == "System" || class.name == "println" {
             return Err(Diagnostic::new(class.span, "class name reserved for output support"));
@@ -767,6 +768,7 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
                 methods.push(implementation);
             }
             tables.classes[class_id].implementations.push((interface_id, methods));
+            tables.interface_implementers[interface_id].push(class_id);
         }
     }
     // Ordinary objects still require mandatory fields. Enums are alternatives:
@@ -787,9 +789,7 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
                 // An abstract interface with no local implementers is an opaque
                 // boundary, not a recursive ownership cycle. Existing concrete
                 // implementers still participate in the productivity fixed point.
-                let mut implementers = tables.classes.iter().enumerate().filter_map(
-                    |(candidate, class)| class.implementations.iter()
-                        .any(|(interface, _)| *interface == id).then_some(candidate));
+                let mut implementers = tables.interface_implementers[id].iter().copied();
                 match implementers.next() {
                     None => true,
                     Some(candidate) => productive[candidate]

@@ -7,6 +7,8 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   avoiding a full request-set scan after each expansion.
 - Count concrete user types incrementally during generic expansion instead of
   rescanning the accumulated class list after each specialization.
+- Index interface implementers during contract checking, avoiding repeated
+  whole-program scans in sendability and construction analysis.
 - Stream enum variant initializer signatures and bodies directly into the
   generated output buffer, eliminating temporary parameter and initializer strings.
 - Stream native and virtual pointer-slot runtime adapters directly into their
