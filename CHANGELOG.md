@@ -7,6 +7,9 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   now requires SAN-based identities, disables Common Name fallback, and accepts
   wildcards only as a complete leftmost label.
 
+- Reject non-`Future` operands to `await` and unsupported `async` declarations.
+  Document prefix and postfix `await` as unbounded blocking `Future.await(-1L)`.
+
 - Interpret XML supplied as `Text` as UTF-8 instead of reinterpreting its bytes
   using the XML declaration; `XmlReader.fromBuffer` retains byte encoding detection.
 

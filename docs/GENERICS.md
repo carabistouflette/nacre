@@ -78,9 +78,10 @@ another module cannot satisfy the bound.
 A trait implementation must provide every method with exactly matching
 parameter and return types resolved in the trait and implementation source
 units, plus matching borrowing modes, `readonly` status, and visibility. Trait
-methods are instance and synchronous; an implementation cannot substitute a
-static or async method. Implementation method bodies also retain imports from
-the source unit declaring the `impl`.
+declarations are synchronous instance methods. The `async` modifier is not
+supported; use the blocking `Future` API described in `STDLIB.md` for concurrent
+tasks. Implementation method bodies retain imports from the source unit
+declaring the `impl`.
 
 ## Ownership after substitution
 

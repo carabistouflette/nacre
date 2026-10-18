@@ -305,20 +305,6 @@ fn check_trait_implementations(
                     ),
                 ));
             }
-            if implementation.is_async != req.is_async {
-                let expected = if req.is_async {
-                    "asynchronous"
-                } else {
-                    "synchronous"
-                };
-                return Err(Diagnostic::new(
-                    implementation.span,
-                    format!(
-                        "method `{}` must be {expected} to implement trait `{}`",
-                        req.name, tr.name
-                    ),
-                ));
-            }
         }
     }
     Ok(())

@@ -90,7 +90,6 @@ pub struct Function {
     pub name: String, pub span: Span, pub return_type: Type,
     pub params: Vec<Param>, pub body: Block,
     pub visibility: Visibility, pub is_static: bool, pub readonly: bool,
-    pub is_async: bool,
     pub qualified_name: String, pub unit: usize,
 }
 #[derive(Debug, Clone)]

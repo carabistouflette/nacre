@@ -748,14 +748,61 @@ public void main() {}
 }
 
 #[test]
-fn async_await_syntax_and_execution() {
-    let source = "async int fetch() { return 42; }\nvoid main() {\n    int x = await fetch();\n    assert(x == 42);\n    int y = fetch().await;\n    assert(y == 42);\n}\n";
-    let program = support::compile(source, &[]).unwrap();
-    assert!(program.output().unwrap().status.success());
+fn await_rejects_non_future_expressions() {
+    for source in [
+        "void main() { int value = await 7; }",
+        "int value() { return 7; } void main() { int result = value().await; }",
+    ] {
+        let error = validate(source).unwrap_err();
+        assert!(
+            error.message.contains("await requires a `Future<T>` value"),
+            "{error}"
+        );
+    }
 }
 
 #[test]
-fn async_await_suspends_and_resumes_real_future() {
+fn await_rejects_temporary_future_values() {
+    let source = r#"
+class BackgroundTask implements CancelableTask<int> {
+    public Result<int, Text> run(borrow CancellationToken token) {
+        return new Result<int, Text>.Ok(1);
+    }
+}
+Future<int> pass(Future<int> future) { return future; }
+void main() {
+    match (Future<int>.spawn(new BackgroundTask())) {
+        Ok(future) {
+            Result<Option<int>, Text> result = await pass(future);
+            drop(result);
+        }
+        Err(error) { drop(error); }
+    }
+}
+"#;
+    let error = validate(source).unwrap_err();
+    assert!(
+        error.message.contains("await requires a Future local or field"),
+        "{error}"
+    );
+}
+
+#[test]
+fn async_function_modifiers_are_rejected() {
+    for source in [
+        "async int fetch() { return 42; } void main() {}",
+        "class Worker { async int fetch() { return 42; } } void main() {}",
+    ] {
+        let error = validate(source).unwrap_err();
+        assert!(
+            error.message.contains("`async` declarations are not supported"),
+            "{error}"
+        );
+    }
+}
+
+#[test]
+fn postfix_await_waits_for_real_future() {
     let source = r#"
 class BackgroundTask implements CancelableTask<int> {
     public Result<int, Text> run(borrow CancellationToken token) {
@@ -766,7 +813,7 @@ class BackgroundTask implements CancelableTask<int> {
 void main() {
     match (Future<int>.spawn(new BackgroundTask())) {
         Ok(fut) {
-            Result<Option<int>, Text> res = await fut;
+            Result<Option<int>, Text> res = fut.await;
             match (res) {
                 Ok(opt) {
                     match (opt) {
@@ -787,7 +834,7 @@ void main() {
 }
 
 #[test]
-fn async_await_suspends_and_resumes_with_barrier_latch() {
+fn prefix_await_waits_until_release_barrier() {
     let source = r#"
 class SuspendedTask implements CancelableTask<int> {
     private CountDownLatch releaseGate;
@@ -814,7 +861,7 @@ class ReleaseWorker implements Task<Unit> {
     }
 }
 
-Result<Unit, Text> runAsyncTest() {
+Result<Unit, Text> runAwaitTest() {
     CountDownLatch gate = CountDownLatch.create(1L)?;
     Future<int> fut = Future<int>.spawn(new SuspendedTask(gate.cloneHandle()?))?;
     Thread<Unit> releaser = Thread<Unit>.spawn(new ReleaseWorker(gate))?;
@@ -833,9 +880,9 @@ Result<Unit, Text> runAsyncTest() {
 }
 
 void main() {
-    match (runAsyncTest()) {
+    match (runAwaitTest()) {
         Ok(u) {}
-        Err(e) { assert(false, "async test failed"); }
+        Err(e) { assert(false, "await test failed"); }
     }
 }
 "#;

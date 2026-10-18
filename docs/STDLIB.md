@@ -2244,6 +2244,15 @@ cancellation and joins its worker, so drop may block until a noncooperative task
 finishes. Dropping a pool future does not join a worker; the pool owns queued and
 running work.
 
+The prefix `await future` and postfix `future.await` expressions are shorthand
+for `future.await(-1L)`. They accept an owned `Future<T>` place (a local
+variable or writable field), reject other types and temporary receivers, and
+block the calling operating-system thread until completion. They return
+`Result<Option<T>, Text>` and do not suspend the Nacre task or create an
+asynchronous frame. The caller's stack and borrows remain live during the wait.
+The `async` function and method modifier is unsupported; use `Future.spawn` or a
+`ThreadPool` to run `CancelableTask<T>` work concurrently.
+
 `Future.spawn` consumes and drops its task if synchronization setup or worker
 creation fails.
 

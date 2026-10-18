@@ -759,7 +759,7 @@ pub fn check(program: &a::Program) -> Result<t::Program, Diagnostic> {
             || (class.native.is_some() && class.constructor.is_none()) { continue; }
         let constructor = class.constructor.clone().unwrap_or_else(|| a::Function {
             name: class.name.clone(), span: class.span, return_type: a::Type::Void,
-            params: Vec::new(), body: Vec::new(), visibility: Visibility::Public, is_static: false, readonly: false, is_async: false,
+            params: Vec::new(), body: Vec::new(), visibility: Visibility::Public, is_static: false, readonly: false,
             qualified_name: format!("{}::{}", class.qualified_name, class.name), unit: class.unit,
         });
         let id = tables.add_signature(&constructor, Some(class_id), Kind::Constructor)?;
@@ -2336,20 +2336,48 @@ impl Checker<'_> {
         Ok((t::ExprKind::Cast { value: Box::new(value) }, target))
     }
     fn await_expression(&mut self, inner: &a::Expr, span: Span) -> Result<(t::ExprKind, Type), Diagnostic> {
-        if let Ok(receiver) = self.place(inner, false)
-            && let Some(class) = receiver.ty.object_class()
-                && let Some(crate::ir::NativeClass::Future(_)) = self.tables.classes[class].native {
-                    let id = *self.tables.classes[class].methods.get("await")
-                        .ok_or_else(|| Diagnostic::new(span, "method `await` is unknown on Future"))?;
-                    let timeout_expr = a::Expr {
-                        kind: a::ExprKind::Long(-1),
+        let receiver = match self.place(inner, false) {
+            Ok(receiver) => receiver,
+            Err(_) => {
+                let checked = self.expression(inner)?;
+                if let Some(class) = checked.ty.object_class()
+                    && matches!(
+                        self.tables.classes[class].native,
+                        Some(crate::ir::NativeClass::Future(_))
+                    )
+                {
+                    return Err(Diagnostic::new(
                         span,
-                        depth: inner.depth,
-                    };
-                    return self.call(id, Some(receiver), &[timeout_expr], span);
+                        "await requires a Future local or field; temporary receivers are unsupported",
+                    ));
                 }
-        let checked = self.expression(inner)?;
-        Ok((checked.kind, checked.ty))
+                return Err(Diagnostic::new(span, format!(
+                    "await requires a `Future<T>` value, found `{}`",
+                    self.tables.type_name(checked.ty)
+                )));
+            }
+        };
+        let Some(class) = receiver.ty.object_class().filter(|class| {
+            matches!(
+                self.tables.classes[*class].native,
+                Some(crate::ir::NativeClass::Future(_))
+            )
+        }) else {
+            return Err(Diagnostic::new(span, format!(
+                "await requires a `Future<T>` value, found `{}`",
+                self.tables.type_name(receiver.ty)
+            )));
+        };
+        let id = *self.tables.classes[class]
+            .methods
+            .get("await")
+            .ok_or_else(|| Diagnostic::new(span, "method `await` is unknown on Future"))?;
+        let timeout_expr = a::Expr {
+            kind: a::ExprKind::Long(-1),
+            span,
+            depth: inner.depth,
+        };
+        self.call(id, Some(receiver), &[timeout_expr], span)
     }
 
     fn borrow_expression(&mut self, inner: &a::Expr, mutable: bool, span: Span) -> Result<(t::ExprKind, Type), Diagnostic> {
