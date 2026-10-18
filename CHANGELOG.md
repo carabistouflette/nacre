@@ -13,6 +13,8 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   rescanning class and function declarations for each inferred expression.
 - Group public wildcard-import declarations by module once per resolver pass
   instead of rescanning all declarations for every wildcard import.
+- Index trait-implementation class candidates by name, preserving the existing
+  unit/module/root priority without scanning and sorting every class per impl.
 
 - End local borrowed bindings and retained view loans after their last
   control-flow use. Backward liveness follows branch alternatives and loop

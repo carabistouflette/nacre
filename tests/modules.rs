@@ -132,6 +132,16 @@ fn missing_and_ambiguous_imports_are_rejected() {
 }
 
 #[test]
+fn impl_target_prefers_current_module_class_over_root_class() {
+    let source = bundle(&[
+        ("root.ncr", "class Item {}"),
+        ("app.ncr", "module app.main; trait Marker { void mark(); } class Item { void mark() {} } impl Marker for Item { void mark() {} } void main() {}"),
+    ]);
+    let error = source.validate().unwrap_err();
+    assert!(error.message.contains("duplicate method `mark` on class `Item`"), "{error}");
+}
+
+#[test]
 fn declarations_are_unique_within_a_module_but_isolated_between_modules() {
     let duplicate = bundle(&[
         ("one.ncr", "module first.types; public class Item {}"),

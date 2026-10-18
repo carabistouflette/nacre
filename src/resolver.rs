@@ -79,29 +79,55 @@ pub fn resolve(program: &mut a::Program) -> Result<(), Diagnostic> {
     }
 
     let mut trait_impl_targets = Vec::with_capacity(program.impls.len());
+    let mut classes_by_name: HashMap<String, (usize, Vec<usize>)> = HashMap::new();
+    if !program.impls.is_empty() {
+        for (index, class) in program.classes.iter().enumerate() {
+            if let Some((_, additional)) = classes_by_name.get_mut(class.name.as_str()) {
+                additional.push(index);
+            } else {
+                classes_by_name.insert(class.name.clone(), (index, Vec::new()));
+            }
+        }
+    }
 
     for imp in &mut program.impls {
         let unit = &program.units[imp.unit];
         let (trait_index, tr) = resolve_trait(&trait_map, unit, &imp.trait_name, imp.span)?;
         let imp_module = &unit.module;
         let qualified_class = qualify(imp_module, &imp.target_class);
-        let mut class_candidates = Vec::new();
-        for (i, c) in program.classes.iter().enumerate() {
-            if c.unit == imp.unit && c.name == imp.target_class {
-                class_candidates.push((1, i));
-            } else if c.qualified_name == qualified_class {
-                class_candidates.push((2, i));
-            } else if program.units[c.unit].module.is_empty() && c.name == imp.target_class {
-                class_candidates.push((3, i));
+        let mut best_candidate: Option<(u8, usize)> = None;
+        let mut ambiguous_candidate = false;
+        if let Some((first, additional)) = classes_by_name.get(imp.target_class.as_str()) {
+            for &i in std::iter::once(first).chain(additional) {
+                let c = &program.classes[i];
+                let priority = if c.unit == imp.unit && c.name == imp.target_class {
+                    1
+                } else if c.qualified_name == qualified_class {
+                    2
+                } else if program.units[c.unit].module.is_empty() && c.name == imp.target_class {
+                    3
+                } else {
+                    continue;
+                };
+                match best_candidate {
+                    None => best_candidate = Some((priority, i)),
+                    Some((best_priority, _)) if priority < best_priority => {
+                        best_candidate = Some((priority, i));
+                        ambiguous_candidate = false;
+                    }
+                    Some((best_priority, _)) if priority == best_priority => {
+                        ambiguous_candidate = true;
+                    }
+                    _ => {}
+                }
             }
         }
-        class_candidates.sort_by_key(|(p, _)| *p);
-        let target_idx = match class_candidates.as_slice() {
-            [] => return Err(Diagnostic::new(imp.span, format!("unknown class `{}` in impl block", imp.target_class))),
-            [(p1, _), (p2, _), ..] if p1 == p2 => {
+        let target_idx = match best_candidate {
+            None => return Err(Diagnostic::new(imp.span, format!("unknown class `{}` in impl block", imp.target_class))),
+            Some(_) if ambiguous_candidate => {
                 return Err(Diagnostic::new(imp.span, format!("ambiguous class `{}` in impl block", imp.target_class)));
             }
-            [(_, idx), ..] => *idx,
+            Some((_, idx)) => idx,
         };
         trait_impl_targets.push((trait_index, target_idx));
         let class = &mut program.classes[target_idx];
