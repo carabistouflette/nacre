@@ -2405,8 +2405,8 @@ Listener `bind` requires a positive backlog. `localAddress` reports an ephemeral
 port selected by the OS. TCP `connect` and listener `accept` accept zero for an
 unbounded wait (unlike synchronizers, where zero polls and `-1` is unbounded), a
 positive monotonic millisecond timeout, and return `Err` for negative values. A timeout
-closes an in-progress connect descriptor. TCP reads
-append to the existing destination and return a positive count, `0` for orderly
+closes an in-progress connect descriptor. TCP reads append at most `maxBytes`
+and no more than 64 KiB per call. They return a positive count, `0` for orderly
 EOF, or `Err` (including timeout); a zero maximum returns zero immediately.
 `writeSome` returns one partial count. `writeAll` retries partial progress against
 one end-to-end deadline; `Err` can follow bytes already sent. A peer close reports

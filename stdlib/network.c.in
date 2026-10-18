@@ -420,17 +420,20 @@ static ncr_obj_@LONG_RESULT_TYPE@ @TCP_STREAM_READ_SOME@(ncr_obj_@TCP_STREAM_ID@
         || requested > SIZE_MAX - ncr_v_@READ_DESTINATION_ID@->length) {
         NCR_NETWORK_RETURN_ERROR(@LONG_RESULT_ID@, "TcpStream.readSome buffer length", EOVERFLOW, ncr_line, ncr_column);
     }
+    /* Limit each receive and wait for readiness before growing the destination. */
+    if (requested > 65536U) { requested = 65536U; }
     bool finite = false;
     int64_t deadline = 0;
     int failure = 0;
     if (!ncr_network_deadline(ncr_v_@READ_TIMEOUT_ID@, &finite, &deadline, &failure)) {
         NCR_NETWORK_RETURN_ERROR(@LONG_RESULT_ID@, "TcpStream.readSome timeout", failure, ncr_line, ncr_column);
     }
-    @BUFFER_RESERVE@(ncr_v_@READ_DESTINATION_ID@, ncr_v_@READ_DESTINATION_ID@->length + requested, ncr_line, ncr_column);
     for (;;) {
         int ready = ncr_network_poll(p->fd, POLLIN, finite, deadline, &failure);
         if (ready == 0) { NCR_NETWORK_RETURN_TIMEOUT(@LONG_RESULT_ID@, "TcpStream.readSome", ncr_line, ncr_column); }
         if (ready < 0) { NCR_NETWORK_RETURN_ERROR(@LONG_RESULT_ID@, "TcpStream.readSome poll", failure, ncr_line, ncr_column); }
+        @BUFFER_RESERVE@(ncr_v_@READ_DESTINATION_ID@,
+            ncr_v_@READ_DESTINATION_ID@->length + requested, ncr_line, ncr_column);
         ssize_t count = recv(p->fd, ncr_v_@READ_DESTINATION_ID@->bytes + ncr_v_@READ_DESTINATION_ID@->length, requested, 0);
         if (count >= 0) {
             ncr_v_@READ_DESTINATION_ID@->length += (size_t)count;

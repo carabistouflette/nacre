@@ -403,10 +403,12 @@ void main() {
                                                 Err(error) { println("read-negative-rejected"); }
                                                 Ok(count) { println("read-negative-unexpected"); }
                                             }
-                                            match (stream.readSome(buffer, 10L, 50L)) {
+                                            match (stream.readSome(buffer, 1048576L, 50L)) {
                                                 Err(error) { println("read-deadline"); }
                                                 Ok(count) { println("read-unexpected"); }
                                             }
+                                            if (buffer.capacity() == 0L) { println("read-capacity-untouched"); }
+                                            else { println("read-capacity-grew"); }
                                         }
                                     }
                                     match (stream.close()) { Ok(unit) { println("stream-closed"); } Err(error) { println("stream-close-error"); } }
@@ -426,12 +428,75 @@ void main() {
     let endpoint = process.next_line();
     let port: u16 = endpoint.rsplit(':').next().unwrap().parse().unwrap();
     let _peer = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+    assert_eq!(process.next_line(), "read-negative-rejected");
+    assert_eq!(process.next_line(), "read-deadline");
+    assert_eq!(process.next_line(), "read-capacity-untouched");
     let (status, stdout, stderr) = process.finish_for(Duration::from_secs(10));
     assert!(status.success(), "read-deadline server failed:\n{stderr}");
     assert_live_zero(&stderr);
-    assert!(stdout.contains("read-negative-rejected\n"), "{stdout}");
     assert!(stdout.contains("read-deadline\n"), "{stdout}");
+    assert!(stdout.contains("read-capacity-untouched\n"), "{stdout}");
 }
+
+#[test]
+fn tcp_read_some_bounds_large_max_bytes() {
+    let source = r#"
+void main() {
+    Text host = new Text("127.0.0.1");
+    match (SocketAddress.resolve(host, 0, false)) {
+        Err(error) { println("resolve-error"); }
+        Ok(addresses) {
+            match (TcpListener.bind(addresses.getRef(0), 8)) {
+                Err(error) { println("bind-error"); }
+                Ok(listener) {
+                    match (listener.localAddress()) {
+                        Err(error) { println("local-error"); }
+                        Ok(local) {
+                            Text endpoint = local.toText();
+                            Console.printText(endpoint);
+                            Console.print("\n");
+                            match (listener.accept(5000L)) {
+                                Err(error) { println("accept-error"); }
+                                Ok(stream) {
+                                    match (ByteBuffer.withCapacity(0L)) {
+                                        Err(error) { println("buffer-error"); }
+                                        Ok(buffer) {
+                                            match (stream.readSome(buffer, 1048576L, 5000L)) {
+                                                Ok(count) {
+                                                    if (count == 1L && buffer.length() == 1L
+                                                        && buffer.capacity() <= 131072L
+                                                        && buffer.get(0L) == (byte)73) {
+                                                        println("read-bounded");
+                                                    } else { println("read-unbounded"); }
+                                                }
+                                                Err(error) { println("read-error"); }
+                                            }
+                                        }
+                                    }
+                                    match (stream.close()) { Ok(unit) { println("stream-closed"); } Err(error) { println("stream-close-error"); } }
+                                }
+                            }
+                            match (listener.close()) { Ok(unit) { println("listener-closed"); } Err(error) { println("listener-close-error"); } }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+"#;
+    let server = compile(source);
+    let mut process = Running::start(&server, &[], false);
+    let endpoint = process.next_line();
+    let port: u16 = endpoint.rsplit(':').next().unwrap().parse().unwrap();
+    let mut peer = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+    peer.write_all(&[73]).unwrap();
+    let (status, stdout, stderr) = process.finish_for(Duration::from_secs(10));
+    assert!(status.success(), "TCP large-read server failed:\n{stderr}");
+    assert_live_zero(&stderr);
+    assert!(stdout.contains("read-bounded\n"), "{stdout}");
+}
+
 #[test]
 fn tcp_peer_close_is_reported_as_a_write_error_without_sigpipe() {
     let server_source = r#"
