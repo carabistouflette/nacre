@@ -111,7 +111,7 @@ static @BUFFER_TYPE@ ncr_cryptokeys_buffer_copy(const unsigned char *bytes, size
     size_t line, size_t column) {
     unsigned char *owned = NULL;
     if (length > 0) {
-        owned = ncr_allocate(length, line, column);
+        owned = ncr_allocate_raw(length, line, column);
         memcpy(owned, bytes, length);
     }
     return ncr_cryptokeys_buffer_take(owned, length, length, line, column);

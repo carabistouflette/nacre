@@ -13,6 +13,8 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 
 - Remove duplicate clearing after calloc-backed XML and Temporal allocations.
 
+- Avoid zero-initializing fully overwritten byte copies in BinaryReader, SQLite blobs, Encoding, crypto buffers, and HTTP.
+
 - Align Tree-sitter, Zed, and VS Code syntax support with trait/impl declarations,
   bounded type parameters, and async/await; capture Zed's named shift-right token.
 

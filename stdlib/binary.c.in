@@ -360,7 +360,7 @@ static ncr_obj_@READER_BYTES_RESULT@ @BINARY_READER_READ_BYTES@(ncr_obj_@READER_
     result->length = 0;
     result->capacity = 0;
     if (size > 0) {
-        result->bytes = ncr_allocate(size, ncr_line, ncr_column);
+        result->bytes = ncr_allocate_raw(size, ncr_line, ncr_column);
         memcpy(result->bytes, input, size);
         result->length = size;
         result->capacity = size;

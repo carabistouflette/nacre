@@ -846,7 +846,7 @@ static ncr_obj_@STATEMENT_COLUMN_BLOB_RESULT@ @SQL_STATEMENT_COLUMN_BLOB@(
         copy->length = (size_t)count;
         copy->capacity = (size_t)count;
         if (count > 0) {
-            copy->bytes = ncr_allocate((size_t)count, ncr_line, ncr_column);
+            copy->bytes = ncr_allocate_raw((size_t)count, ncr_line, ncr_column);
             memcpy(copy->bytes, bytes, (size_t)count);
         }
         option.tag = @STATEMENT_COLUMN_BLOB_SOME_TAG@;

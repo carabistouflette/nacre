@@ -17,7 +17,7 @@ static ncr_obj_@TEXT_ID@ *ncr_encoding_text_copy_@ID@(
         text->length = (int32_t)length;
         return text;
     }
-    unsigned char *copy = ncr_allocate(length, line, column);
+    unsigned char *copy = ncr_allocate_raw(length, line, column);
     memcpy(copy, bytes, length);
     return ncr_encoding_text_take_@ID@(copy, length, line, column);
 }

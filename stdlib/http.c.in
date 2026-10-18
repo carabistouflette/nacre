@@ -273,7 +273,7 @@ static size_t ncr_http_header_callback(char *bytes, size_t size, size_t count, v
     struct ncr_http_header_entry *entries = ncr_http_header_entries(response);
     for (size_t index = 0; index < response->header_count; index++) {
         if (ncr_http_header_name_equal(&entries[index], (const unsigned char *)bytes, colon)) {
-            unsigned char *value = value_length == 0 ? NULL : ncr_allocate(value_length, context->line, context->column);
+            unsigned char *value = value_length == 0 ? NULL : ncr_allocate_raw(value_length, context->line, context->column);
             if (value_length > 0) { memcpy(value, bytes + value_start, value_length); }
             ncr_deallocate(entries[index].value);
             entries[index].value = value;
@@ -291,9 +291,9 @@ static size_t ncr_http_header_callback(char *bytes, size_t size, size_t count, v
         return 0;
     }
     entries = ncr_http_header_entries(response);
-    unsigned char *name = ncr_allocate(colon, context->line, context->column);
+    unsigned char *name = ncr_allocate_raw(colon, context->line, context->column);
     memcpy(name, bytes, colon);
-    unsigned char *value = value_length == 0 ? NULL : ncr_allocate(value_length, context->line, context->column);
+    unsigned char *value = value_length == 0 ? NULL : ncr_allocate_raw(value_length, context->line, context->column);
     if (value_length > 0) { memcpy(value, bytes + value_start, value_length); }
     entries[response->header_count++] = (struct ncr_http_header_entry){
         .name = name, .name_length = colon, .value = value, .value_length = value_length,
@@ -414,7 +414,7 @@ static void @HTTP_REQUEST_SET_BODY@(ncr_obj_@HTTP_REQUEST_ID@ *ncr_self,
         ncr_fail("HttpRequest.setBody: invalid request or body", ncr_line, ncr_column);
     }
     size_t length = @SET_BODY_SOURCE_ID@->length;
-    unsigned char *copy = length == 0 ? NULL : ncr_allocate(length, ncr_line, ncr_column);
+    unsigned char *copy = length == 0 ? NULL : ncr_allocate_raw(length, ncr_line, ncr_column);
     if (length > 0) { memcpy(copy, @SET_BODY_SOURCE_ID@->bytes, length); }
     ncr_deallocate(ncr_self->body);
     ncr_self->body = copy;
