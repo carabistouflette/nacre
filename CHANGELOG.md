@@ -32,6 +32,8 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 - Sanitize control characters in compiler diagnostic snippets and omit carriage
   returns from displayed CRLF source lines.
 
+- Use the same four-space tab expansion for reported source columns.
+
 - Align Tree-sitter, Zed, and VS Code syntax support with trait/impl declarations,
   bounded type parameters, and async/await; capture Zed's named shift-right token.
 

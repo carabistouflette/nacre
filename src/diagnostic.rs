@@ -1,4 +1,4 @@
-//! Source locations are byte offsets; diagnostics display character columns.
+//! Source locations are byte offsets; displayed columns count tabs as four spaces.
 use std::fmt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -109,7 +109,7 @@ impl std::error::Error for Diagnostic {}
 pub fn line_column(source: &str, offset: usize) -> (usize, usize) {
     let prefix = &source[..char_boundary(source, offset)];
     let line = prefix.bytes().filter(|&b| b == b'\n').count() + 1;
-    let column = prefix.rsplit('\n').next().unwrap_or("").chars().count() + 1;
+    let column = rendered_columns(prefix.rsplit('\n').next().unwrap_or("")) + 1;
     (line, column)
 }
 

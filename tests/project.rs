@@ -138,9 +138,12 @@ fn rendered_diagnostics_sanitize_control_characters_in_crlf_source() {
     let diagnostic = Diagnostic::new(span, "invalid token").with_note(span, "same location");
     let rendered = diagnostic.render("control.ncr", source);
 
+    assert!(rendered.starts_with("control.ncr:2:5:"), "{rendered:?}");
+
     assert!(!rendered.contains('\x1b'), "{rendered:?}");
     assert!(!rendered.contains('\r'), "{rendered:?}");
     assert!(rendered.contains("    �[31mtrue"), "{rendered:?}");
+    assert!(rendered.contains("  |     ^\n"), "{rendered:?}");
 }
 
 #[test]
