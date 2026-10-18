@@ -70,7 +70,7 @@ pub fn resolve(program: &mut a::Program) -> Result<(), Diagnostic> {
         }
     }
 
-    for imp in &program.impls {
+    for imp in &mut program.impls {
         let imp_module = &program.units[imp.unit].module;
         let mut tr = trait_map.get(&(imp_module.clone(), imp.trait_name.clone()))
             .or_else(|| trait_map.get(&(String::new(), imp.trait_name.clone())))
@@ -121,6 +121,7 @@ pub fn resolve(program: &mut a::Program) -> Result<(), Diagnostic> {
             [(_, idx), ..] => *idx,
         };
         let class = &mut program.classes[target_idx];
+        class.qualified_name.clone_into(&mut imp.target_class);
         for req in &tr.methods {
             let imp_method = imp.methods.iter().find(|m| m.name == req.name).ok_or_else(|| {
                 Diagnostic::new(imp.span, format!("missing method `{}` required by trait `{}`", req.name, tr.name))

@@ -1,8 +1,8 @@
 # Generic specialization
 
 Nacre explicitly specializes generic classes, interfaces, and enums before type
-checking. This is static nominal specialization, not Java-style runtime erasure or
-a bounded trait system.
+checking. This is static nominal specialization with optional single-trait
+bounds, not Java-style runtime erasure or a general trait system.
 
 ```java
 class Duo<A, B> {
@@ -39,10 +39,10 @@ to substituted declarations, not direct primitive borrow syntax. `borrow mut T`
 still requires a borrowable nominal type.
 
 Every application supplies all arguments: no diamond, inferred arguments, raw
-generic type, bounds, wildcard, or variance is supported. Generic functions and
-methods are not supported. A static method may be called through an applied type,
-such as `Box<int>.create()`; a type parameter cannot be used for static dispatch
-such as `T.create()`.
+generic type, wildcard, or variance is supported. Each type parameter may declare
+one trait bound (`T: Marker`). Generic functions and methods are not supported.
+A static method may be called through an applied type, such as `Box<int>.create()`;
+a type parameter cannot be used for static dispatch such as `T.create()`.
 
 ## When templates are checked
 
@@ -69,7 +69,8 @@ void main() {}
 
 `Example<int>` is compatible with the return type; `Example<boolean>` is not.
 Operations and interface contracts are checked after substituting the concrete
-type, not against bounds declared on `T`.
+type. A declared trait bound requires a matching `impl` for that concrete type,
+including when the class and implementation are in named modules.
 
 ## Ownership after substitution
 

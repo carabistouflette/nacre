@@ -401,6 +401,46 @@ public void main() {
 }
 
 #[test]
+fn generic_trait_bounds_accept_named_module_implementations() {
+    let contracts = r#"
+module library.contracts;
+public trait Marker {}
+"#;
+    let model = r#"
+module library.model;
+import library.contracts.*;
+
+public class Item {}
+impl Marker for Item {}
+
+public class Holder<T: Marker> {
+    private T item;
+    public Holder(T item) { this.item = item; }
+    public int value() { return 42; }
+}
+"#;
+    let app = r#"
+module app;
+import library.model.*;
+
+public void main() {
+    Item item = new Item();
+    Holder<Item> holder = new Holder<Item>(item);
+    println(holder.value());
+}
+"#;
+    let bundle = nacre::project::SourceBundle::from_sources(vec![
+        ("contracts.ncr".to_owned(), contracts.to_owned()),
+        ("model.ncr".to_owned(), model.to_owned()),
+        ("app.ncr".to_owned(), app.to_owned()),
+    ]).unwrap();
+    let program = support::compile(&bundle, &[]).unwrap();
+    let output = program.output().unwrap();
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert_eq!(output.stdout, b"42\n");
+}
+
+#[test]
 fn ambiguous_imported_traits_are_rejected() {
     let source_a = "module mod_a;\npublic trait SharedTrait { void run(); }\n";
     let source_b = "module mod_b;\npublic trait SharedTrait { void run(); }\n";
