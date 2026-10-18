@@ -212,7 +212,7 @@ void main() {
                                             }
                                             long consumed = 0L;
                                             while (consumed < 5L) {
-                                                match (stream.readSome(received, 2L, 0L)) {
+                                                match (stream.readSome(received, 9223372036854775807L, 0L)) {
                                                     Ok(count) {
                                                         if (count == 0L) { consumed = 5L; }
                                                         else { consumed = consumed + count; }
@@ -774,12 +774,14 @@ void main() {
                                     match (ByteBuffer.withCapacity(0L)) {
                                         Err(error) { println("bounded-buffer-error"); }
                                         Ok(bounded) {
-                                            match (socket.receiveFrom(bounded, 1048576L, 1000L)) {
+                                            bounded.append((byte)88);
+                                            match (socket.receiveFrom(bounded, 9223372036854775807L, 1000L)) {
                                                 Err(error) { println("bounded-receive-error"); }
                                                 Ok(datagram) {
                                                     if (datagram.bytesRead() == 1L && !datagram.truncated()
-                                                        && bounded.length() == 1L && bounded.capacity() <= 131072L
-                                                        && bounded.get(0L) == (byte)90) {
+                                                        && bounded.length() == 2L && bounded.capacity() <= 131072L
+                                                        && bounded.get(0L) == (byte)88
+                                                        && bounded.get(1L) == (byte)90) {
                                                         println("udp-read-bounded");
                                                     } else { println("udp-read-unbounded"); }
                                                 }

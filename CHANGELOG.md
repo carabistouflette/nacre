@@ -75,6 +75,9 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 - Bound `UdpSocket.receiveFrom` to 64 KiB and defer buffer growth until a
   datagram is ready; timeouts no longer reserve the caller's full `maxBytes`.
 
+- Clamp the TCP and UDP 64 KiB receive limit before checking destination append
+  arithmetic, so large positive limits remain valid with nonempty buffers.
+
 - Align Tree-sitter, Zed, and VS Code syntax support with trait/impl declarations,
   bounded type parameters, and async/await; capture Zed's named shift-right token.
 

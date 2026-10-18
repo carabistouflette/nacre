@@ -2427,6 +2427,10 @@ reported as truncated. Both UDP methods use the same timeout convention as TCP;
 timeout is `Err`. No automatic datagram retry or network service discovery is
 provided.
 
+Both TCP and UDP receive methods clamp the requested limit to 64 KiB before
+checking append-length arithmetic, so a large positive `maxBytes` remains valid
+when the destination already contains data.
+
 ## HTTP(S)
 
 `HttpRequest` and `HttpResponse` are affine values backed by libcurl. A generated
