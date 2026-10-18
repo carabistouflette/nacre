@@ -1,4 +1,5 @@
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
+use std::collections::HashSet;
 pub(super) const TEXT_INLINE_CAPACITY: usize = 23;
 pub(super) fn marker(method: M) -> &'static str {
     match method {
@@ -696,38 +697,38 @@ pub(super) fn replace_method_ids(
     program: &t::Program,
     receiver: Option<usize>,
 ) -> String {
-    let mut substitutions = Vec::new();
-    let mut search_from = 0;
-    while let Some((start, end)) = next_placeholder(&body, search_from) {
-        let placeholder = &body[start..end];
-        if substitutions.iter().any(|(existing, _)| *existing == placeholder) {
-            search_from = end;
-            continue;
-        }
-        let function = program.functions.iter().find_map(|function| {
-            let method = function.native?;
-            let receiver_matches = if let Some(class) = receiver {
-                let is_static_factory = function.receiver.is_none()
-                    && matches!(function.native, Some(M::MapWithHasher | M::SetWithHasher))
-                    && function.name.strip_prefix(program.classes[class].name.as_str())
-                        == Some(".withHasher");
-                function.receiver == Some(class) || is_static_factory
-            } else {
-                true
-            };
-            if receiver_matches && marker(method) == placeholder {
-                Some((function, method))
-            } else {
-                None
+    let mut placeholders = HashSet::new();
+    let mut previous_at = None;
+    for (index, byte) in body.bytes().enumerate() {
+        if byte == b'@' {
+            if let Some(start) = previous_at {
+                // Keep overlapping pairs so an unmatched outer placeholder cannot hide an inner one.
+                placeholders.insert(&body[start..=index]);
             }
-        });
-        if let Some((function, method)) = function {
-            substitutions.push((marker(method), format!("ncr_fn_{}", function.id)));
-            search_from = end;
-        } else {
-            search_from = start + 1;
+            previous_at = Some(index);
         }
     }
+    if placeholders.is_empty() { return body; }
+
+    let mut substitutions = Vec::new();
+    for function in &program.functions {
+        let Some(method) = function.native else { continue; };
+        let placeholder = marker(method);
+        if !placeholders.contains(placeholder) { continue; }
+        let receiver_matches = if let Some(class) = receiver {
+            let is_static_factory = function.receiver.is_none()
+                && matches!(method, M::MapWithHasher | M::SetWithHasher)
+                && function.name.strip_prefix(program.classes[class].name.as_str())
+                    == Some(".withHasher");
+            function.receiver == Some(class) || is_static_factory
+        } else {
+            true
+        };
+        if receiver_matches && placeholders.remove(placeholder) {
+            substitutions.push((placeholder, format!("ncr_fn_{}", function.id)));
+        }
+    }
+    drop(placeholders);
     replace_placeholders(body, &substitutions)
 }
 
@@ -868,17 +869,32 @@ mod tests {
                 function(20, "Map.withHasher", None, super::M::MapWithHasher),
                 function(30, "Map.withHasher", None, super::M::MapWithHasher),
                 function(40, "Other.withHasher", None, super::M::MapWithHasher),
+                function(50, "Map.size", Some(0), super::M::MapSize),
+                function(60, "Map.size", Some(0), super::M::MapSize),
             ],
             main: 0,
         };
-        let marker = super::marker(super::M::MapWithHasher);
+        let with_hasher = super::marker(super::M::MapWithHasher);
+        let map_size = super::marker(super::M::MapSize);
         assert_eq!(
-            replace_method_ids(marker.to_owned(), &program, None),
+            replace_method_ids(with_hasher.to_owned(), &program, None),
             "ncr_fn_10",
         );
         assert_eq!(
-            replace_method_ids(marker.to_owned(), &program, Some(0)),
+            replace_method_ids(with_hasher.to_owned(), &program, Some(0)),
             "ncr_fn_20",
+        );
+        assert_eq!(
+            replace_method_ids(
+                format!("{with_hasher}{map_size}{with_hasher}{map_size}"),
+                &program,
+                Some(0),
+            ),
+            "ncr_fn_20ncr_fn_50ncr_fn_20ncr_fn_50",
+        );
+        assert_eq!(
+            replace_method_ids(format!("@UNKNOWN{map_size}"), &program, Some(0)),
+            "@UNKNOWNncr_fn_50",
         );
     }
 
