@@ -1,5 +1,7 @@
 name: Nacre
 on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
 jobs:
   test:
     name: Native ${{ matrix.backend }} / ${{ matrix.cc }}

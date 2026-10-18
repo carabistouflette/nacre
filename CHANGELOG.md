@@ -34,6 +34,8 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 
 - Use the same four-space tab expansion for reported source columns.
 
+- Grant CI workflows read-only repository-content permissions.
+
 - Run Clippy with warnings denied across all Rust targets and the fuzzing feature in CI.
 
 - Align Tree-sitter, Zed, and VS Code syntax support with trait/impl declarations,
