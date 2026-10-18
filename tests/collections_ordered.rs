@@ -192,6 +192,21 @@ void main() {
 }
 
 #[test]
+fn bitset_preallocated_and_cloned_capacity_stays_logically_zero() {
+    assert_native(r#"
+void main() {
+    BitSet reserved = new BitSet(1024L);
+    BitSet copy = reserved.clone();
+    copy.set(1000L);
+    println(reserved.isEmpty() && !reserved.get(1000L));
+    println(copy.cardinality() == 1L && copy.get(1000L) && !copy.get(500L));
+    reserved.set(1L);
+    println(reserved.get(1L) && !copy.get(1L));
+}
+"#, b"true\ntrue\ntrue\n");
+}
+
+#[test]
 fn owned_iterators_transfer_drain_map_filter_take_skip_and_drop_remainders() {
     assert_native(r#"
 class TimesTwo implements Mapper<int, int> {

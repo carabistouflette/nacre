@@ -1,4 +1,5 @@
 /* Dense bits are packed into 64-bit words; capacity is measured in words. */
+/* Capacity slack is uninitialized; ensure() zeros words before they become logical. */
 static void ncr_bit_set_reserve_@ID@(ncr_obj_@ID@ *p, int64_t requested,
                                      size_t line, size_t column) {
     if (requested < 0) { ncr_fail("BitSet capacity is too large", line, column); }
@@ -10,7 +11,7 @@ static void ncr_bit_set_reserve_@ID@(ncr_obj_@ID@ *p, int64_t requested,
     if ((uint64_t)capacity > SIZE_MAX / sizeof(uint64_t)) {
         ncr_fail("BitSet capacity is too large", line, column);
     }
-    uint64_t *words = ncr_allocate((size_t)capacity * sizeof(uint64_t), line, column);
+    uint64_t *words = ncr_allocate_raw((size_t)capacity * sizeof(uint64_t), line, column);
     if (p->word_count > 0) {
         memcpy(words, p->words, (size_t)p->word_count * sizeof(uint64_t));
     }
@@ -59,8 +60,7 @@ static void @BIT_SET_NEW@(ncr_obj_@ID@ *p, int64_t initialBits,
     p->word_count = 0;
     p->capacity = words;
     if (words > 0) {
-        p->words = ncr_allocate((size_t)words * sizeof(uint64_t), line, column);
-        memset(p->words, 0, (size_t)words * sizeof(uint64_t));
+        p->words = ncr_allocate_raw((size_t)words * sizeof(uint64_t), line, column);
     }
 }
 
@@ -186,8 +186,7 @@ static ncr_obj_@ID@ * @BIT_SET_CLONE@(ncr_obj_@ID@ *p, size_t line, size_t colum
     copy->capacity = p->capacity;
     copy->words = NULL;
     if (copy->capacity > 0) {
-        copy->words = ncr_allocate((size_t)copy->capacity * sizeof(uint64_t), line, column);
-        memset(copy->words, 0, (size_t)copy->capacity * sizeof(uint64_t));
+        copy->words = ncr_allocate_raw((size_t)copy->capacity * sizeof(uint64_t), line, column);
         if (copy->word_count > 0) {
             memcpy(copy->words, p->words, (size_t)copy->word_count * sizeof(uint64_t));
         }
