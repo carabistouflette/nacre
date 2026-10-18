@@ -8,6 +8,8 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   cloning it for each request.
 - Key cached C executables by compiler version/target and included header contents;
   isolate concurrent cache writes and clean failed staging files.
+- Append generated C directly into the source-map buffer, avoiding a second full
+  translation-unit allocation and copy for project compilation.
 - Keep Clang-only strict qualifier warnings on the direct-LLVM side of parity
   tests, leaving the GCC/C fixture invocation with supported compiler options.
 - Record matched JSON, string, binary-streaming, map, Sudoku, and Life benchmarks
