@@ -174,7 +174,12 @@ static bool ncr_http_response_line_is_status(const unsigned char *line, size_t l
     if (line[space + 1] < '0' || line[space + 1] > '9'
         || line[space + 2] < '0' || line[space + 2] > '9'
         || line[space + 3] < '0' || line[space + 3] > '9') { return false; }
-    return length == space + 4 || line[space + 4] == ' ';
+    if (length != space + 4 && line[space + 4] != ' ') { return false; }
+    for (size_t index = space + 4; index < length; ++index) {
+        unsigned char byte = line[index];
+        if ((byte < 0x20U && byte != '\t') || byte == 0x7fU) { return false; }
+    }
+    return true;
 }
 
 struct ncr_http_callback_context {
@@ -185,7 +190,7 @@ struct ncr_http_callback_context {
     bool response_too_large;
     bool header_limit_exceeded;
     bool header_count_exceeded;
-    bool malformed_header;
+    bool malformed_response;
 };
 
 static size_t ncr_http_body_callback(char *bytes, size_t size, size_t count, void *userdata) {
@@ -248,7 +253,7 @@ static size_t ncr_http_header_callback(char *bytes, size_t size, size_t count, v
     if (content_length == 0) { return length; }
     if (content_length >= 5 && memcmp(bytes, "HTTP/", 5) == 0) {
         if (!ncr_http_response_line_is_status((const unsigned char *)bytes, content_length)) {
-            context->malformed_header = true;
+            context->malformed_response = true;
             return 0;
         }
         ncr_http_clear_headers(response);
@@ -259,7 +264,7 @@ static size_t ncr_http_header_callback(char *bytes, size_t size, size_t count, v
     while (colon < content_length && bytes[colon] != ':') { colon++; }
     if (colon == 0 || colon == content_length
         || !ncr_http_valid_token((const unsigned char *)bytes, colon)) {
-        context->malformed_header = true;
+        context->malformed_response = true;
         return 0;
     }
     size_t value_start = colon + 1;
@@ -269,7 +274,7 @@ static size_t ncr_http_header_callback(char *bytes, size_t size, size_t count, v
     size_t value_length = value_end - value_start;
     if (!ncr_http_valid_header_value((const unsigned char *)bytes + value_start, value_length)
         || !ncr_utf8_valid((const unsigned char *)bytes + value_start, value_length)) {
-        context->malformed_header = true;
+        context->malformed_response = true;
         return 0;
     }
 
@@ -537,7 +542,7 @@ static @SEND_RESULT_TYPE@ @HTTP_REQUEST_SEND@(ncr_obj_@HTTP_REQUEST_ID@ *ncr_sel
         if (context.response_too_large) { detail = "response body exceeds configured byte limit"; }
         else if (context.header_limit_exceeded) { detail = "response headers exceed the 65536-byte limit"; }
         else if (context.header_count_exceeded) { detail = "response has more than 1024 distinct headers"; }
-        else if (context.malformed_header) { detail = "response contains a malformed or non-UTF-8 header"; }
+        else if (context.malformed_response) { detail = "response contains an invalid status line or response header"; }
         char message[256];
         size_t message_length = ncr_http_format_error(message, sizeof(message), "HttpRequest.send", detail);
         ncr_drop_@HTTP_RESPONSE_ID@(response);

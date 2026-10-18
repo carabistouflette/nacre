@@ -586,8 +586,9 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   redirects/retries, copied request bodies, and bounded binary response capture.
   Response headers are parsed with an explicit byte/count bound, duplicate fields
   use last-value lookup, interim blocks are discarded, and non-2xx status codes
-  remain successful transport results. Loopback tests cover methods, headers,
-  binary bodies, malformed inputs/headers, limits, timeouts, and local-CA TLS.
+  remain successful transport results. The status parser rejects prohibited
+  control bytes in reason phrases. Loopback tests cover methods, headers, binary
+  bodies, malformed inputs and status lines, limits, timeouts, and local-CA TLS.
 
 - Tree-sitter, Zed and VS Code syntax now cover module/import paths, qualified
   generic static calls, native scalar literals and casts, and postfix Result

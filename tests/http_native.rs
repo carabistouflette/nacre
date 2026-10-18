@@ -377,6 +377,33 @@ void main() {
     assert_eq!(stdout_lines(&output), vec!["MALFORMED_HEADERS".to_owned()]);
     server.join().unwrap();
 }
+#[test]
+fn rejects_control_bytes_in_http_status_reason_phrase() {
+    let (url, server) = one_response_server(
+        b"HTTP/1.1 200 \x01invalid reason\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_vec(),
+        Duration::ZERO,
+    );
+    let source = r#"
+void main() {
+    Text method = new Text("GET");
+    Text url = new Text("@URL@");
+    match (HttpRequest.create(method, url)) {
+        Err(error) { println("CREATE_ERROR"); }
+        Ok(request) {
+            match (request.send()) {
+                Ok(response) { println("STATUS_ACCEPTED"); }
+                Err(error) { println("MALFORMED_STATUS"); }
+            }
+        }
+    }
+}
+"#;
+    let output = run(&compile(&source.replace("@URL@", &url)));
+    assert_eq!(stdout_lines(&output), vec!["MALFORMED_STATUS".to_owned()]);
+    server.join().unwrap();
+}
+
+
 
 const TLS_TEST_CA: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/http-test-ca.pem");
 const TLS_TEST_KEY: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/http-test-key.pem");
