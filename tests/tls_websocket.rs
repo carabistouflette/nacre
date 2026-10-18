@@ -444,9 +444,15 @@ fn read_client_frame(stream: &mut TcpStream) -> std::io::Result<(u8, Vec<u8>)> {
     Ok((header[0] & 0x0f, payload))
 }
 
-fn write_server_frame(stream: &mut TcpStream, opcode: u8, payload: &[u8]) -> std::io::Result<()> {
+fn write_server_frame(
+    stream: &mut TcpStream,
+    opcode: u8,
+    final_frame: bool,
+    payload: &[u8],
+) -> std::io::Result<()> {
     assert!(payload.len() < 126, "test server only sends short frames");
-    stream.write_all(&[0x80 | opcode, payload.len() as u8])?;
+    let first = (if final_frame { 0x80 } else { 0 }) | opcode;
+    stream.write_all(&[first, payload.len() as u8])?;
     stream.write_all(payload)?;
     stream.flush()
 }
@@ -469,11 +475,16 @@ fn serve_websocket(listener: TcpListener) -> JoinHandle<()> {
         let (opcode, payload) = read_client_frame(&mut stream).expect("client text frame");
         assert_eq!(opcode, 1);
         assert_eq!(payload, b"hello");
-        write_server_frame(&mut stream, 1, b"world").unwrap();
+        write_server_frame(&mut stream, 1, false, &[0xce]).unwrap();
+        write_server_frame(&mut stream, 9, true, b"alive").unwrap();
+        let (opcode, payload) = read_client_frame(&mut stream).expect("client Pong frame");
+        assert_eq!(opcode, 10);
+        assert_eq!(payload, b"alive");
+        write_server_frame(&mut stream, 0, true, &[0xbb, b'x']).unwrap();
         let (opcode, payload) = read_client_frame(&mut stream).expect("client close frame");
         assert_eq!(opcode, 8);
         assert!(payload.starts_with(&[0x03, 0xe8]));
-        write_server_frame(&mut stream, 8, &payload).unwrap();
+        write_server_frame(&mut stream, 8, true, &payload).unwrap();
         drop(stream);
         let (mut tls_stream, _) = listener.accept().expect("WSS failure-path accept");
         tls_stream.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
@@ -518,7 +529,7 @@ void main() {
                                                     println(message.isText());
                                                     match (message.asText()) {
                                                         Err(error) { println("decode-error"); }
-                                                        Ok(text) { println(text.equalsString("world")); }
+                                                        Ok(text) { println(text.equalsString("λx")); }
                                                     }
                                                 }
                                             }

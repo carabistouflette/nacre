@@ -2616,8 +2616,10 @@ readonly Result<Text, Text> WebSocketMessage.asText()
 explicit TLS configuration handle. Both perform the HTTP upgrade and validate the
 peer response before returning an affine connection. `maxMessageBytes` limits an
 incoming message. `receive` returns `Ok(None)` after an orderly close; protocol,
-UTF-8, I/O, and timeout failures are owned `Err(Text)` values. `close` sends a
-close frame and completes the peer close handshake, then releases the transport.
+UTF-8, I/O, and timeout failures are owned `Err(Text)` values. Fragmented data
+frames are reassembled before a message is returned; incoming ping frames are
+answered with Pong. `close` sends a close frame and completes the peer close
+handshake, then releases the transport.
 Each positive WebSocket timeout is one monotonic deadline through frame and control
 processing, including WSS TLS shutdown; zero means unbounded waiting.
 
