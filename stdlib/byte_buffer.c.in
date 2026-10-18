@@ -99,27 +99,3 @@ static @TRUNCATE_RESULT@ @BYTE_BUFFER_TRUNCATE@(@BUFFER_TYPE@ p, int64_t ncr_v_@
     return (@TRUNCATE_RESULT@){ .tag = @TRUNCATE_OK_TAG@, .data.v@TRUNCATE_OK_TAG@.f0 = UINT8_C(0) };
 }
 
-static int64_t ncr_byte_buffer_index_of_byte_@ID@(@BUFFER_TYPE@ p, uint8_t byte_val, size_t start) {
-    if (start >= p->length || p->bytes == NULL) { return -1; }
-    const void *found = memchr(p->bytes + start, byte_val, p->length - start);
-    return found == NULL ? -1 : (int64_t)((const unsigned char *)found - p->bytes);
-}
-
-static int64_t ncr_byte_buffer_find_bytes_@ID@(@BUFFER_TYPE@ p, const unsigned char *needle, size_t needle_len, size_t start) {
-    if (start > p->length || p->bytes == NULL) { return -1; }
-    if (needle_len == 0) { return (int64_t)start; }
-    if (needle_len > p->length - start) { return -1; }
-    size_t remaining = p->length - start;
-    const unsigned char *cursor = p->bytes + start;
-    while (remaining >= needle_len) {
-        const unsigned char *candidate = (const unsigned char *)memchr(cursor, needle[0], remaining - needle_len + 1);
-        if (candidate == NULL) { return -1; }
-        if (needle_len == 1 || memcmp(candidate, needle, needle_len) == 0) {
-            return (int64_t)(candidate - p->bytes);
-        }
-        size_t adv = (size_t)(candidate - cursor) + 1;
-        cursor += adv;
-        remaining -= adv;
-    }
-    return -1;
-}
