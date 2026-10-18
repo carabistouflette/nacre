@@ -58,6 +58,31 @@ fn write_executable(path: &Path, script: &str) {
 
 #[cfg(unix)]
 #[test]
+fn native_compiler_error_output_is_bounded() {
+    let temp = TestDir::new();
+    let compiler = temp.path("noisy-c-compiler");
+    write_executable(
+        &compiler,
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then printf 'fixture compiler\\n'; exit 0; fi\ni=0\nwhile [ \"$i\" -lt 16384 ]; do printf '%s' 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' >&2; i=$((i + 1)); done\nexit 1\n",
+    );
+    let executable = temp.path("native-program");
+    let output = Command::new(env!("CARGO_BIN_EXE_nacre"))
+        .args(["build", "examples/language/hello_world.ncr", "-o", path_str(&executable)])
+        .env("NACRE_CC", &compiler)
+        .env("NACRE_NO_CACHE", "1")
+        .output()
+        .unwrap();
+
+    assert!(!output.status.success());
+    assert!(output.stderr.len() <= 64 * 1024 + 1024, "captured {} diagnostic bytes", output.stderr.len());
+    let message = String::from_utf8_lossy(&output.stderr);
+    assert!(message.contains("C compiler"), "{message}");
+    assert!(message.contains("child output capture exceeded 65536 bytes per stream (stderr)"), "{message}");
+    assert!(message.contains("To inspect the generated code"), "{message}");
+}
+
+#[cfg(unix)]
+#[test]
 fn doctor_direct_rejects_mismatched_llvm_before_compilation() {
     let temp = TestDir::new();
     let clang = temp.path("clang-23");

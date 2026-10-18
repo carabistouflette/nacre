@@ -153,7 +153,7 @@ fn join_capped_reader(
         .map_err(|error| format!("failed to read child {stream}: {error}"))
 }
 
-fn capture_limited_output(
+pub(super) fn capture_limited_output(
     mut command: Command,
     max_bytes: usize,
     stdout_capture: StdoutCapture,
@@ -220,6 +220,14 @@ fn capture_limited_output(
         stderr_truncated: stderr.truncated,
     })
 }
+fn compiler_stderr(output: &LimitedOutput) -> String {
+    let mut stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+    if let Some(note) = output.truncation_note(OUTPUT_CAPTURE_LIMIT_BYTES) {
+        if !stderr.is_empty() { stderr.push('\n'); }
+        stderr.push_str(&note);
+    }
+    stderr
+}
 
 pub fn find_c_compiler() -> Result<OsString, String> {
     find_c_compiler_with_version().map(|(compiler, _)| compiler)
@@ -244,8 +252,10 @@ fn find_c_compiler_with_version() -> Result<(OsString, Vec<u8>), String> {
 }
 
 fn c_compiler_version(compiler: &std::ffi::OsStr) -> Option<Vec<u8>> {
-    let output = Command::new(compiler).arg("--version").output().ok()?;
-    if !output.status.success() { return None; }
+    let mut command = Command::new(compiler);
+    command.arg("--version");
+    let output = capture_limited_output(command, OUTPUT_CAPTURE_LIMIT_BYTES, StdoutCapture::Capture).ok()?;
+    if !output.status.success() || output.truncation_note(OUTPUT_CAPTURE_LIMIT_BYTES).is_some() { return None; }
     let mut version = Vec::new();
     append_identity_part(&mut version, &output.stdout);
     append_identity_part(&mut version, &output.stderr);
@@ -288,19 +298,22 @@ fn append_identity_part(identity: &mut Vec<u8>, part: &[u8]) {
     identity.extend_from_slice(part);
 }
 
-fn cache_compiler_identity(compiler: &std::ffi::OsStr, version: &[u8]) -> Vec<u8> {
+fn cache_compiler_identity(compiler: &std::ffi::OsStr, version: &[u8]) -> Option<Vec<u8>> {
     let mut identity = Vec::new();
     append_identity_part(&mut identity, version);
     if Path::new(compiler).components().count() == 1
         && let Some(path) = env::var_os("PATH") {
             append_identity_part(&mut identity, path.as_encoded_bytes());
         }
-    if let Ok(target) = Command::new(compiler).arg("-dumpmachine").output()
+    let mut command = Command::new(compiler);
+    command.arg("-dumpmachine");
+    if let Ok(target) = capture_limited_output(command, OUTPUT_CAPTURE_LIMIT_BYTES, StdoutCapture::Capture)
         && target.status.success() {
+            if target.truncation_note(OUTPUT_CAPTURE_LIMIT_BYTES).is_some() { return None; }
             append_identity_part(&mut identity, &target.stdout);
             append_identity_part(&mut identity, &target.stderr);
         }
-    identity
+    Some(identity)
 }
 
 fn update_cache_hash(hash: &mut u128, bytes: &[u8]) {
@@ -392,11 +405,10 @@ fn dependency_cache_fingerprint(
     libraries: &NativeLibraries,
     source_path: &Path,
 ) -> Option<u128> {
-    let output = c_compiler_command(compiler, optimization, libraries, flags)
-        .args(["-M", "-MT", "nacre", "-MF", "-"])
-        .arg(source_path)
-        .output().ok()?;
-    if !output.status.success() { return None; }
+    let mut command = c_compiler_command(compiler, optimization, libraries, flags);
+    command.args(["-M", "-MT", "nacre", "-MF", "-"]).arg(source_path);
+    let output = capture_limited_output(command, OUTPUT_CAPTURE_LIMIT_BYTES, StdoutCapture::Capture).ok()?;
+    if !output.status.success() || output.stdout_truncated { return None; }
     let source_path = source_path.canonicalize().ok()?;
     let mut paths = parse_make_dependencies(&output.stdout)?;
     paths.sort();
@@ -426,7 +438,7 @@ pub fn compile_c_optimized(source: &str, optimization: &str, flags: &[&str]) -> 
     // Profiles are mutable external inputs, not part of the executable cache key.
     let cache = profile_directory.is_none().then(cache_dir).flatten();
     let (compiler, compiler_version) = find_c_compiler_with_version()?;
-    let compiler_identity = cache.as_ref().map(|_| cache_compiler_identity(&compiler, &compiler_version));
+    let compiler_identity = cache.as_ref().and_then(|_| cache_compiler_identity(&compiler, &compiler_version));
     let directory = TempDir::new()?;
     let executable = directory.0.join(if cfg!(windows) { "program.exe" } else { "program" });
 
@@ -474,14 +486,15 @@ pub fn compile_c_optimized(source: &str, optimization: &str, flags: &[&str]) -> 
         command.arg("-dumpdir").arg(Path::new(profile_directory).join("nacre-"))
             .args(["-dumpbase", "program.c"]);
     }
-    let output = command
+    command
         .arg(&c_path).arg("-o").arg(&executable)
         .args(if cfg!(unix) { &["-lm"][..] } else { &[][..] })
         .args(if cfg!(target_os = "linux") { &["-Wl,--gc-sections"][..] } else { &[][..] })
-        .args(libraries.link_flags())
-        .output().map_err(|e| format!("failed to start {compiler:?}: {e}"))?;
+        .args(libraries.link_flags());
+    let output = capture_limited_output(command, OUTPUT_CAPTURE_LIMIT_BYTES, StdoutCapture::Discard)
+        .map_err(|error| format!("failed to start {compiler:?}: {error}"))?;
     if !output.status.success() {
-        return Err(format!("C compiler {compiler:?} failed:\n{}\nTo inspect the generated code: nacre emit-c source.ncr -o debug.c", String::from_utf8_lossy(&output.stderr)));
+        return Err(format!("C compiler {compiler:?} failed:\n{}\nTo inspect the generated code: nacre emit-c source.ncr -o debug.c", compiler_stderr(&output)));
     }
     if let Some(cached_path) = &cache_entry {
         if let Some(parent) = cached_path.parent() {
@@ -516,16 +529,20 @@ pub fn emit_llvm(source: &str, optimization: &str) -> Result<String, String> {
     let compiler = env::var_os("NACRE_CLANG").unwrap_or_else(|| OsString::from("clang"));
     let directory = TempDir::new()?;
     let c_path = directory.0.join("program.c");
+    let ir_path = directory.0.join("program.ll");
     fs::write(&c_path, source).map_err(|e| e.to_string())?;
-    let output = Command::new(&compiler)
+    let mut command = Command::new(&compiler);
+    command
         .args(["-std=c11", optimization, "-pthread", "-S", "-emit-llvm", "-fno-ident"])
         .args(NativeLibraries::from_source(source).header_flags())
-        .arg(&c_path).args(["-o", "-"])
-        .output().map_err(|e| format!("emit-llvm requires Clang (NACRE_CLANG={compiler:?}): {e}"))?;
+        .arg(&c_path).arg("-o").arg(&ir_path);
+    let output = capture_limited_output(command, OUTPUT_CAPTURE_LIMIT_BYTES, StdoutCapture::Discard)
+        .map_err(|e| format!("emit-llvm requires Clang (NACRE_CLANG={compiler:?}): {e}"))?;
     if !output.status.success() {
-        return Err(format!("Clang LLVM generation failed:\n{}", String::from_utf8_lossy(&output.stderr)));
+        return Err(format!("Clang LLVM generation failed:\n{}", compiler_stderr(&output)));
     }
-    String::from_utf8(output.stdout).map_err(|e| format!("LLVM output is not valid UTF-8: {e}"))
+    let ir = fs::read(&ir_path).map_err(|error| format!("failed to read LLVM output: {error}"))?;
+    String::from_utf8(ir).map_err(|e| format!("LLVM output is not valid UTF-8: {e}"))
 }
 
 /// Compile direct LLVM IR together with the stdlib-only C runtime through LLVM bitcode.
@@ -587,11 +604,12 @@ pub(crate) fn compile_llvm_direct_with_runtime(
             .arg(&runtime_path)
             .arg("-o")
             .arg(&runtime_bitcode);
-        let output = command.output().map_err(|e| format!("failed to run Clang {compiler:?} for LLVM runtime bitcode: {e}"))?;
+        let output = capture_limited_output(command, OUTPUT_CAPTURE_LIMIT_BYTES, StdoutCapture::Discard)
+            .map_err(|e| format!("failed to run Clang {compiler:?} for LLVM runtime bitcode: {e}"))?;
         if !output.status.success() {
             return Err(format!(
                 "Clang compilation of LLVM runtime bitcode failed:\n{}",
-                String::from_utf8_lossy(&output.stderr),
+                compiler_stderr(&output),
             ));
         }
         if let Some(cache_entry) = &cache_entry {
@@ -600,23 +618,23 @@ pub(crate) fn compile_llvm_direct_with_runtime(
         runtime_bitcode.as_path()
     };
 
-    let output = Command::new(linker)
-        .args(["--only-needed", "--internalize"])
+    let mut command = Command::new(linker);
+    command.args(["--only-needed", "--internalize"])
         .arg(&user_path)
         .arg(runtime_bitcode_input)
         .arg("-o")
-        .arg(&linked_bitcode)
-        .output()
+        .arg(&linked_bitcode);
+    let output = capture_limited_output(command, OUTPUT_CAPTURE_LIMIT_BYTES, StdoutCapture::Discard)
         .map_err(|e| format!("direct LLVM compilation requires llvm-link ({linker:?}): {e}"))?;
     if !output.status.success() {
         return Err(format!(
             "llvm-link {linker:?} failed to link direct LLVM and runtime bitcode:\n{}",
-            String::from_utf8_lossy(&output.stderr),
+            compiler_stderr(&output),
         ));
     }
 
-    let output = Command::new(compiler)
-        .arg(optimization)
+    let mut command = Command::new(compiler);
+    command.arg(optimization)
         .args(USER_IR_FLAGS)
         .args(section_flags)
         .args(flags)
@@ -625,13 +643,13 @@ pub(crate) fn compile_llvm_direct_with_runtime(
         .args(if cfg!(target_os = "linux") { &["-Wl,--gc-sections"][..] } else { &[][..] })
         .args(libraries.link_flags())
         .arg("-o")
-        .arg(&executable)
-        .output()
+        .arg(&executable);
+    let output = capture_limited_output(command, OUTPUT_CAPTURE_LIMIT_BYTES, StdoutCapture::Discard)
         .map_err(|e| format!("failed to run Clang {compiler:?} for native LLVM linking: {e}"))?;
     if !output.status.success() {
         return Err(format!(
             "Clang native linking of direct LLVM program failed:\n{}",
-            String::from_utf8_lossy(&output.stderr),
+            compiler_stderr(&output),
         ));
     }
     Ok(NativeProgram { executable, _directory: directory })

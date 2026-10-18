@@ -44,6 +44,10 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 
 - Discard test stdout and bound test/benchmark child output capture.
 
+- Bound native C/LLVM compiler and linker subprocess capture to 64 KiB per stream.
+  Truncated diagnostics are marked, incomplete cache probes skip caching, and
+  `emit-llvm` retains the complete IR output.
+
 - Align Tree-sitter, Zed, and VS Code syntax support with trait/impl declarations,
   bounded type parameters, and async/await; capture Zed's named shift-right token.
 

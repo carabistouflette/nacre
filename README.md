@@ -320,6 +320,9 @@ nacre lsp
 `nacre test` discards child stdout and captures at most 64 KiB of stderr. The
 `nacre bench` runner captures at most 64 KiB per stream; it drains and discards
 excess. Failed tests report truncated stderr; benchmarks exceeding the cap fail.
+Native C/LLVM compiler diagnostics and toolchain probes are capped at 64 KiB per
+captured stream. Truncated diagnostics are marked; incomplete cache probes skip
+caching, while `emit-llvm` still returns the complete IR output.
 
 Commands accept multiple sources or recursively collected directories, resolving
 their module namespaces together as one whole-program compilation. `init` and
