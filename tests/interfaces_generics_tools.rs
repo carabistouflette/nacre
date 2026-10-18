@@ -103,7 +103,7 @@ fn cli_check_does_not_accept_ir_only_options() {
     assert!(!out.status.success());
 }
 #[test]
-#[ignore = "requires Clang; run cargo test --test features_v4_tools -- --ignored"]
+#[ignore = "requires Clang; run cargo test --test interfaces_generics_tools -- --ignored"]
 fn llvm_ir_from_real_frontend() {
     let c = compile_to_c(INTERFACES).unwrap();
     for level in ["-O0", "-O2"] {
@@ -112,7 +112,7 @@ fn llvm_ir_from_real_frontend() {
     }
 }
 #[test]
-#[ignore = "requires Clang; run cargo test --test features_v4_tools -- --ignored"]
+#[ignore = "requires Clang; run cargo test --test interfaces_generics_tools -- --ignored"]
 fn cli_emit_llvm() {
     let temp = Temp::new();
     let path = temp.0.join("test.ll");

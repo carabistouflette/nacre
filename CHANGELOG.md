@@ -27,6 +27,8 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 
 - Reject non-ASCII LSP header bytes before parsing Content-Length.
 
+- Correct ignored LLVM test commands to use the actual Cargo target name.
+
 - Align Tree-sitter, Zed, and VS Code syntax support with trait/impl declarations,
   bounded type parameters, and async/await; capture Zed's named shift-right token.
 
