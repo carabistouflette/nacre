@@ -9,6 +9,9 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 - Hash `LIBRARY_PATH` and `LD_RUN_PATH` in native C executable cache keys, so
   changes to library selection or embedded runpaths force a fresh link.
 
+- Distinguish unset from empty values in native cache environment hashes, so
+  different compiler and linker configurations do not reuse stale artifacts.
+
 - Reject unresolvable relative LSP paths instead of silently mapping them under
   the filesystem root.
 

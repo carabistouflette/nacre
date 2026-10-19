@@ -332,7 +332,9 @@ fn hash_cache_part(hash: &mut u128, part: &[u8]) {
 fn hash_environment_variable(hash: &mut u128, variable: &str) {
     update_cache_hash(hash, variable.as_bytes());
     *hash = (*hash ^ 0xff).wrapping_mul(CACHE_HASH_PRIME);
-    if let Some(value) = env::var_os(variable) {
+    let value = env::var_os(variable);
+    update_cache_hash(hash, &[u8::from(value.is_some())]);
+    if let Some(value) = value {
         update_cache_hash(hash, value.as_encoded_bytes());
     }
     *hash = (*hash ^ 0xff).wrapping_mul(CACHE_HASH_PRIME);

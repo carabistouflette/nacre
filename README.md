@@ -342,8 +342,9 @@ selected optimization also apply to `--direct` native builds.
 The default C `run`/`build` path caches completed executables. Its key includes
 generated C, compiler command/version/target, flags, and resolved header paths
 and contents. If dependency scanning fails, the build safely bypasses the cache.
-The C executable key also hashes `LIBRARY_PATH` and `LD_RUN_PATH`, so changing
-link-time library selection or embedded runtime search paths forces a fresh link.
+The C executable key also hashes `LIBRARY_PATH` and `LD_RUN_PATH`, including
+whether each is unset or set to an empty value, so changed link-time library
+selection or embedded runtime search paths force a fresh link.
 The cache defaults to `$XDG_CACHE_HOME/nacre` (or `$HOME/.cache/nacre`);
 `NACRE_CACHE_DIR` overrides the location and `NACRE_NO_CACHE` disables caching.
 PGO builds bypass the cache. Direct native builds use a separate runtime-bitcode

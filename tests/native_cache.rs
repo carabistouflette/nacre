@@ -213,6 +213,44 @@ impl CacheProbe<'_> {
         );
     }
 
+    #[cfg(target_os = "linux")]
+    fn run_with_library_path_presence(&self, library_dir: &Path, empty: bool, expect_link_failure: bool) {
+        let mut command = Command::new(self.executable);
+        command.args(["--exact", "c_cache_library_path_presence_probe_child", "--nocapture"])
+            .env("NACRE_CACHE_LIBRARY_PATH_PRESENCE_PROBE_CHILD", "1")
+            .env("NACRE_CACHE_EXPECTED", "10\n")
+            .env("NACRE_CACHE_INCLUDE", self.include)
+            .env("NACRE_CACHE_DIR", self.cache)
+            .env("NACRE_ENABLE_TEST_CACHE", "1")
+            .env("NACRE_CC", self.wrapper)
+            .env("NACRE_FIXTURE_REAL_CC", self.compiler)
+            .env("NACRE_FIXTURE_VERSION", "library-path-presence-v1")
+            .env("NACRE_FIXTURE_COMPILE_LOG", self.compile_log)
+            .current_dir(library_dir)
+            .env_remove("LD_RUN_PATH")
+            .env_remove("LD_LIBRARY_PATH")
+            .env_remove("MACOSX_DEPLOYMENT_TARGET")
+            .env_remove("NACRE_NO_CACHE");
+        if expect_link_failure {
+            command.env("NACRE_CACHE_EXPECT_LINK_FAILURE", "1");
+        } else {
+            command.env_remove("NACRE_CACHE_EXPECT_LINK_FAILURE");
+        }
+
+        if empty {
+            command.env("LIBRARY_PATH", "");
+        } else {
+            command.env_remove("LIBRARY_PATH");
+        }
+        let output = command.output().unwrap();
+        assert!(
+            output.status.success(),
+            "library-path presence probe failed\nstdout: {}\nstderr: {}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+        );
+    }
+
     fn run_concurrently(&self, barrier: &Path) {
         let output = Command::new(self.executable)
             .args(["--exact", "c_cache_concurrent_probe_child", "--nocapture"])
@@ -283,6 +321,26 @@ fn c_cache_ld_run_path_probe_child() {
         .env_remove("LD_RUN_PATH")
         .output()
         .unwrap();
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    let expected = std::env::var("NACRE_CACHE_EXPECTED").unwrap();
+    assert_eq!(output.stdout, expected.as_bytes());
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn c_cache_library_path_presence_probe_child() {
+    if std::env::var_os("NACRE_CACHE_LIBRARY_PATH_PRESENCE_PROBE_CHILD").is_none() { return; }
+    let program = native::compile_c_optimized(
+        LIBRARY_SOURCE,
+        "-O0",
+        &["-Wl,--whole-archive", "-lnacre_cache_fixture", "-Wl,--no-whole-archive"],
+    );
+    if std::env::var_os("NACRE_CACHE_EXPECT_LINK_FAILURE").is_some() {
+        assert!(program.is_err(), "unset LIBRARY_PATH must not reuse the cwd-linked executable");
+        return;
+    }
+    let program = program.unwrap();
+    let output = program.output().unwrap();
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     let expected = std::env::var("NACRE_CACHE_EXPECTED").unwrap();
     assert_eq!(output.stdout, expected.as_bytes());
@@ -457,6 +515,41 @@ fn c_cache_invalidates_for_ld_run_path_changes() {
         fs::read(&compile_log).unwrap().len(),
         2,
         "an unchanged linker runpath should reuse the executable",
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn c_cache_distinguishes_empty_and_unset_library_path() {
+    let temp = TestDir::new();
+    let library_dir = temp.path("working library");
+    fs::create_dir(&library_dir).unwrap();
+    let compiler = native::find_c_compiler().unwrap();
+    create_archive_fixture(&compiler, &library_dir, 10);
+    let include = temp.path("include headers");
+    fs::create_dir(&include).unwrap();
+    let wrapper = make_compiler_wrapper(&temp);
+    let cache = temp.path("cache");
+    let compile_log = temp.path("actual-compiles");
+    let executable = std::env::current_exe().unwrap();
+    let probe = CacheProbe {
+        executable: &executable,
+        compiler: &compiler,
+        wrapper: &wrapper,
+        cache: &cache,
+        include: &include,
+        compile_log: &compile_log,
+    };
+
+    probe.run_with_library_path_presence(&library_dir, true, false);
+    assert_eq!(fs::read(&compile_log).unwrap().len(), 1);
+    probe.run_with_library_path_presence(&library_dir, false, true);
+    assert_eq!(fs::read(&compile_log).unwrap().len(), 2);
+    probe.run_with_library_path_presence(&library_dir, true, false);
+    assert_eq!(
+        fs::read(&compile_log).unwrap().len(),
+        2,
+        "an unchanged empty library path should reuse the executable",
     );
 }
 
