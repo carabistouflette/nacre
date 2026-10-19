@@ -9,6 +9,9 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 - Hash Clang config-file contents so in-place `--config` edits invalidate native
   executable and runtime cache entries.
 
+- Preserve exact raw UTF-8 ZIP entry names, including decomposed Unicode, while
+  retaining libarchive charset conversion for legacy names.
+
 - Emit LLVM value copies and zeroing directly into the output buffer, avoiding
   temporary formatted strings.
 - Match trait bounds for specialized arguments against implementations attached

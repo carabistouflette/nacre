@@ -60,6 +60,99 @@ static int ncr_zip_reader_configure(struct archive *archive) {
 
 #define NCR_ZIP_READER_READ_SIZE 65536
 
+/* 1 returns raw UTF-8; 0 delegates decoding; -1 rejects NUL; -2 is OOM. */
+static int ncr_zip_reader_raw_name_@ZIP_READER_ID@(
+    ncr_obj_@ZIP_READER_ID@ *reader,
+    struct archive *archive,
+    const unsigned char **name,
+    size_t *name_length
+) {
+    la_int64_t header_position = archive_read_header_position(archive);
+    if (header_position < 0) { return 0; }
+    uint64_t offset = (uint64_t)header_position;
+    unsigned char header[30];
+
+    if (reader->memory != NULL) {
+        size_t position = (size_t)offset;
+        if ((uint64_t)position != offset) { return 0; }
+        if (position > reader->memory_length
+            || sizeof(header) > reader->memory_length - position) { return 0; }
+        const unsigned char *record = reader->memory + position;
+        if (memcmp(record, "PK\003\004", 4) != 0) { return 0; }
+        memcpy(header, record, sizeof(header));
+        size_t length = (size_t)header[26] | ((size_t)header[27] << 8);
+        size_t name_offset = position + sizeof(header);
+        if (length > reader->memory_length - name_offset) { return 0; }
+        const unsigned char *raw_name = reader->memory + name_offset;
+        if (memchr(raw_name, 0, length) != NULL) { return -1; }
+        unsigned int flags = (unsigned int)header[6] | ((unsigned int)header[7] << 8);
+        if ((flags & 0x0800u) == 0) { return 0; }
+        *name = raw_name;
+        *name_length = length;
+        return 1;
+    }
+
+    FILE *source_file = (FILE *)reader->source_file;
+    off_t requested = (off_t)header_position;
+    if (source_file == NULL || requested < 0 || (la_int64_t)requested != header_position) { return 0; }
+    off_t previous = ftello(source_file);
+    if (previous < 0) { return 0; }
+    int result = 0;
+    if (fseeko(source_file, requested, SEEK_SET) == 0
+        && fread(header, 1, sizeof(header), source_file) == sizeof(header)
+        && memcmp(header, "PK\003\004", 4) == 0) {
+        size_t length = (size_t)header[26] | ((size_t)header[27] << 8);
+        unsigned int flags = (unsigned int)header[6] | ((unsigned int)header[7] << 8);
+        if ((uint64_t)header_position <= (uint64_t)INT64_MAX - sizeof(header) - length) {
+            if ((flags & 0x0800u) != 0) {
+                if (length == 0) {
+                    *name = (const unsigned char *)"";
+                    *name_length = 0;
+                    result = 1;
+                } else {
+                    if (length > reader->raw_name_capacity) {
+                        unsigned char *next = realloc(reader->raw_name_buffer, length);
+                        if (next == NULL) {
+                            result = -2;
+                        } else {
+                            reader->raw_name_buffer = next;
+                            reader->raw_name_capacity = length;
+                        }
+                    }
+                    if (result != -2) {
+                        if (fread(reader->raw_name_buffer, 1, length, source_file) != length) {
+                            result = 0;
+                        } else if (memchr(reader->raw_name_buffer, 0, length) != NULL) {
+                            result = -1;
+                        } else {
+                            *name = reader->raw_name_buffer;
+                            *name_length = length;
+                            result = 1;
+                        }
+                    }
+                }
+            } else {
+                unsigned char chunk[4096];
+                size_t remaining = length;
+                result = 0;
+                while (remaining > 0) {
+                    size_t amount = remaining < sizeof(chunk) ? remaining : sizeof(chunk);
+                    if (fread(chunk, 1, amount, source_file) != amount
+                        || memchr(chunk, 0, amount) != NULL) {
+                        result = -1;
+                        break;
+                    }
+                    remaining -= amount;
+                }
+            }
+        }
+    }
+    int restore_status = fseeko(source_file, previous, SEEK_SET);
+    clearerr(source_file);
+    if (restore_status != 0) { return 0; }
+    return result;
+}
+
 static int ncr_zip_reader_file_open_@ZIP_READER_ID@(struct archive *archive, void *client_data) {
     ncr_obj_@ZIP_READER_ID@ *reader = client_data;
     if (reader->source_file == NULL) {
@@ -186,6 +279,9 @@ static ncr_obj_@OPEN_RESULT_ID@ @ZIP_READER_OPEN@(ncr_obj_@PATH_ID@ *ncr_v_@OPEN
     reader->source_file = source_file;
     reader->source_buffer = ncr_allocate(NCR_ZIP_READER_READ_SIZE, ncr_line, ncr_column);
     reader->memory = NULL;
+    reader->memory_length = 0;
+    reader->raw_name_buffer = NULL;
+    reader->raw_name_capacity = 0;
     reader->entry_active = false;
     reader->entry_read = false;
     reader->eof = false;
@@ -271,6 +367,9 @@ static ncr_obj_@FROM_BYTES_RESULT_ID@ @ZIP_READER_FROM_BYTES@(ncr_obj_@BUFFER_ID
     reader->source_file = NULL;
     reader->source_buffer = NULL;
     reader->memory = copy;
+    reader->memory_length = length;
+    reader->raw_name_buffer = NULL;
+    reader->raw_name_capacity = 0;
     reader->entry_active = false;
     reader->entry_read = false;
     reader->eof = false;
@@ -307,11 +406,24 @@ static ncr_obj_@NEXT_RESULT_ID@ @ZIP_READER_NEXT@(ncr_obj_@ZIP_READER_ID@ *ncr_s
     const char *pathname = NULL;
     size_t name_length = 0;
     bool valid_pathname = false;
+    int raw_name_status = -1;
     if (status == ARCHIVE_OK && !has_outer_filter) {
-        pathname = archive_entry_pathname_utf8(header);
-        if (pathname != NULL) {
-            name_length = strlen(pathname);
-            valid_pathname = ncr_utf8_valid((const unsigned char *)pathname, name_length);
+        const unsigned char *raw_name = NULL;
+        size_t raw_name_length = 0;
+        raw_name_status = ncr_zip_reader_raw_name_@ZIP_READER_ID@(
+            ncr_self, archive, &raw_name, &raw_name_length
+        );
+        if (raw_name_status == 1) {
+            pathname = (const char *)raw_name;
+            name_length = raw_name_length;
+            valid_pathname = ncr_utf8_valid(raw_name, name_length)
+                && memchr(raw_name, 0, name_length) == NULL;
+        } else if (raw_name_status == 0) {
+            pathname = archive_entry_pathname_utf8(header);
+            if (pathname != NULL) {
+                name_length = strlen(pathname);
+                valid_pathname = ncr_utf8_valid((const unsigned char *)pathname, name_length);
+            }
         }
     }
     if (status == ARCHIVE_WARN) {
@@ -342,6 +454,9 @@ static ncr_obj_@NEXT_RESULT_ID@ @ZIP_READER_NEXT@(ncr_obj_@ZIP_READER_ID@ *ncr_s
         int skip_status = archive_read_data_skip(archive);
         ncr_zip_restore_locale(skip_previous);
         if (skip_status != ARCHIVE_OK) { NCR_ZIP_RETURN_ERROR(@NEXT_RESULT_ID@, "ZipReader.next", archive, ncr_line, ncr_column); }
+        if (raw_name_status == -2) {
+            return ncr_result_error_@NEXT_RESULT_ID@("ZipReader.next: unable to allocate entry name", sizeof("ZipReader.next: unable to allocate entry name") - 1, ncr_line, ncr_column);
+        }
         return ncr_result_error_@NEXT_RESULT_ID@("ZipReader.next: entry name is not UTF-8", sizeof("ZipReader.next: entry name is not UTF-8") - 1, ncr_line, ncr_column);
     }
     if (archive_entry_is_encrypted(header) != 0) {
@@ -443,6 +558,7 @@ static ncr_obj_@READER_CLOSE_RESULT_ID@ @ZIP_READER_CLOSE@(ncr_obj_@ZIP_READER_I
     locale_t locale = (locale_t)ncr_self->locale;
     FILE *source_file = (FILE *)ncr_self->source_file;
     unsigned char *source_buffer = ncr_self->source_buffer;
+    unsigned char *raw_name_buffer = ncr_self->raw_name_buffer;
     locale_t previous = locale == (locale_t)0 ? (locale_t)0 : uselocale(locale);
     bool locale_active = previous != (locale_t)0;
     ncr_self->archive = NULL;
@@ -450,6 +566,8 @@ static ncr_obj_@READER_CLOSE_RESULT_ID@ @ZIP_READER_CLOSE@(ncr_obj_@ZIP_READER_I
     ncr_self->locale = NULL;
     ncr_self->source_file = NULL;
     ncr_self->source_buffer = NULL;
+    ncr_self->raw_name_buffer = NULL;
+    ncr_self->raw_name_capacity = 0;
     ncr_self->entry_active = false;
     ncr_self->entry_read = false;
     ncr_self->eof = false;
@@ -462,8 +580,10 @@ static ncr_obj_@READER_CLOSE_RESULT_ID@ @ZIP_READER_CLOSE@(ncr_obj_@ZIP_READER_I
     int free_status = archive_read_free(archive);
     int source_close_status = source_file == NULL ? 0 : fclose(source_file);
     ncr_deallocate(source_buffer);
+    free(raw_name_buffer);
     free(ncr_self->memory);
     ncr_self->memory = NULL;
+    ncr_self->memory_length = 0;
     if (close_status == ARCHIVE_OK && free_status != ARCHIVE_OK) {
         message_length = ncr_zip_error_message(message, sizeof(message), "ZipReader.close", NULL);
     } else if (close_status == ARCHIVE_OK && free_status == ARCHIVE_OK && source_close_status != 0) {
