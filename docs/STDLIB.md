@@ -1538,8 +1538,9 @@ Reads enforce the budget before calling the source. Each operation leaves the
 logical cursor unchanged unless it succeeds. Bytes appended before a source
 error remain staged for later smaller reads, and the source error is returned.
 An append beyond the requested count is a contract violation; those bytes are
-preserved, not clamped or treated as confirmed progress. A zero-count read marks
-permanent EOF. Invalid UTF-8 leaves the cursor unchanged. A source error does
+preserved, not clamped or treated as confirmed progress. An `Ok(0)` from a positive
+source request marks permanent EOF. Zero-byte requests do not probe the source.
+Invalid UTF-8 leaves the cursor unchanged. A source error does
 not imply that the underlying transport rolled back; only staged bytes and
 successful results establish recoverable progress.
 
