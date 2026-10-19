@@ -288,6 +288,35 @@ void main() {
 "#);
     assert_eq!(output.stdout, b"33\n9\n99\n99\n15\n");
 }
+#[test]
+fn zip_does_not_pull_right_after_left_pipeline_exhausts() {
+    let output = run(r#"
+class TraceOdd implements Predicate<int> {
+    public readonly boolean test(int value) { println(value); return value % 2 == 1; }
+}
+class TraceRight implements Mapper<int, int> {
+    public int apply(int value) { println(value); return value; }
+}
+class AddPair implements Folder<int, Pair<int, int>> {
+    public int apply(int total, borrow Pair<int, int> pair) {
+        return total + pair.first + pair.second;
+    }
+}
+void main() {
+    List<int> left = new List<int>();
+    left.add(1); left.add(2); left.add(3); left.add(4);
+    List<int> right = new List<int>();
+    right.add(10); right.add(20); right.add(30);
+
+    int total = left.iter()
+        .filter(new TraceOdd())
+        .zip(right.iter().map(new TraceRight()))
+        .fold(0, new AddPair());
+    println(total);
+}
+"#);
+    assert_eq!(output.stdout, b"1\n10\n2\n3\n20\n4\n34\n");
+}
 
 #[test]
 fn affine_items_are_borrowed_and_remain_in_the_collection_after_fold() {
