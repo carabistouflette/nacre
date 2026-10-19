@@ -484,7 +484,8 @@ fn tokenize(source: &str) -> Result<Vec<Token>, String> {
             match (bytes[pos], bytes[pos + 1]) {
                 (b'-', b'>') => { tokens.push(Token::Arrow); pos += 2; continue; }
                 (b'=', b'>') => { tokens.push(Token::FatArrow); pos += 2; continue; }
-                (b'=', b'=') | (b'!', b'=') | (b'<', b'=') | (b'>', b'=') | (b'&', b'&') | (b'|', b'|') => {
+                (b'=', b'=') | (b'!', b'=') | (b'<', b'<') | (b'>', b'>')
+                | (b'<', b'=') | (b'>', b'=') | (b'&', b'&') | (b'|', b'|') => {
                     tokens.push(Token::BinaryOp(source[pos..pos + 2].to_string()));
                     pos += 2;
                     continue;

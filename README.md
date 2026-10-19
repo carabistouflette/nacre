@@ -318,6 +318,9 @@ nacre add <path> [--manifest-path <file>]
 nacre doctor [--direct] [--zip]
 nacre lsp
 ```
+
+`nacre fmt` normalizes layout without splitting operators such as `<<` and `>>`;
+`--check` reports changed files without writing them.
 `nacre test` discards child stdout and captures at most 64 KiB of stderr. The
 `nacre bench` runner captures at most 64 KiB per stream; it drains and discards
 excess. Failed tests report truncated stderr; benchmarks exceeding the cap fail.
