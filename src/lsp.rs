@@ -15,7 +15,7 @@ use framing::{read_frame, send};
 mod file_uri;
 use file_uri::{normalize_path, path_to_uri, uri_to_path};
 mod diagnostics;
-use diagnostics::diagnostic_json;
+use diagnostics::{diagnostic_json, range_to_offsets};
 mod source_files;
 use source_files::{
     config_entry_exists, configured_source_roots, is_project_config, source_root_contains,
@@ -165,7 +165,7 @@ impl Server {
                         "capabilities": {
                             "textDocumentSync": {
                                 "openClose": true,
-                                "change": 1,
+                                "change": 2,
                                 "save": { "includeText": false }
                             },
                             "hoverProvider": true,
@@ -277,17 +277,31 @@ impl Server {
         ) else { return Ok(()); };
         let Some(path) = uri_to_path(uri) else { return Ok(()); };
         let Some(change_list) = params.get("contentChanges").and_then(Value::as_array) else { return Ok(()); };
-        let mut replacement = None;
-        for change in change_list {
-            if change.get("range").is_some() { return Ok(()); }
-            let Some(text) = change.get("text").and_then(Value::as_str) else { return Ok(()); };
-            replacement = Some(text);
-        }
-        let Some(text) = replacement else { return Ok(()); };
-        let Some(open) = self.documents.get_mut(&path) else { return Ok(()); };
+        if change_list.is_empty() { return Ok(()); }
+        let Some(open) = self.documents.get(&path) else { return Ok(()); };
         if version <= open.version { return Ok(()); }
+        let mut original = open.text.as_deref();
+        let mut text = None;
+        for change in change_list {
+            let Some(replacement) = change.get("text").and_then(Value::as_str) else { return Ok(()); };
+            if let Some(range) = change.get("range") {
+                if text.is_none() {
+                    // Over-limit text is discarded; full replacement restores it.
+                    let Some(current) = original else { continue; };
+                    text = Some(current.to_owned());
+                }
+                original = None;
+                let Some(current) = text.as_mut() else { return Ok(()); };
+                let Some((start, end)) = range_to_offsets(current, range) else { return Ok(()); };
+                current.replace_range(start..end, replacement);
+            } else {
+                text = bounded_text(replacement);
+                original = None;
+            }
+        }
+        let Some(open) = self.documents.get_mut(&path) else { return Ok(()); };
         open.version = version;
-        open.text = bounded_text(text);
+        open.text = text.filter(|text| text.len() <= MAX_SOURCE_BYTES);
         self.revalidate_path(&path, output, None)
     }
 

@@ -165,7 +165,7 @@ fn stdio_lsp_reports_utf16_diagnostics_edits_and_unsaved_project_overlays() {
         "params": { "rootUri": uri(&temp.0), "capabilities": {} }
     }));
     let initialized = client.response(1);
-    assert_eq!(initialized["result"]["capabilities"]["textDocumentSync"]["change"].as_i64(), Some(1));
+    assert_eq!(initialized["result"]["capabilities"]["textDocumentSync"]["change"].as_i64(), Some(2));
     client.send(json!({ "jsonrpc": "2.0", "method": "initialized", "params": {} }));
     client.send(json!({ "jsonrpc": "2.0", "id": 3, "method": "exit" }));
     assert_eq!(client.response(3)["error"]["code"], -32600);
@@ -226,6 +226,101 @@ fn stdio_lsp_reports_utf16_diagnostics_edits_and_unsaved_project_overlays() {
 
     client.send(json!({ "jsonrpc": "2.0", "id": 3, "method": "shutdown" }));
     assert!(client.response(3)["result"].is_null());
+    client.send(json!({ "jsonrpc": "2.0", "method": "exit" }));
+    client.finish();
+}
+
+#[test]
+fn lsp_applies_ordered_incremental_edits_at_utf16_positions() {
+    let temp = TempDir::new();
+    let source_dir = temp.0.join("src");
+    fs::create_dir(&source_dir).unwrap();
+    fs::write(temp.0.join("nacre.json"), r#"{"sources":["src"]}"#).unwrap();
+
+    let path = source_dir.join("Main.ncr");
+    let initial = "void main() { /* 😀 */ int value = true; }\n";
+    fs::write(&path, initial).unwrap();
+    let document_uri = uri(&path);
+
+    let mut client = Client::spawn();
+    client.send(json!({
+        "jsonrpc": "2.0", "id": 1, "method": "initialize",
+        "params": { "rootUri": uri(&temp.0), "capabilities": {} }
+    }));
+    let initialized = client.response(1);
+    client.send(json!({ "jsonrpc": "2.0", "method": "initialized", "params": {} }));
+    client.send(json!({
+        "jsonrpc": "2.0", "method": "textDocument/didOpen",
+        "params": { "textDocument": {
+            "uri": document_uri.clone(), "languageId": "nacre", "version": 1, "text": initial
+        } }
+    }));
+    assert!(!client.diagnostics(&document_uri)["diagnostics"].as_array().unwrap().is_empty());
+
+    let token = initial.find("true").unwrap();
+    let character = initial[..token].encode_utf16().count();
+    client.send(json!({
+        "jsonrpc": "2.0", "method": "textDocument/didChange",
+        "params": {
+            "textDocument": { "uri": document_uri.clone(), "version": 2 },
+            "contentChanges": [
+                {
+                    "range": {
+                        "start": { "line": 0, "character": character },
+                        "end": { "line": 0, "character": character + 4 }
+                    },
+                    "text": "12345"
+                },
+                {
+                    "range": {
+                        "start": { "line": 0, "character": character },
+                        "end": { "line": 0, "character": character + 5 }
+                    },
+                    "text": "1"
+                }
+            ]
+        }
+    }));
+
+    let updated = client.diagnostics(&document_uri);
+    assert!(updated["diagnostics"].as_array().unwrap().is_empty(), "{updated}");
+    assert_eq!(updated["version"].as_i64(), Some(2));
+    assert_eq!(
+        initialized["result"]["capabilities"]["textDocumentSync"]["change"].as_i64(),
+        Some(2)
+    );
+
+    let emoji = initial.find("😀").unwrap();
+    let inside_surrogate = initial[..emoji].encode_utf16().count() + 1;
+    client.send(json!({
+        "jsonrpc": "2.0", "method": "textDocument/didChange",
+        "params": {
+            "textDocument": { "uri": document_uri.clone(), "version": 3 },
+            "contentChanges": [{
+                "range": {
+                    "start": { "line": 0, "character": inside_surrogate },
+                    "end": { "line": 0, "character": inside_surrogate + 1 }
+                },
+                "text": "x"
+            }]
+        }
+    }));
+    let ignored = client.diagnostics(&document_uri);
+    assert_eq!(ignored["version"].as_i64(), Some(2), "{ignored}");
+
+    client.send(json!({
+        "jsonrpc": "2.0", "method": "textDocument/didChange",
+        "params": {
+            "textDocument": { "uri": document_uri.clone(), "version": 4 },
+            "contentChanges": [{ "text": "void main() {}\n" }]
+        }
+    }));
+    let recovered = client.diagnostics(&document_uri);
+    assert!(recovered["diagnostics"].as_array().unwrap().is_empty(), "{recovered}");
+    assert_eq!(recovered["version"].as_i64(), Some(4));
+
+    client.send(json!({ "jsonrpc": "2.0", "id": 2, "method": "shutdown" }));
+    assert!(client.response(2)["result"].is_null());
     client.send(json!({ "jsonrpc": "2.0", "method": "exit" }));
     client.finish();
 }
@@ -298,6 +393,32 @@ fn oversized_open_document_reports_a_source_diagnostic() {
     assert_eq!(items[0]["severity"].as_u64(), Some(1));
     assert!(items[0]["message"].as_str().unwrap().contains("source limit"), "{diagnostics}");
     assert_eq!(diagnostics["version"].as_i64(), Some(9));
+    client.send(json!({
+        "jsonrpc": "2.0", "method": "textDocument/didChange",
+        "params": {
+            "textDocument": { "uri": document_uri, "version": 10 },
+            "contentChanges": [{
+                "range": {
+                    "start": { "line": 0, "character": 0 },
+                    "end": { "line": 0, "character": 0 }
+                },
+                "text": ""
+            }]
+        }
+    }));
+    let diagnostics = client.diagnostics(&uri(&path));
+    assert_eq!(diagnostics["version"].as_i64(), Some(10));
+    assert!(diagnostics["diagnostics"][0]["message"].as_str().unwrap().contains("source limit"));
+
+    client.send(json!({
+        "jsonrpc": "2.0", "method": "textDocument/didChange",
+        "params": {
+            "textDocument": { "uri": document_uri, "version": 11 },
+            "contentChanges": [{ "text": prefix }]
+        }
+    }));
+    let diagnostics = client.diagnostics(&uri(&path));
+    assert!(diagnostics["diagnostics"].as_array().unwrap().is_empty());
 
     client.send(json!({ "jsonrpc": "2.0", "id": 2, "method": "shutdown" }));
     assert!(client.response(2)["result"].is_null());

@@ -426,8 +426,9 @@ cargo build --manifest-path editors/zed/dist/nacre/Cargo.toml \
 
 Use Zed's Install Dev Extension action on `editors/zed/dist/nacre`. Keep that
 prepared directory in place. Configure `lsp.nacre.binary.path` if needed.
-The LSP supports UTF-16 diagnostics, unsaved cross-file overlays, current document
-versions, project roots, and diagnostic clearing after fixes/close.
+The LSP supports UTF-16 diagnostics and incremental UTF-16 edits, unsaved
+cross-file overlays, current document versions, project roots, and diagnostic
+clearing after fixes/close.
 
 ## Verification and fuzzing
 

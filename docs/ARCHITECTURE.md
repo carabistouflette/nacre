@@ -426,6 +426,11 @@ exhaustive proof. See [VALIDATION.md](VALIDATION.md) for the recorded evidence.
 compiler, on bounded snapshots of disk sources and open buffers. Frontend byte
 positions are converted to LSP UTF-16 positions; notes become related
 information.
+
+The server advertises incremental document synchronization and applies ranged
+changes in order using strict UTF-16 positions; full-text replacements remain
+supported.
+
 Document-symbol, hover, and definition requests share one scope loader and borrow
 the requested file's source slice from the bundle, avoiding an extra text copy.
 

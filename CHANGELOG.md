@@ -3,6 +3,9 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Advertise incremental LSP synchronization and apply ordered ranged edits using
+  strict UTF-16 positions, while retaining full-text replacements.
+
 - Parse benchmark timing records against the benchmark name and numeric fields, so
   benchmark stdout cannot replace the generated measurements.
 

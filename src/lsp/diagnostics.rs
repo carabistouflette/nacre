@@ -73,6 +73,51 @@ fn line_ending_end(bytes: &[u8], offset: usize) -> Option<usize> {
     }
 }
 
+fn line_bounds(source: &str, line: usize) -> Option<(usize, usize)> {
+    let bytes = source.as_bytes();
+    let mut current_line = 0;
+    let mut line_start = 0;
+    let mut index = 0;
+    while current_line < line {
+        if index >= bytes.len() { return None; }
+        if let Some(next_line_start) = line_ending_end(bytes, index) {
+            current_line += 1;
+            line_start = next_line_start;
+            index = next_line_start;
+        } else {
+            index += 1;
+        }
+    }
+    let mut line_end = line_start;
+    while line_end < bytes.len() && line_ending_end(bytes, line_end).is_none() {
+        line_end += 1;
+    }
+    Some((line_start, line_end))
+}
+
+pub(super) fn range_to_offsets(source: &str, range: &Value) -> Option<(usize, usize)> {
+    let start = range_position_to_offset(source, range.get("start")?)?;
+    let end = range_position_to_offset(source, range.get("end")?)?;
+    (start <= end).then_some((start, end))
+}
+
+fn range_position_to_offset(source: &str, position: &Value) -> Option<usize> {
+    let line = usize::try_from(position.get("line")?.as_u64()?).ok()?;
+    let character = usize::try_from(position.get("character")?.as_u64()?).ok()?;
+    let (line_start, line_end) = line_bounds(source, line)?;
+    let line_text = source.get(line_start..line_end)?;
+    let mut utf16_offset = 0;
+    let mut byte_offset = line_start;
+    for ch in line_text.chars() {
+        if utf16_offset == character { return Some(byte_offset); }
+        let utf16_width = ch.len_utf16();
+        if character < utf16_offset + utf16_width { return None; }
+        utf16_offset += utf16_width;
+        byte_offset += ch.len_utf8();
+    }
+    (utf16_offset == character).then_some(byte_offset)
+}
+
 pub(super) fn offset_position(source: &str, offset: usize) -> (usize, usize, usize) {
     let offset = char_boundary(source, offset);
     let bytes = source.as_bytes();
@@ -98,24 +143,7 @@ pub(super) fn offset_position(source: &str, offset: usize) -> (usize, usize, usi
 }
 
 pub(super) fn position_to_offset(source: &str, line: usize, character: usize) -> usize {
-    let bytes = source.as_bytes();
-    let mut current_line = 0;
-    let mut line_start = 0;
-    let mut index = 0;
-    while current_line < line {
-        if index >= bytes.len() { return source.len(); }
-        if let Some(next_line_start) = line_ending_end(bytes, index) {
-            current_line += 1;
-            line_start = next_line_start;
-            index = next_line_start;
-        } else {
-            index += 1;
-        }
-    }
-    let mut line_end = line_start;
-    while line_end < bytes.len() && line_ending_end(bytes, line_end).is_none() {
-        line_end += 1;
-    }
+    let Some((line_start, line_end)) = line_bounds(source, line) else { return source.len(); };
     let line_slice = &source[line_start..line_end];
     let mut utf16_count = 0;
     let mut byte_offset = 0;
@@ -161,6 +189,40 @@ mod tests {
             assert_eq!(offset_position(source, line_start), (1, 0, line_start));
         }
         assert_eq!(offset_position("a\rb", 1), (0, 1, 1));
+    }
+
+    #[test]
+    fn edit_ranges_use_strict_utf16_offsets_across_line_endings() {
+        let source = "a😀\r\néz";
+        assert_eq!(
+            range_to_offsets(source, &json!({
+                "start": { "line": 0, "character": 1 },
+                "end": { "line": 0, "character": 3 }
+            })),
+            Some((1, 5))
+        );
+        assert_eq!(
+            range_to_offsets(source, &json!({
+                "start": { "line": 0, "character": 3 },
+                "end": { "line": 1, "character": 0 }
+            })),
+            Some((5, 7))
+        );
+        assert_eq!(
+            range_to_offsets(source, &json!({
+                "start": { "line": 1, "character": 0 },
+                "end": { "line": 1, "character": 1 }
+            })),
+            Some((7, 9))
+        );
+        for invalid in [
+            json!({ "start": { "line": 0, "character": 2 }, "end": { "line": 0, "character": 3 } }),
+            json!({ "start": { "line": 0, "character": 0 }, "end": { "line": 0, "character": 4 } }),
+            json!({ "start": { "line": 2, "character": 0 }, "end": { "line": 2, "character": 0 } }),
+            json!({ "start": { "line": 1, "character": 1 }, "end": { "line": 0, "character": 0 } }),
+        ] {
+            assert_eq!(range_to_offsets(source, &invalid), None);
+        }
     }
 
     #[test]
