@@ -6,8 +6,8 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 - Hash compiler environment settings in native C cache keys to prevent stale
   executables when SDK, deployment-target, or override options change.
 
-- Include `LIBRARY_PATH` in native C cache keys so changing linker search paths
-  cannot reuse an executable linked against another library.
+- Hash `LIBRARY_PATH` and `LD_RUN_PATH` in native C executable cache keys, so
+  changes to library selection or embedded runpaths force a fresh link.
 
 - Hash Clang config-file contents so in-place `--config` edits invalidate native
   executable and runtime cache entries.

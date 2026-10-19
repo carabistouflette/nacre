@@ -406,6 +406,7 @@ fn compute_cache_key(
     hash_cache_part(&mut hash, &dependencies.to_le_bytes());
     hash_compiler_environment(&mut hash);
     hash_environment_variable(&mut hash, "LIBRARY_PATH");
+    hash_environment_variable(&mut hash, "LD_RUN_PATH");
     hash_clang_config_files(&mut hash, flags)?;
     Some(format!("{hash:032x}"))
 }

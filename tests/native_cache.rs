@@ -98,6 +98,22 @@ fn create_archive_fixture(compiler: &std::ffi::OsStr, directory: &Path, value: i
     assert!(archived.status.success(), "fixture archive creation failed:\n{}", String::from_utf8_lossy(&archived.stderr));
 }
 
+#[cfg(target_os = "linux")]
+fn create_shared_library_fixture(compiler: &std::ffi::OsStr, directory: &Path, value: i32) {
+    let source = directory.join("fixture.c");
+    let library = directory.join("libnacre_runpath_fixture.so");
+    fs::write(&source, format!("int nacre_cache_fixture_value(void) {{ return {value}; }}\n")).unwrap();
+    let compiled = Command::new(compiler)
+        .args(["-shared", "-fPIC"])
+        .arg(&source)
+        .arg("-Wl,-soname,libnacre_runpath_fixture.so")
+        .arg("-o")
+        .arg(&library)
+        .output()
+        .unwrap();
+    assert!(compiled.status.success(), "fixture shared-library compiler failed:\n{}", String::from_utf8_lossy(&compiled.stderr));
+}
+
 struct CacheProbe<'a> {
     executable: &'a Path,
     compiler: &'a std::ffi::OsStr,
@@ -169,6 +185,34 @@ impl CacheProbe<'_> {
         );
     }
 
+    #[cfg(target_os = "linux")]
+    fn run_with_linker_runpath(&self, library_path: &Path, runpath: &Path, expected: &str) {
+        let output = Command::new(self.executable)
+            .args(["--exact", "c_cache_ld_run_path_probe_child", "--nocapture"])
+            .env("NACRE_CACHE_LD_RUN_PATH_PROBE_CHILD", "1")
+            .env("NACRE_CACHE_EXPECTED", expected)
+            .env("NACRE_CACHE_INCLUDE", self.include)
+            .env("NACRE_CACHE_DIR", self.cache)
+            .env("NACRE_ENABLE_TEST_CACHE", "1")
+            .env("NACRE_CC", self.wrapper)
+            .env("NACRE_FIXTURE_REAL_CC", self.compiler)
+            .env("NACRE_FIXTURE_VERSION", "ld-run-path-v1")
+            .env("NACRE_FIXTURE_COMPILE_LOG", self.compile_log)
+            .env("LIBRARY_PATH", library_path)
+            .env("LD_RUN_PATH", runpath)
+            .env_remove("LD_LIBRARY_PATH")
+            .env_remove("MACOSX_DEPLOYMENT_TARGET")
+            .env_remove("NACRE_NO_CACHE")
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "LD_RUN_PATH cache probe failed\nstdout: {}\nstderr: {}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+        );
+    }
+
     fn run_concurrently(&self, barrier: &Path) {
         let output = Command::new(self.executable)
             .args(["--exact", "c_cache_concurrent_probe_child", "--nocapture"])
@@ -219,6 +263,26 @@ fn c_cache_library_path_probe_child() {
         &["-Wl,--whole-archive", "-lnacre_cache_fixture", "-Wl,--no-whole-archive"],
     ).unwrap();
     let output = program.output().unwrap();
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    let expected = std::env::var("NACRE_CACHE_EXPECTED").unwrap();
+    assert_eq!(output.stdout, expected.as_bytes());
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn c_cache_ld_run_path_probe_child() {
+    if std::env::var_os("NACRE_CACHE_LD_RUN_PATH_PROBE_CHILD").is_none() { return; }
+    let program = native::compile_c_optimized(
+        LIBRARY_SOURCE,
+        "-O0",
+        &["-Wl,--no-as-needed", "-lnacre_runpath_fixture"],
+    ).unwrap();
+    let output = Command::new(program.path())
+        .env_remove("LIBRARY_PATH")
+        .env_remove("LD_LIBRARY_PATH")
+        .env_remove("LD_RUN_PATH")
+        .output()
+        .unwrap();
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     let expected = std::env::var("NACRE_CACHE_EXPECTED").unwrap();
     assert_eq!(output.stdout, expected.as_bytes());
@@ -351,6 +415,48 @@ fn c_cache_invalidates_for_library_path_changes() {
         fs::read(&compile_log).unwrap().len(),
         2,
         "an unchanged linker search path should reuse the executable",
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn c_cache_invalidates_for_ld_run_path_changes() {
+    let temp = TestDir::new();
+    let first_library = temp.path("first runpath");
+    let second_library = temp.path("second runpath");
+    fs::create_dir(&first_library).unwrap();
+    fs::create_dir(&second_library).unwrap();
+    let compiler = native::find_c_compiler().unwrap();
+    create_shared_library_fixture(&compiler, &first_library, 10);
+    create_shared_library_fixture(&compiler, &second_library, 20);
+    let include = temp.path("include headers");
+    fs::create_dir(&include).unwrap();
+    let wrapper = make_compiler_wrapper(&temp);
+    let cache = temp.path("cache");
+    let compile_log = temp.path("actual-compiles");
+    let executable = std::env::current_exe().unwrap();
+    let probe = CacheProbe {
+        executable: &executable,
+        compiler: &compiler,
+        wrapper: &wrapper,
+        cache: &cache,
+        include: &include,
+        compile_log: &compile_log,
+    };
+
+    probe.run_with_linker_runpath(&first_library, &first_library, "10\n");
+    assert_eq!(fs::read(&compile_log).unwrap().len(), 1);
+    probe.run_with_linker_runpath(&first_library, &second_library, "20\n");
+    assert_eq!(
+        fs::read(&compile_log).unwrap().len(),
+        2,
+        "a changed linker runpath must relink the executable",
+    );
+    probe.run_with_linker_runpath(&first_library, &second_library, "20\n");
+    assert_eq!(
+        fs::read(&compile_log).unwrap().len(),
+        2,
+        "an unchanged linker runpath should reuse the executable",
     );
 }
 
