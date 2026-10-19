@@ -1,7 +1,7 @@
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
 use super::support::{
-    native_function, required_indexed_native_method, replace_method_ids, replace_placeholders,
-    result_id, text_class, variant, variant_id,
+    required_first_native_method, required_indexed_native_method, replace_method_ids,
+    replace_placeholders, result_id, text_class, variant, variant_id,
 };
 
 pub(super) fn fields(program: &t::Program, class: C) -> String {
@@ -38,8 +38,12 @@ fn class_id(program: &t::Program, is: impl Fn(C) -> bool) -> Option<usize> {
     program.classes.iter().find(|class| class.native.is_some_and(&is)).map(|class| class.id)
 }
 
-fn native_method(program: &t::Program, method: M) -> &t::Function {
-    native_function(program, |candidate| candidate == method)
+fn native_method<'a>(
+    program: &'a t::Program,
+    native_method_ids: &mut Option<t::NativeMethodIndex>,
+    method: M,
+) -> &'a t::Function {
+    required_first_native_method(program, native_method_ids, method)
 }
 fn watch_kind_id(program: &t::Program) -> usize {
     program.classes.iter().find(|class| class.name == "WatchKind")
@@ -53,21 +57,26 @@ fn parameter(function: &t::Function, index: usize) -> String {
 
 fn add_parameters(
     program: &t::Program,
+    native_method_ids: &mut Option<t::NativeMethodIndex>,
     replacements: &mut Vec<(&'static str, String)>,
     parameters: &[(&'static str, M, usize)],
 ) {
     for (placeholder, method, index) in parameters {
-        replacements.push((*placeholder, parameter(native_method(program, *method), *index)));
+        replacements.push((
+            *placeholder,
+            parameter(native_method(program, native_method_ids, *method), *index),
+        ));
     }
 }
 
 fn add_results(
     program: &t::Program,
+    native_method_ids: &mut Option<t::NativeMethodIndex>,
     replacements: &mut Vec<(&'static str, String)>,
     results: &[(&'static str, &'static str, M)],
 ) {
     for (result_placeholder, ok_placeholder, method) in results {
-        let result = result_id(native_method(program, *method));
+        let result = result_id(native_method(program, native_method_ids, *method));
         replacements.push((*result_placeholder, result.to_string()));
         replacements.push((*ok_placeholder, variant_id(program, result, "Ok").to_string()));
     }
@@ -99,12 +108,12 @@ fn path_implementation(program: &t::Program, text: usize, path: usize, native_me
         ("@TEXT_FROM_BYTES@", format!("ncr_text_from_bytes_{text}")),
         ("@TEXT_TAKE_BYTES@", format!("ncr_text_take_bytes_{text}")),
     ];
-    add_parameters(program, &mut replacements, &[
+    add_parameters(program, native_method_ids, &mut replacements, &[
         ("@PATH_FROM_TEXT_ARG@", M::PathFromText, 0),
         ("@PATH_JOIN_BASE@", M::PathJoin, 0),
         ("@PATH_JOIN_CHILD@", M::PathJoin, 1),
     ]);
-    add_results(program, &mut replacements, &[
+    add_results(program, native_method_ids, &mut replacements, &[
         ("@PATH_FROM_TEXT_RESULT@", "@PATH_FROM_TEXT_OK_TAG@", M::PathFromText),
         ("@PATH_JOIN_RESULT@", "@PATH_JOIN_OK_TAG@", M::PathJoin),
     ]);
@@ -122,7 +131,7 @@ fn file_implementation(program: &t::Program, text: usize, path: usize, file: usi
         ("@BUFFER_ID@", buffer.to_string()),
         ("@BUFFER_RESERVE@", format!("ncr_byte_buffer_reserve_{buffer}")),
     ];
-    add_parameters(program, &mut replacements, &[
+    add_parameters(program, native_method_ids, &mut replacements, &[
         ("@FILE_OPEN_READ_PATH@", M::FileOpenRead, 0),
         ("@FILE_CREATE_PATH@", M::FileCreate, 0),
         ("@FILE_CREATE_MODE@", M::FileCreate, 1),
@@ -153,7 +162,7 @@ fn file_implementation(program: &t::Program, text: usize, path: usize, file: usi
         ("@FILE_WRITE_AT_MAX@", M::FileWriteAt, 3),
         ("@FILE_WRITE_ALL_SOURCE@", M::FileWriteAll, 0),
     ]);
-    add_results(program, &mut replacements, &[
+    add_results(program, native_method_ids, &mut replacements, &[
         ("@FILE_OPEN_READ_RESULT@", "@FILE_OPEN_READ_OK_TAG@", M::FileOpenRead),
         ("@FILE_CREATE_RESULT@", "@FILE_CREATE_OK_TAG@", M::FileCreate),
         ("@FILE_OPEN_APPEND_RESULT@", "@FILE_OPEN_APPEND_OK_TAG@", M::FileOpenAppend),
@@ -187,16 +196,16 @@ fn directory_implementation(program: &t::Program, text: usize, path: usize, dire
         ("@DIRECTORY_ID@", directory.to_string()),
         ("@TEXT_FROM_BYTES@", format!("ncr_text_from_bytes_{text}")),
     ];
-    add_parameters(program, &mut replacements, &[
+    add_parameters(program, native_method_ids, &mut replacements, &[
         ("@DIRECTORY_OPEN_PATH@", M::DirectoryOpen, 0),
     ]);
-    add_results(program, &mut replacements, &[
+    add_results(program, native_method_ids, &mut replacements, &[
         ("@DIRECTORY_OPEN_RESULT@", "@DIRECTORY_OPEN_OK_TAG@", M::DirectoryOpen),
         ("@DIRECTORY_NEXT_RESULT@", "@DIRECTORY_NEXT_OK_TAG@", M::DirectoryNextName),
         ("@DIRECTORY_CLOSE_RESULT@", "@DIRECTORY_CLOSE_OK_TAG@", M::DirectoryClose),
     ]);
     add_self_parameters(&mut replacements, &["@DIRECTORY_NEXT_SELF@", "@DIRECTORY_CLOSE_SELF@"]);
-    let next_result = result_id(native_method(program, M::DirectoryNextName));
+    let next_result = result_id(native_method(program, native_method_ids, M::DirectoryNextName));
     let (_, ok_variant) = variant(program, next_result, "Ok");
     let [Type::Object(option)] = ok_variant.fields.as_slice() else {
         unreachable!("Directory.nextName returns Result<Option<Text>, Text>");
@@ -226,11 +235,11 @@ fn watcher_implementation(
         ("@WATCHER_ID@", watcher.to_string()),
         ("@WATCH_EVENT_ID@", watch_event.to_string()),
     ];
-    add_parameters(program, &mut replacements, &[
+    add_parameters(program, native_method_ids, &mut replacements, &[
         ("@WATCHER_OPEN_PATH@", M::WatcherOpen, 0),
         ("@WATCHER_NEXT_TIMEOUT@", M::WatcherNext, 0),
     ]);
-    add_results(program, &mut replacements, &[
+    add_results(program, native_method_ids, &mut replacements, &[
         ("@WATCHER_OPEN_RESULT@", "@WATCHER_OPEN_OK_TAG@", M::WatcherOpen),
         ("@WATCHER_NEXT_RESULT@", "@WATCHER_NEXT_OK_TAG@", M::WatcherNext),
         ("@WATCHER_CLOSE_RESULT@", "@WATCHER_CLOSE_OK_TAG@", M::WatcherClose),
@@ -238,7 +247,7 @@ fn watcher_implementation(
     add_self_parameters(&mut replacements, &[
         "@WATCHER_NEXT_SELF@", "@WATCHER_CLOSE_SELF@",
     ]);
-    let next_result = result_id(native_method(program, M::WatcherNext));
+    let next_result = result_id(native_method(program, native_method_ids, M::WatcherNext));
     let (_, next_ok) = variant(program, next_result, "Ok");
     let [Type::Object(option)] = next_ok.fields.as_slice() else {
         unreachable!("Watcher.next returns Result<Option<WatchEvent>, Text>");
@@ -289,7 +298,7 @@ fn files_implementation(
     buffer: usize,
     native_method_ids: &mut Option<t::NativeMethodIndex>,
 ) -> String {
-    let list_method = native_method(program, M::FilesList);
+    let list_method = native_method(program, native_method_ids, M::FilesList);
     let list_result = result_id(list_method);
     let (_, list_ok) = variant(program, list_result, "Ok");
     let [Type::Object(list_class)] = list_ok.fields.as_slice() else {
@@ -302,7 +311,7 @@ fn files_implementation(
     let method_ids = native_method_ids.get_or_insert_with(|| t::NativeMethodIndex::new(program));
     let list_new = required_indexed_native_method(program, method_ids, Some(*list_class), M::ListNew);
     let list_add = required_indexed_native_method(program, method_ids, Some(*list_class), M::ListAdd);
-    let path_from_text = native_method(program, M::PathFromText);
+    let path_from_text = native_method(program, native_method_ids, M::PathFromText);
     let mut replacements = vec![
         ("@TEXT_ID@", text.to_string()),
         ("@PATH_ID@", path.to_string()),
@@ -315,7 +324,7 @@ fn files_implementation(
         ("@LIST_NEW@", format!("ncr_fn_{}", list_new.id)),
         ("@LIST_ADD@", format!("ncr_fn_{}", list_add.id)),
     ];
-    add_parameters(program, &mut replacements, &[
+    add_parameters(program, native_method_ids, &mut replacements, &[
         ("@FILES_METADATA_PATH@", M::FilesMetadata, 0),
         ("@FILES_CREATE_DIRECTORY_PATH@", M::FilesCreateDirectory, 0),
         ("@FILES_CREATE_DIRECTORY_MODE@", M::FilesCreateDirectory, 1),
@@ -339,7 +348,7 @@ fn files_implementation(
         ("@FILES_LIST_PATH@", M::FilesList, 0),
         ("@FILES_CANONICAL_PATH@", M::FilesCanonical, 0),
     ]);
-    add_results(program, &mut replacements, &[
+    add_results(program, native_method_ids, &mut replacements, &[
         ("@FILES_METADATA_RESULT@", "@FILES_METADATA_OK_TAG@", M::FilesMetadata),
         ("@FILES_CREATE_DIRECTORY_RESULT@", "@FILES_CREATE_DIRECTORY_OK_TAG@", M::FilesCreateDirectory),
         ("@FILES_REMOVE_FILE_RESULT@", "@FILES_REMOVE_FILE_OK_TAG@", M::FilesRemoveFile),
@@ -357,7 +366,7 @@ fn files_implementation(
         ("@FILES_WRITE_ATOMIC_RESULT@", "@FILES_WRITE_ATOMIC_OK_TAG@", M::FilesWriteTextAtomic),
     ]);
     let mut body = expand_template(program, include_str!("../../stdlib/files.c.in"), &replacements, native_method_ids);
-    let atomic_result = result_id(native_method(program, M::FilesWriteTextAtomic));
+    let atomic_result = result_id(native_method(program, native_method_ids, M::FilesWriteTextAtomic));
     let atomic = replace_placeholders(include_str!("../../stdlib/files_atomic.c.in").to_owned(), &[
         ("@TEXT_ID@", text.to_string()),
         ("@RESULT_UNIT_ATOMIC@", atomic_result.to_string()),

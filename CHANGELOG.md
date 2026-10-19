@@ -3,6 +3,8 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Reuse the lazy native-method index for Filesystem parameter/result metadata,
+  eliminating repeated scans while keeping the unused-filesystem path unindexed.
 - Resolve active Compression and Checksums method metadata through the lazy
   native-method index, removing repeated scans while preserving the no-feature
   early return.
