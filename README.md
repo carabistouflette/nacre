@@ -398,6 +398,8 @@ source metadata, but optimization can remove or relocate variables and statement
 Packages **0.7.0**, grammar **0.6.0**, and 30 snippets cover integer/text maps,
 copied/shared/exclusive traversal, and recoverable collection operations.
 Both clients launch `nacre lsp` and use the real compiler for diagnostics.
+The VS Code grammar highlights all standard-library types, including generic
+collection, codec, and concurrency types.
 
 ```sh
 npm --prefix editors/tree-sitter-nacre ci

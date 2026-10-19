@@ -277,60 +277,97 @@ async function main() {
   assertHasScope(scopesAt(traitAsyncSyntax, 5, 'await', 1), 'keyword.control.nacre', 'postfix await expression');
 
 
+  // Keep this complete with the classes registered in src/stdlib/catalog.rs.
   const standardTypes = [
-    ['Array', 'Array<int>'],
-    ['Arrays', 'Arrays'],
-    ['ByteBuffer', 'ByteBuffer'],
-    ['Channel', 'Channel<Text>'],
-    ['Command', 'Command'],
-    ['Comparator', 'Comparator<Text>'],
-    ['Console', 'Console'],
-    ['Datagram', 'Datagram'],
-    ['Deque', 'Deque<Text>'],
-    ['Directory', 'Directory'],
-    ['Env', 'Env'],
-    ['ExitStatus', 'ExitStatus'],
-    ['File', 'File'],
-    ['FileInfo', 'FileInfo'],
-    ['Files', 'Files'],
-    ['Guard', 'Guard<Text>'],
-    ['List', 'List<long>'],
-    ['Map', 'Map<Text, int>'],
-    ['Math', 'Math'],
-    ['Mutex', 'Mutex<Text>'],
-    ['Option', 'Option<int>'],
-    ['Path', 'Path'],
-    ['Process', 'Process'],
-    ['ProcessOutput', 'ProcessOutput'],
-    ['Random', 'Random'],
-    ['Receiver', 'Receiver<Text>'],
-    ['Regex', 'Regex'],
-    ['RegexMatch', 'RegexMatch'],
-    ['Result', 'Result<Unit, Text>'],
-    ['SendError', 'SendError<Text>'],
-    ['Sender', 'Sender<Text>'],
-    ['Set', 'Set<Text>'],
-    ['SocketAddress', 'SocketAddress'],
-    ['String', 'String'],
-    ['Task', 'Task<long>'],
-    ['TcpListener', 'TcpListener'],
-    ['TcpStream', 'TcpStream'],
-    ['Text', 'Text'],
-    ['Thread', 'Thread<long>'],
-    ['Time', 'Time'],
-    ['TlsConfig', 'TlsConfig'],
-    ['TlsStream', 'TlsStream'],
-    ['UdpSocket', 'UdpSocket'],
-    ['Uri', 'Uri'],
-    ['WebSocket', 'WebSocket'],
-    ['WebSocketMessage', 'WebSocketMessage']
+    'Option', 'Result',
+    'BigInt', 'BigDecimal', 'RoundingMode',
+    'List', 'Array', 'Arrays', 'Deque', 'Map', 'Set', 'Comparator', 'OrderedMap',
+    'OrderedSet', 'PriorityQueue', 'BitSet', 'Pair', 'RefMapper', 'Folder', 'Iterator',
+    'Mapper', 'Predicate', 'ListIterator', 'MapIterator', 'FilterIterator', 'TakeIterator',
+    'SkipIterator', 'Iterators', 'Hasher',
+    'Text',
+    'Unicode', 'Character', 'Charset', 'Locale',
+    'Regex', 'RegexMatch',
+    'ByteBuffer', 'Console', 'Args',
+    'CryptoKey', 'CryptoDigest', 'CryptoMac', 'Certificate', 'Encoding', 'Crypto',
+    'ByteSource', 'ByteSink', 'StreamError', 'Streams', 'BinaryReader', 'BinaryWriter',
+    'Codec', 'Serialization', 'ByteCodec', 'CharCodec', 'UnitCodec', 'IntCodec',
+    'LongCodec', 'DoubleCodec', 'BooleanCodec', 'TextCodec', 'ListCodec', 'OptionCodec',
+    'ResultCodec', 'UuidCodec', 'BytesCodec', 'Uuid',
+    'Path', 'File', 'Directory', 'FileInfo', 'Files', 'WatchKind', 'Watcher', 'WatchEvent',
+    'ZipReader', 'ZipWriter', 'ZipEntry',
+    'Math', 'Random', 'Time', 'Compression', 'Checksums',
+    'DateFields', 'CalendarFields', 'DateTime', 'Temporal',
+    'XmlDocument', 'XmlReader', 'XmlEvent', 'XmlWriter', 'XsltStylesheet',
+    'SocketAddress', 'TcpListener', 'TcpStream', 'Datagram', 'UdpSocket', 'HttpRequest',
+    'HttpResponse', 'Uri', 'Dns',
+    'Task', 'Thread', 'Mutex', 'Guard', 'Channel', 'Sender', 'Receiver', 'SendError',
+    'AtomicInt', 'AtomicLong', 'AtomicBoolean', 'Semaphore', 'CountDownLatch', 'Barrier',
+    'Condition', 'CancellationToken', 'CancelableTask', 'Future', 'ThreadPool', 'SubmitError',
+    'Env', 'Command', 'Process', 'ProcessOutput', 'ExitStatus',
+    'Database', 'SqlStatement',
+    'TlsConfig', 'TlsStream', 'WebSocket', 'WebSocketMessage'
   ];
   const standardTypeLine = tokenize(
     grammar,
-    `void standardTypes(${standardTypes.map(([, type], index) => `${type} value${index}`).join(', ')}) {}`
+    `void standardTypes(${standardTypes.map((name, index) => `${name} value${index}`).join(', ')}) {}`
   );
-  for (const [name] of standardTypes) {
+  for (const name of standardTypes) {
     assertHasScope(scopesAt(standardTypeLine, 0, name), 'support.type.builtin.nacre', `${name} standard type`);
+  }
+
+  const genericStandardTypes = [
+    ['Option', 'Option<int>'],
+    ['Result', 'Result<int, Text>'],
+    ['List', 'List<int>'],
+    ['Deque', 'Deque<int>'],
+    ['Set', 'Set<int>'],
+    ['Comparator', 'Comparator<int>'],
+    ['Hasher', 'Hasher<int>'],
+    ['Array', 'Array<int>'],
+    ['Map', 'Map<int, Text>'],
+    ['OrderedMap', 'OrderedMap<int, Text>'],
+    ['OrderedSet', 'OrderedSet<int>'],
+    ['PriorityQueue', 'PriorityQueue<int>'],
+    ['Pair', 'Pair<int, Text>'],
+    ['RefMapper', 'RefMapper<int, Text>'],
+    ['Folder', 'Folder<int, Text>'],
+    ['Iterator', 'Iterator<int>'],
+    ['Mapper', 'Mapper<int, Text>'],
+    ['Predicate', 'Predicate<int>'],
+    ['ListIterator', 'ListIterator<int>'],
+    ['MapIterator', 'MapIterator<int, Text>'],
+    ['FilterIterator', 'FilterIterator<int>'],
+    ['TakeIterator', 'TakeIterator<int>'],
+    ['SkipIterator', 'SkipIterator<int>'],
+    ['Iterators', 'Iterators<int>'],
+    ['Task', 'Task<int>'],
+    ['Thread', 'Thread<int>'],
+    ['Mutex', 'Mutex<int>'],
+    ['Guard', 'Guard<int>'],
+    ['Channel', 'Channel<int>'],
+    ['Sender', 'Sender<int>'],
+    ['Receiver', 'Receiver<int>'],
+    ['Condition', 'Condition<int>'],
+    ['CancelableTask', 'CancelableTask<int>'],
+    ['Future', 'Future<int>'],
+    ['ThreadPool', 'ThreadPool<int>'],
+    ['Codec', 'Codec<int>'],
+    ['Serialization', 'Serialization<int>'],
+    ['ListCodec', 'ListCodec<int>'],
+    ['OptionCodec', 'OptionCodec<int>'],
+    ['ResultCodec', 'ResultCodec<int, Text>']
+  ];
+  const genericStandardTypeLine = tokenize(
+    grammar,
+    `void genericStandardTypes(${genericStandardTypes.map(([, type], index) => `${type} value${index}`).join(', ')}) {}`
+  );
+  for (const [name] of genericStandardTypes) {
+    assertHasScope(
+      scopesAt(genericStandardTypeLine, 0, name),
+      'support.type.builtin.nacre',
+      `${name} generic standard type`
+    );
   }
 
   const ownership = tokenize(grammar, 'borrow mut Box value;');

@@ -299,12 +299,16 @@
         {
           "name": "support.type.builtin.nacre",
           "match": "\\b(?:String|Array|Arrays|List|Map|Set|Deque|Comparator|Text|Option|Result|ByteBuffer|Regex|RegexMatch|Console|Files|Args|Math|Random|Time|Path|File|FileInfo|Directory|Env|Command|Process|ExitStatus|ProcessOutput|Task|Thread|Mutex|Guard|Channel|Sender|Receiver|SendError|SocketAddress|TcpListener|TcpStream|UdpSocket|Datagram|TlsConfig|TlsStream|Uri|WebSocket|WebSocketMessage)\\b"
+        },
+        {
+          "name": "support.type.builtin.nacre",
+          "match": "\\b(?:BigInt|BigDecimal|RoundingMode|OrderedMap|OrderedSet|PriorityQueue|BitSet|Pair|RefMapper|Folder|Iterator|Mapper|Predicate|ListIterator|MapIterator|FilterIterator|TakeIterator|SkipIterator|Iterators|Hasher|Unicode|Character|Charset|Locale|CryptoKey|CryptoDigest|CryptoMac|Certificate|Encoding|Crypto|ByteSource|ByteSink|StreamError|Streams|BinaryReader|BinaryWriter|Codec|Serialization|ByteCodec|CharCodec|UnitCodec|IntCodec|LongCodec|DoubleCodec|BooleanCodec|TextCodec|ListCodec|OptionCodec|ResultCodec|UuidCodec|BytesCodec|Uuid|WatchKind|Watcher|WatchEvent|ZipReader|ZipWriter|ZipEntry|Compression|Checksums|DateFields|CalendarFields|DateTime|Temporal|XmlDocument|XmlReader|XmlEvent|XmlWriter|XsltStylesheet|HttpRequest|HttpResponse|Dns|AtomicInt|AtomicLong|AtomicBoolean|Semaphore|CountDownLatch|Barrier|Condition|CancellationToken|CancelableTask|Future|ThreadPool|SubmitError|Database|SqlStatement)\\b"
         }
       ]
     },
     "generic-builtin": {
       "name": "meta.generic.nacre",
-      "begin": "\\b(Array|Arrays|List|Map|Set|Deque|Comparator|Option|Result|ByteBuffer|Regex|RegexMatch|Console|Files|Args|Math|Random|Time|Path|File|FileInfo|Directory|Env|Command|Process|ExitStatus|ProcessOutput|Task|Thread|Mutex|Guard|Channel|Sender|Receiver|SendError|SocketAddress|TcpListener|TcpStream|UdpSocket|Datagram)(\\s*)(<)",
+      "begin": "\\b(Option|Result|List|Deque|Set|Comparator|Hasher|Array|Map|OrderedMap|OrderedSet|PriorityQueue|Pair|RefMapper|Folder|Iterator|Mapper|Predicate|ListIterator|MapIterator|FilterIterator|TakeIterator|SkipIterator|Iterators|Task|Thread|Mutex|Guard|Channel|Sender|Receiver|Condition|CancelableTask|Future|ThreadPool|Codec|Serialization|ListCodec|OptionCodec|ResultCodec)(\\s*)(<)",
       "beginCaptures": {
         "1": { "name": "support.type.builtin.nacre" },
         "3": { "name": "punctuation.definition.typeparameters.begin.nacre" }
