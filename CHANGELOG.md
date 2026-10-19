@@ -37,6 +37,8 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   rescanning all functions for each SQL method lookup.
 - Share the lazy native-method index with ByteBuffer and binary stream codegen
   instead of rescanning functions for each method.
+- Reuse the lazy native-method index for Crypto static methods instead of
+  scanning the function table for each API lookup.
 - Resolve the shared Mutex<Unit> class once during concurrency drop-helper
   generation instead of rescanning all classes for every handle type.
 - Index class field names once, replacing repeated linear scans and per-pattern

@@ -1,14 +1,14 @@
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
 use super::native_usage;
 use super::support::{
-    native_function, replace_method_ids, replace_placeholders, result_id, template_section,
-    text_class, variant_id,
+    replace_method_ids, replace_placeholders, result_id, template_section,
+    text_class, variant_id, required_indexed_native_method,
 };
 
-fn method(program: &t::Program, native: M) -> &t::Function {
-    let function = native_function(program, |candidate| candidate == native);
-    assert!(function.receiver.is_none(), "Crypto methods are static");
-    function
+fn method<'a>(
+    program: &'a t::Program, method_ids: &t::NativeMethodIndex, native: M,
+) -> &'a t::Function {
+    required_indexed_native_method(program, method_ids, None, native)
 }
 
 fn parameter(function: &t::Function, index: usize) -> String {
@@ -61,7 +61,7 @@ fn without_digest_selection(source: &str) -> String {
     body
 }
 
-pub(super) fn implementation(program: &t::Program) -> String {
+pub(super) fn implementation(program: &t::Program, method_ids: &t::NativeMethodIndex) -> String {
     if !is_used(program) { return String::new(); }
     let text = text_class(program).expect("Crypto requires Text");
     let byte_buffer = program.classes.iter()
@@ -70,14 +70,14 @@ pub(super) fn implementation(program: &t::Program) -> String {
     let text_borrow = Type::Borrow { class: text, mutable: false };
     let buffer_borrow = Type::Borrow { class: byte_buffer, mutable: false };
 
-    let random = method(program, M::CryptoRandomBytes);
-    let digest = method(program, M::CryptoDigest);
-    let hmac = method(program, M::CryptoHmac);
-    let pbkdf2 = method(program, M::CryptoPbkdf2);
-    let hkdf = method(program, M::CryptoHkdf);
-    let encrypt = method(program, M::CryptoAesGcmEncrypt);
-    let decrypt = method(program, M::CryptoAesGcmDecrypt);
-    let compare = method(program, M::CryptoConstantTimeEquals);
+    let random = method(program, method_ids, M::CryptoRandomBytes);
+    let digest = method(program, method_ids, M::CryptoDigest);
+    let hmac = method(program, method_ids, M::CryptoHmac);
+    let pbkdf2 = method(program, method_ids, M::CryptoPbkdf2);
+    let hkdf = method(program, method_ids, M::CryptoHkdf);
+    let encrypt = method(program, method_ids, M::CryptoAesGcmEncrypt);
+    let decrypt = method(program, method_ids, M::CryptoAesGcmDecrypt);
+    let compare = method(program, method_ids, M::CryptoConstantTimeEquals);
     assert_parameters(random, &[Type::Long]);
     assert_parameters(digest, &[text_borrow, buffer_borrow]);
     assert_parameters(hmac, &[text_borrow, buffer_borrow, buffer_borrow]);
