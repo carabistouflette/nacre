@@ -2493,10 +2493,11 @@ timeouts where zero polls and `-1` is unbounded. The default response-body limit
 is 16 MiB; `setMaxResponseBytes` accepts any nonnegative byte count, with zero
 allowing only an empty body. The write callback checks the bound before growing
 the response buffer, so a failed oversized response never escapes in a partial
-`HttpResponse`. Response headers have a separate 64 KiB total wire-byte limit and
-a limit of 1024 distinct fields. Fields from interim status blocks such as `100
-Continue` are discarded. Malformed status lines, including prohibited control
-bytes in reason phrases, are rejected. Header lookup is ASCII case-insensitive,
+Response headers have a separate 64 KiB cumulative limit on bytes delivered to
+libcurl's header callback and a limit of 1024 distinct fields. Fields from interim
+status blocks such as `100 Continue` are discarded. Malformed status lines,
+including prohibited control bytes in reason phrases, are rejected.
+Header lookup is ASCII case-insensitive,
 returns an owned copy and uses the last value for duplicate field names; values
 that are not valid UTF-8 make the response malformed. `bodyText` performs strict
 UTF-8 validation and returns `Err` for binary bodies that are not valid UTF-8.
