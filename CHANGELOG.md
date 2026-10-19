@@ -3,6 +3,9 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Gate DNS output with one allocation-free scan, then reuse the lazy index for
+  method metadata and signatures; pass the computed resolver requirement
+  through to DNS generation.
 - Resolve active XML stream result metadata through the lazy native-method index,
   avoiding repeated scans while preserving the no-XML early return.
 - Reuse the lazy native-method index for Filesystem parameter/result metadata,

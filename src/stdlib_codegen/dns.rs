@@ -1,23 +1,31 @@
 use crate::c_repr::ctype;
 use crate::ir::{self as t, NativeMethod as M, Type};
 use super::support::{
-    marker, native_function, replace_method_ids, replace_placeholders, result_id, text_class,
-    native_function_if, has_placeholder, template_section,
+    marker, required_first_native_method, replace_method_ids, replace_placeholders, result_id,
+    text_class, has_placeholder, template_section,
 };
 
 pub(super) const IDNA_HELPER_NAME: &str = "ncr_dns_idna_host";
 pub(super) const RESOLVER_HELPER_NAME: &str = "ncr_dns_resolve_host";
 
-fn function(program: &t::Program, method: M) -> &t::Function {
-    native_function(program, |candidate| candidate == method)
+fn function<'a>(
+    program: &'a t::Program,
+    native_method_ids: &mut Option<t::NativeMethodIndex>,
+    method: M,
+) -> &'a t::Function {
+    required_first_native_method(program, native_method_ids, method)
 }
 
 fn parameter(function: &t::Function, index: usize) -> String {
     function.params[index].0.to_string()
 }
 
-fn signature(program: &t::Program, method: M) -> String {
-    let function = function(program, method);
+fn signature(
+    program: &t::Program,
+    native_method_ids: &mut Option<t::NativeMethodIndex>,
+    method: M,
+) -> String {
+    let function = function(program, native_method_ids, method);
     assert_eq!(function.native, Some(method), "DNS signature has its compiler-owned native method");
     let mut parameters = function.params.iter()
         .map(|(id, ty)| format!("{} ncr_v_{id}", ctype(program, *ty)))
@@ -48,10 +56,22 @@ pub(super) fn implementation(
     transport_needs_idna: bool,
     transport_needs_resolver: bool,
 ) -> String {
-    let public_idna = native_function_if(program, |method| method == M::DnsIdna).is_some();
-    let public_resolve = native_function_if(program, |method| method == M::DnsResolve).is_some();
-    let reverse_used = native_function_if(program, |method| method == M::DnsReverse).is_some();
-    let hostname_used = native_function_if(program, |method| method == M::DnsLocalHostName).is_some();
+    let mut public_idna = false;
+    let mut public_resolve = false;
+    let mut reverse_used = false;
+    let mut hostname_used = false;
+    for function in &program.functions {
+        match function.native {
+            Some(M::DnsIdna) => public_idna = true,
+            Some(M::DnsResolve) => public_resolve = true,
+            Some(M::DnsReverse) => reverse_used = true,
+            Some(M::DnsLocalHostName) => hostname_used = true,
+            _ => {}
+        }
+        if public_idna && public_resolve && reverse_used && hostname_used {
+            break;
+        }
+    }
     let resolver_used = public_resolve || transport_needs_resolver;
     let idna_core_used = public_idna || public_resolve || transport_needs_idna || transport_needs_resolver;
     if !idna_core_used && !reverse_used && !hostname_used { return String::new(); }
@@ -64,16 +84,16 @@ pub(super) fn implementation(
             "/* DNS_GROUP idna_core */", "/* DNS_GROUP_END idna_core */"));
     }
 
-    let idna_function = if public_idna { Some(function(program, M::DnsIdna)) } else { None };
-    let resolve_function = if public_resolve { Some(function(program, M::DnsResolve)) } else { None };
-    let reverse_function = if reverse_used { Some(function(program, M::DnsReverse)) } else { None };
-    let hostname_function = if hostname_used { Some(function(program, M::DnsLocalHostName)) } else { None };
+    let idna_function = if public_idna { Some(function(program, native_method_ids, M::DnsIdna)) } else { None };
+    let resolve_function = if public_resolve { Some(function(program, native_method_ids, M::DnsResolve)) } else { None };
+    let reverse_function = if reverse_used { Some(function(program, native_method_ids, M::DnsReverse)) } else { None };
+    let hostname_function = if hostname_used { Some(function(program, native_method_ids, M::DnsLocalHostName)) } else { None };
 
     if public_idna {
         body.push_str(template_section(TEMPLATE,
             "/* DNS_GROUP idna_public */", "/* DNS_GROUP_END idna_public */"));
     }
-    let socket_resolve = if resolver_used { Some(function(program, M::SocketAddressResolve)) } else { None };
+    let socket_resolve = if resolver_used { Some(function(program, native_method_ids, M::SocketAddressResolve)) } else { None };
     if resolver_used {
         body.push_str(template_section(TEMPLATE,
             "/* DNS_GROUP resolve_core */", "/* DNS_GROUP_END resolve_core */"));
@@ -103,7 +123,7 @@ pub(super) fn implementation(
             ("@TEXT_RESULT_ID@", result.to_string()),
             ("@TEXT_RESULT_OK_TAG@", ok.to_string()),
             ("@TEXT_RESULT_ERR_TAG@", err.to_string()),
-            ("@DNS_IDNA_SIGNATURE@", signature(program, M::DnsIdna)),
+            ("@DNS_IDNA_SIGNATURE@", signature(program, native_method_ids, M::DnsIdna)),
             ("@DNS_IDNA_INPUT@", parameter(idna, 0)),
         ]);
     }
@@ -120,7 +140,7 @@ pub(super) fn implementation(
             ("@TEXT_RESULT_ID@", result.to_string()),
             ("@TEXT_RESULT_OK_TAG@", ok.to_string()),
             ("@TEXT_RESULT_ERR_TAG@", err.to_string()),
-            ("@DNS_REVERSE_SIGNATURE@", signature(program, M::DnsReverse)),
+            ("@DNS_REVERSE_SIGNATURE@", signature(program, native_method_ids, M::DnsReverse)),
             ("@DNS_REVERSE_ADDRESS@", parameter(reverse, 0)),
         ]);
     }
@@ -134,7 +154,7 @@ pub(super) fn implementation(
             ("@TEXT_RESULT_ID@", result.to_string()),
             ("@TEXT_RESULT_OK_TAG@", ok.to_string()),
             ("@TEXT_RESULT_ERR_TAG@", err.to_string()),
-            ("@DNS_LOCAL_HOST_NAME_SIGNATURE@", signature(program, M::DnsLocalHostName)),
+            ("@DNS_LOCAL_HOST_NAME_SIGNATURE@", signature(program, native_method_ids, M::DnsLocalHostName)),
         ]);
     }
     if let Some(resolve) = resolve_function {
@@ -149,7 +169,7 @@ pub(super) fn implementation(
         assert_eq!(resolve.params[1].1, socket_resolve.params[1].1,
             "Dns.resolve uses the existing SocketAddress.resolve port type");
         substitutions.extend([
-            ("@DNS_RESOLVE_SIGNATURE@", signature(program, M::DnsResolve)),
+            ("@DNS_RESOLVE_SIGNATURE@", signature(program, native_method_ids, M::DnsResolve)),
             ("@DNS_RESOLVE_INPUT@", parameter(resolve, 0)),
             ("@DNS_RESOLVE_PORT@", parameter(resolve, 1)),
             ("@DNS_RESOLVE_CORE_SIGNATURE@", format!(

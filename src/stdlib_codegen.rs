@@ -360,7 +360,7 @@ pub fn implementations(program: &t::Program) -> String {
     out.push_str(&http::implementation(program, &mut native_method_ids));
     out.push_str(&uri::percent_helpers(program, transport_needs_connect));
     out.push_str(&uri::implementation(program, &mut native_method_ids));
-    out.push_str(&dns::implementation(program, &mut native_method_ids, transport_needs_connect, transport_needs_connect));
+    out.push_str(&dns::implementation(program, &mut native_method_ids, transport_needs_connect, resolver_needed));
     out.push_str(&zip::entry_implementation(program, &mut native_method_ids));
     if let Some(zip) = zip::implementation(program, &mut native_method_ids) {
         out.push_str(&zip);
