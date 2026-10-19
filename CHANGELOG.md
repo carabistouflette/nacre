@@ -24,6 +24,9 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 - Avoid growing a TCP read buffer merely to report orderly EOF after a peer
   closes its write side.
 
+- Fail closed in source-backed `BinaryReader` after `ByteSource.read` violates
+  its byte-count/append contract, preventing unverified staged bytes from being read.
+
 - Emit LLVM value copies and zeroing directly into the output buffer, avoiding
   temporary formatted strings.
 - Match trait bounds for specialized arguments against implementations attached

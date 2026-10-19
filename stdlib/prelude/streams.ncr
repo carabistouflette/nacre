@@ -242,6 +242,8 @@ class Streams {
 
 class BinaryReader {
     public BinaryReader(ByteBuffer bytes, boolean littleEndian) {}
+    // A source-backed reader fails closed if ByteSource.read violates the
+    // count/append contract.
     public static Result<BinaryReader, Text> fromSource(ByteSource source, boolean littleEndian, long maxBytes) {}
     public readonly long position() {}
     public readonly long remaining() {}

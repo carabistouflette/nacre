@@ -265,6 +265,52 @@ fn binary_streaming_reader_retry_and_writer_resume_preserve_progress() {
     assert_eq!(stdout.matches("sink flush\n").count(), 1, "{stdout}");
 }
 
+#[test]
+fn binary_reader_does_not_reuse_bytes_from_an_invalid_source_count() {
+    let program = compile(r#"
+class InconsistentSource implements ByteSource {
+    private boolean sent;
+
+    public InconsistentSource() { this.sent = false; }
+
+    public Result<long, Text> read(borrow mut ByteBuffer destination, long maxBytes) {
+        if (!this.sent) {
+            this.sent = true;
+            destination.append((byte)85);
+            return new Result<long, Text>.Ok(0L);
+        }
+        return new Result<long, Text>.Ok(0L);
+    }
+}
+
+Result<Unit, Text> exercise() {
+    BinaryReader reader = BinaryReader.fromSource(new InconsistentSource(), true, 1L)?;
+    match (reader.readByte()) {
+        Err(error) { println("invalid source count rejected"); drop(error); }
+        Ok(value) { println("invalid source count accepted"); }
+    }
+    match (reader.readByte()) {
+        Err(error) { println("retry blocked"); drop(error); }
+        Ok(value) { println("invalid staged byte accepted"); }
+    }
+    return new Result<Unit, Text>.Ok(());
+}
+
+void main() {
+    match (exercise()) {
+        Ok(unit) {}
+        Err(error) { error.print(); }
+    }
+}
+"#);
+    let output = run(&program, &[]);
+    assert_eq!(
+        output.stdout,
+        b"invalid source count rejected\nretry blocked\n"
+    );
+}
+
+
 const STREAM_CODEC_SOURCE: &str = r#"
 class ChunkSource implements ByteSource {
     private File input;

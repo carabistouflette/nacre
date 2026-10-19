@@ -10,6 +10,14 @@ static ncr_obj_@TEXT_ID@ *ncr_binary_reader_text_error_@READER_ID@(
     const char *message, size_t length, size_t ncr_line, size_t ncr_column) {
     return ncr_text_from_bytes_@TEXT_ID@((const unsigned char *)message, length, ncr_line, ncr_column);
 }
+static int ncr_binary_reader_fail_source_@READER_ID@(ncr_obj_@READER_ID@ *p,
+    ncr_obj_@TEXT_ID@ **error, size_t ncr_line, size_t ncr_column) {
+    static const char message[] = "ByteSource.read returned an invalid byte count";
+    p->source_failed = true;
+    *error = ncr_binary_reader_text_error_@READER_ID@(
+        message, sizeof(message) - 1, ncr_line, ncr_column);
+    return -1;
+}
 
 static ncr_obj_@BUFFER_ID@ *ncr_binary_reader_new_stage_@READER_ID@(size_t ncr_line, size_t ncr_column) {
     ncr_obj_@BUFFER_ID@ *stage = ncr_allocate(sizeof(*stage), ncr_line, ncr_column);
@@ -39,7 +47,6 @@ static int ncr_binary_reader_stage_@READER_ID@(ncr_obj_@READER_ID@ *p, uint64_t 
     ncr_obj_@TEXT_ID@ **error, size_t ncr_line, size_t ncr_column) {
     static const char limit_message[] = "BinaryReader read exceeds maxBytes";
     static const char range_message[] = "BinaryReader staging length exceeds size_t range";
-    static const char count_message[] = "ByteSource.read returned an invalid byte count";
     *error = NULL;
     if (p->position < 0 || p->position > p->max_bytes
         || count > (uint64_t)(p->max_bytes - p->position)) {
@@ -51,6 +58,10 @@ static int ncr_binary_reader_stage_@READER_ID@(ncr_obj_@READER_ID@ *p, uint64_t 
         *error = ncr_binary_reader_text_error_@READER_ID@(
             range_message, sizeof(range_message) - 1, ncr_line, ncr_column);
         return -1;
+    }
+    if (p->source_failed) {
+        return ncr_binary_reader_fail_source_@READER_ID@(
+            p, error, ncr_line, ncr_column);
     }
     size_t available = p->stage->length - p->stage_offset;
     if (count <= (uint64_t)available) { return 1; }
@@ -76,20 +87,19 @@ static int ncr_binary_reader_stage_@READER_ID@(ncr_obj_@READER_ID@ *p, uint64_t 
             p->source.vtable->m@SOURCE_READ_SLOT@(p->source.data, p->stage, (int64_t)missing);
         if (p->stage->length < old_length) {
             ncr_drop_@SOURCE_READ_RESULT@(source_result);
-            *error = ncr_binary_reader_text_error_@READER_ID@(
-                count_message, sizeof(count_message) - 1, ncr_line, ncr_column);
-            return -1;
+            return ncr_binary_reader_fail_source_@READER_ID@(
+                p, error, ncr_line, ncr_column);
         }
         size_t appended = p->stage->length - old_length;
         if (source_result.tag == @SOURCE_READ_ERROR_TAG@) {
             if (appended > (size_t)missing) {
-                ncr_obj_@TEXT_ID@ *source_error = source_result.data.v@SOURCE_READ_ERROR_TAG@.f0;
+                ncr_obj_@TEXT_ID@ *source_error =
+                    source_result.data.v@SOURCE_READ_ERROR_TAG@.f0;
                 source_result.tag = -1;
                 ncr_drop_@SOURCE_READ_RESULT@(source_result);
                 ncr_drop_@TEXT_ID@(source_error);
-                *error = ncr_binary_reader_text_error_@READER_ID@(
-                    count_message, sizeof(count_message) - 1, ncr_line, ncr_column);
-                return -1;
+                return ncr_binary_reader_fail_source_@READER_ID@(
+                    p, error, ncr_line, ncr_column);
             }
             *error = source_result.data.v@SOURCE_READ_ERROR_TAG@.f0;
             source_result.tag = -1;
@@ -99,17 +109,15 @@ static int ncr_binary_reader_stage_@READER_ID@(ncr_obj_@READER_ID@ *p, uint64_t 
         if (source_result.tag != @SOURCE_READ_OK_TAG@) {
             source_result.tag = -1;
             ncr_drop_@SOURCE_READ_RESULT@(source_result);
-            *error = ncr_binary_reader_text_error_@READER_ID@(
-                count_message, sizeof(count_message) - 1, ncr_line, ncr_column);
-            return -1;
+            return ncr_binary_reader_fail_source_@READER_ID@(
+                p, error, ncr_line, ncr_column);
         }
         int64_t returned = source_result.data.v@SOURCE_READ_OK_TAG@.f0;
         source_result.tag = -1;
         ncr_drop_@SOURCE_READ_RESULT@(source_result);
         if (returned < 0 || (uint64_t)returned > missing || appended != (size_t)returned) {
-            *error = ncr_binary_reader_text_error_@READER_ID@(
-                count_message, sizeof(count_message) - 1, ncr_line, ncr_column);
-            return -1;
+            return ncr_binary_reader_fail_source_@READER_ID@(
+                p, error, ncr_line, ncr_column);
         }
         if (returned == 0) {
             p->source_eof = true;
@@ -151,6 +159,7 @@ static void @BINARY_READER_NEW@(ncr_obj_@READER_ID@ *ncr_self,
     ncr_self->little_endian = ncr_v_@READER_ENDIAN_ID@;
     ncr_self->stream_mode = false;
     ncr_self->source_eof = false;
+    ncr_self->source_failed = false;
 }
 
 static ncr_obj_@READER_FACTORY_RESULT@ @BINARY_READER_FROM_SOURCE@(
@@ -173,6 +182,7 @@ static ncr_obj_@READER_FACTORY_RESULT@ @BINARY_READER_FROM_SOURCE@(
     reader->little_endian = ncr_v_@READER_FROM_SOURCE_ENDIAN_ID@;
     reader->stream_mode = true;
     reader->source_eof = false;
+    reader->source_failed = false;
     return (ncr_obj_@READER_FACTORY_RESULT@){
         .tag = @READER_FACTORY_OK_TAG@,
         .data.v@READER_FACTORY_OK_TAG@.f0 = reader

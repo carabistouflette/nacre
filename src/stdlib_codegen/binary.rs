@@ -108,7 +108,7 @@ pub(super) fn fields(program: &t::Program, class: C, _class_id: usize) -> String
     let sink = interface_class(program, "ByteSink");
     match class {
         C::BinaryReader => format!(
-            "    ncr_obj_{buffer} *bytes;\n    ncr_obj_{source} source;\n    ncr_obj_{buffer} *stage;\n    int64_t position;\n    int64_t max_bytes;\n    size_t stage_offset;\n    bool little_endian;\n    bool stream_mode;\n    bool source_eof;\n",
+            "    ncr_obj_{buffer} *bytes;\n    ncr_obj_{source} source;\n    ncr_obj_{buffer} *stage;\n    int64_t position;\n    int64_t max_bytes;\n    size_t stage_offset;\n    bool little_endian;\n    bool stream_mode;\n    bool source_eof;\n    bool source_failed;\n",
         ),
         C::BinaryWriter => format!(
             "    ncr_obj_{buffer} *buffer;\n    ncr_obj_{sink} sink;\n    int64_t position;\n    int64_t max_bytes;\n    size_t pending_offset;\n    bool little_endian;\n    bool stream_mode;\n",
