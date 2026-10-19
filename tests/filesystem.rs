@@ -1417,6 +1417,19 @@ Result<Unit,Text> drain(borrow Path path) {
     }
     if (overflow && overflowKind) { println("OVERFLOW_KIND_SEEN"); }
     else { println("OVERFLOW_KIND_MISSING"); }
+    Console.print("AFTER_OVERFLOW_READY\n");
+    match (Console.readLine()) {
+        Err(error) { return new Result<Unit,Text>.Err(error); }
+        Ok(option) { drop(option); }
+    }
+    match (watcher.next(5000L)?) {
+        None { println("WATCH_AFTER_OVERFLOW_MISSING"); }
+        Some(event) {
+            borrow Text name = event.name();
+            if (name.equalsString("after-overflow")) { println("WATCH_AFTER_OVERFLOW_EVENT"); }
+            else { println("WATCH_AFTER_OVERFLOW_WRONG_EVENT"); }
+        }
+    }
     watcher.close()?;
     watcher.close()?;
     println("CLOSE_IDEMPOTENT");
@@ -1445,7 +1458,7 @@ void main() {
         .parse::<usize>()
         .unwrap();
     let program = compile(source);
-    let (mut child, output) = spawn_watcher(&program, &scratch.0);
+    let (mut child, mut output) = spawn_watcher(&program, &scratch.0);
 
     for index in 0..=queue_limit {
         let path = scratch.0.join(format!("overflow-{index:08x}"));
@@ -1457,11 +1470,19 @@ void main() {
         drop(file);
     }
     send_line(&mut child);
+    assert_eq!(take_line(&mut output), "OVERFLOW_KIND_SEEN");
+    assert_eq!(take_line(&mut output), "AFTER_OVERFLOW_READY");
+    fs::write(scratch.0.join("after-overflow"), b"").unwrap();
+    send_line(&mut child);
     let result = finish_child(child, output);
-    assert!(result.status.success(), "{}", String::from_utf8_lossy(&result.stderr));
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
     assert_live_zero(&result);
     let stdout = String::from_utf8(result.stdout).unwrap();
-    assert!(stdout.contains("OVERFLOW_KIND_SEEN\n"), "{stdout}");
+    assert!(stdout.contains("WATCH_AFTER_OVERFLOW_EVENT\n"), "{stdout}");
     assert!(stdout.contains("CLOSE_IDEMPOTENT\n"));
     assert!(stdout.contains("WATCH_DONE\n"));
 }
