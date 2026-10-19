@@ -597,3 +597,29 @@ void main() {
 "#;
     assert_direct_matches_c(source, b"1\n2\n", &["-DNACRE_MEMORY_STATS"]);
 }
+
+#[test]
+fn direct_iterator_take_preserves_bounds_above_collection_index_range() {
+    let source = r#"
+class Sum implements Folder<int, int> {
+    public int apply(int total, int value) { return total + value; }
+}
+void main() {
+    List<int> values = new List<int>();
+    values.add(1); values.add(2); values.add(3);
+    long limit = 2147483648L;
+    Pair<long, Option<long>> hint = values.iter().take(limit).sizeHint();
+    match (hint) {
+        (lower, upper) {
+            println(lower);
+            match (upper) {
+                Some(bound) { println(bound); }
+                None { println("no upper bound"); }
+            }
+        }
+    }
+    println(values.iter().take(limit).fold(0, new Sum()));
+}
+"#;
+    assert_direct_matches_c(source, b"3\n3\n6\n", &["-DNACRE_MEMORY_STATS"]);
+}
