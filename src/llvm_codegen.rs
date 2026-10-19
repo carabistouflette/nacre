@@ -2568,29 +2568,29 @@ impl<'a> LlvmEmitter<'a> {
 
     fn copy_value(&mut self, ty: Type, destination: &str, source: &str) -> Result<(), String> {
         if let Some(key) = self.aggregate_key(ty) {
-            let helper = format!("ncr_llvm_copy_{key}");
-            self.body.push_str(&format!(
-                "    call void @{helper}(ptr {destination}, ptr {source})\n"));
+            writeln!(
+                self.body,
+                "    call void @ncr_llvm_copy_{key}(ptr {destination}, ptr {source})"
+            ).unwrap();
         } else {
             let storage_ty = llvm_storage_type(ty, self.program);
             let value = self.fresh_reg();
-            self.body.push_str(&format!(
-                "    {value} = load {storage_ty}, ptr {source}\n    store {storage_ty} {value}, ptr {destination}\n"));
+            writeln!(
+                self.body,
+                "    {value} = load {storage_ty}, ptr {source}\n    store {storage_ty} {value}, ptr {destination}"
+            ).unwrap();
         }
         Ok(())
     }
 
     fn zero_value(&mut self, ty: Type, destination: &str) -> Result<(), String> {
         if let Some(key) = self.aggregate_key(ty) {
-            let helper = if key == "string" { "ncr_llvm_zero_string".to_owned() }
-                else { format!("ncr_llvm_zero_{}", key) };
-            self.body.push_str(&format!("    call void @{helper}(ptr {destination})\n"));
+            writeln!(self.body, "    call void @ncr_llvm_zero_{key}(ptr {destination})").unwrap();
         } else {
             let storage_ty = llvm_storage_type(ty, self.program);
             let zero = if storage_ty == "ptr" { "null" } else if storage_ty == "double" { "0.0" }
                 else if storage_ty == "i1" { "false" } else { "0" };
-            self.body.push_str(&format!(
-                "    store {storage_ty} {zero}, ptr {destination}\n"));
+            writeln!(self.body, "    store {storage_ty} {zero}, ptr {destination}").unwrap();
         }
         Ok(())
     }
