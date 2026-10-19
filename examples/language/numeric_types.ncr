@@ -33,6 +33,9 @@ void main() {
     println(7L | 8L);
     println(7L ^ 3L);
     println(~0L);
+    println(1 << 31);
+    println(-8L >> 1);
+    println(-1L >> 63);
 
     List<byte> bytes = new List<byte>();
     bytes.add(maximumByte);

@@ -4,7 +4,7 @@ use std::process::Output;
 
 const NUMERIC_EXAMPLE: &str = include_str!("../examples/language/numeric_types.ncr");
 // U+1F9EA is the Unicode test data in this expected output.
-const EXPECTED_OUTPUT: &str = "255\n65\n🧪\n🧪\n3\n-2147483648\n-9223372036854775808\n-9223372036854775808\n0\nfalse\ntrue\n-1\n-3\n-9223372036854775808\n3\n15\n4\n-1\n297\nfalse\ntrue\ntrue\n78\n-9223372036854775808\n()\n1\n255|🧪|-9223372036854775808|3.25|inf\n-9223372036854775808\n[E6111]\n312.5\ntrue\n[E6112]\n()\n";
+const EXPECTED_OUTPUT: &str = "255\n65\n🧪\n🧪\n3\n-2147483648\n-9223372036854775808\n-9223372036854775808\n0\nfalse\ntrue\n-1\n-3\n-9223372036854775808\n3\n15\n4\n-1\n-2147483648\n-4\n-1\n297\nfalse\ntrue\ntrue\n78\n-9223372036854775808\n()\n1\n255|🧪|-9223372036854775808|3.25|inf\n-9223372036854775808\n[E6111]\n312.5\ntrue\n[E6112]\n()\n";
 
 fn assert_numeric_output(bytes: &[u8]) {
     let text = std::str::from_utf8(bytes).unwrap();
@@ -52,6 +52,8 @@ fn checked_numeric_failures_report_stable_codes_and_locations() {
         ("void main() { double nan = 0.0 / 0.0; int value = (int)nan; println(value); }", "[E6102]"),
         ("void main() { int value = 1 << 32; println(value); }", "[E6104]"),
         ("void main() { int value = 1 << -1; println(value); }", "[E6104]"),
+        ("void main() { long value = 1L << 64; println(value); }", "[E6104]"),
+        ("void main() { long value = 1L >> -1; println(value); }", "[E6104]"),
         ("void main() { long value = 1L / 0L; println(value); }", "[E6103]"),
     ] {
         let output = execute(source, &[]);

@@ -53,6 +53,13 @@ failures do not unwind scopes. No throughput or latency guarantees are made.
 | `boolean` | `true` or `false`. |
 | `String` | Immutable, statically stored UTF-8 literal view; it is not an owned dynamic string. |
 
+Shift operators `<<` and `>>` require an integer left operand and a `byte`,
+`char`, or `int` count. A `byte` or `char` left operand is promoted to `int`;
+`int` shifts use 32 bits and `long` shifts use 64 bits. Counts must be
+nonnegative and less than the operand width, or execution terminates with
+`[E6104]`. Left shifts discard bits beyond that width; right shifts are
+arithmetic and preserve the sign bit.
+
 A character literal contains exactly one Unicode scalar, for example `'λ'` or
 `'\u{1f9ed}'`. Character literals support `\n`, `\r`, `\t`, `\0`, `\"`, `\'`,
 `\\`, and `\u{...}` escapes. String literals support `\n`, `\r`, `\t`, `\0`,

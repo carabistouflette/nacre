@@ -3,6 +3,9 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Document integer shift widths, count bounds, and sign-extending right shifts;
+  cover signed boundaries and invalid `long` counts in numeric tests.
+
 - Advertise incremental LSP synchronization and apply ordered ranged edits using
   strict UTF-16 positions, while retaining full-text replacements.
 
