@@ -3,6 +3,8 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Reuse the shared lazy method index for TLS implementation metadata after its
+  no-TLS class gate, eliminating repeated function-table scans.
 - Skip WebSocket method lookups when no WebSocket classes are present and reuse
   the lazy native-method index for active implementation metadata.
 - Resolve HTTP codegen methods through the lazy native-method index instead of

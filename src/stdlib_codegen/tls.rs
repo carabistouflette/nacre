@@ -1,11 +1,15 @@
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
 use super::support::{
-    has_placeholder, native_class_id, native_class_id_if, native_function_if,
+    first_native_method_if, has_placeholder, native_class_id, native_class_id_if,
     replace_placeholders, result_id, template_section, variant_id,
 };
 
-fn method_if(program: &t::Program, native: M) -> Option<&t::Function> {
-    native_function_if(program, |candidate| candidate == native)
+fn method_if<'a>(
+    program: &'a t::Program,
+    native_method_ids: &mut Option<t::NativeMethodIndex>,
+    native: M,
+) -> Option<&'a t::Function> {
+    first_native_method_if(program, native_method_ids, native)
 }
 fn class_id(program: &t::Program, is: impl Fn(C) -> bool) -> usize {
     native_class_id(program, is)
@@ -132,7 +136,10 @@ pub(crate) fn drop_helper_prototypes(program: &t::Program) -> String {
     out
 }
 
-pub(super) fn implementation(program: &t::Program) -> String {
+pub(super) fn implementation(
+    program: &t::Program,
+    native_method_ids: &mut Option<t::NativeMethodIndex>,
+) -> String {
     let config_class = class_id_if(program, |native| matches!(native, C::TlsConfig));
     let stream_class = class_id_if(program, |native| matches!(native, C::TlsStream));
     let websocket_class = class_id_if(program, |native| matches!(native, C::WebSocket));
@@ -140,24 +147,24 @@ pub(super) fn implementation(program: &t::Program) -> String {
         return String::new();
     }
 
-    let config_client = method_if(program, M::TlsConfigClient);
-    let config_client_with_ca = method_if(program, M::TlsConfigClientWithCa);
-    let config_client_with_identity = method_if(program, M::TlsConfigClientWithIdentity);
-    let config_server = method_if(program, M::TlsConfigServer);
-    let config_server_with_client_auth = method_if(program, M::TlsConfigServerWithClientAuth);
-    let stream_connect = method_if(program, M::TlsStreamConnect);
-    let stream_accept = method_if(program, M::TlsStreamAccept);
-    let stream_read_some = method_if(program, M::TlsStreamReadSome);
-    let stream_read = method_if(program, M::TlsStreamRead);
-    let stream_write_some = method_if(program, M::TlsStreamWriteSome);
-    let stream_write = method_if(program, M::TlsStreamWrite);
-    let stream_write_all = method_if(program, M::TlsStreamWriteAll);
-    let stream_cipher = method_if(program, M::TlsStreamCipher);
-    let stream_protocol = method_if(program, M::TlsStreamProtocol);
-    let stream_peer_certificate = method_if(program, M::TlsStreamPeerCertificate);
-    let stream_flush = method_if(program, M::TlsStreamFlush);
-    let stream_close = method_if(program, M::TlsStreamClose);
-    let websocket_connect_tls = method_if(program, M::WebSocketConnectTls);
+    let config_client = method_if(program, native_method_ids, M::TlsConfigClient);
+    let config_client_with_ca = method_if(program, native_method_ids, M::TlsConfigClientWithCa);
+    let config_client_with_identity = method_if(program, native_method_ids, M::TlsConfigClientWithIdentity);
+    let config_server = method_if(program, native_method_ids, M::TlsConfigServer);
+    let config_server_with_client_auth = method_if(program, native_method_ids, M::TlsConfigServerWithClientAuth);
+    let stream_connect = method_if(program, native_method_ids, M::TlsStreamConnect);
+    let stream_accept = method_if(program, native_method_ids, M::TlsStreamAccept);
+    let stream_read_some = method_if(program, native_method_ids, M::TlsStreamReadSome);
+    let stream_read = method_if(program, native_method_ids, M::TlsStreamRead);
+    let stream_write_some = method_if(program, native_method_ids, M::TlsStreamWriteSome);
+    let stream_write = method_if(program, native_method_ids, M::TlsStreamWrite);
+    let stream_write_all = method_if(program, native_method_ids, M::TlsStreamWriteAll);
+    let stream_cipher = method_if(program, native_method_ids, M::TlsStreamCipher);
+    let stream_protocol = method_if(program, native_method_ids, M::TlsStreamProtocol);
+    let stream_peer_certificate = method_if(program, native_method_ids, M::TlsStreamPeerCertificate);
+    let stream_flush = method_if(program, native_method_ids, M::TlsStreamFlush);
+    let stream_close = method_if(program, native_method_ids, M::TlsStreamClose);
+    let websocket_connect_tls = method_if(program, native_method_ids, M::WebSocketConnectTls);
 
     let has_config = config_class.is_some();
     let has_stream = stream_class.is_some();
