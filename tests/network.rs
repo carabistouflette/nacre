@@ -779,6 +779,25 @@ void main() {
                                                 && received.get(2L) == (byte)66);
                                         }
                                     }
+                                    match (socket.sendTo(received, 1L, 2L, local, 0L)) {
+                                        Err(error) { println("udp-zero-limit-send-error"); }
+                                        Ok(count) {
+                                            if (count == 2L) { println("udp-zero-limit-send-ok"); }
+                                            else { println("udp-zero-limit-send-error"); }
+                                        }
+                                    }
+                                    match (socket.receiveFrom(received, 0L, 0L)) {
+                                        Err(error) { println("zero-limit-receive-error"); }
+                                        Ok(datagram) {
+                                            if (datagram.bytesRead() == 0L && datagram.truncated()
+                                                && received.length() == 3L
+                                                && received.get(0L) == (byte)90
+                                                && received.get(1L) == (byte)65
+                                                && received.get(2L) == (byte)66) {
+                                                println("udp-zero-limit-truncated");
+                                            } else { println("udp-zero-limit-corrupted"); }
+                                        }
+                                    }
                                     match (socket.sendTo(received, 0L, 1L, local, 0L)) {
                                         Err(error) { println("bounded-send-error"); }
                                         Ok(count) {
@@ -847,6 +866,7 @@ void main() {
     for marker in [
         "udp-send-negative-rejected\nudp-receive-negative-rejected\n",
         "true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n",
+        "udp-zero-limit-send-ok\nudp-zero-limit-truncated\n",
         "bounded-send-ok\nudp-read-bounded\n",
         "udp-deadline\nudp-timeout-unallocated\nudp-closed\nclosed-udp-address-error\nclosed-udp-send-error\nclosed-udp-receive-error\n",
     ] {
