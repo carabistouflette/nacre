@@ -104,6 +104,42 @@ void main() {
     assert_eq!(directory_entries(&scratch.0), vec![OsString::from("board.dat")]);
 }
 
+#[cfg(unix)]
+#[test]
+fn atomic_write_replaces_symlink_entry_not_its_target() {
+    use std::os::unix::fs::symlink;
+
+    let scratch = Scratch::new();
+    let target = scratch.0.join("destination.dat");
+    let link = scratch.0.join("alias.dat");
+    fs::write(&target, b"original destination").unwrap();
+    symlink(&target, &link).unwrap();
+
+    let source = r#"
+void main() {
+    match (Args.get(0)) {
+        Err(error) { println("ARG_ERROR"); }
+        Ok(path) {
+            Text content = new Text("replacement");
+            match (Files.writeTextAtomic(path, content)) {
+                Err(error) { println("WRITE_ERROR"); }
+                Ok(unit) { println("WRITE_OK"); }
+            }
+        }
+    }
+}
+"#;
+    let output = run(&compile(source), &[link.as_path()]);
+    assert_eq!(output.stdout, b"WRITE_OK\n");
+    assert_eq!(fs::read(&target).unwrap(), b"original destination");
+    assert_eq!(fs::read(&link).unwrap(), b"replacement");
+    assert!(!fs::symlink_metadata(&link).unwrap().file_type().is_symlink());
+    assert_eq!(
+        directory_entries(&scratch.0),
+        vec![OsString::from("alias.dat"), OsString::from("destination.dat")]
+    );
+}
+
 #[test]
 fn invalid_atomic_paths_do_not_touch_the_destination() {
     let scratch = Scratch::new();
