@@ -330,11 +330,11 @@ pub(crate) fn read_directory_entries(
 
 fn collect(
     path: &Path,
-    depth: usize,
+    directory_depth: usize,
     visited: &mut usize,
     output: &mut Vec<PathBuf>,
 ) -> Result<(), String> {
-    if depth > 32 {
+    if directory_depth > 32 {
         return Err("source directory nesting limit is 32".to_owned());
     }
     let meta =
@@ -357,8 +357,10 @@ fn collect(
             }
             let kind = fs::symlink_metadata(&entry)
                 .map_err(|error| format!("{}: {error}", display_path(&entry)))?;
-            if kind.is_dir() || is_source_file(&entry) {
-                collect(&entry, depth + 1, visited, output)?;
+            if kind.is_dir() {
+                collect(&entry, directory_depth + 1, visited, output)?;
+            } else if is_source_file(&entry) {
+                collect(&entry, directory_depth, visited, output)?;
             }
         }
     } else {

@@ -20,7 +20,8 @@ Directories are traversed recursively in sorted order. Directory inputs collect
 regular file is read as given. Symlinks anywhere in an explicit input path are
 refused, as are duplicate canonical paths. Source text must be UTF-8. A bundle
 is limited to 64 files, 1 MiB of combined source, 4,096 directory entries across
-discovery, and directory nesting depth 32.
+discovery, and 32 nested directories; the terminal `.ncr` file does not consume
+a level.
 
 Each file is lexed and parsed independently, then its declarations are resolved
 as one whole program. A source-unit header assigns declarations to a namespace;

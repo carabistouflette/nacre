@@ -280,6 +280,27 @@ fn directory_scan_limit_is_enforced_at_the_boundary() {
 }
 
 #[test]
+fn directory_depth_counts_directories_not_source_files() {
+    let temp = Temp::new();
+    let mut directory = temp.0.clone();
+    for _ in 0..32 {
+        directory.push("nested");
+        fs::create_dir(&directory).unwrap();
+    }
+    fs::write(directory.join("Main.ncr"), "void main() {}").unwrap();
+    SourceBundle::from_paths(std::slice::from_ref(&temp.0))
+        .unwrap()
+        .validate()
+        .unwrap();
+
+    directory.push("nested");
+    fs::create_dir(&directory).unwrap();
+    fs::write(directory.join("TooDeep.ncr"), "class TooDeep {}").unwrap();
+    let error = SourceBundle::from_paths(std::slice::from_ref(&temp.0)).unwrap_err();
+    assert!(error.contains("source directory nesting limit is 32"), "{error}");
+}
+
+#[test]
 fn duplicate_disk_input_is_rejected() {
     let t=Temp::new();let p=t.file("main.ncr","void main(){}");assert!(SourceBundle::from_paths(&[p.clone(),p]).is_err());
 }
