@@ -99,6 +99,18 @@ fn source_root_cannot_traverse_an_intermediate_symlink() {
 
 #[cfg(unix)]
 #[test]
+fn package_directory_symlink_is_rejected() {
+    let t = Temp::new();
+    let app = t.package("app", "app", "", "void main(){}");
+    let alias = t.0.join("linked-app");
+    std::os::unix::fs::symlink(&app, &alias).unwrap();
+
+    let error = resolve_inputs(&[alias]).unwrap_err();
+    assert!(error.contains("symbolic-link"), "{error}");
+}
+
+#[cfg(unix)]
+#[test]
 fn manifest_apis_reject_symlinks_and_nonregular_files() {
     let t = Temp::new();
     let app = t.package("app", "app", "", "void main(){}");

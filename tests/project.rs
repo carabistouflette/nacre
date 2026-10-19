@@ -386,6 +386,19 @@ fn source_symlinks_are_rejected() {
     let t=Temp::new();let p=t.file("main.ncr","void main(){}");let link=t.0.join("link.ncr");symlink(&p,&link).unwrap();
     assert!(SourceBundle::from_paths(&[link]).is_err());
 }
+
+#[cfg(unix)]
+#[test]
+fn source_paths_through_intermediate_symlinks_are_rejected() {
+    let t = Temp::new();
+    let target = Temp::new();
+    target.file("main.ncr", "void main(){}");
+    let link = t.0.join("linked");
+    std::os::unix::fs::symlink(&target.0, &link).unwrap();
+
+    let error = SourceBundle::from_paths(&[link.join("main.ncr")]).unwrap_err();
+    assert!(error.contains("symbolic-link"), "{error}");
+}
 #[cfg(unix)]
 #[test]
 fn hard_link_output_cannot_overwrite_an_input() {
