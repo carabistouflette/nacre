@@ -21,6 +21,9 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 - Block `Command.output` indefinitely on pipe readiness for unbounded captures,
   avoiding fixed 10 ms wakeups; block on child completion once both pipes close.
 
+- Avoid growing a TCP read buffer merely to report orderly EOF after a peer
+  closes its write side.
+
 - Emit LLVM value copies and zeroing directly into the output buffer, avoiding
   temporary formatted strings.
 - Match trait bounds for specialized arguments against implementations attached

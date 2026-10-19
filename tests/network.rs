@@ -231,6 +231,19 @@ void main() {
                                                 Ok(count) { println(count == 0L); }
                                                 Err(error) { println(false); }
                                             }
+                                            match (ByteBuffer.withCapacity(0L)) {
+                                                Err(error) { println("eof-probe-buffer-error"); }
+                                                Ok(eof_probe) {
+                                                    match (stream.readSome(eof_probe, 65536L, 0L)) {
+                                                        Err(error) { println("eof-probe-read-error"); }
+                                                        Ok(count) {
+                                                            if (count == 0L && eof_probe.capacity() == 0L) {
+                                                                println("eof-read-kept-buffer-unallocated");
+                                                            } else { println("eof-read-allocated-buffer"); }
+                                                        }
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
                                     match (stream.close()) {
@@ -343,7 +356,9 @@ fn tcp_loopback_fragments_reads_and_writes_and_observes_orderly_eof() {
     let (status, stdout, stderr) = process.finish_for(Duration::from_secs(10));
     assert!(status.success(), "server exited unsuccessfully:\n{stderr}");
     assert_live_zero(&stderr);
-    assert!(stdout.contains("true\ntrue\ntrue\ntrue\nstream-closed\n"), "{stdout}");
+    assert!(stdout.contains("true\ntrue\ntrue\ntrue\n"), "{stdout}");
+    assert!(stdout.contains("eof-read-kept-buffer-unallocated\n"), "{stdout}");
+    assert!(stdout.contains("stream-closed\nclosed-stream-error\n"), "{stdout}");
     assert!(stdout.contains("listener-closed\nclosed-listener-error\nrepeated-close-error\n"), "{stdout}");
 }
 

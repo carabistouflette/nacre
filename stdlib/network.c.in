@@ -69,7 +69,7 @@ static size_t ncr_network_receive_limit(int64_t max_bytes) {
     return (size_t)(requested < limit ? requested : limit);
 }
 
-/* Return 1 when ready, 0 when the original deadline expires, and -1 on error. */
+/* Return poll event flags when ready, 0 on timeout, and -1 on error. */
 static int ncr_network_poll(int fd, short events, bool finite, int64_t deadline, int *failure) {
     for (;;) {
         int timeout = -1;
@@ -85,7 +85,7 @@ static int ncr_network_poll(int fd, short events, bool finite, int64_t deadline,
         int ready = poll(&descriptor, 1, timeout);
         if (ready > 0) {
             if ((descriptor.revents & POLLNVAL) != 0) { *failure = EBADF; return -1; }
-            return 1;
+            return descriptor.revents;
         }
         if (ready == 0) { continue; }
         if (errno == EINTR) { continue; }
@@ -432,9 +432,25 @@ static ncr_obj_@LONG_RESULT_TYPE@ @TCP_STREAM_READ_SOME@(ncr_obj_@TCP_STREAM_ID@
         NCR_NETWORK_RETURN_ERROR(@LONG_RESULT_ID@, "TcpStream.readSome timeout", failure, ncr_line, ncr_column);
     }
     for (;;) {
-        int ready = ncr_network_poll(p->fd, POLLIN, finite, deadline, &failure);
+        int ready = ncr_network_poll(p->fd, POLLIN | POLLRDHUP, finite, deadline, &failure);
         if (ready == 0) { NCR_NETWORK_RETURN_TIMEOUT(@LONG_RESULT_ID@, "TcpStream.readSome", ncr_line, ncr_column); }
         if (ready < 0) { NCR_NETWORK_RETURN_ERROR(@LONG_RESULT_ID@, "TcpStream.readSome poll", failure, ncr_line, ncr_column); }
+        if ((ready & POLLRDHUP) != 0) {
+            unsigned char peeked_byte;
+            ssize_t peeked = recv(p->fd, &peeked_byte, sizeof(peeked_byte), MSG_PEEK);
+            if (peeked == 0) {
+                return (ncr_obj_@LONG_RESULT_ID@){
+                    .tag = @LONG_RESULT_OK_TAG@,
+                    .data.v@LONG_RESULT_OK_TAG@.f0 = 0
+                };
+            }
+            if (peeked < 0) {
+                failure = errno;
+                if (failure == EINTR || failure == EAGAIN || failure == EWOULDBLOCK) { continue; }
+                NCR_NETWORK_RETURN_ERROR(@LONG_RESULT_ID@, "TcpStream.readSome", failure, ncr_line, ncr_column);
+            }
+        }
+
         @BUFFER_RESERVE@(ncr_v_@READ_DESTINATION_ID@,
             ncr_v_@READ_DESTINATION_ID@->length + requested, ncr_line, ncr_column);
         ssize_t count = recv(p->fd, ncr_v_@READ_DESTINATION_ID@->bytes + ncr_v_@READ_DESTINATION_ID@->length, requested, 0);
