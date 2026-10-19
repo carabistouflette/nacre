@@ -55,7 +55,8 @@ pub(super) fn configured_source_roots(
             .ok_or_else(|| format!("{} contains a non-string or empty source path", config.display()))?;
         let source = Path::new(source);
         if source.is_absolute() { return Err(format!("{} source paths must be relative", config.display())); }
-        let path = normalize_path(&root.join(source));
+        let path = normalize_path(&root.join(source))
+            .ok_or_else(|| format!("{} source path cannot be resolved without a current working directory", config.display()))?;
         if !path.starts_with(root) { return Err(format!("{} source path escapes the project root", config.display())); }
         reject_symlink_path(&path, root)?;
         roots.push(path);

@@ -35,11 +35,11 @@ pub(super) fn uri_to_path(uri: &str) -> Option<PathBuf> {
     #[cfg(not(unix))]
     let path = PathBuf::from(String::from_utf8(bytes).ok()?);
     if !path.is_absolute() { return None; }
-    Some(normalize_path(&path))
+    normalize_path(&path)
 }
 
 pub(super) fn path_to_uri(path: &Path) -> Option<String> {
-    let path = normalize_path(path);
+    let path = normalize_path(path)?;
     #[cfg(unix)]
     let path = path.as_os_str().as_bytes();
     #[cfg(not(unix))]
@@ -67,11 +67,11 @@ fn hex(byte: u8) -> Option<u8> {
     }
 }
 
-pub(super) fn normalize_path(path: &Path) -> PathBuf {
+pub(super) fn normalize_path(path: &Path) -> Option<PathBuf> {
     let absolute = if path.is_absolute() {
         path.to_owned()
     } else {
-        std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/" )).join(path)
+        std::env::current_dir().ok()?.join(path)
     };
     let mut normalized = PathBuf::new();
     for component in absolute.components() {
@@ -83,7 +83,7 @@ pub(super) fn normalize_path(path: &Path) -> PathBuf {
             Component::Normal(part) => normalized.push(part),
         }
     }
-    normalized
+    Some(normalized)
 }
 
 #[cfg(all(test, unix))]
@@ -128,5 +128,44 @@ mod tests {
         assert_eq!(uri_to_path(&uri), Some(PathBuf::from(format!("/{}", "a".repeat(MAX_URI_BYTES - "file:///".len())))));
         uri.push('a');
         assert_eq!(uri_to_path(&uri), None);
+    }
+
+    #[test]
+    fn relative_paths_resolve_against_current_directory() {
+        let relative = Path::new("relative.ncr");
+        let absolute = std::env::current_dir().unwrap().join(relative);
+        assert_eq!(path_to_uri(relative), path_to_uri(&absolute));
+    }
+
+    #[test]
+    fn relative_path_uri_fails_when_current_directory_is_unavailable() {
+        const CHILD: &str = "NACRE_FILE_URI_CWD_CHILD";
+        if std::env::var_os(CHILD).is_some() {
+            let directory = std::env::temp_dir().join(format!("nacre-file-uri-cwd-{}", std::process::id()));
+            std::fs::create_dir(&directory).unwrap();
+            std::env::set_current_dir(&directory).unwrap();
+            std::fs::remove_dir(&directory).unwrap();
+            assert!(std::env::current_dir().is_err());
+            assert!(crate::lsp::initial_roots(&serde_json::json!({"rootPath": "relative"})).is_empty());
+            assert_eq!(path_to_uri(Path::new("relative.ncr")), None);
+            return;
+        }
+
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "lsp::file_uri::tests::relative_path_uri_fails_when_current_directory_is_unavailable",
+                "--nocapture",
+            ])
+            .env(CHILD, "1")
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "child test failed\nstdout: {}\nstderr: {}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+        );
+        assert!(String::from_utf8_lossy(&output.stdout).contains("1 passed"));
     }
 }

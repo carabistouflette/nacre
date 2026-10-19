@@ -663,8 +663,9 @@ fn initial_roots(params: &Value) -> Vec<PathBuf> {
         if let Some(path) = params.get("rootUri").and_then(Value::as_str).and_then(uri_to_path) {
             roots.push(path);
         } else if let Some(root) = params.get("rootPath").and_then(Value::as_str) {
-            let path = normalize_path(Path::new(root));
-            roots.push(path);
+            if let Some(path) = normalize_path(Path::new(root)) {
+                roots.push(path);
+            }
         }
     }
     roots
