@@ -4,7 +4,7 @@ use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::Read;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 use crate::ast;
 use crate::diagnostic::{line_column, Diagnostic, Span};
 
@@ -388,7 +388,7 @@ pub fn resolve_inputs(paths: &[PathBuf]) -> Result<Vec<PathBuf>, String> {
     let mut seen = HashSet::new();
     let mut visited_entries = 0usize;
     for path in paths {
-        reject_symlink_components(path)?;
+        crate::manifest::reject_symlink_components(path, "input path")?;
         if let Some(manifest) = manifest_path(path) {
             let start = graph.roots.len();
             graph.visit(&manifest, None, 0)?;
@@ -412,30 +412,6 @@ pub fn resolve_inputs(paths: &[PathBuf]) -> Result<Vec<PathBuf>, String> {
         if files.len() > MAX_FILES { return Err(format!("source file limit is {MAX_FILES}")); }
     }
     Ok(files)
-}
-
-fn reject_symlink_components(path: &Path) -> Result<(), String> {
-    let mut current = PathBuf::new();
-    for component in path.components() {
-        match component {
-            Component::Prefix(_) | Component::RootDir | Component::ParentDir => {
-                current.push(component.as_os_str());
-            }
-            Component::CurDir => {}
-            Component::Normal(_) => {
-                current.push(component.as_os_str());
-                let metadata = fs::symlink_metadata(&current)
-                    .map_err(|error| format!("{}: {error}", display_path(&current)))?;
-                if metadata.file_type().is_symlink() {
-                    return Err(format!(
-                        "symbolic-link input path is not allowed: {}",
-                        display_path(&current)
-                    ));
-                }
-            }
-        }
-    }
-    Ok(())
 }
 
 fn manifest_path(path: &Path) -> Option<PathBuf> {
@@ -535,6 +511,7 @@ impl PackageGraph {
         self.active.insert(path.clone());
         for (name, dependency) in &manifest.dependencies {
             let dependency = root.join(&dependency.path);
+            crate::manifest::reject_symlink_components(&dependency, "dependency path")?;
             let dependency = if dependency.is_dir() { dependency.join("Nacre.toml") } else { dependency };
             self.visit(&dependency, Some(name), depth + 1)?;
         }

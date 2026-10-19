@@ -111,6 +111,37 @@ fn package_directory_symlink_is_rejected() {
 
 #[cfg(unix)]
 #[test]
+fn dependency_paths_cannot_traverse_intermediate_symlinks() {
+    let t = Temp::new();
+    let app = t.package(
+        "app",
+        "app",
+        "helper = { path = '../linked-parent/helper' }",
+        "void main(){}",
+    );
+    t.package(
+        "real-parent/helper",
+        "helper",
+        "",
+        "public int answer(){return 42;}",
+    );
+    let add_owner = t.package("add-owner", "add-owner", "", "void main(){}");
+    let alias_parent = t.0.join("linked-parent");
+    std::os::unix::fs::symlink(t.0.join("real-parent"), &alias_parent).unwrap();
+    let alias = alias_parent.join("helper");
+
+    let owner_manifest = add_owner.join("Nacre.toml");
+    let original = fs::read(&owner_manifest).unwrap();
+    let add_error = nacre::manifest::add_dependency(&owner_manifest, &alias).unwrap_err();
+    assert!(add_error.contains("symbolic-link"), "{add_error}");
+    assert_eq!(fs::read(&owner_manifest).unwrap(), original);
+
+    let resolve_error = resolve_inputs(&[app]).unwrap_err();
+    assert!(resolve_error.contains("symbolic-link"), "{resolve_error}");
+}
+
+#[cfg(unix)]
+#[test]
 fn manifest_apis_reject_symlinks_and_nonregular_files() {
     let t = Temp::new();
     let app = t.package("app", "app", "", "void main(){}");

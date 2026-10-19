@@ -549,6 +549,31 @@ fn validate_contained_path(
     Ok(())
 }
 
+pub(crate) fn reject_symlink_components(path: &Path, label: &str) -> Result<(), String> {
+    let mut current = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::Prefix(_) | Component::RootDir | Component::ParentDir => {
+                current.push(component.as_os_str());
+            }
+            Component::CurDir => {}
+            Component::Normal(_) => {
+                current.push(component.as_os_str());
+                let metadata = fs::symlink_metadata(&current).map_err(|error| {
+                    path_error(&current, format!("cannot inspect {label}: {error}"))
+                })?;
+                if metadata.file_type().is_symlink() {
+                    return Err(path_error(
+                        &current,
+                        format!("symbolic-link {label} is not allowed"),
+                    ));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 fn resolve_project(path: &Path) -> Result<(PathBuf, PathBuf), String> {
     let requested = if path.is_absolute() {
         path.to_path_buf()
@@ -557,14 +582,7 @@ fn resolve_project(path: &Path) -> Result<(PathBuf, PathBuf), String> {
             .map_err(|error| path_error(path, format!("cannot resolve current directory: {error}")))?
             .join(path)
     };
-    let requested_metadata = fs::symlink_metadata(&requested)
-        .map_err(|error| path_error(path, format!("cannot inspect dependency path: {error}")))?;
-    if requested_metadata.file_type().is_symlink() {
-        return Err(path_error(
-            path,
-            "dependency path must not be a symbolic link",
-        ));
-    }
+    reject_symlink_components(&requested, "dependency path")?;
     let canonical = fs::canonicalize(&requested)
         .map_err(|error| path_error(path, format!("cannot resolve dependency path: {error}")))?;
     let (manifest, root) = if canonical.is_dir() {

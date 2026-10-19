@@ -31,6 +31,9 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 - Reject source inputs that traverse symbolic links, including package-directory
   aliases.
 
+- Reject package dependencies reached through symlinked path components, not
+  only symlink target entries.
+
 - Encode scaffold package names reversibly from destination basenames, so
   distinct punctuation and non-UTF-8 paths cannot collapse to one package ID.
 
