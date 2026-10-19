@@ -747,7 +747,45 @@ fn enum_order(program: &t::Program) -> Vec<usize> {
     }
     order
 }
+#[derive(Clone, Copy)]
+struct LinearOwnedChain {
+    enum_class: usize,
+    enum_field: usize,
+    recursive_variant: usize,
+    recursive_payload: usize,
+}
+
+/// Find a class whose only owned edge is a single enum variant back to itself.
+fn linear_owned_chain(program: &t::Program, class: &t::Class) -> Option<LinearOwnedChain> {
+    if class.native.is_some() || class.variants.is_some() || class.is_interface { return None; }
+    let mut fields = class.fields.iter().enumerate().filter_map(|(field, ty)| match ty {
+        Type::Object(id) => Some((field, *id)),
+        _ => None,
+    });
+    let (enum_field, enum_class) = fields.next()?;
+    if fields.next().is_some() { return None; }
+
+    let enum_layout = program.classes.get(enum_class)?;
+    if enum_layout.native.is_some() || enum_layout.is_interface { return None; }
+    let variants = enum_layout.variants.as_ref()?;
+    let mut recursive_edge = None;
+    for (variant_id, variant) in variants.iter().enumerate() {
+        let mut owned_fields = variant.fields.iter().enumerate().filter_map(|(field, ty)| match ty {
+            Type::Object(id) => Some((field, *id)),
+            _ => None,
+        });
+        let Some((payload, child)) = owned_fields.next() else { continue; };
+        if child != class.id || owned_fields.next().is_some() || recursive_edge.is_some() { return None; }
+        recursive_edge = Some((variant_id, payload));
+    }
+    let (recursive_variant, recursive_payload) = recursive_edge?;
+    Some(LinearOwnedChain { enum_class, enum_field, recursive_variant, recursive_payload })
+}
+
 fn class_support(program: &t::Program) -> String {
+    let linear_chains: Vec<_> = program.classes.iter()
+        .map(|class| linear_owned_chain(program, class))
+        .collect();
     let mut out = String::from("\n/* By-value tagged sums and allocation-free interface representations. */\n");
     for class in &program.classes {
         writeln!(out, "typedef struct ncr_obj_{} ncr_obj_{};", class.id, class.id).unwrap();
@@ -847,12 +885,31 @@ fn class_support(program: &t::Program) -> String {
             writeln!(out, "static void ncr_drop_fields_{}(ncr_obj_{} *p);", class.id, class.id).unwrap();
         }
     }
+    // Reuse the enum edge as an intrusive parent stack: deep linear drops stay
+    // iterative, allocation-free, and child-before-parent.
+    for (class, chain) in program.classes.iter().zip(&linear_chains) {
+        let Some(chain) = chain else { continue; };
+        writeln!(
+            out,
+            "static void ncr_drop_chain_{}(ncr_obj_{} *p, bool drop_root) {{\n    ncr_obj_{} *stack = NULL;\n    bool first = true;\n    while (p != NULL) {{\n        ncr_obj_{} link = p->ncr_f_{};\n        ncr_obj_{} *child = NULL;\n        if (link.tag == {}) {{ child = link.data.v{}.f{}; }}\n        if (drop_root || !first) {{\n            p->ncr_f_{} = (ncr_obj_{}){{ .tag = {}, .data.v{} = {{ .f{} = stack }} }};\n            stack = p;\n        }}\n        p = child;\n        first = false;\n    }}\n    while (stack != NULL) {{\n        ncr_obj_{} *previous = stack->ncr_f_{}.data.v{}.f{};\n        ncr_deallocate(stack);\n        stack = previous;\n    }}\n}}",
+            class.id, class.id, class.id,
+            chain.enum_class, chain.enum_field, class.id,
+            chain.recursive_variant, chain.recursive_variant, chain.recursive_payload,
+            chain.enum_field, chain.enum_class, chain.recursive_variant,
+            chain.recursive_variant, chain.recursive_payload,
+            class.id, chain.enum_field, chain.recursive_variant, chain.recursive_payload,
+        ).unwrap();
+    }
     for class in &program.classes {
         if !class.is_interface && class.variants.is_none() {
             writeln!(out, "static void ncr_drop_fields_{}(ncr_obj_{} *p) {{", class.id, class.id).unwrap();
             out.push_str("    if (p == NULL) { return; }\n");
-            for (id, ty) in class.fields.iter().enumerate().rev() {
-                if let Type::Object(child) = ty { writeln!(out, "    ncr_drop_{child}(p->ncr_f_{id});").unwrap(); }
+            if linear_chains[class.id].is_some() {
+                writeln!(out, "    ncr_drop_chain_{}(p, false);", class.id).unwrap();
+            } else {
+                for (id, ty) in class.fields.iter().enumerate().rev() {
+                    if let Type::Object(child) = ty { writeln!(out, "    ncr_drop_{child}(p->ncr_f_{id});").unwrap(); }
+                }
             }
             if let Some(native) = class.native { out.push_str(&crate::stdlib_codegen::drop_fields(program, native, class.id)); }
             out.push_str("}\n");
@@ -874,6 +931,8 @@ fn class_support(program: &t::Program) -> String {
                 out.push_str("\n        break;\n");
             }
             out.push_str("    default: break;\n    }\n    p.tag = -1;\n");
+        } else if linear_chains[class.id].is_some() {
+            writeln!(out, "    if (p != NULL) {{ ncr_drop_chain_{}(p, true); }}", class.id).unwrap();
         } else {
             out.push_str("    if (p == NULL) { return; }\n");
             writeln!(out, "    ncr_drop_fields_{}(p);", class.id).unwrap();

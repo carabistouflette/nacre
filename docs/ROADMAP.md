@@ -77,10 +77,12 @@ inferred from built-in traversal or whole-program module imports.
 Local borrowed bindings release loans after their last use on each reachable
 path, with scope exit as a fallback. Owners and transitively owned fields share
 a conservative root; local views remain non-movable and non-exportable. Partial
-moves are unsupported. Map traversal order is unspecified,
-and maps do not promise hash-flooding resistance. Very deep owned trees can
-exhaust the C stack during recursive destruction. Programs are not sandboxed;
-limits on compiler and LSP input do not make untrusted programs safe.
+moves are unsupported. Map traversal order is unspecified, and maps do not promise
+hash-flooding resistance. Simple linear class/enum ownership chains with one
+recursive child variant are destroyed iteratively; deep branched trees and
+other recursive ownership shapes can still exhaust the C stack during
+destruction. Programs are not sandboxed; limits on compiler and LSP input do not
+make untrusted programs safe.
 
 Validation reports retain the versions, environments, and scope in which their
 evidence was collected. Historical labels and results are not statements of
