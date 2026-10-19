@@ -1,13 +1,18 @@
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
 use super::support::{
-    has_placeholder, native_class_id_if, replace_method_ids, replace_placeholders, result_id,
-    text_class, variant, variant_id,
+    has_placeholder, native_class_id_if, replace_method_ids, replace_placeholders,
+    required_first_native_method, result_id, text_class, variant, variant_id,
 };
 
-fn method(program: &t::Program, receiver: Option<usize>, is: impl Fn(M) -> bool) -> &t::Function {
-    program.functions.iter().find(|function| {
-        function.receiver == receiver && function.native.is_some_and(&is)
-    }).expect("compiler-owned Regex native method is present")
+fn method<'a>(
+    program: &'a t::Program,
+    native_method_ids: &mut Option<t::NativeMethodIndex>,
+    receiver: Option<usize>,
+    method: M,
+) -> &'a t::Function {
+    let function = required_first_native_method(program, native_method_ids, method);
+    assert_eq!(function.receiver, receiver, "Regex method has the expected receiver");
+    function
 }
 
 pub(super) fn preamble(program: &t::Program) -> String {
@@ -54,9 +59,9 @@ pub(super) fn implementation(program: &t::Program, native_method_ids: &mut Optio
 }
 
 fn regex_implementation(program: &t::Program, regex_class: usize, native_method_ids: &mut Option<t::NativeMethodIndex>) -> String {
-    let compile = method(program, None, |method| matches!(method, M::RegexCompile));
-    let matches = method(program, Some(regex_class), |method| matches!(method, M::RegexMatches));
-    let search = method(program, Some(regex_class), |method| matches!(method, M::RegexSearch));
+    let compile = method(program, native_method_ids, None, M::RegexCompile);
+    let matches = method(program, native_method_ids, Some(regex_class), M::RegexMatches);
+    let search = method(program, native_method_ids, Some(regex_class), M::RegexSearch);
     let compile_result = result_id(compile);
     let matches_result = result_id(matches);
     let search_result = result_id(search);

@@ -3,6 +3,8 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Resolve Regex compile, match, and search metadata through the lazy native-method
+  index and assert that each selected method belongs to its expected receiver.
 - Resolve XSLT compile and transform metadata through the shared native-method
   index after the existing no-XSLT class gate.
 - Resolve Encoding methods through the lazy native-method index and reuse their
