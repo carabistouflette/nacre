@@ -14,7 +14,7 @@ pub(super) fn drop_helper_prototypes(program: &t::Program) -> String {
     format!("static void ncr_xslt_stylesheet_drop_{class_id}(ncr_obj_{class_id} *stylesheet);\n")
 }
 
-pub(super) fn implementation(program: &t::Program) -> String {
+pub(super) fn implementation(program: &t::Program, native_method_ids: &mut Option<t::NativeMethodIndex>) -> String {
     let Some(stylesheet_class) = xslt_class(program) else { return String::new(); };
     let document_class = program.classes.iter()
         .find(|class| matches!(class.native, Some(C::XmlDocument)))
@@ -53,7 +53,7 @@ pub(super) fn implementation(program: &t::Program) -> String {
     assert!(matches!(program.classes[bytes_result].result, Some(layout)
         if layout.ok_type == Type::Object(buffer_class) && layout.err_type == Type::Object(text_class)));
 
-    let body = replace_method_ids(include_str!("../../stdlib/xslt.c.in").to_owned(), program, None);
+    let body = replace_method_ids(include_str!("../../stdlib/xslt.c.in").to_owned(), program, None, native_method_ids);
     let body = replace_placeholders(body, &[
         ("@STYLESHEET_ID@", stylesheet_class.to_string()),
         ("@DOCUMENT_ID@", document_class.to_string()),

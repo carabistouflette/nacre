@@ -37,7 +37,7 @@ pub(super) fn drop_fields() -> String {
     "    if (p->zone != NULL) { ncr_deallocate(p->zone); }\n".to_owned()
 }
 
-pub(super) fn implementation(program: &t::Program) -> String {
+pub(super) fn implementation(program: &t::Program, native_method_ids: &mut Option<t::NativeMethodIndex>) -> String {
     let instant = native_function(program, |method| matches!(method, M::TemporalInstant));
     let epoch_second = native_function(program, |method| matches!(method, M::TemporalEpochSecond));
     let offset_seconds = native_function(program, |method| matches!(method, M::TemporalOffsetSeconds));
@@ -85,8 +85,8 @@ pub(super) fn implementation(program: &t::Program) -> String {
         ("@TEMPORAL_TEXT_RESULT@", text_result.to_string()),
         ("@TEMPORAL_TEXT_OK_TAG@", variant_id(program, text_result, "Ok").to_string()),
     ]);
-    let body = replace_method_ids(body, program, Some(temporal));
-    let body = replace_method_ids(body, program, None);
+    let body = replace_method_ids(body, program, Some(temporal), native_method_ids);
+    let body = replace_method_ids(body, program, None, native_method_ids);
     debug_assert!(!super::support::has_placeholder(&body), "unexpanded Temporal placeholder");
     body
 }

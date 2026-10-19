@@ -16,7 +16,7 @@ pub(super) fn common_helpers(program: &t::Program) -> String {
     ])
 }
 
-pub(super) fn implementation(program: &t::Program) -> String {
+pub(super) fn implementation(program: &t::Program, native_method_ids: &mut Option<t::NativeMethodIndex>) -> String {
     let from_parts = native_function(program, |method| matches!(method, M::DateTimeFromParts));
     let parts = native_function(program, |method| matches!(method, M::DateTimeParts));
     let format = native_function(program, |method| matches!(method, M::DateTimeFormat));
@@ -68,7 +68,7 @@ pub(super) fn implementation(program: &t::Program) -> String {
         ("@DATE_TIME_LIST_NEW@", format!("ncr_fn_{}", list_new.id)),
         ("@DATE_TIME_LIST_ADD@", format!("ncr_fn_{}", list_add.id)),
     ]);
-    let body = replace_method_ids(body, program, None);
+    let body = replace_method_ids(body, program, None, native_method_ids);
     debug_assert!(!super::support::has_placeholder(&body), "unexpanded DateTime placeholder");
     body
 }

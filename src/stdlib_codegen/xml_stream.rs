@@ -52,7 +52,7 @@ fn result_bindings(program: &t::Program, function: &t::Function, keys: [&'static
     result
 }
 
-pub(super) fn implementation(program: &t::Program) -> String {
+pub(super) fn implementation(program: &t::Program, native_method_ids: &mut Option<t::NativeMethodIndex>) -> String {
     let reader = class_id(program, C::XmlReader);
     let event = class_id(program, C::XmlEvent);
     let writer = class_id(program, C::XmlWriter);
@@ -149,7 +149,7 @@ pub(super) fn implementation(program: &t::Program) -> String {
             bindings.push((*name, id.to_string()));
         }
     }
-    let body = replace_method_ids(body, program, None);
+    let body = replace_method_ids(body, program, None, native_method_ids);
     let body = replace_placeholders(body, &bindings);
     debug_assert!(!has_placeholder(&body), "unexpanded streaming XML template placeholder");
     body

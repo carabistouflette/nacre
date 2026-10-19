@@ -57,7 +57,7 @@ pub(super) fn percent_helpers(program: &t::Program, dns_helper_required: bool) -
     }
 }
 
-pub(super) fn implementation(program: &t::Program) -> String {
+pub(super) fn implementation(program: &t::Program, native_method_ids: &mut Option<t::NativeMethodIndex>) -> String {
     let Some(uri) = program.classes.iter()
         .find(|class| matches!(class.native, Some(C::Uri))).map(|class| class.id)
     else { return String::new(); };
@@ -173,7 +173,7 @@ pub(super) fn implementation(program: &t::Program) -> String {
 
     let mut body = String::from("/* nacre-link: uri */\n#include <uriparser/Uri.h>\n");
     body.push_str(&replace_placeholders(include_str!("../../stdlib/uri.c.in").to_owned(), &substitutions));
-    body = replace_method_ids(body, program, None);
+    body = replace_method_ids(body, program, None, native_method_ids);
     debug_assert!(!has_placeholder(&body), "unexpanded URI placeholder");
     body
 }

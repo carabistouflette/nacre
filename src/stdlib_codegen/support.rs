@@ -709,6 +709,7 @@ pub(super) fn replace_method_ids(
     body: String,
     program: &t::Program,
     receiver: Option<usize>,
+    native_method_ids: &mut Option<t::NativeMethodIndex>,
 ) -> String {
     let mut placeholders = HashSet::new();
     let mut previous_at = None;
@@ -724,21 +725,27 @@ pub(super) fn replace_method_ids(
     if placeholders.is_empty() { return body; }
 
     let mut substitutions = Vec::new();
-    for function in &program.functions {
-        let Some(method) = function.native else { continue; };
-        let placeholder = marker(method);
-        if !placeholders.contains(placeholder) { continue; }
-        let receiver_matches = if let Some(class) = receiver {
+    if let Some(class) = receiver {
+        for function in &program.functions {
+            let Some(method) = function.native else { continue; };
+            let placeholder = marker(method);
+            if !placeholders.contains(placeholder) { continue; }
             let is_static_factory = function.receiver.is_none()
                 && matches!(method, M::MapWithHasher | M::SetWithHasher)
                 && function.name.strip_prefix(program.classes[class].name.as_str())
                     == Some(".withHasher");
-            function.receiver == Some(class) || is_static_factory
-        } else {
-            true
-        };
-        if receiver_matches && placeholders.remove(placeholder) {
-            substitutions.push((placeholder, format!("ncr_fn_{}", function.id)));
+            if (function.receiver == Some(class) || is_static_factory)
+                && placeholders.remove(placeholder) {
+                substitutions.push((placeholder, format!("ncr_fn_{}", function.id)));
+            }
+        }
+    } else {
+        let method_ids = native_method_ids.get_or_insert_with(|| t::NativeMethodIndex::new(program));
+        for (method, function_id) in method_ids.iter_first_by_method() {
+            let placeholder = marker(method);
+            if placeholders.remove(placeholder) {
+                substitutions.push((placeholder, format!("ncr_fn_{function_id}")));
+            }
         }
     }
     drop(placeholders);
@@ -890,11 +897,11 @@ mod tests {
         let with_hasher = super::marker(super::M::MapWithHasher);
         let map_size = super::marker(super::M::MapSize);
         assert_eq!(
-            replace_method_ids(with_hasher.to_owned(), &program, None),
+            replace_method_ids(with_hasher.to_owned(), &program, None, &mut None),
             "ncr_fn_10",
         );
         assert_eq!(
-            replace_method_ids(with_hasher.to_owned(), &program, Some(0)),
+            replace_method_ids(with_hasher.to_owned(), &program, Some(0), &mut None),
             "ncr_fn_20",
         );
         assert_eq!(
@@ -902,11 +909,12 @@ mod tests {
                 format!("{with_hasher}{map_size}{with_hasher}{map_size}"),
                 &program,
                 Some(0),
+                &mut None,
             ),
             "ncr_fn_20ncr_fn_50ncr_fn_20ncr_fn_50",
         );
         assert_eq!(
-            replace_method_ids(format!("@UNKNOWN{map_size}"), &program, Some(0)),
+            replace_method_ids(format!("@UNKNOWN{map_size}"), &program, Some(0), &mut None),
             "@UNKNOWNncr_fn_50",
         );
     }

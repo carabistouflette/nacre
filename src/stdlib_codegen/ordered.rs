@@ -199,7 +199,7 @@ fn borrowed_getters(program: &t::Program, class_id: usize, value: Type) -> Strin
     output
 }
 
-pub(super) fn map_implementation(program: &t::Program, class_id: usize, key: Type, value: Type) -> String {
+pub(super) fn map_implementation(program: &t::Program, class_id: usize, key: Type, value: Type, native_method_ids: &mut Option<t::NativeMethodIndex>) -> String {
     let constructor = native_method(program, class_id, |candidate| candidate == M::OrderedMapNew);
     let (comparator, compare_slot, compare_type) = ordering::comparator_info(program, constructor);
     assert_eq!(comparator_field(program, class_id), Type::Object(comparator));
@@ -257,13 +257,13 @@ pub(super) fn map_implementation(program: &t::Program, class_id: usize, key: Typ
         ("@INDEX_NONE_TAG@", index_none_tag.to_string()),
         ("@INDEX_SOME_TAG@", index_some_tag.to_string()),
     ]);
-    body = replace_method_ids(body, program, Some(class_id));
+    body = replace_method_ids(body, program, Some(class_id), native_method_ids);
     body.push_str(&ordered_map_drain(program, class_id, key, value, M::OrderedMapDrainKeys, true));
     body.push_str(&ordered_map_drain(program, class_id, key, value, M::OrderedMapDrainValues, false));
     body
 }
 
-pub(super) fn set_implementation(program: &t::Program, class_id: usize, key: Type) -> String {
+pub(super) fn set_implementation(program: &t::Program, class_id: usize, key: Type, native_method_ids: &mut Option<t::NativeMethodIndex>) -> String {
     let map = ordered_map_for_set(program, key);
     let (_, _, compare_type) = comparator_info(program, class_id, M::OrderedSetNew);
     let contains = native_method(program, class_id, |candidate| candidate == M::OrderedSetContains);
@@ -281,7 +281,7 @@ pub(super) fn set_implementation(program: &t::Program, class_id: usize, key: Typ
         ("@DROP_DUPLICATE_KEY@", drop_element(key, "key")),
         ("@ORDERED_SET_KEY_AT@", ordered_set_key_at(program, class_id, key)),
     ]);
-    body = replace_method_ids(body, program, Some(class_id));
+    body = replace_method_ids(body, program, Some(class_id), native_method_ids);
     debug_assert!(!body.contains('@'), "unexpanded OrderedSet template placeholder");
     body.push_str(&ordered_set_drain(program, class_id, key));
     body

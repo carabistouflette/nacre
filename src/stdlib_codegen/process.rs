@@ -240,7 +240,7 @@ fn output_substitutions(program: &t::Program) -> Vec<(&'static str, String)> {
     ]
 }
 
-pub(super) fn implementations(program: &t::Program) -> Option<String> {
+pub(super) fn implementations(program: &t::Program, native_method_ids: &mut Option<t::NativeMethodIndex>) -> Option<String> {
     const ENV_METHODS: &[M] = &[M::EnvGet, M::EnvSet, M::EnvUnset];
     const COMMAND_METHODS: &[M] = &[
         M::CommandCreate, M::CommandAddArg, M::CommandSetEnv,
@@ -280,7 +280,7 @@ pub(super) fn implementations(program: &t::Program) -> Option<String> {
     if has_output { substitutions.extend(output_substitutions(program)); }
     if has_process || has_output || has_command { substitutions.extend(status_substitutions(program)); }
     body = replace_placeholders(body, &substitutions);
-    body = replace_method_ids(body, program, None);
+    body = replace_method_ids(body, program, None, native_method_ids);
     debug_assert!(!super::support::has_placeholder(&body), "unexpanded Process placeholder");
     Some(body)
 }

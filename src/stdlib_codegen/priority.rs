@@ -78,7 +78,7 @@ fn value_at_method(program: &t::Program, class_id: usize, element: Type) -> Stri
 }
 
 
-pub(super) fn implementation(program: &t::Program, class_id: usize, element: Type) -> String {
+pub(super) fn implementation(program: &t::Program, class_id: usize, element: Type, native_method_ids: &mut Option<t::NativeMethodIndex>) -> String {
     let constructor = native_method(program, class_id, |candidate| candidate == M::PriorityQueueNew);
     let (comparator, compare_slot, compare_type) = ordering::comparator_info(program, constructor);
     assert_eq!(program.classes[class_id].fields.first(), Some(&Type::Object(comparator)),
@@ -125,7 +125,7 @@ pub(super) fn implementation(program: &t::Program, class_id: usize, element: Typ
         ("@DROP_AT_INDEX@", drop_element(element, "p->items[index]")),
     ];
     body = replace_placeholders(body, &substitutions);
-    body = replace_method_ids(body, program, Some(class_id));
+    body = replace_method_ids(body, program, Some(class_id), native_method_ids);
     body.push_str(&iterators::drain_function(
         program,
         class_id,

@@ -1,7 +1,7 @@
 use crate::ir::{self as t, NativeMethod as M};
 use super::support::{native_function, replace_method_ids, replace_placeholders, result_id, variant_id};
 
-pub(super) fn implementation(program: &t::Program) -> String {
+pub(super) fn implementation(program: &t::Program, native_method_ids: &mut Option<t::NativeMethodIndex>) -> String {
     let monotonic = native_function(program, |method| matches!(method, M::TimeMonotonicNanos));
     let monotonic_result = result_id(monotonic);
     let unix_millis = native_function(program, |method| matches!(method, M::TimeUnixMillis));
@@ -22,7 +22,7 @@ pub(super) fn implementation(program: &t::Program) -> String {
         ("@TIME_DEADLINE_RESULT@", deadline_result.to_string()),
         ("@TIME_DEADLINE_OK_TAG@", variant_id(program, deadline_result, "Ok").to_string()),
     ]);
-    let body = replace_method_ids(body, program, None);
+    let body = replace_method_ids(body, program, None, native_method_ids);
     debug_assert!(!super::support::has_placeholder(&body), "unexpanded Time placeholder");
     body
 }

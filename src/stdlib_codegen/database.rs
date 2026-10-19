@@ -63,10 +63,11 @@ fn option_info(
 }
 
 pub(super) fn implementation(
-    program: &t::Program, method_ids: &t::NativeMethodIndex, class_id: usize,
+    program: &t::Program, native_method_ids: &mut Option<t::NativeMethodIndex>, class_id: usize,
 ) -> String {
     assert!(matches!(program.classes[class_id].native, Some(C::Database)),
         "Database implementation belongs to its native class");
+    let method_ids = native_method_ids.get_or_insert_with(|| t::NativeMethodIndex::new(program));
     let mut statement_class = None;
     let mut text = None;
     let mut buffer = None;
@@ -251,7 +252,7 @@ pub(super) fn implementation(
     }
     let template = include_str!("../../stdlib/database.c.in");
     let body = super::support::replace_placeholders(template.to_owned(), &replacements);
-    let body = replace_method_ids(body, program, None);
+    let body = replace_method_ids(body, program, None, native_method_ids);
     debug_assert!(!super::support::has_placeholder(&body), "unexpanded SQL placeholder");
     body
 }

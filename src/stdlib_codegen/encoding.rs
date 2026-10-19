@@ -47,7 +47,7 @@ fn result(program: &t::Program, function: &t::Function, ok_type: Type, text: usi
     (result, ok_tag)
 }
 
-pub(super) fn implementation(program: &t::Program, class: usize) -> String {
+pub(super) fn implementation(program: &t::Program, class: usize, native_method_ids: &mut Option<t::NativeMethodIndex>) -> String {
     assert!(matches!(program.classes[class].native, Some(C::Encoding)),
         "Encoding implementation belongs to its native class");
     let text = text_class(program).expect("Encoding requires Text");
@@ -116,7 +116,7 @@ pub(super) fn implementation(program: &t::Program, class: usize) -> String {
         ("@UTF8_DECODE_ERROR@", format!("ncr_result_error_{utf8_result}")),
         ("@ID@", class.to_string()),
     ]);
-    body = replace_method_ids(body, program, None);
+    body = replace_method_ids(body, program, None, native_method_ids);
     debug_assert!(!super::support::has_placeholder(&body), "unexpanded Encoding placeholder");
     body
 }

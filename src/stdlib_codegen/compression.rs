@@ -21,7 +21,7 @@ fn second_id(function: &t::Function, expected: Type) -> usize {
 
 const TEMPLATE: &str = include_str!("../../stdlib/compression.c.in");
 
-pub(super) fn implementation(program: &t::Program) -> String {
+pub(super) fn implementation(program: &t::Program, native_method_ids: &mut Option<t::NativeMethodIndex>) -> String {
     let compression = native_function_if(program, |method| method == M::CompressionDeflate).is_some();
     let checksums = native_function_if(program, |method| method == M::ChecksumsCrc32).is_some();
     if !compression && !checksums {
@@ -38,7 +38,7 @@ pub(super) fn implementation(program: &t::Program) -> String {
     if checksums {
         body.push_str(&checksum_body(program, buffer));
     }
-    let body = replace_method_ids(body, program, None);
+    let body = replace_method_ids(body, program, None, native_method_ids);
     debug_assert!(!super::support::has_placeholder(&body), "unexpanded Compression placeholder");
     body
 }

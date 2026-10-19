@@ -28,7 +28,7 @@ pub(super) fn drop_fields(program: &t::Program, class: C) -> String {
     }
 }
 
-pub(super) fn entry_implementation(program: &t::Program) -> String {
+pub(super) fn entry_implementation(program: &t::Program, native_method_ids: &mut Option<t::NativeMethodIndex>) -> String {
     let Some(entry) = class_id(program, |native| matches!(native, C::ZipEntry)) else {
         return String::new();
     };
@@ -37,14 +37,14 @@ pub(super) fn entry_implementation(program: &t::Program) -> String {
         ("@ZIP_ENTRY_ID@", entry.to_string()),
         ("@TEXT_ID@", text.to_string()),
     ]);
-    let body = replace_method_ids(body, program, None);
+    let body = replace_method_ids(body, program, None, native_method_ids);
     debug_assert!(!has_placeholder(&body), "unexpanded ZIP entry placeholder");
     body
 }
 
 const TEMPLATE: &str = include_str!("../../stdlib/zip.c.in");
 
-pub(super) fn implementation(program: &t::Program) -> Option<String> {
+pub(super) fn implementation(program: &t::Program, native_method_ids: &mut Option<t::NativeMethodIndex>) -> Option<String> {
     let reader = class_id(program, |native| matches!(native, C::ZipReader));
     let writer = class_id(program, |native| matches!(native, C::ZipWriter));
     if reader.is_none() && writer.is_none() {
@@ -57,16 +57,16 @@ pub(super) fn implementation(program: &t::Program) -> Option<String> {
         "/* ZIP_GROUP_END common */",
     ).to_owned();
     if reader.is_some() {
-        body.push_str(&reader_implementation(program));
+        body.push_str(&reader_implementation(program, native_method_ids));
     }
     if writer.is_some() {
-        body.push_str(&writer_implementation(program));
+        body.push_str(&writer_implementation(program, native_method_ids));
     }
     debug_assert!(!has_placeholder(&body), "unexpanded ZIP placeholder");
     Some(body)
 }
 
-fn reader_implementation(program: &t::Program) -> String {
+fn reader_implementation(program: &t::Program, native_method_ids: &mut Option<t::NativeMethodIndex>) -> String {
     let reader = class_id(program, |native| matches!(native, C::ZipReader))
         .expect("ZipReader implementation requires ZipReader");
     let entry = class_id(program, |native| matches!(native, C::ZipEntry))
@@ -133,10 +133,10 @@ fn reader_implementation(program: &t::Program) -> String {
         "/* ZIP_GROUP_END reader */",
     ).to_owned();
     let body = replace_placeholders(body, &replacements);
-    replace_method_ids(body, program, None)
+    replace_method_ids(body, program, None, native_method_ids)
 }
 
-fn writer_implementation(program: &t::Program) -> String {
+fn writer_implementation(program: &t::Program, native_method_ids: &mut Option<t::NativeMethodIndex>) -> String {
     let writer = class_id(program, |native| matches!(native, C::ZipWriter))
         .expect("ZipWriter implementation requires ZipWriter");
     let path = class_id(program, |native| matches!(native, C::Path))
@@ -184,7 +184,7 @@ fn writer_implementation(program: &t::Program) -> String {
         "/* ZIP_GROUP_END writer */",
     ).to_owned();
     let body = replace_placeholders(body, &replacements);
-    replace_method_ids(body, program, None)
+    replace_method_ids(body, program, None, native_method_ids)
 }
 
 fn class_id(program: &t::Program, is: impl Fn(C) -> bool) -> Option<usize> {

@@ -120,7 +120,7 @@ fn selected_template(bigint: bool, decimal: bool) -> String {
     body
 }
 
-pub(super) fn implementation(program: &t::Program) -> String {
+pub(super) fn implementation(program: &t::Program, native_method_ids: &mut Option<t::NativeMethodIndex>) -> String {
     let mut bigint = None;
     let mut decimal = None;
     let mut text = None;
@@ -197,7 +197,7 @@ pub(super) fn implementation(program: &t::Program) -> String {
     }
     let mut body = selected_template(bigint_used, decimal_used);
     body = replace_placeholders(body, &substitutions);
-    body = replace_method_ids(body, program, None);
+    body = replace_method_ids(body, program, None, native_method_ids);
     debug_assert!(!has_placeholder(&body), "unexpanded BigInt/BigDecimal placeholder");
     body
 }

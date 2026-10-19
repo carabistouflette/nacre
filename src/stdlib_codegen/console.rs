@@ -4,7 +4,7 @@ use super::support::{
     text_class, variant, variant_id,
 };
 
-pub(super) fn implementation(program: &t::Program) -> Option<String> {
+pub(super) fn implementation(program: &t::Program, native_method_ids: &mut Option<t::NativeMethodIndex>) -> Option<String> {
     let read_line = native_function_if(program, |method| matches!(method, M::ConsoleReadLine))?;
     let text = text_class(program).expect("Console requires Text");
     let result = result_id(read_line);
@@ -32,7 +32,7 @@ pub(super) fn implementation(program: &t::Program) -> Option<String> {
         ("@OPTION_NONE_TAG@", variant_id(program, option, "None").to_string()),
         ("@OPTION_SOME_TAG@", variant_id(program, option, "Some").to_string()),
     ]);
-    let body = replace_method_ids(body, program, None);
+    let body = replace_method_ids(body, program, None, native_method_ids);
     debug_assert!(!super::support::has_placeholder(&body), "unexpanded Console placeholder");
     out.push_str(&body);
     Some(out)

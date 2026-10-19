@@ -104,12 +104,13 @@ fn method<'a>(
     required_indexed_native_method(program, method_ids, None, native)
 }
 
-pub(super) fn implementation(program: &t::Program, method_ids: &t::NativeMethodIndex) -> String {
+pub(super) fn implementation(program: &t::Program, native_method_ids: &mut Option<t::NativeMethodIndex>) -> String {
     let mut usage = [false; ICU_METHODS.len()];
     native_usage::for_each(program, |method| {
         if let Some(index) = method_index(method) { usage[index] = true; }
     });
     if !usage.iter().any(|used| *used) { return String::new(); }
+    let method_ids = native_method_ids.get_or_insert_with(|| t::NativeMethodIndex::new(program));
 
     let has_unicode = any_used(&usage, UNICODE_METHODS);
     let has_character = any_used(&usage, CHARACTER_METHODS);

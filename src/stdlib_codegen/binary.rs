@@ -140,8 +140,9 @@ fn group(source: &str, name: &str) -> String {
 }
 
 pub(super) fn implementation(
-    program: &t::Program, method_ids: &t::NativeMethodIndex, class_id: usize, native: C,
+    program: &t::Program, native_method_ids: &mut Option<t::NativeMethodIndex>, class_id: usize, native: C,
 ) -> String {
+    let method_ids = native_method_ids.get_or_insert_with(|| t::NativeMethodIndex::new(program));
     let buffer = buffer_class(program);
     let mut substitutions = vec![
         ("@BUFFER_ID@", buffer.to_string()),
@@ -261,7 +262,7 @@ pub(super) fn implementation(
         _ => unreachable!("binary implementation requested for another native class"),
     };
     body = replace_placeholders(body, &substitutions);
-    body = replace_method_ids(body, program, None);
+    body = replace_method_ids(body, program, None, native_method_ids);
     debug_assert!(!super::support::has_placeholder(&body), "unexpanded binary template placeholder");
     body
 }

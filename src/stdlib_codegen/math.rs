@@ -1,7 +1,7 @@
 use crate::ir::{self as t, NativeMethod as M};
 use super::support::{native_function, replace_method_ids, replace_placeholders, result_id, variant_id};
 
-pub(super) fn implementation(program: &t::Program) -> String {
+pub(super) fn implementation(program: &t::Program, native_method_ids: &mut Option<t::NativeMethodIndex>) -> String {
     let abs_int = native_function(program, |method| matches!(method, M::MathAbsInt));
     let abs_int_value = format!("ncr_v_{}", abs_int.params.first().expect("Math.absInt value parameter").0);
     let abs_long = native_function(program, |method| matches!(method, M::MathAbsLong));
@@ -19,7 +19,7 @@ pub(super) fn implementation(program: &t::Program) -> String {
         ("@MATH_LONG_OK_TAG@", variant_id(program, result_id(abs_long), "Ok").to_string()),
         ("@ABS_LONG_VALUE@", abs_long_value),
     ]);
-    let body = replace_method_ids(body, program, None);
+    let body = replace_method_ids(body, program, None, native_method_ids);
     debug_assert!(!super::support::has_placeholder(&body), "unexpanded Math placeholder");
     body
 }

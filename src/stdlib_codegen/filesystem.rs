@@ -83,14 +83,15 @@ fn expand_template(
     program: &t::Program,
     template: &str,
     replacements: &[(&str, String)],
+    native_method_ids: &mut Option<t::NativeMethodIndex>,
 ) -> String {
     let body = replace_placeholders(template.to_owned(), replacements);
-    let body = replace_method_ids(body, program, None);
+    let body = replace_method_ids(body, program, None, native_method_ids);
     debug_assert!(!super::support::has_placeholder(&body), "unexpanded filesystem placeholder");
     body
 }
 
-fn path_implementation(program: &t::Program, text: usize, path: usize) -> String {
+fn path_implementation(program: &t::Program, text: usize, path: usize, native_method_ids: &mut Option<t::NativeMethodIndex>) -> String {
     let mut replacements = vec![
         ("@TEXT_ID@", text.to_string()),
         ("@PATH_ID@", path.to_string()),
@@ -109,10 +110,10 @@ fn path_implementation(program: &t::Program, text: usize, path: usize) -> String
     add_self_parameters(&mut replacements, &[
         "@PATH_CLONE_SELF@", "@PATH_IS_ABSOLUTE_SELF@", "@PATH_AS_TEXT_SELF@",
     ]);
-    expand_template(program, include_str!("../../stdlib/path.c.in"), &replacements)
+    expand_template(program, include_str!("../../stdlib/path.c.in"), &replacements, native_method_ids)
 }
 
-fn file_implementation(program: &t::Program, text: usize, path: usize, file: usize, buffer: usize) -> String {
+fn file_implementation(program: &t::Program, text: usize, path: usize, file: usize, buffer: usize, native_method_ids: &mut Option<t::NativeMethodIndex>) -> String {
     let mut replacements = vec![
         ("@TEXT_ID@", text.to_string()),
         ("@PATH_ID@", path.to_string()),
@@ -173,12 +174,12 @@ fn file_implementation(program: &t::Program, text: usize, path: usize, file: usi
         "@FILE_TRUNCATE_SELF@", "@FILE_READ_AT_SELF@", "@FILE_WRITE_AT_SELF@",
         "@FILE_WRITE_ALL_SELF@", "@FILE_FLUSH_SELF@", "@FILE_CLOSE_SELF@",
     ]);
-    let mut body = expand_template(program, include_str!("../../stdlib/file.c.in"), &replacements);
-    body.push_str(&expand_template(program, include_str!("../../stdlib/file_random_access.c.in"), &replacements));
+    let mut body = expand_template(program, include_str!("../../stdlib/file.c.in"), &replacements, native_method_ids);
+    body.push_str(&expand_template(program, include_str!("../../stdlib/file_random_access.c.in"), &replacements, native_method_ids));
     body
 }
 
-fn directory_implementation(program: &t::Program, text: usize, path: usize, directory: usize) -> String {
+fn directory_implementation(program: &t::Program, text: usize, path: usize, directory: usize, native_method_ids: &mut Option<t::NativeMethodIndex>) -> String {
     let mut replacements = vec![
         ("@TEXT_ID@", text.to_string()),
         ("@PATH_ID@", path.to_string()),
@@ -203,12 +204,12 @@ fn directory_implementation(program: &t::Program, text: usize, path: usize, dire
     replacements.push(("@DIRECTORY_OPTION_ID@", option.to_string()));
     replacements.push(("@DIRECTORY_OPTION_NONE_TAG@", variant_id(program, option, "None").to_string()));
     replacements.push(("@DIRECTORY_OPTION_SOME_TAG@", variant_id(program, option, "Some").to_string()));
-    expand_template(program, include_str!("../../stdlib/directory.c.in"), &replacements)
+    expand_template(program, include_str!("../../stdlib/directory.c.in"), &replacements, native_method_ids)
 }
 
-fn file_info_implementation(program: &t::Program, file_info: usize) -> String {
+fn file_info_implementation(program: &t::Program, file_info: usize, native_method_ids: &mut Option<t::NativeMethodIndex>) -> String {
     let replacements = vec![("@FILE_INFO_ID@", file_info.to_string())];
-    expand_template(program, include_str!("../../stdlib/file_info.c.in"), &replacements)
+    expand_template(program, include_str!("../../stdlib/file_info.c.in"), &replacements, native_method_ids)
 }
 fn watcher_implementation(
     program: &t::Program,
@@ -216,6 +217,7 @@ fn watcher_implementation(
     path: usize,
     watcher: usize,
     watch_event: usize,
+    native_method_ids: &mut Option<t::NativeMethodIndex>,
 ) -> String {
     let mut replacements = vec![
         ("@TEXT_ID@", text.to_string()),
@@ -264,16 +266,16 @@ fn watcher_implementation(
         ("@WATCH_KIND_IGNORED_TAG@", variant_id(program, kind, "Ignored").to_string()),
         ("@WATCH_KIND_OVERFLOW_TAG@", variant_id(program, kind, "Overflow").to_string()),
     ]);
-    expand_template(program, include_str!("../../stdlib/watcher.c.in"), &replacements)
+    expand_template(program, include_str!("../../stdlib/watcher.c.in"), &replacements, native_method_ids)
 }
-fn watch_event_implementation(program: &t::Program, text: usize, watch_event: usize) -> String {
+fn watch_event_implementation(program: &t::Program, text: usize, watch_event: usize, native_method_ids: &mut Option<t::NativeMethodIndex>) -> String {
     let kind = watch_kind_id(program);
     let replacements = [
         ("@TEXT_ID@", text.to_string()),
         ("@WATCH_EVENT_ID@", watch_event.to_string()),
         ("@WATCH_KIND_ID@", kind.to_string()),
     ];
-    expand_template(program, include_str!("../../stdlib/watch_event.c.in"), &replacements)
+    expand_template(program, include_str!("../../stdlib/watch_event.c.in"), &replacements, native_method_ids)
 }
 
 
@@ -284,6 +286,7 @@ fn files_implementation(
     path: usize,
     file_info: usize,
     buffer: usize,
+    native_method_ids: &mut Option<t::NativeMethodIndex>,
 ) -> String {
     let list_method = native_method(program, M::FilesList);
     let list_result = result_id(list_method);
@@ -355,7 +358,7 @@ fn files_implementation(
         ("@FILES_CANONICAL_RESULT@", "@FILES_CANONICAL_OK_TAG@", M::FilesCanonical),
         ("@FILES_WRITE_ATOMIC_RESULT@", "@FILES_WRITE_ATOMIC_OK_TAG@", M::FilesWriteTextAtomic),
     ]);
-    let mut body = expand_template(program, include_str!("../../stdlib/files.c.in"), &replacements);
+    let mut body = expand_template(program, include_str!("../../stdlib/files.c.in"), &replacements, native_method_ids);
     let atomic_result = result_id(native_method(program, M::FilesWriteTextAtomic));
     let atomic = replace_placeholders(include_str!("../../stdlib/files_atomic.c.in").to_owned(), &[
         ("@TEXT_ID@", text.to_string()),
@@ -363,14 +366,14 @@ fn files_implementation(
         ("@UNIT_ATOMIC_OK_TAG@", variant_id(program, atomic_result, "Ok").to_string()),
         ("@ERROR_UNIT_ATOMIC@", format!("ncr_result_error_{atomic_result}")),
     ]);
-    let atomic = replace_method_ids(atomic, program, None);
+    let atomic = replace_method_ids(atomic, program, None, native_method_ids);
     debug_assert!(!super::support::has_placeholder(&atomic), "unexpanded atomic Files placeholder");
     body.push_str(&atomic);
-    body.push_str(&expand_template(program, include_str!("../../stdlib/files_extended.c.in"), &replacements));
+    body.push_str(&expand_template(program, include_str!("../../stdlib/files_extended.c.in"), &replacements, native_method_ids));
     body
 }
 
-pub(super) fn implementations(program: &t::Program) -> Option<String> {
+pub(super) fn implementations(program: &t::Program, native_method_ids: &mut Option<t::NativeMethodIndex>) -> Option<String> {
     let path = class_id(program, |class| matches!(class, C::Path));
     let file = class_id(program, |class| matches!(class, C::File));
     let directory = class_id(program, |class| matches!(class, C::Directory));
@@ -413,7 +416,7 @@ pub(super) fn implementations(program: &t::Program) -> Option<String> {
     };
 
     if let Some(path) = path {
-        output.push_str(&path_implementation(program, text.expect("Path requires Text"), path));
+        output.push_str(&path_implementation(program, text.expect("Path requires Text"), path, native_method_ids));
     }
     if let Some(file) = file {
         output.push_str(&file_implementation(
@@ -422,6 +425,7 @@ pub(super) fn implementations(program: &t::Program) -> Option<String> {
             path.expect("File requires Path"),
             file,
             buffer.expect("File requires ByteBuffer"),
+            native_method_ids,
         ));
     }
     if let Some(directory) = directory {
@@ -430,10 +434,11 @@ pub(super) fn implementations(program: &t::Program) -> Option<String> {
             text.expect("Directory requires Text"),
             path.expect("Directory requires Path"),
             directory,
+            native_method_ids,
         ));
     }
     if let Some(file_info) = file_info {
-        output.push_str(&file_info_implementation(program, file_info));
+        output.push_str(&file_info_implementation(program, file_info, native_method_ids));
     }
     if files.is_some() {
         output.push_str(&files_implementation(
@@ -442,6 +447,7 @@ pub(super) fn implementations(program: &t::Program) -> Option<String> {
             path.expect("Files requires Path"),
             file_info.expect("Files.metadata requires FileInfo"),
             buffer.expect("Files text APIs require ByteBuffer"),
+            native_method_ids,
         ));
     }
     if let Some(watcher) = watcher {
@@ -451,6 +457,7 @@ pub(super) fn implementations(program: &t::Program) -> Option<String> {
             path.expect("Watcher requires Path"),
             watcher,
             watch_event.expect("Watcher requires WatchEvent"),
+            native_method_ids,
         ));
     }
     if let Some(watch_event) = watch_event {
@@ -458,6 +465,7 @@ pub(super) fn implementations(program: &t::Program) -> Option<String> {
             program,
             text_class(program).expect("WatchEvent requires Text"),
             watch_event,
+            native_method_ids,
         ));
     }
     Some(output)

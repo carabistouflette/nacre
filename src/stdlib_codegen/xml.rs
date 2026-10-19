@@ -53,7 +53,7 @@ fn parameter(function: &t::Function, index: usize) -> String {
     function.params[index].0.to_string()
 }
 
-pub(super) fn implementation(program: &t::Program) -> Option<String> {
+pub(super) fn implementation(program: &t::Program, native_method_ids: &mut Option<t::NativeMethodIndex>) -> Option<String> {
     let xml = xml_class(program)?;
     let text = super::support::text_class(program).expect("Text native class");
     let parse = method(program, M::XmlDocumentParse);
@@ -101,7 +101,7 @@ pub(super) fn implementation(program: &t::Program) -> Option<String> {
         ("@LIST_NEW@", format!("ncr_fn_{}", list_new.id)),
         ("@LIST_ADD@", format!("ncr_fn_{}", list_add.id)),
     ]);
-    let template = replace_method_ids(template, program, None);
+    let template = replace_method_ids(template, program, None, native_method_ids);
     let body = replace_placeholders(template, &[
         ("@XML_DOCUMENT_ID@", xml.to_string()),
         ("@TEXT_ID@", text.to_string()),

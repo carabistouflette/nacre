@@ -147,7 +147,7 @@ fn add_method_placeholders(
     }
 }
 
-pub(super) fn implementation(program: &t::Program) -> String {
+pub(super) fn implementation(program: &t::Program, native_method_ids: &mut Option<t::NativeMethodIndex>) -> String {
     let key = class_id(program, |class| matches!(class, C::CryptoKey));
     let digest = class_id(program, |class| matches!(class, C::CryptoDigest));
     let mac = class_id(program, |class| matches!(class, C::CryptoMac));
@@ -190,7 +190,7 @@ pub(super) fn implementation(program: &t::Program) -> String {
     }
     add_method_placeholders(program, &mut replacements, key.is_some(), digest.is_some(), mac.is_some(), certificate.is_some());
     body = replace_placeholders(body, &replacements);
-    body = replace_method_ids(body, program, None);
+    body = replace_method_ids(body, program, None, native_method_ids);
     debug_assert!(!super::support::has_placeholder(&body), "unexpanded crypto keys placeholder");
     body
 }

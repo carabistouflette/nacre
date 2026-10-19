@@ -237,26 +237,23 @@ fn append_body(
         C::Deque(element) => deque::implementation(program, class.id, element),
         C::Map { key, value, hasher } => collections::map_implementation(program, class.id, key, value, hasher),
         C::Set { key, hasher } => set::implementation(program, class.id, key, hasher),
-        C::OrderedMap(key, value) => ordered::map_implementation(program, class.id, key, value),
-        C::OrderedSet(key) => ordered::set_implementation(program, class.id, key),
-        C::PriorityQueue(element) => priority::implementation(program, class.id, element),
-        C::BitSet => bitset::implementation(program, class.id),
+        C::OrderedMap(key, value) => ordered::map_implementation(program, class.id, key, value, native_method_ids),
+        C::OrderedSet(key) => ordered::set_implementation(program, class.id, key, native_method_ids),
+        C::PriorityQueue(element) => priority::implementation(program, class.id, element, native_method_ids),
+        C::BitSet => bitset::implementation(program, class.id, native_method_ids),
         C::ListIterator(_) | C::MapIterator(_, _) | C::FilterIterator(_) |
         C::TakeIterator(_) | C::SkipIterator(_) | C::Iterators(_) => {
             let method_ids = native_method_ids.get_or_insert_with(|| t::NativeMethodIndex::new(program));
             iterators::implementation(program, method_ids, native, class.id)
         }
         C::Text => text::implementation(program, class.id),
-        C::Math => math::implementation(program),
-        C::Random => random::implementation(program),
-        C::Encoding => encoding::implementation(program, class.id),
-        C::Crypto => {
-            let method_ids = native_method_ids.get_or_insert_with(|| t::NativeMethodIndex::new(program));
-            crypto::implementation(program, method_ids)
-        }
-        C::Time => time::implementation(program),
-        C::DateTime => date_time::implementation(program),
-        C::Temporal => temporal::implementation(program),
+        C::Math => math::implementation(program, native_method_ids),
+        C::Random => random::implementation(program, native_method_ids),
+        C::Encoding => encoding::implementation(program, class.id, native_method_ids),
+        C::Crypto => crypto::implementation(program, native_method_ids),
+        C::Time => time::implementation(program, native_method_ids),
+        C::DateTime => date_time::implementation(program, native_method_ids),
+        C::Temporal => temporal::implementation(program, native_method_ids),
         C::Arrays => {
             let method_ids = native_method_ids.get_or_insert_with(|| t::NativeMethodIndex::new(program));
             arrays::zeroed_implementations(program, method_ids)
@@ -266,14 +263,9 @@ fn append_body(
             buffer::implementation(program, method_ids, class.id)
         }
         C::Uuid => uuid::implementation(program, class.id),
-        C::BinaryReader | C::BinaryWriter => {
-            let method_ids = native_method_ids.get_or_insert_with(|| t::NativeMethodIndex::new(program));
-            binary::implementation(program, method_ids, class.id, native)
-        }
-        C::Database => {
-            let method_ids = native_method_ids.get_or_insert_with(|| t::NativeMethodIndex::new(program));
-            database::implementation(program, method_ids, class.id)
-        }
+        C::BinaryReader | C::BinaryWriter =>
+            binary::implementation(program, native_method_ids, class.id, native),
+        C::Database => database::implementation(program, native_method_ids, class.id),
         C::SqlStatement => return,
         C::SocketAddress | C::TcpListener | C::TcpStream | C::Datagram | C::UdpSocket |
         C::Uri | C::Dns => return,
@@ -296,7 +288,7 @@ fn append_body(
         C::Arrays | C::ByteBuffer | C::Encoding | C::Crypto | C::Uuid | C::Database => None,
         _ => Some(class.id),
     };
-    body = support::replace_method_ids(body, program, receiver);
+    body = support::replace_method_ids(body, program, receiver, native_method_ids);
     debug_assert!(!support::has_placeholder(&body), "unexpanded standard-library placeholder");
     out.push_str(&body);
     out.push('\n');
@@ -341,19 +333,19 @@ pub fn implementations(program: &t::Program) -> String {
                 append_body(program, &mut out, class, native, &mut native_method_ids);
             }
     }
-    out.push_str(&compression::implementation(program));
-    out.push_str(&big_numbers::implementation(program));
-    let method_ids = native_method_ids.get_or_insert_with(|| t::NativeMethodIndex::new(program));
-    let icu = support::replace_method_ids(unicode::implementation(program, method_ids), program, None);
+    out.push_str(&compression::implementation(program, &mut native_method_ids));
+    out.push_str(&big_numbers::implementation(program, &mut native_method_ids));
+    let icu_body = unicode::implementation(program, &mut native_method_ids);
+    let icu = support::replace_method_ids(icu_body, program, None, &mut native_method_ids);
     debug_assert!(!support::has_placeholder(&icu), "unexpanded ICU template placeholder");
     out.push_str(&icu);
-    out.push_str(&regex::implementation(program));
+    out.push_str(&regex::implementation(program, &mut native_method_ids));
     out.push_str(&concurrency::implementations(program));
-    if let Some(console) = console::implementation(program) {
+    if let Some(console) = console::implementation(program, &mut native_method_ids) {
         out.push_str(&console);
         out.push('\n');
     }
-    if let Some(args) = args::implementation(program) {
+    if let Some(args) = args::implementation(program, &mut native_method_ids) {
         out.push_str(&args);
         out.push('\n');
     }
@@ -364,32 +356,32 @@ pub fn implementations(program: &t::Program) -> String {
         matches!(class.native, Some(C::TlsStream | C::WebSocket)));
     let resolver_needed = transport_needs_connect || program.functions.iter().any(|function|
         function.native == Some(t::NativeMethod::DnsResolve));
-    out.push_str(&network::implementation(program, transport_needs_wait, transport_needs_connect, resolver_needed));
-    out.push_str(&http::implementation(program));
+    out.push_str(&network::implementation(program, &mut native_method_ids, transport_needs_wait, transport_needs_connect, resolver_needed));
+    out.push_str(&http::implementation(program, &mut native_method_ids));
     out.push_str(&uri::percent_helpers(program, transport_needs_connect));
-    out.push_str(&uri::implementation(program));
-    out.push_str(&dns::implementation(program, transport_needs_connect, transport_needs_connect));
-    out.push_str(&zip::entry_implementation(program));
-    if let Some(zip) = zip::implementation(program) {
+    out.push_str(&uri::implementation(program, &mut native_method_ids));
+    out.push_str(&dns::implementation(program, &mut native_method_ids, transport_needs_connect, transport_needs_connect));
+    out.push_str(&zip::entry_implementation(program, &mut native_method_ids));
+    if let Some(zip) = zip::implementation(program, &mut native_method_ids) {
         out.push_str(&zip);
     }
-    if let Some(filesystem) = filesystem::implementations(program) {
+    if let Some(filesystem) = filesystem::implementations(program, &mut native_method_ids) {
         out.push_str(&filesystem);
         out.push('\n');
     }
-    if let Some(processes) = process::implementations(program) {
+    if let Some(processes) = process::implementations(program, &mut native_method_ids) {
         out.push_str(&processes);
     }
-    out.push_str(&cryptokeys::implementation(program));
+    out.push_str(&cryptokeys::implementation(program, &mut native_method_ids));
     out.push_str(&tls::implementation(program));
     out.push_str(&websocket::implementation(program));
     out.push_str(&xml::shared_implementation(program));
-    if let Some(xml) = xml::implementation(program) {
+    if let Some(xml) = xml::implementation(program, &mut native_method_ids) {
         out.push_str(&xml);
         out.push('\n');
     }
-    out.push_str(&xml_stream::implementation(program));
-    out.push_str(&xslt::implementation(program));
+    out.push_str(&xml_stream::implementation(program, &mut native_method_ids));
+    out.push_str(&xslt::implementation(program, &mut native_method_ids));
     out
 }
 

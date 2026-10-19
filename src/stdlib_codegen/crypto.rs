@@ -61,8 +61,9 @@ fn without_digest_selection(source: &str) -> String {
     body
 }
 
-pub(super) fn implementation(program: &t::Program, method_ids: &t::NativeMethodIndex) -> String {
+pub(super) fn implementation(program: &t::Program, native_method_ids: &mut Option<t::NativeMethodIndex>) -> String {
     if !is_used(program) { return String::new(); }
+    let method_ids = native_method_ids.get_or_insert_with(|| t::NativeMethodIndex::new(program));
     let text = text_class(program).expect("Crypto requires Text");
     let byte_buffer = program.classes.iter()
         .find(|class| matches!(class.native, Some(C::ByteBuffer)))
@@ -134,7 +135,7 @@ pub(super) fn implementation(program: &t::Program, method_ids: &t::NativeMethodI
         ("@COMPARE_LEFT@", parameter(compare, 0)),
         ("@COMPARE_RIGHT@", parameter(compare, 1)),
     ]);
-    let body = replace_method_ids(body, program, None);
+    let body = replace_method_ids(body, program, None, native_method_ids);
     debug_assert!(!super::support::has_placeholder(&body), "unexpanded Crypto placeholder");
     body
 }

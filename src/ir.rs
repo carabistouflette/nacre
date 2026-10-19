@@ -4,6 +4,7 @@ use crate::ast::{BinaryOp, UnaryOp};
 use crate::diagnostic::Span;
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::sync::OnceLock;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Type { Byte, Char, Int, Long, Double, Unit, Boolean, String, Void, Object(usize), Borrow { class: usize, mutable: bool } }
@@ -407,23 +408,43 @@ pub enum NativeMethod {
     XsltStylesheetCompile, XsltStylesheetTransform, XsltStylesheetTransformBytes,
 }
 
-pub(crate) struct NativeMethodIndex(HashMap<(Option<usize>, NativeMethod), usize>);
+pub(crate) struct NativeMethodIndex {
+    by_receiver: HashMap<(Option<usize>, NativeMethod), usize>,
+    first_by_method: OnceLock<HashMap<NativeMethod, usize>>,
+}
 impl NativeMethodIndex {
     pub(crate) fn new(program: &Program) -> Self {
-        let mut methods = HashMap::new();
+        let mut by_receiver = HashMap::new();
         for function in &program.functions {
             if let Some(method) = function.native {
-                methods.entry((function.receiver, method)).or_insert(function.id);
+                by_receiver.entry((function.receiver, method)).or_insert(function.id);
             }
         }
-        Self(methods)
+        Self {
+            by_receiver,
+            first_by_method: OnceLock::new(),
+        }
     }
 
     pub(crate) fn get(&self, class: usize, method: NativeMethod) -> Option<usize> {
-        self.0.get(&(Some(class), method)).copied()
+        self.by_receiver.get(&(Some(class), method)).copied()
     }
 
     pub(crate) fn get_static(&self, method: NativeMethod) -> Option<usize> {
-        self.0.get(&(None, method)).copied()
+        self.by_receiver.get(&(None, method)).copied()
+    }
+
+    pub(crate) fn iter_first_by_method(&self) -> impl Iterator<Item = (NativeMethod, usize)> + '_ {
+        self.first_by_method.get_or_init(|| {
+            let mut first_by_method: HashMap<NativeMethod, usize> = HashMap::new();
+            for ((_, method), id) in &self.by_receiver {
+                first_by_method.entry(*method)
+                    .and_modify(|first_id| *first_id = (*first_id).min(*id))
+                    .or_insert(*id);
+            }
+            first_by_method
+        })
+        .iter()
+        .map(|(method, id)| (*method, *id))
     }
 }

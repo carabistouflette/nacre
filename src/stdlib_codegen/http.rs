@@ -73,7 +73,7 @@ pub(crate) fn drop_helper_prototypes(program: &t::Program) -> String {
     "static void ncr_http_request_destroy(void *value);\nstatic void ncr_http_response_destroy(void *value);\n".to_owned()
 }
 
-pub(super) fn implementation(program: &t::Program) -> String {
+pub(super) fn implementation(program: &t::Program, native_method_ids: &mut Option<t::NativeMethodIndex>) -> String {
     if !uses_http(program) { return String::new(); }
 
     let request = class_id(program, |native| matches!(native, C::HttpRequest));
@@ -145,7 +145,7 @@ pub(super) fn implementation(program: &t::Program) -> String {
         ("@RESPONSE_FINAL_URL_RESULT_TYPE@", ctype(program, final_url.return_type).into_owned()),
     ];
     let body = replace_placeholders(template.to_owned(), &substitutions);
-    let body = replace_method_ids(body, program, None);
+    let body = replace_method_ids(body, program, None, native_method_ids);
     debug_assert!(!super::support::has_placeholder(&body), "unexpanded HTTP placeholder");
     body
 }

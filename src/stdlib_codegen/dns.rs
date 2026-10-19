@@ -44,6 +44,7 @@ pub(super) fn drop_fields() -> String { String::new() }
 
 pub(super) fn implementation(
     program: &t::Program,
+    native_method_ids: &mut Option<t::NativeMethodIndex>,
     transport_needs_idna: bool,
     transport_needs_resolver: bool,
 ) -> String {
@@ -202,7 +203,7 @@ pub(super) fn implementation(
         }
 
     body = replace_placeholders(body, &substitutions);
-    body = replace_method_ids(body, program, None);
+    body = replace_method_ids(body, program, None, native_method_ids);
     debug_assert!(!has_placeholder(&body), "unexpanded DNS placeholder");
     body
 }

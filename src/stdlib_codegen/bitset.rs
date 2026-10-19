@@ -19,7 +19,7 @@ pub(super) fn drop_fields(_program: &t::Program, class: C, _class_id: usize) -> 
     }
 }
 
-pub(super) fn implementation(program: &t::Program, class_id: usize) -> String {
+pub(super) fn implementation(program: &t::Program, class_id: usize, native_method_ids: &mut Option<t::NativeMethodIndex>) -> String {
     let constructor = native_method(program, class_id, |candidate| candidate == M::BitSetNew);
     assert_eq!(constructor.params.first().map(|(_, ty)| *ty), Some(Type::Long),
         "BitSet constructor takes the initial bit count");
@@ -62,7 +62,7 @@ pub(super) fn implementation(program: &t::Program, class_id: usize) -> String {
         ("@SOME_TAG@", some_tag.to_string()),
     ];
     body = replace_placeholders(body, &substitutions);
-    body = replace_method_ids(body, program, Some(class_id));
+    body = replace_method_ids(body, program, Some(class_id), native_method_ids);
     debug_assert!(!body.contains('@'), "unexpanded BitSet template placeholder");
     body
 }

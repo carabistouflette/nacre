@@ -88,6 +88,7 @@ fn has_any(program: &t::Program, methods: &[M]) -> bool {
 
 pub(super) fn implementation(
     program: &t::Program,
+    native_method_ids: &mut Option<t::NativeMethodIndex>,
     transport_needs_wait: bool,
     transport_needs_connect: bool,
     transport_needs_resolver: bool,
@@ -288,7 +289,7 @@ pub(super) fn implementation(
     }
 
     let mut body = replace_placeholders(body, &substitutions);
-    body = replace_method_ids(body, program, None);
+    body = replace_method_ids(body, program, None, native_method_ids);
     debug_assert!(!super::support::has_placeholder(&body), "unexpanded network placeholder");
     body
 }

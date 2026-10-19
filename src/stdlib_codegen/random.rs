@@ -7,7 +7,7 @@ pub(super) fn fields() -> String {
 
 pub(super) fn drop_fields() -> String { String::new() }
 
-pub(super) fn implementation(program: &t::Program) -> String {
+pub(super) fn implementation(program: &t::Program, native_method_ids: &mut Option<t::NativeMethodIndex>) -> String {
     let random_class = program.classes.iter()
         .find(|class| matches!(class.native, Some(C::Random)))
         .expect("Random native class is present").id;
@@ -27,7 +27,7 @@ pub(super) fn implementation(program: &t::Program) -> String {
         ("@RANDOM_INT_RESULT@", int_result.to_string()),
         ("@RANDOM_INT_OK_TAG@", variant_id(program, int_result, "Ok").to_string()),
     ]);
-    let body = replace_method_ids(body, program, None);
+    let body = replace_method_ids(body, program, None, native_method_ids);
     debug_assert!(!super::support::has_placeholder(&body), "unexpanded Random placeholder");
     body
 }
