@@ -32,14 +32,38 @@ fn type_parameter(program: &t::Program, id: usize) -> Type {
         _ => unreachable!("concurrency type parameter"),
     }
 }
-fn task_run(program: &t::Program, thread_id: usize) -> (usize, usize, Type) {
-    let spawn = program.functions.iter().find(|function| {
-        function.native == Some(M::ThreadSpawn) && native_owner(program, function) == thread_id
-    }).expect("Thread.spawn method is present");
-    let Type::Object(task_id) = spawn.params[0].1 else { unreachable!("Task is an interface object") };
-    let run = program.classes[task_id].interface_methods.iter().copied().find(|id|
-        program.functions[*id].name.ends_with(".run")).expect("Task.run interface method is present");
-    (task_id, run, program.functions[run].return_type)
+#[derive(Clone, Copy)]
+struct ThreadRun {
+    task: usize,
+    run: usize,
+    result: Type,
+}
+fn thread_run_index(program: &t::Program) -> Vec<Option<ThreadRun>> {
+    if !program.classes.iter().any(|class| {
+        matches!(class.native, Some(C::Thread(_)))
+    }) {
+        return Vec::new();
+    }
+    let mut index = vec![None; program.classes.len()];
+    for spawn in &program.functions {
+        if spawn.native != Some(M::ThreadSpawn) { continue; }
+        let thread_id = native_owner(program, spawn);
+        let Type::Object(task) = spawn.params[0].1 else {
+            unreachable!("Task is an interface object");
+        };
+        let run = program.classes[task].interface_methods.iter().copied()
+            .find(|id| program.functions[*id].name.ends_with(".run"))
+            .expect("Task.run interface method is present");
+        index[thread_id].get_or_insert(ThreadRun {
+            task,
+            run,
+            result: program.functions[run].return_type,
+        });
+    }
+    index
+}
+fn task_run(thread_runs: &[Option<ThreadRun>], thread_id: usize) -> ThreadRun {
+    thread_runs[thread_id].expect("Thread.spawn method is present")
 }
 fn zero_value(program: &t::Program, ty: Type) -> String {
     match ty {
@@ -139,12 +163,12 @@ pub(super) fn drop_helper_prototypes(program: &t::Program) -> String {
     out
 }
 
-fn control_definitions(program: &t::Program) -> String {
+fn control_definitions(program: &t::Program, thread_runs: &[Option<ThreadRun>]) -> String {
     let mut out = String::new();
     for class in &program.classes {
         match class.native {
             Some(C::Thread(_)) => {
-                let (task, _, result) = task_run(program, class.id);
+                let ThreadRun { task, result, .. } = task_run(thread_runs, class.id);
                 out.push_str(&format!("struct ncr_thread_context_{} {{ ncr_obj_{task} task; {} result; }};\n",
                     class.id, ctype(program, result)));
             }
@@ -161,8 +185,12 @@ fn control_definitions(program: &t::Program) -> String {
     out
 }
 
-fn thread_worker(program: &t::Program, thread_id: usize) -> String {
-    let (task, run, _) = task_run(program, thread_id);
+fn thread_worker(
+    program: &t::Program,
+    thread_id: usize,
+    thread_runs: &[Option<ThreadRun>],
+) -> String {
+    let ThreadRun { task, run, .. } = task_run(thread_runs, thread_id);
     let slot = program.functions[run].virtual_slot.expect("Task.run vtable slot");
     format!(
         "static void *ncr_thread_main_{thread_id}(void *raw) {{\n    struct ncr_thread_context_{thread_id} *context = raw;\n    context->result = context->task.vtable->m{slot}(context->task.data);\n    ncr_drop_{task}(context->task);\n    return NULL;\n}}\n",
@@ -249,9 +277,13 @@ fn channel_receiver_drop(_program: &t::Program, id: usize, channel: usize) -> St
     )
 }
 
-fn thread_spawn(program: &t::Program, function: &t::Function) -> String {
+fn thread_spawn(
+    program: &t::Program,
+    function: &t::Function,
+    thread_runs: &[Option<ThreadRun>],
+) -> String {
     let thread = native_owner(program, function);
-    let (task, _, _) = task_run(program, thread);
+    let ThreadRun { task, .. } = task_run(thread_runs, thread);
     let context = format!("struct ncr_thread_context_{thread}");
     let task_arg = function.params[0].0;
     let task_drop = format!("ncr_drop_{task}(context->task);");
@@ -540,12 +572,12 @@ fn receiver_close(program: &t::Program, function: &t::Function) -> String {
     method_body(program, function, body)
 }
 
-fn drop_helpers(program: &t::Program) -> String {
+fn drop_helpers(program: &t::Program, thread_runs: &[Option<ThreadRun>]) -> String {
     let mut out = String::new();
     for class in &program.classes {
         match class.native {
             Some(C::Thread(_)) => {
-                let (_, _, result) = task_run(program, class.id);
+                let ThreadRun { result, .. } = task_run(thread_runs, class.id);
                 out.push_str(&format!(
                     "static void ncr_concurrency_drop_{}(ncr_obj_{} *p) {{\n    if (p->context == NULL) {{ return; }}\n    int error = pthread_join(p->thread, NULL);\n    if (error != 0) {{ ncr_sync_fatal(\"pthread_join during Thread drop\", error); }}\n    struct ncr_thread_context_{} *context = p->context;\n{}    p->context = NULL; p->joined = true;\n    ncr_deallocate(context);\n}}\n",
                     class.id, class.id, class.id, drop_value(program, result, "context->result")));
@@ -578,11 +610,12 @@ pub(super) fn implementations(
     program: &t::Program,
     native_method_ids: &mut Option<t::NativeMethodIndex>,
 ) -> String {
+    let thread_runs = thread_run_index(program);
     let mut out = include_str!("../../stdlib/concurrency.c.in").to_owned();
-    out.push_str(&control_definitions(program));
+    out.push_str(&control_definitions(program, &thread_runs));
     for class in &program.classes {
         match class.native {
-            Some(C::Thread(_)) => out.push_str(&thread_worker(program, class.id)),
+            Some(C::Thread(_)) => out.push_str(&thread_worker(program, class.id, &thread_runs)),
             Some(C::Mutex(value)) => out.push_str(&mutex_control_helpers(program, class.id, value)),
             Some(C::Channel(value)) => out.push_str(&channel_control_helpers(program, class.id, value)),
             _ => {}
@@ -605,10 +638,10 @@ pub(super) fn implementations(
         }
     }
     out.push_str(&super::concurrency_extra::drop_helpers(program));
-    out.push_str(&drop_helpers(program));
+    out.push_str(&drop_helpers(program, &thread_runs));
     for function in &program.functions {
         let body = match function.native {
-            Some(M::ThreadSpawn) => Some(thread_spawn(program, function)),
+            Some(M::ThreadSpawn) => Some(thread_spawn(program, function, &thread_runs)),
             Some(M::ThreadJoin) => Some(thread_join(program, function)),
             Some(M::MutexCreate) => Some(mutex_create(program, function)),
             Some(M::MutexCloneHandle) => Some(mutex_clone(program, function)),
