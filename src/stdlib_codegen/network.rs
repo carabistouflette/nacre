@@ -1,7 +1,7 @@
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
 use super::support::{
-    native_function, replace_method_ids, replace_placeholders, result_id,
-    template_section, variant_id,
+    replace_method_ids, replace_placeholders, required_first_native_method,
+    required_indexed_native_method, result_id, template_section, variant_id,
 };
 
 pub(super) fn fields(program: &t::Program, class: C, _class_id: usize) -> String {
@@ -34,19 +34,34 @@ fn native_class_id(program: &t::Program, is: impl Fn(C) -> bool) -> usize {
         .expect("network signature specializes required native class").id
 }
 
-fn method(program: &t::Program, native: M) -> &t::Function {
-    native_function(program, |candidate| candidate == native)
+fn method<'a>(
+    program: &'a t::Program,
+    native_method_ids: &mut Option<t::NativeMethodIndex>,
+    native: M,
+) -> &'a t::Function {
+    required_first_native_method(program, native_method_ids, native)
 }
 
-fn method_if(program: &t::Program, native: M) -> Option<&t::Function> {
-    program.functions.iter().find(|function| function.native == Some(native))
+fn method_if<'a>(
+    program: &'a t::Program,
+    native_method_ids: &mut Option<t::NativeMethodIndex>,
+    native: M,
+) -> Option<&'a t::Function> {
+    let id = native_method_ids
+        .get_or_insert_with(|| t::NativeMethodIndex::new(program))
+        .get_first_by_method(native)?;
+    program.functions.get(id)
 }
 
-fn method_for_class(program: &t::Program, class_id: usize, native: M) -> &t::Function {
-    program.functions.iter().find(|function| function.receiver == Some(class_id) && function.native == Some(native))
-        .expect("compiler-owned specialized network method is present")
+fn method_for_class<'a>(
+    program: &'a t::Program,
+    native_method_ids: &mut Option<t::NativeMethodIndex>,
+    class_id: usize,
+    native: M,
+) -> &'a t::Function {
+    let method_ids = native_method_ids.get_or_insert_with(|| t::NativeMethodIndex::new(program));
+    required_indexed_native_method(program, method_ids, Some(class_id), native)
 }
-
 
 fn result_type(_program: &t::Program, function: &t::Function) -> String {
     match function.return_type {
@@ -82,8 +97,15 @@ fn group<'a>(source: &'a str, name: &str) -> &'a str {
     template_section(source, &start, &end)
 }
 
-fn has_any(program: &t::Program, methods: &[M]) -> bool {
-    program.functions.iter().any(|function| function.native.is_some_and(|method| methods.contains(&method)))
+fn has_any(
+    program: &t::Program,
+    native_method_ids: &mut Option<t::NativeMethodIndex>,
+    methods: &[M],
+) -> bool {
+    let method_ids = native_method_ids.get_or_insert_with(|| t::NativeMethodIndex::new(program));
+    methods
+        .iter()
+        .any(|method| method_ids.get_first_by_method(*method).is_some())
 }
 
 pub(super) fn implementation(
@@ -115,8 +137,8 @@ pub(super) fn implementation(
     if need_connect_helper { body.push_str(group(template, "connect_helper")); }
     let address_query = [M::TcpListenerLocalAddress, M::TcpStreamPeerAddress, M::TcpStreamLocalAddress, M::UdpSocketLocalAddress];
     let close_methods = [M::TcpListenerClose, M::TcpStreamClose, M::UdpSocketClose];
-    let resolve = method_if(program, M::SocketAddressResolve);
-    let to_text = method_if(program, M::SocketAddressToText);
+    let resolve = method_if(program, native_method_ids, M::SocketAddressResolve);
+    let to_text = method_if(program, native_method_ids, M::SocketAddressToText);
     let listener_methods = [M::TcpListenerBind, M::TcpListenerAccept, M::TcpListenerLocalAddress, M::TcpListenerClose];
     let stream_methods = [M::TcpStreamConnect, M::TcpStreamReadSome, M::TcpStreamWriteSome, M::TcpStreamWriteAll,
         M::TcpStreamRead, M::TcpStreamWrite, M::TcpStreamFlush,
@@ -124,38 +146,38 @@ pub(super) fn implementation(
     let udp_methods = [M::UdpSocketBind, M::UdpSocketSendTo, M::UdpSocketReceiveFrom, M::UdpSocketLocalAddress, M::UdpSocketClose];
     let datagram_methods = [M::DatagramSource, M::DatagramBytesRead, M::DatagramTruncated];
 
-    if has_any(program, &address_query) { body.push_str(group(template, "address")); }
-    if has_any(program, &close_methods) { body.push_str(group(template, "close")); }
+    if has_any(program, native_method_ids, &address_query) { body.push_str(group(template, "address")); }
+    if has_any(program, native_method_ids, &close_methods) { body.push_str(group(template, "close")); }
     if resolve.is_some() { body.push_str(group(template, "resolve")); }
     if to_text.is_some() { body.push_str(group(template, "text")); }
-    if has_any(program, &listener_methods) { body.push_str(group(template, "listener")); }
-    if has_any(program, &stream_methods) { body.push_str(group(template, "stream")); }
-    if has_any(program, &udp_methods) { body.push_str(group(template, "udp")); }
-    if has_any(program, &datagram_methods) { body.push_str(group(template, "datagram")); }
+    if has_any(program, native_method_ids, &listener_methods) { body.push_str(group(template, "listener")); }
+    if has_any(program, native_method_ids, &stream_methods) { body.push_str(group(template, "stream")); }
+    if has_any(program, native_method_ids, &udp_methods) { body.push_str(group(template, "udp")); }
+    if has_any(program, native_method_ids, &datagram_methods) { body.push_str(group(template, "datagram")); }
     body.push_str(template.split_once("/* NETWORK_GROUP_END datagram */")
         .expect("network template final group").1);
 
     let mut substitutions = vec![];
     if let Some(address) = address { add(&mut substitutions, "@ADDRESS_ID@", address); }
-    if has_any(program, &datagram_methods) || has_any(program, &udp_methods) {
+    if has_any(program, native_method_ids, &datagram_methods) || has_any(program, native_method_ids, &udp_methods) {
         let datagram = native_class_id(program, |native| matches!(native, C::Datagram));
         add(&mut substitutions, "@DATAGRAM_ID@", datagram);
     }
 
-    if has_any(program, &address_query) {
-        let address_function = method_if(program, M::TcpListenerLocalAddress)
-            .or_else(|| method_if(program, M::TcpStreamPeerAddress))
-            .or_else(|| method_if(program, M::TcpStreamLocalAddress))
-            .or_else(|| method_if(program, M::UdpSocketLocalAddress))
+    if has_any(program, native_method_ids, &address_query) {
+        let address_function = method_if(program, native_method_ids, M::TcpListenerLocalAddress)
+            .or_else(|| method_if(program, native_method_ids, M::TcpStreamPeerAddress))
+            .or_else(|| method_if(program, native_method_ids, M::TcpStreamLocalAddress))
+            .or_else(|| method_if(program, native_method_ids, M::UdpSocketLocalAddress))
             .expect("network address query is present");
         add_result_type(&mut substitutions, program, "@ADDRESS_RESULT_TYPE@", address_function);
         add_result(&mut substitutions, program, "@ADDRESS_RESULT_ID@", address_function);
         add_ok_tag(&mut substitutions, program, "@ADDRESS_RESULT_OK_TAG@", address_function);
     }
-    if has_any(program, &close_methods) {
-        let close = method_if(program, M::TcpListenerClose)
-            .or_else(|| method_if(program, M::TcpStreamClose))
-            .or_else(|| method_if(program, M::UdpSocketClose))
+    if has_any(program, native_method_ids, &close_methods) {
+        let close = method_if(program, native_method_ids, M::TcpListenerClose)
+            .or_else(|| method_if(program, native_method_ids, M::TcpStreamClose))
+            .or_else(|| method_if(program, native_method_ids, M::UdpSocketClose))
             .expect("network close method is present");
         add_result_type(&mut substitutions, program, "@UNIT_RESULT_TYPE@", close);
         add_result(&mut substitutions, program, "@UNIT_RESULT_ID@", close);
@@ -165,8 +187,8 @@ pub(super) fn implementation(
         let address = address.expect("SocketAddress.resolve requires its native address class");
         let list = native_class_id(program, |native| matches!(native, C::List(Type::Object(element)) if element == address));
         let text = native_class_id(program, |native| matches!(native, C::Text));
-        let list_new = method_for_class(program, list, M::ListNew);
-        let list_add = method_for_class(program, list, M::ListAdd);
+        let list_new = method_for_class(program, native_method_ids, list, M::ListNew);
+        let list_add = method_for_class(program, native_method_ids, list, M::ListAdd);
         add(&mut substitutions, "@LIST_ID@", list);
         add(&mut substitutions, "@TEXT_ID@", text);
         add_result_type(&mut substitutions, program, "@RESOLVE_RESULT_TYPE@", function);
@@ -182,11 +204,11 @@ pub(super) fn implementation(
         let text = native_class_id(program, |native| matches!(native, C::Text));
         add(&mut substitutions, "@TEXT_ID@", text);
     }
-    if has_any(program, &listener_methods) {
+    if has_any(program, native_method_ids, &listener_methods) {
         let listener = native_class_id(program, |native| matches!(native, C::TcpListener));
         let stream = native_class_id(program, |native| matches!(native, C::TcpStream));
-        let bind = method(program, M::TcpListenerBind);
-        let accept = method(program, M::TcpListenerAccept);
+        let bind = method(program, native_method_ids, M::TcpListenerBind);
+        let accept = method(program, native_method_ids, M::TcpListenerAccept);
         add(&mut substitutions, "@TCP_LISTENER_ID@", listener);
         add(&mut substitutions, "@TCP_STREAM_ID@", stream);
         add_result_type(&mut substitutions, program, "@LISTENER_RESULT_TYPE@", bind);
@@ -199,19 +221,19 @@ pub(super) fn implementation(
         add(&mut substitutions, "@LISTENER_BIND_BACKLOG_ID@", param(bind, 1));
         add(&mut substitutions, "@ACCEPT_TIMEOUT_ID@", param(accept, 0));
     }
-    if has_any(program, &stream_methods) {
+    if has_any(program, native_method_ids, &stream_methods) {
         let stream = native_class_id(program, |native| matches!(native, C::TcpStream));
         let buffer = native_class_id(program, |native| matches!(native, C::ByteBuffer));
-        let connect = method(program, M::TcpStreamConnect);
-        let read = method(program, M::TcpStreamReadSome);
-        let write = method(program, M::TcpStreamWriteSome);
-        let write_all = method(program, M::TcpStreamWriteAll);
-        let default_read = method(program, M::TcpStreamRead);
-        let default_write = method(program, M::TcpStreamWrite);
-        let flush = method(program, M::TcpStreamFlush);
+        let connect = method(program, native_method_ids, M::TcpStreamConnect);
+        let read = method(program, native_method_ids, M::TcpStreamReadSome);
+        let write = method(program, native_method_ids, M::TcpStreamWriteSome);
+        let write_all = method(program, native_method_ids, M::TcpStreamWriteAll);
+        let default_read = method(program, native_method_ids, M::TcpStreamRead);
+        let default_write = method(program, native_method_ids, M::TcpStreamWrite);
+        let flush = method(program, native_method_ids, M::TcpStreamFlush);
         let text = native_class_id(program, |native| matches!(native, C::Text));
-        let address_result = method_if(program, M::TcpStreamPeerAddress)
-            .or_else(|| method_if(program, M::TcpListenerLocalAddress))
+        let address_result = method_if(program, native_method_ids, M::TcpStreamPeerAddress)
+            .or_else(|| method_if(program, native_method_ids, M::TcpListenerLocalAddress))
             .expect("TCP stream address result specialization");
         add(&mut substitutions, "@TCP_STREAM_ID@", stream);
         add(&mut substitutions, "@BUFFER_ID@", buffer);
@@ -249,16 +271,16 @@ pub(super) fn implementation(
         add_result(&mut substitutions, program, "@ADDRESS_RESULT_ID@", address_result);
         add_ok_tag(&mut substitutions, program, "@ADDRESS_RESULT_OK_TAG@", address_result);
     }
-    if has_any(program, &udp_methods) {
+    if has_any(program, native_method_ids, &udp_methods) {
         let udp = native_class_id(program, |native| matches!(native, C::UdpSocket));
         let buffer = native_class_id(program, |native| matches!(native, C::ByteBuffer));
-        let bind = method(program, M::UdpSocketBind);
-        let send = method(program, M::UdpSocketSendTo);
-        let receive = method(program, M::UdpSocketReceiveFrom);
+        let bind = method(program, native_method_ids, M::UdpSocketBind);
+        let send = method(program, native_method_ids, M::UdpSocketSendTo);
+        let receive = method(program, native_method_ids, M::UdpSocketReceiveFrom);
         let text = native_class_id(program, |native| matches!(native, C::Text));
-        let address_result = method_if(program, M::UdpSocketLocalAddress)
-            .or_else(|| method_if(program, M::TcpListenerLocalAddress))
-            .or_else(|| method_if(program, M::TcpStreamPeerAddress))
+        let address_result = method_if(program, native_method_ids, M::UdpSocketLocalAddress)
+            .or_else(|| method_if(program, native_method_ids, M::TcpListenerLocalAddress))
+            .or_else(|| method_if(program, native_method_ids, M::TcpStreamPeerAddress))
             .expect("UDP address result specialization");
         add(&mut substitutions, "@UDP_SOCKET_ID@", udp);
         add(&mut substitutions, "@BUFFER_ID@", buffer);

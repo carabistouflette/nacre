@@ -3,6 +3,9 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Reuse the lazy native-method index in network code generation for method
+  selection and feature checks, avoiding repeated scans without indexing
+  programs that do not need network support.
 - Route standard-library marker replacement through a shared one-pass expander,
   avoiding repeated template copies while preserving ordered nested expansion.
 - Resolve method-ID placeholders from markers present in each template, avoiding
