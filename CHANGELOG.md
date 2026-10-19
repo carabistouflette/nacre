@@ -3,6 +3,12 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Parse benchmark timing records against the benchmark name and numeric fields, so
+  benchmark stdout cannot replace the generated measurements.
+
+- Format benchmark operation counts without allocating an intermediate
+  character vector.
+
 - Preserve embedded NUL bytes in failed assertion messages.
 
 - Ignore empty `NACRE_CACHE_DIR`, `XDG_CACHE_HOME`, and `HOME` values when

@@ -140,37 +140,41 @@ static void ncr_run_bench_{id}(const char *name) {{
         let truncation_note = output.truncation_note(native::OUTPUT_CAPTURE_LIMIT_BYTES);
         if output.status.success() && truncation_note.is_none() {
             let stdout = String::from_utf8_lossy(&output.stdout);
-            let mut reported = false;
-            for line in stdout.lines() {
-                if let Some(rest) = line.strip_prefix("BENCH_RESULT: ") {
-                    let parts: Vec<&str> = rest.split_whitespace().collect();
-                    if parts.len() >= 4 {
-                        let ns: u64 = parts[1].parse().unwrap_or(0);
-                        let diff: u64 = parts[2].parse().unwrap_or(0);
-                        let ops: u64 = parts[3].parse().unwrap_or(0);
-                        if json_output {
-                            bench_results.push(serde_json::json!({
-                                "name": name,
-                                "ns_per_iter": ns,
-                                "max_diff_ns": diff,
-                                "ops_per_sec": ops,
-                                "status": "ok"
-                            }));
-                        } else {
-                            let formatted_ops = format_with_commas(parts[3]);
-                            println!("bench: {:>8} ns/iter (+/- {:>4}) ({} ops/sec)", ns, diff, formatted_ops);
-                        }
-                        reported = true;
-                        break;
-                    }
+            let reported = stdout.lines().rev().find_map(|line| {
+                let rest = line.strip_prefix("BENCH_RESULT: ")?;
+                let mut parts = rest.split_whitespace();
+                if parts.next()? != name.as_str() {
+                    return None;
                 }
-            }
-            if !reported {
+                let ns = parts.next()?.parse::<u64>().ok()?;
+                let diff = parts.next()?.parse::<u64>().ok()?;
+                let ops_text = parts.next()?;
+                let ops = ops_text.parse::<u64>().ok()?;
+                if parts.next().is_some() {
+                    return None;
+                }
+                Some((ns, diff, ops, ops_text))
+            });
+            if let Some((ns, diff, ops, ops_text)) = reported {
                 if json_output {
-                    bench_results.push(serde_json::json!({ "name": name, "status": "ok" }));
+                    bench_results.push(serde_json::json!({
+                        "name": name,
+                        "ns_per_iter": ns,
+                        "max_diff_ns": diff,
+                        "ops_per_sec": ops,
+                        "status": "ok"
+                    }));
                 } else {
-                    println!("ok");
+                    let formatted_ops = format_with_commas(ops_text);
+                    println!(
+                        "bench: {:>8} ns/iter (+/- {:>4}) ({} ops/sec)",
+                        ns, diff, formatted_ops
+                    );
                 }
+            } else if json_output {
+                bench_results.push(serde_json::json!({ "name": name, "status": "ok" }));
+            } else {
+                println!("ok");
             }
             passed += 1;
         } else {
@@ -234,14 +238,28 @@ static void ncr_run_bench_{id}(const char *name) {{
 }
 
 fn format_with_commas(s: &str) -> String {
-    let mut result = String::new();
-    let chars: Vec<char> = s.chars().collect();
-    let len = chars.len();
-    for (i, c) in chars.into_iter().enumerate() {
+    // The parsed operation count from the C harness is ASCII decimal.
+    let len = s.len();
+    let comma_count = len.saturating_sub(1) / 3;
+    let mut result = String::with_capacity(len + comma_count);
+    for (i, byte) in s.bytes().enumerate() {
         if i > 0 && (len - i).is_multiple_of(3) {
             result.push(',');
         }
-        result.push(c);
+        result.push(byte as char);
     }
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::format_with_commas;
+
+    #[test]
+    fn formats_operation_counts_with_comma_groups() {
+        assert_eq!(format_with_commas("0"), "0");
+        assert_eq!(format_with_commas("999"), "999");
+        assert_eq!(format_with_commas("1000"), "1,000");
+        assert_eq!(format_with_commas("12345678"), "12,345,678");
+    }
 }
