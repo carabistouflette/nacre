@@ -999,3 +999,69 @@ fn lsp_opens_non_utf8_source_paths_and_publishes_diagnostics() {
     client.send(json!({ "jsonrpc": "2.0", "method": "exit" }));
     client.finish();
 }
+
+#[test]
+fn lsp_workspace_folder_changes_revalidate_the_project_boundary() {
+    let temp = TempDir::new();
+    let workspace = temp.0.join("workspace");
+    fs::create_dir(&workspace).unwrap();
+    fs::write(
+        temp.0.join("Nacre.toml"),
+        "[package]\nname = \"root\"\nversion = \"0.1.0\"\nsources = [\"workspace\"]\n",
+    )
+    .unwrap();
+    let main_path = workspace.join("Main.ncr");
+    let model_path = workspace.join("Model.ncr");
+    let main_source = "void main() { Item item = new Item(); }\n";
+    fs::write(&main_path, main_source).unwrap();
+    fs::write(&model_path, "class Item {}\n").unwrap();
+    let main_uri = uri(&main_path);
+
+    let mut client = Client::spawn();
+    client.send(json!({
+        "jsonrpc": "2.0", "id": 1, "method": "initialize",
+        "params": {
+            "workspaceFolders": [],
+            "capabilities": { "workspace": { "workspaceFolders": { "supported": true } } }
+        }
+    }));
+    let initialized = client.response(1);
+    assert!(
+        initialized["result"]["capabilities"]["workspace"]["workspaceFolders"]["changeNotifications"]
+            .as_bool()
+            .unwrap(),
+        "server must advertise workspace-folder notifications"
+    );
+    client.send(json!({ "jsonrpc": "2.0", "method": "initialized", "params": {} }));
+    client.send(json!({
+        "jsonrpc": "2.0", "method": "textDocument/didOpen",
+        "params": { "textDocument": { "uri": main_uri.clone(), "languageId": "nacre", "version": 1, "text": main_source } }
+    }));
+    assert!(
+        client.diagnostics(&main_uri)["diagnostics"].as_array().unwrap().is_empty(),
+        "the parent manifest initially includes both workspace sources"
+    );
+
+    client.send(json!({
+        "jsonrpc": "2.0", "method": "workspace/didChangeWorkspaceFolders",
+        "params": { "event": { "added": [{ "uri": uri(&workspace), "name": "workspace" }], "removed": [] } }
+    }));
+    assert!(
+        !client.diagnostics(&main_uri)["diagnostics"].as_array().unwrap().is_empty(),
+        "adding a workspace boundary excludes the ancestor project manifest"
+    );
+
+    client.send(json!({
+        "jsonrpc": "2.0", "method": "workspace/didChangeWorkspaceFolders",
+        "params": { "event": { "added": [], "removed": [{ "uri": uri(&workspace), "name": "workspace" }] } }
+    }));
+    assert!(
+        client.diagnostics(&main_uri)["diagnostics"].as_array().unwrap().is_empty(),
+        "removing the workspace boundary restores the ancestor project scope"
+    );
+
+    client.send(json!({ "jsonrpc": "2.0", "id": 2, "method": "shutdown" }));
+    assert!(client.response(2)["result"].is_null());
+    client.send(json!({ "jsonrpc": "2.0", "method": "exit" }));
+    client.finish();
+}
