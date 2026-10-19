@@ -3,6 +3,8 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Skip WebSocket method lookups when no WebSocket classes are present and reuse
+  the lazy native-method index for active implementation metadata.
 - Resolve HTTP codegen methods through the lazy native-method index instead of
   rescanning the function table, retaining the no-HTTP early return.
 - Gate DNS output with one allocation-free scan, then reuse the lazy index for

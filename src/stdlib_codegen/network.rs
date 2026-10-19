@@ -1,6 +1,6 @@
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
 use super::support::{
-    replace_method_ids, replace_placeholders, required_first_native_method,
+    first_native_method_if, replace_method_ids, replace_placeholders, required_first_native_method,
     required_indexed_native_method, result_id, template_section, variant_id,
 };
 
@@ -47,10 +47,7 @@ fn method_if<'a>(
     native_method_ids: &mut Option<t::NativeMethodIndex>,
     native: M,
 ) -> Option<&'a t::Function> {
-    let id = native_method_ids
-        .get_or_insert_with(|| t::NativeMethodIndex::new(program))
-        .get_first_by_method(native)?;
-    program.functions.get(id)
+    first_native_method_if(program, native_method_ids, native)
 }
 
 fn method_for_class<'a>(

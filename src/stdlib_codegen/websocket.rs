@@ -2,16 +2,29 @@ use crate::c_repr::ctype;
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
 use std::borrow::Cow;
 use super::support::{
-    has_placeholder, native_class_id, native_class_id_if, native_function_if,
-    replace_placeholders, result_id, template_section, variant, variant_id,
+    first_native_method_if, has_placeholder, native_class_id, native_class_id_if,
+    native_function_if, replace_placeholders, result_id, template_section, variant, variant_id,
 };
 
 fn method_if(program: &t::Program, native: M) -> Option<&t::Function> {
     native_function_if(program, |candidate| candidate == native)
 }
 
-fn method(program: &t::Program, native: M) -> &t::Function {
-    method_if(program, native).expect("native WebSocket dependency is present")
+fn indexed_method_if<'a>(
+    program: &'a t::Program,
+    native_method_ids: &mut Option<t::NativeMethodIndex>,
+    native: M,
+) -> Option<&'a t::Function> {
+    first_native_method_if(program, native_method_ids, native)
+}
+
+fn method<'a>(
+    program: &'a t::Program,
+    native_method_ids: &mut Option<t::NativeMethodIndex>,
+    native: M,
+) -> &'a t::Function {
+    indexed_method_if(program, native_method_ids, native)
+        .expect("native WebSocket dependency is present")
 }
 
 fn class_id_if(program: &t::Program, is: impl Fn(C) -> bool) -> Option<usize> {
@@ -161,21 +174,25 @@ pub(super) fn drop_fields(program: &t::Program, class: C) -> String {
     }
 }
 
-pub(super) fn implementation(program: &t::Program) -> String {
-    let connect = method_if(program, M::WebSocketConnect);
-    let connect_tls = method_if(program, M::WebSocketConnectTls);
-    let send_text = method_if(program, M::WebSocketSendText);
-    let send_binary = method_if(program, M::WebSocketSendBinary);
-    let ping = method_if(program, M::WebSocketPing);
-    let receive = method_if(program, M::WebSocketReceive);
-    let close = method_if(program, M::WebSocketClose);
-    let is_text = method_if(program, M::WebSocketMessageIsText);
-    let body = method_if(program, M::WebSocketMessageBody);
-    let as_text = method_if(program, M::WebSocketMessageAsText);
+pub(super) fn implementation(
+    program: &t::Program,
+    native_method_ids: &mut Option<t::NativeMethodIndex>,
+) -> String {
     let websocket = class_id_if(program, |native| matches!(native, C::WebSocket));
     let message = class_id_if(program, |native| matches!(native, C::WebSocketMessage));
 
     if websocket.is_none() && message.is_none() { return String::new(); }
+
+    let connect = indexed_method_if(program, native_method_ids, M::WebSocketConnect);
+    let connect_tls = indexed_method_if(program, native_method_ids, M::WebSocketConnectTls);
+    let send_text = indexed_method_if(program, native_method_ids, M::WebSocketSendText);
+    let send_binary = indexed_method_if(program, native_method_ids, M::WebSocketSendBinary);
+    let ping = indexed_method_if(program, native_method_ids, M::WebSocketPing);
+    let receive = indexed_method_if(program, native_method_ids, M::WebSocketReceive);
+    let close = indexed_method_if(program, native_method_ids, M::WebSocketClose);
+    let is_text = indexed_method_if(program, native_method_ids, M::WebSocketMessageIsText);
+    let body = indexed_method_if(program, native_method_ids, M::WebSocketMessageBody);
+    let as_text = indexed_method_if(program, native_method_ids, M::WebSocketMessageAsText);
     let has_ws_io = connect.is_some() || connect_tls.is_some() || send_text.is_some()
         || send_binary.is_some() || ping.is_some() || receive.is_some() || close.is_some();
     let has_message_methods = is_text.is_some() || body.is_some() || as_text.is_some();
@@ -307,13 +324,13 @@ pub(super) fn implementation(program: &t::Program) -> String {
         add(&mut replacements, "@CONNECT_CORE_RESULT_ID@", result_id(core_result));
         add(&mut replacements, "@CONNECT_CORE_OK_TAG@", variant_id(program, result_id(core_result), "Ok"));
 
-        let uri_scheme = method(program, M::UriScheme);
-        let uri_user_info = method(program, M::UriUserInfo);
-        let uri_host = method(program, M::UriHost);
-        let uri_path = method(program, M::UriPath);
-        let uri_port = method(program, M::UriPort);
-        let uri_query = method(program, M::UriQuery);
-        let uri_fragment = method(program, M::UriFragment);
+        let uri_scheme = method(program, native_method_ids, M::UriScheme);
+        let uri_user_info = method(program, native_method_ids, M::UriUserInfo);
+        let uri_host = method(program, native_method_ids, M::UriHost);
+        let uri_path = method(program, native_method_ids, M::UriPath);
+        let uri_port = method(program, native_method_ids, M::UriPort);
+        let uri_query = method(program, native_method_ids, M::UriQuery);
+        let uri_fragment = method(program, native_method_ids, M::UriFragment);
         let uri = uri_scheme.receiver.expect("Uri.scheme is an instance getter");
         let Type::Object(option_text) = uri_scheme.return_type else {
             unreachable!("Uri text getters return Option<Text>")
@@ -326,7 +343,7 @@ pub(super) fn implementation(program: &t::Program) -> String {
         let Type::Object(option_port) = port_ok.fields[0] else {
             unreachable!("Uri.port Ok payload is Option<int>")
         };
-        let resolver_result = result_id(method(program, M::SocketAddressResolve));
+        let resolver_result = result_id(method(program, native_method_ids, M::SocketAddressResolve));
         let resolver_ok_tag = variant_id(program, resolver_result, "Ok");
 
         add(&mut replacements, "@URI_TYPE@", ctype(program, Type::Object(uri)));

@@ -374,7 +374,7 @@ pub fn implementations(program: &t::Program) -> String {
     }
     out.push_str(&cryptokeys::implementation(program, &mut native_method_ids));
     out.push_str(&tls::implementation(program));
-    out.push_str(&websocket::implementation(program));
+    out.push_str(&websocket::implementation(program, &mut native_method_ids));
     out.push_str(&xml::shared_implementation(program));
     if let Some(xml) = xml::implementation(program, &mut native_method_ids) {
         out.push_str(&xml);

@@ -588,16 +588,23 @@ pub(super) fn required_indexed_native_method<'a>(
     }.unwrap_or_else(|| panic!("compiler-owned native method {method:?} is present"));
     program.functions.get(id).expect("native method index contains a valid function ID")
 }
+pub(super) fn first_native_method_if<'a>(
+    program: &'a t::Program,
+    native_method_ids: &mut Option<t::NativeMethodIndex>,
+    method: M,
+) -> Option<&'a t::Function> {
+    let id = native_method_ids
+        .get_or_insert_with(|| t::NativeMethodIndex::new(program))
+        .get_first_by_method(method)?;
+    Some(program.functions.get(id).expect("native method index contains a valid function ID"))
+}
 pub(super) fn required_first_native_method<'a>(
     program: &'a t::Program,
     native_method_ids: &mut Option<t::NativeMethodIndex>,
     method: M,
 ) -> &'a t::Function {
-    let id = native_method_ids
-        .get_or_insert_with(|| t::NativeMethodIndex::new(program))
-        .get_first_by_method(method)
-        .unwrap_or_else(|| panic!("compiler-owned native function is present"));
-    program.functions.get(id).expect("native method index contains a valid function ID")
+    first_native_method_if(program, native_method_ids, method)
+        .unwrap_or_else(|| panic!("compiler-owned native function is present"))
 }
 
 pub(super) fn native_function_if(program: &t::Program, is: impl Fn(M) -> bool) -> Option<&t::Function> {
