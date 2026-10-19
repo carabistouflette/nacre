@@ -569,6 +569,88 @@ fn lsp_reports_manifest_diagnostics_when_nacre_toml_is_invalid() {
     client.finish();
 }
 
+#[cfg(unix)]
+#[test]
+fn lsp_rejects_manifest_paths_through_symlinked_project_roots() {
+    let temp = TempDir::new();
+    let real = temp.0.join("real-project");
+    let source_dir = real.join("src");
+    fs::create_dir_all(&source_dir).unwrap();
+    let manifest_path = real.join("Nacre.toml");
+    fs::write(
+        &manifest_path,
+        "[package]\nname = 'demo'\nversion = '0.1.0'\nsources = ['src']\n",
+    )
+    .unwrap();
+    fs::write(source_dir.join("Main.ncr"), "void main() {}\n").unwrap();
+
+    let alias = temp.0.join("linked-project");
+    std::os::unix::fs::symlink(&real, &alias).unwrap();
+    let alias_manifest = alias.join("Nacre.toml");
+    let alias_source = alias.join("src/Main.ncr");
+    let mut client = Client::spawn();
+    client.send(json!({
+        "jsonrpc": "2.0", "id": 1, "method": "initialize",
+        "params": { "rootUri": uri(&alias), "capabilities": {} }
+    }));
+    client.response(1);
+    client.send(json!({ "jsonrpc": "2.0", "method": "initialized", "params": {} }));
+    client.send(json!({
+        "jsonrpc": "2.0", "method": "textDocument/didOpen",
+        "params": { "textDocument": { "uri": uri(&alias_source), "languageId": "nacre", "version": 1, "text": "void main() {}\n" } }
+    }));
+
+    let diagnostics = client.diagnostics(&uri(&alias_manifest));
+    let items = diagnostics["diagnostics"].as_array().expect("diagnostics array");
+    assert!(items.iter().any(|diagnostic| {
+        diagnostic["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("symbolic-link"))
+    }), "{items:?}");
+
+    client.send(json!({ "jsonrpc": "2.0", "id": 2, "method": "shutdown" }));
+    assert!(client.response(2)["result"].is_null());
+    client.send(json!({ "jsonrpc": "2.0", "method": "exit" }));
+    client.finish();
+}
+
+#[cfg(unix)]
+#[test]
+fn lsp_rejects_broken_manifest_symlinks() {
+    let temp = TempDir::new();
+    let source_dir = temp.0.join("src");
+    fs::create_dir_all(&source_dir).unwrap();
+    let manifest_path = temp.0.join("Nacre.toml");
+    std::os::unix::fs::symlink(temp.0.join("missing-manifest"), &manifest_path).unwrap();
+    let source_path = source_dir.join("Main.ncr");
+    fs::write(&source_path, "void main() {}\n").unwrap();
+
+    let mut client = Client::spawn();
+    client.send(json!({
+        "jsonrpc": "2.0", "id": 1, "method": "initialize",
+        "params": { "rootUri": uri(&temp.0), "capabilities": {} }
+    }));
+    client.response(1);
+    client.send(json!({ "jsonrpc": "2.0", "method": "initialized", "params": {} }));
+    client.send(json!({
+        "jsonrpc": "2.0", "method": "textDocument/didOpen",
+        "params": { "textDocument": { "uri": uri(&source_path), "languageId": "nacre", "version": 1, "text": "void main() {}\n" } }
+    }));
+
+    let diagnostics = client.diagnostics(&uri(&manifest_path));
+    let items = diagnostics["diagnostics"].as_array().expect("diagnostics array");
+    assert!(items.iter().any(|diagnostic| {
+        diagnostic["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("symbolic-link"))
+    }), "{items:?}");
+
+    client.send(json!({ "jsonrpc": "2.0", "id": 2, "method": "shutdown" }));
+    assert!(client.response(2)["result"].is_null());
+    client.send(json!({ "jsonrpc": "2.0", "method": "exit" }));
+    client.finish();
+}
+
 #[test]
 fn lsp_uses_unsaved_nacre_toml_overlays_and_reverts_on_close() {
     let temp = TempDir::new();

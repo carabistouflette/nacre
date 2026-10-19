@@ -461,6 +461,7 @@ impl PackageGraph {
         overlay: Option<&str>,
     ) -> Result<(), String> {
         if depth > 32 { return Err("package dependency nesting limit is 32".to_owned()); }
+        crate::manifest::reject_symlink_parent_components(path, "manifest")?;
         let exists = match fs::symlink_metadata(path) {
             Ok(metadata) => {
                 if metadata.file_type().is_symlink() {

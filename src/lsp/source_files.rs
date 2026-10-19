@@ -11,6 +11,14 @@ pub(super) fn is_project_config(path: &Path) -> bool {
     path.file_name().is_some_and(|name| name == "Nacre.toml" || name == "nacre.json")
 }
 
+pub(super) fn config_entry_exists(path: &Path) -> Result<bool, String> {
+    match fs::symlink_metadata(path) {
+        Ok(_) => Ok(true),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(format!("{}: {error}", path.display())),
+    }
+}
+
 pub(super) fn configured_source_roots(
     root: &Path,
     manifest_overlay: Option<&str>,
@@ -18,7 +26,7 @@ pub(super) fn configured_source_roots(
 ) -> Result<Vec<PathBuf>, String> {
     const MAX_CONFIG_BYTES: usize = 64 * 1024;
     let manifest = root.join("Nacre.toml");
-    if manifest.exists() || manifest_overlay.is_some() {
+    if config_entry_exists(&manifest)? || manifest_overlay.is_some() {
         return crate::project::manifest_source_roots(&manifest, manifest_overlay);
     }
     let config = root.join("nacre.json");

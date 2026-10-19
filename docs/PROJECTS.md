@@ -124,6 +124,8 @@ file to those roots; it does not select among multiple `main` declarations.
 Sources and entry paths must stay inside the package. Unknown keys, malformed
 TOML, unsupported dependency forms, and manifests larger than 1 MiB are errors.
 At least `[package]` or `[workspace]` is required.
+`Manifest::load` rejects symlinks in every component of its manifest path;
+`add_dependency` applies the same rule to its owner and target paths.
 
 Dependencies are local paths relative to the declaring manifest. Their table
 keys must match the target package names. Resolution visits dependencies before
@@ -145,6 +147,7 @@ A workspace may be virtual (no `[package]`) or also define its own package.
 Members are explicit local relative paths, not globs. Compiling the workspace
 combines its members; compile a member directory instead when members are
 independent executables with separate entry points.
+Workspace members cannot traverse symbolic-link components.
 
 `nacre add ../utilities` adds the dependency to `./Nacre.toml`;
 `--manifest-path path/to/Nacre.toml` selects another owning package. The supplied
@@ -204,6 +207,7 @@ as the compiler. Legacy `nacre.json` still accepts a non-empty `sources` array:
 Paths that are absolute or escape the project root are rejected. Symlinks are
 not followed. Legacy JSON source roots also reject symlinks in existing parent
 components, so a symlinked ancestor cannot redirect loading outside the project.
+Broken symlink project markers are rejected rather than treated as absent.
 The compiler's file, source-size, and directory-depth limits also apply to a
 project. Legacy JSON configuration must be a regular file and is limited to 64
 KiB; TOML manifests use the 1 MiB limit above.

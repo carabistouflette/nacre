@@ -18,8 +18,8 @@ mod diagnostics;
 use diagnostics::diagnostic_json;
 mod source_files;
 use source_files::{
-    configured_source_roots, is_project_config, source_root_contains, reject_symlink_path,
-    collect_recursive, read_source,
+    config_entry_exists, configured_source_roots, is_project_config, source_root_contains,
+    reject_symlink_path, collect_recursive, read_source,
 };
 mod queries;
 
@@ -452,9 +452,11 @@ impl Server {
                 }
                 let manifest_path = scope.root.join("Nacre.toml");
                 let legacy_path = scope.root.join("nacre.json");
-                let config_path = if manifest_path.exists() || self.documents.contains_key(&manifest_path) {
+                let config_path = if config_entry_exists(&manifest_path).unwrap_or(true)
+                    || self.documents.contains_key(&manifest_path) {
                     Some(manifest_path)
-                } else if legacy_path.exists() || self.documents.contains_key(&legacy_path) {
+                } else if config_entry_exists(&legacy_path).unwrap_or(true)
+                    || self.documents.contains_key(&legacy_path) {
                     Some(legacy_path)
                 } else {
                     None
@@ -536,7 +538,7 @@ impl Server {
             let legacy_path = scope.root.join("nacre.json");
             let manifest_document = self.documents.get(&manifest_path);
             let legacy_document = self.documents.get(&legacy_path);
-            if manifest_path.exists() || manifest_document.is_some() {
+            if config_entry_exists(&manifest_path)? || manifest_document.is_some() {
                 if manifest_document.is_some_and(|document| document.text.is_none()) {
                     return Err(format!("{} exceeds the {MAX_SOURCE_BYTES}-byte project configuration limit", manifest_path.display()));
                 }
@@ -629,8 +631,11 @@ impl Server {
             let Some(dir) = current else { break; };
             let manifest = dir.join("Nacre.toml");
             let legacy = dir.join("nacre.json");
-            if manifest.is_file() || legacy.is_file()
-                || self.documents.contains_key(&manifest) || self.documents.contains_key(&legacy) {
+            let has_marker = config_entry_exists(&manifest).unwrap_or(true)
+                || config_entry_exists(&legacy).unwrap_or(true)
+                || self.documents.contains_key(&manifest)
+                || self.documents.contains_key(&legacy);
+            if has_marker {
                 return ProjectScope { root: dir.to_owned(), has_marker: true };
             }
             if boundary == Some(dir) { break; }

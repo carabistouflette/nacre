@@ -45,6 +45,19 @@ fn workspace_selects_members_not_unlisted_neighbor_sources() {
     SourceBundle::from_paths(std::slice::from_ref(&t.0)).unwrap().validate().unwrap();
 }
 
+#[cfg(unix)]
+#[test]
+fn workspace_members_cannot_traverse_symlinked_directories() {
+    let t = Temp::new();
+    let app = t.package("app", "app", "", "void main(){}");
+    let alias = t.0.join("linked-app");
+    std::os::unix::fs::symlink(&app, &alias).unwrap();
+    fs::write(t.0.join("Nacre.toml"), "[workspace]\nmembers = ['linked-app']\n").unwrap();
+
+    let error = resolve_inputs(std::slice::from_ref(&t.0)).unwrap_err();
+    assert!(error.contains("symbolic-link"), "{error}");
+}
+
 #[test]
 fn package_cycles_are_rejected_before_frontend_loading() {
     let t = Temp::new();
@@ -148,6 +161,9 @@ fn manifest_apis_reject_symlinks_and_nonregular_files() {
     let alias = t.0.join("linked.toml");
     std::os::unix::fs::symlink(app.join("Nacre.toml"), &alias).unwrap();
     assert!(nacre::manifest::Manifest::load(&alias).is_err());
+    let linked_directory = t.0.join("linked-directory");
+    std::os::unix::fs::symlink(&app, &linked_directory).unwrap();
+    assert!(nacre::manifest::Manifest::load(&linked_directory.join("Nacre.toml")).is_err());
     let helper = t.package("helper", "helper", "", "public int answer(){return 42;}");
     let original = fs::read(app.join("Nacre.toml")).unwrap();
     assert!(nacre::manifest::add_dependency(&alias, &helper).is_err());

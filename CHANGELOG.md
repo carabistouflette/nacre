@@ -34,6 +34,12 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 - Reject package dependencies reached through symlinked path components, not
   only symlink target entries.
 
+- Reject symlinked parent components in direct manifest reads and package-graph
+  resolution, including workspace members and LSP project roots.
+
+- Reject broken project-marker symlinks during LSP scope discovery instead of
+  treating them as missing.
+
 - Encode scaffold package names reversibly from destination basenames, so
   distinct punctuation and non-UTF-8 paths cannot collapse to one package ID.
 

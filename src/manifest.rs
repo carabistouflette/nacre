@@ -109,7 +109,7 @@ pub struct Profile {
 }
 
 impl Manifest {
-    /// Load and validate a Nacre TOML manifest.
+    /// Load and validate a Nacre TOML manifest, rejecting symlink path components.
     pub fn load(path: &Path) -> Result<Self, String> {
         Self::load_with_size(path).map(|(manifest, _)| manifest)
     }
@@ -140,6 +140,7 @@ impl Manifest {
 /// `dependency_path` may name a project directory or its `Nacre.toml`; relative
 /// paths are interpreted from the process working directory. The resulting
 /// dependency path is stored relative to the owning manifest's directory.
+/// The owner and dependency paths must not traverse symbolic links.
 pub fn add_dependency(manifest_path: &Path, dependency_path: &Path) -> Result<String, String> {
     let owner_contents = read_manifest(manifest_path)?;
     let owner_file = fs::canonicalize(manifest_path).map_err(|error| {
@@ -363,6 +364,7 @@ impl RawProfile {
 }
 
 fn read_manifest(path: &Path) -> Result<String, String> {
+    reject_symlink_parent_components(path, "manifest")?;
     let metadata = fs::symlink_metadata(path)
         .map_err(|error| path_error(path, format!("cannot inspect manifest: {error}")))?;
     if !metadata.is_file() || metadata.file_type().is_symlink() {
@@ -572,6 +574,14 @@ pub(crate) fn reject_symlink_components(path: &Path, label: &str) -> Result<(), 
         }
     }
     Ok(())
+}
+
+pub(crate) fn reject_symlink_parent_components(path: &Path, label: &str) -> Result<(), String> {
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    reject_symlink_components(parent, label)
 }
 
 fn resolve_project(path: &Path) -> Result<(PathBuf, PathBuf), String> {
