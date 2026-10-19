@@ -818,3 +818,51 @@ void main() {{
         assert!(stdout.contains("server-handshake-rejected\n"), "{stdout}");
     }
 }
+
+#[test]
+fn websocket_rejects_mismatched_upgrade_accept() {
+    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let port = listener.local_addr().unwrap().port().to_string();
+    let server = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        stream.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+        stream.set_write_timeout(Some(Duration::from_secs(5))).unwrap();
+        let request = read_http_headers(&mut stream).unwrap();
+        assert!(request.starts_with("GET /secure HTTP/1.1\r\n"), "{request}");
+        let key = request.lines().find_map(|line| {
+            let (name, value) = line.split_once(':')?;
+            name.eq_ignore_ascii_case("Sec-WebSocket-Key").then(|| value.trim().to_owned())
+        }).expect("Sec-WebSocket-Key");
+        let mut accept = websocket_accept(&key).into_bytes();
+        accept[0] = if accept[0] == b'A' { b'B' } else { b'A' };
+        write!(
+            stream,
+            "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {}\r\n\r\n",
+            String::from_utf8(accept).unwrap(),
+        ).unwrap();
+        stream.flush().unwrap();
+    });
+    let program = compile(r#"
+void main() {
+    match (Args.get(0)) {
+        Err(error) { println("argument-error"); }
+        Ok(port) {
+            Text address = new Text("ws://127.0.0.1:");
+            address.appendText(port);
+            address.append("/secure");
+            match (Uri.parse(address)) {
+                Err(error) { println("uri-error"); }
+                Ok(uri) {
+                    match (WebSocket.connect(uri, 5000L, 64L)) {
+                        Err(error) { println("upgrade-rejected"); }
+                        Ok(socket) { println("UNEXPECTED_ACCEPT"); }
+                    }
+                }
+            }
+        }
+    }
+}
+"#);
+    assert_eq!(run(&program, &[&port]), "upgrade-rejected\n");
+    server.join().unwrap();
+}
