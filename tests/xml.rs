@@ -1,7 +1,10 @@
 mod support;
 
 use nacre::native;
-use std::process::Output;
+use std::net::TcpListener;
+use std::process::{Command, Output};
+use std::thread;
+use std::time::{Duration, Instant};
 
 fn execute(source: &str) -> Output {
     support::compile(source, &["-DNACRE_MEMORY_STATS"])
@@ -1152,5 +1155,51 @@ void main() { match (exercise()) { Ok(unit) {} Err(error) { error.print(); } } }
     let output = execute(source);
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     assert_eq!(output.stdout, b"true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n");
+    assert_memory_balanced(&output);
+}
+
+#[test]
+fn xml_reader_never_fetches_external_dtds() {
+    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let source = format!(
+        r#"
+void main() {{
+    Text xml = new Text("<!DOCTYPE root SYSTEM 'http://127.0.0.1:{port}/blocked.dtd'><root/>");
+    match (XmlReader.fromText(xml)) {{
+        Err(error) {{ println("reader-create-error"); }}
+        Ok(reader) {{
+            match (reader.read()) {{
+                Err(error) {{ println("external-dtd-rejected"); }}
+                Ok(next) {{ println("external-dtd-accepted"); }}
+            }}
+        }}
+    }}
+}}
+"#,
+    );
+    let program = support::compile(&source, &["-DNACRE_MEMORY_STATS"])
+        .unwrap_or_else(|error| panic!("native compile failed: {error}"));
+    let monitor = thread::spawn(move || {
+        let deadline = Instant::now() + Duration::from_millis(500);
+        loop {
+            match listener.accept() {
+                Ok((stream, _)) => {
+                    drop(stream);
+                    return true;
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    if Instant::now() >= deadline { return false; }
+                    thread::sleep(Duration::from_millis(2));
+                }
+                Err(error) => panic!("XML DTD monitor accept failed: {error}"),
+            }
+        }
+    });
+    let output = Command::new(program.path()).output().unwrap();
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert_eq!(output.stdout, b"external-dtd-rejected\n");
+    assert!(!monitor.join().unwrap(), "XML reader attempted to fetch the external DTD");
     assert_memory_balanced(&output);
 }
