@@ -215,7 +215,13 @@ function filterItems() {
     if !classes.is_empty() {
         html.push_str("<section><h3>Classes</h3>");
         for (c, _) in &classes {
-            html.push_str(&format!("<a href=\"#{}\">{}</a>", c.name, c.name));
+            let name = qualified_item_name(program, c.unit, &c.name);
+            let anchor = documentation_item_id("class", &name);
+            html.push_str(&format!(
+                "<a href=\"#{}\">{}</a>",
+                escape_html(&anchor),
+                escape_html(&name)
+            ));
         }
         html.push_str("</section>");
     }
@@ -223,7 +229,13 @@ function filterItems() {
     if !interfaces.is_empty() {
         html.push_str("<section><h3>Interfaces</h3>");
         for (i, _) in &interfaces {
-            html.push_str(&format!("<a href=\"#{}\">{}</a>", i.name, i.name));
+            let name = qualified_item_name(program, i.unit, &i.name);
+            let anchor = documentation_item_id("interface", &name);
+            html.push_str(&format!(
+                "<a href=\"#{}\">{}</a>",
+                escape_html(&anchor),
+                escape_html(&name)
+            ));
         }
         html.push_str("</section>");
     }
@@ -231,7 +243,13 @@ function filterItems() {
     if !enums.is_empty() {
         html.push_str("<section><h3>Enums</h3>");
         for (e, _) in &enums {
-            html.push_str(&format!("<a href=\"#{}\">{}</a>", e.name, e.name));
+            let name = qualified_item_name(program, e.unit, &e.name);
+            let anchor = documentation_item_id("enum", &name);
+            html.push_str(&format!(
+                "<a href=\"#{}\">{}</a>",
+                escape_html(&anchor),
+                escape_html(&name)
+            ));
         }
         html.push_str("</section>");
     }
@@ -239,7 +257,13 @@ function filterItems() {
     if !functions.is_empty() {
         html.push_str("<section><h3>Functions</h3>");
         for (f, _) in &functions {
-            html.push_str(&format!("<a href=\"#{}\">{}</a>", f.name, f.name));
+            let name = qualified_item_name(program, f.unit, &f.name);
+            let anchor = documentation_item_id("function", &name);
+            html.push_str(&format!(
+                "<a href=\"#{}\">{}</a>",
+                escape_html(&anchor),
+                escape_html(&name)
+            ));
         }
         html.push_str("</section>");
     }
@@ -256,8 +280,16 @@ function filterItems() {
 
     // Classes section
     for (class, doc) in &classes {
-        html.push_str(&format!("<div class=\"card\" id=\"{}\">", class.name));
-        html.push_str(&format!("<h3><span class=\"badge\">class</span> {}</h3>", class.name));
+        let name = qualified_item_name(program, class.unit, &class.name);
+        let anchor = documentation_item_id("class", &name);
+        html.push_str(&format!(
+            "<div class=\"card\" id=\"{}\">",
+            escape_html(&anchor)
+        ));
+        html.push_str(&format!(
+            "<h3><span class=\"badge\">class</span> {}</h3>",
+            escape_html(&name)
+        ));
 
         let mut sig = format!("class {}", class.name);
         if !class.type_params.is_empty() {
@@ -306,9 +338,20 @@ function filterItems() {
 
     // Interfaces section
     for (iface, doc) in &interfaces {
-        html.push_str(&format!("<div class=\"card\" id=\"{}\">", iface.name));
-        html.push_str(&format!("<h3><span class=\"badge interface\">interface</span> {}</h3>", iface.name));
-        html.push_str(&format!("<div class=\"signature\">interface {}</div>", iface.name));
+        let name = qualified_item_name(program, iface.unit, &iface.name);
+        let anchor = documentation_item_id("interface", &name);
+        html.push_str(&format!(
+            "<div class=\"card\" id=\"{}\">",
+            escape_html(&anchor)
+        ));
+        html.push_str(&format!(
+            "<h3><span class=\"badge interface\">interface</span> {}</h3>",
+            escape_html(&name)
+        ));
+        html.push_str(&format!(
+            "<div class=\"signature\">interface {}</div>",
+            escape_html(&iface.name)
+        ));
 
         if let Some(doc_str) = doc {
             html.push_str(&format!("<div class=\"docstring\">{}</div>", render_markdown(doc_str)));
@@ -334,9 +377,20 @@ function filterItems() {
 
     // Enums section
     for (en, doc) in &enums {
-        html.push_str(&format!("<div class=\"card\" id=\"{}\">", en.name));
-        html.push_str(&format!("<h3><span class=\"badge enum\">enum</span> {}</h3>", en.name));
-        html.push_str(&format!("<div class=\"signature\">enum {}</div>", en.name));
+        let name = qualified_item_name(program, en.unit, &en.name);
+        let anchor = documentation_item_id("enum", &name);
+        html.push_str(&format!(
+            "<div class=\"card\" id=\"{}\">",
+            escape_html(&anchor)
+        ));
+        html.push_str(&format!(
+            "<h3><span class=\"badge enum\">enum</span> {}</h3>",
+            escape_html(&name)
+        ));
+        html.push_str(&format!(
+            "<div class=\"signature\">enum {}</div>",
+            escape_html(&en.name)
+        ));
 
         if let Some(doc_str) = doc {
             html.push_str(&format!("<div class=\"docstring\">{}</div>", render_markdown(doc_str)));
@@ -357,8 +411,16 @@ function filterItems() {
 
     // Free functions
     for (func, doc) in &functions {
-        html.push_str(&format!("<div class=\"card\" id=\"{}\">", func.name));
-        html.push_str(&format!("<h3><span class=\"badge fn\">fn</span> {}</h3>", func.name));
+        let name = qualified_item_name(program, func.unit, &func.name);
+        let anchor = documentation_item_id("function", &name);
+        html.push_str(&format!(
+            "<div class=\"card\" id=\"{}\">",
+            escape_html(&anchor)
+        ));
+        html.push_str(&format!(
+            "<h3><span class=\"badge fn\">fn</span> {}</h3>",
+            escape_html(&name)
+        ));
         html.push_str(&format!("<div class=\"signature\">{}</div>", escape_html(&format_function_signature(func))));
 
         if let Some(doc_str) = doc {
@@ -369,6 +431,16 @@ function filterItems() {
 
     html.push_str("</main></body></html>\n");
     html
+}
+fn qualified_item_name(program: &Program, unit: usize, name: &str) -> String {
+    match program.units.get(unit).map(|source| source.module.as_str()) {
+        Some(module) if !module.is_empty() => format!("{module}::{name}"),
+        _ => name.to_owned(),
+    }
+}
+
+fn documentation_item_id(kind: &str, name: &str) -> String {
+    format!("{kind}-{name}")
 }
 
 pub(crate) fn format_function_signature(f: &Function) -> String {
