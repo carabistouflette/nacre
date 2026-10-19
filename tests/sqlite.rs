@@ -785,3 +785,51 @@ void main() {
     let output = run_memory(source);
     assert_eq!(output.stdout, b"INVALID_UTF8_REJECTED\ntrue\ntrue\n");
 }
+
+#[test]
+fn sqlite_failed_step_requires_reset_and_statement_remains_reusable() {
+    let output = run_memory(r#"
+boolean boolFailed(Result<boolean, Text> result) {
+    match (result) { Ok(value) { return false; } Err(error) { return true; } }
+}
+boolean unitFailed(Result<Unit, Text> result) {
+    match (result) { Ok(unit) { return false; } Err(error) { return true; } }
+}
+boolean optionLongEquals(Option<long> option, long expected) {
+    match (option) { Some(value) { return value == expected; } None { return false; } }
+}
+Result<Unit, Text> exercise() {
+    Text memory = new Text(":memory:");
+    Database database = Database.open(memory)?;
+    Text schema = new Text("CREATE TABLE unique_values(value INTEGER UNIQUE)");
+    database.execute(schema)?;
+    Text insert = new Text("INSERT INTO unique_values VALUES(?)");
+    SqlStatement statement = database.prepare(insert)?;
+    statement.bindLong(1, 1L)?;
+    println(!statement.step()?);
+    println(!statement.step()?);
+    statement.reset()?;
+    statement.bindLong(1, 1L)?;
+    println(boolFailed(statement.step()));
+    println(boolFailed(statement.step()));
+    println(unitFailed(statement.reset()));
+    statement.bindLong(1, 2L)?;
+    println(!statement.step()?);
+    Text query = new Text("SELECT value FROM unique_values ORDER BY value");
+    SqlStatement rows = database.prepare(query)?;
+    println(rows.step()?);
+    println(optionLongEquals(rows.columnLong(0)?, 1L));
+    println(rows.step()?);
+    println(optionLongEquals(rows.columnLong(0)?, 2L));
+    println(!rows.step()?);
+    statement.close()?;
+    rows.close()?;
+    database.close()?;
+    return new Result<Unit, Text>.Ok(());
+}
+void main() {
+    match (exercise()) { Ok(unit) {} Err(error) { error.print(); } }
+}
+"#);
+    assert_eq!(output.stdout, b"true\n".repeat(11));
+}
