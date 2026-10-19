@@ -349,8 +349,11 @@ Named external libraries are content-hashed when they resolve in explicit `-L`
 or `LIBRARY_PATH` paths. Libraries found only through compiler defaults, opaque
 linker options, linker scripts, thin archives, and direct file inputs bypass
 this executable cache.
-The cache defaults to `$XDG_CACHE_HOME/nacre` (or `$HOME/.cache/nacre`);
-`NACRE_CACHE_DIR` overrides the location and `NACRE_NO_CACHE` disables caching.
+The cache defaults to a nonempty `$XDG_CACHE_HOME/nacre`, falling back to a
+nonempty `$HOME/.cache/nacre`; empty path values are ignored. A nonempty
+`NACRE_CACHE_DIR` overrides the location, and `NACRE_NO_CACHE` disables
+caching.
+If no nonempty cache location exists, caching is disabled.
 PGO builds bypass the cache. Direct native builds use a separate runtime-bitcode
 cache only; their user LLVM module and final executable are not cached.
 

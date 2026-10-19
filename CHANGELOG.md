@@ -3,6 +3,10 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Ignore empty `NACRE_CACHE_DIR`, `XDG_CACHE_HOME`, and `HOME` values when
+  resolving cache locations rather than writing artifacts in the current
+  directory.
+
 - Hash compiler environment settings in native C cache keys to prevent stale
   executables when SDK, deployment-target, or override options change.
 

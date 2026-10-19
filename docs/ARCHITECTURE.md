@@ -275,11 +275,14 @@ includes compiler/linker identities and versions, target, runtime source,
 compilation flags and environment, and resolved dependency paths and contents.
 Each cache lookup rescans dependencies; incomplete or over-limit scans bypass
 caching. Changed included-file contents therefore cannot reuse stale runtime
-bitcode. The cache defaults to
-`$XDG_CACHE_HOME/nacre` (or `$HOME/.cache/nacre`), `NACRE_CACHE_DIR` overrides
-that location, and `NACRE_NO_CACHE` disables it. PGO builds bypass runtime-bitcode
-caching. Direct native builds retain the selected optimization and native/link
-options, including `--native`, `--lto`, `--jemalloc`, and sanitizer flags.
+bitcode.
+The cache defaults to a nonempty `$XDG_CACHE_HOME/nacre`, falling back to a
+nonempty `$HOME/.cache/nacre`; empty path values are ignored. A nonempty
+`NACRE_CACHE_DIR` overrides the location, and `NACRE_NO_CACHE` disables it.
+Without a nonempty cache location, runtime-bitcode caching is disabled.
+PGO builds bypass runtime-bitcode caching. Direct native builds retain the
+selected optimization and native/link options, including `--native`, `--lto`,
+`--jemalloc`, and sanitizer flags.
 
 Rust consumers can call `nacre::emit_llvm_direct`,
 `nacre::compile_llvm_direct`, `nacre::compile_llvm_direct_with_flags`, and

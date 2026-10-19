@@ -671,3 +671,85 @@ fn c_cache_invalidates_for_changed_clang_config_file() {
     fs::write(&config, "-DVALUE=4\n").unwrap();
     run_probe("4");
 }
+
+#[test]
+fn c_cache_empty_path_probe_child() {
+    if std::env::var_os("NACRE_CACHE_EMPTY_PATH_PROBE_CHILD").is_none() { return; }
+    let program = native::compile_c_optimized("int main(void) { return 0; }\n", "-O0", &[]).unwrap();
+    let output = program.output().unwrap();
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+}
+
+#[test]
+fn c_cache_ignores_empty_location_environment_variables() {
+    let temp = TestDir::new();
+    let executable = std::env::current_exe().unwrap();
+    let run_probe = |label: &str,
+                     cache_override: Option<&str>,
+                     xdg_value: &str,
+                     home_value: Option<&str>,
+                     expected_cache: Option<&Path>| {
+        let home = temp.path(&format!("{label}-home"));
+        let working = temp.path(&format!("{label}-work"));
+        fs::create_dir(&home).unwrap();
+        fs::create_dir(&working).unwrap();
+
+        let mut command = Command::new(&executable);
+        command.args(["--exact", "c_cache_empty_path_probe_child", "--nocapture"])
+            .env("NACRE_CACHE_EMPTY_PATH_PROBE_CHILD", "1")
+            .env("NACRE_ENABLE_TEST_CACHE", "1")
+            .env("HOME", &home)
+            .env("XDG_CACHE_HOME", xdg_value)
+            .env_remove("NACRE_NO_CACHE")
+            .current_dir(&working);
+        if let Some(home_value) = home_value {
+            command.env("HOME", home_value);
+        }
+        if let Some(cache_override) = cache_override {
+            command.env("NACRE_CACHE_DIR", cache_override);
+        } else {
+            command.env_remove("NACRE_CACHE_DIR");
+        }
+        let output = command.output().unwrap();
+        assert!(
+            output.status.success(),
+            "empty-cache-path probe failed\nstdout: {}\nstderr: {}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+        );
+        assert_eq!(
+            fs::read_dir(&working).unwrap().count(),
+            0,
+            "empty cache settings must not write cache files under the working directory",
+        );
+        if let Some(expected_cache) = expected_cache {
+            assert!(
+                expected_cache.is_dir(),
+                "expected cache at {}",
+                expected_cache.display(),
+            );
+        }
+    };
+
+    let xdg_home = temp.path("empty-xdg-home");
+    run_probe(
+        "empty-xdg",
+        None,
+        "",
+        None,
+        Some(&xdg_home.join(".cache/nacre")),
+    );
+
+    let override_home = temp.path("empty-override-home");
+    let xdg_home = override_home.join("xdg");
+    run_probe(
+        "empty-override",
+        Some(""),
+        xdg_home.to_str().unwrap(),
+        None,
+        Some(&xdg_home.join("nacre")),
+    );
+
+    run_probe("empty-home", None, "", Some(""), None);
+
+}

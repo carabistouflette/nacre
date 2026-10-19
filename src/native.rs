@@ -284,13 +284,18 @@ fn cache_dir() -> Option<PathBuf> {
     if env::var_os("NACRE_NO_CACHE").is_some() || (env::var_os("CARGO_MANIFEST_DIR").is_some() && env::var_os("NACRE_ENABLE_TEST_CACHE").is_none()) {
         return None;
     }
-    if let Some(dir) = env::var_os("NACRE_CACHE_DIR") {
+    if let Some(dir) = env::var_os("NACRE_CACHE_DIR").filter(|dir| !dir.is_empty()) {
         return Some(PathBuf::from(dir));
     }
     env::var_os("XDG_CACHE_HOME")
+        .filter(|dir| !dir.is_empty())
         .map(PathBuf::from)
-        .or_else(|| env::var_os("HOME").map(|h| PathBuf::from(h).join(".cache")))
-        .map(|p| p.join("nacre"))
+        .or_else(|| {
+            env::var_os("HOME")
+                .filter(|home| !home.is_empty())
+                .map(|home| PathBuf::from(home).join(".cache"))
+        })
+        .map(|path| path.join("nacre"))
 }
 
 fn append_identity_part(identity: &mut Vec<u8>, part: &[u8]) {
