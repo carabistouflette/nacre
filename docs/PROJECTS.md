@@ -128,7 +128,8 @@ At least `[package]` or `[workspace]` is required.
 Dependencies are local paths relative to the declaring manifest. Their table
 keys must match the target package names. Resolution visits dependencies before
 consumers, loads a shared dependency once, and rejects cycles or one package name
-resolving to different roots. Registry, Git, and version-based dependency
+resolving to different roots. Target project directories and `Nacre.toml` files
+must not themselves be symlinks. Registry, Git, and version-based dependency
 resolution are not supported. Package names do not create language namespaces:
 use `module` and `import` declarations. All selected files form one program with
 one entry point, subject to the existing source limits. Graphs are bounded to

@@ -150,3 +150,18 @@ fn add_dependency_rejects_symlinked_target_manifests() {
     assert!(nacre::manifest::add_dependency(&owner, &linked_project).is_err());
     assert_eq!(fs::read(&owner).unwrap(), original);
 }
+
+#[cfg(unix)]
+#[test]
+fn add_dependency_rejects_symlinked_project_directories() {
+    let t = Temp::new();
+    let app = t.package("app", "app", "", "void main(){}");
+    let helper = t.package("helper", "helper", "", "public int answer(){return 42;}");
+    let owner = app.join("Nacre.toml");
+    let original = fs::read(&owner).unwrap();
+    let alias = t.0.join("linked-helper");
+    std::os::unix::fs::symlink(&helper, &alias).unwrap();
+
+    assert!(nacre::manifest::add_dependency(&owner, &alias).is_err());
+    assert_eq!(fs::read(&owner).unwrap(), original);
+}

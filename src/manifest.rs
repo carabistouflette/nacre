@@ -559,17 +559,17 @@ fn resolve_project(path: &Path) -> Result<(PathBuf, PathBuf), String> {
     };
     let requested_metadata = fs::symlink_metadata(&requested)
         .map_err(|error| path_error(path, format!("cannot inspect dependency path: {error}")))?;
+    if requested_metadata.file_type().is_symlink() {
+        return Err(path_error(
+            path,
+            "dependency path must not be a symbolic link",
+        ));
+    }
     let canonical = fs::canonicalize(&requested)
         .map_err(|error| path_error(path, format!("cannot resolve dependency path: {error}")))?;
     let (manifest, root) = if canonical.is_dir() {
         (canonical.join("Nacre.toml"), canonical)
     } else {
-        if requested_metadata.file_type().is_symlink() {
-            return Err(path_error(
-                path,
-                "manifest must be a regular file, not a symbolic link",
-            ));
-        }
         if canonical.file_name().and_then(|name| name.to_str()) != Some("Nacre.toml") {
             return Err(path_error(
                 path,
