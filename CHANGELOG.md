@@ -3,6 +3,8 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Match trait bounds for specialized arguments against implementations attached
+  to their generic class templates.
 - Avoid copying the full ownership-state vector for transfers that leave the
   state unchanged.
 - Avoid re-canonicalizing resolved dependency manifests during cycle checks.

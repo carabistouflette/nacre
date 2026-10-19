@@ -128,12 +128,16 @@ pub fn expand(mut program: a::Program) -> Result<(a::Program, Vec<String>), Diag
                     Type::Named(n) => n.as_str(),
                     _ => "",
                 };
+                // Implementations target generic templates, not their specialized names.
+                let template_name = arg_name.split_once('<').map_or(arg_name, |(name, _)| name);
                 let trait_impls = implemented_traits.get_or_insert_with(|| {
                     program.impls.iter()
                         .map(|imp| (imp.trait_name.as_str(), imp.target_class.as_str()))
                         .collect()
                 });
-                let satisfies = trait_impls.contains(&(trait_name.as_str(), arg_name));
+                let satisfies = trait_impls.contains(&(trait_name.as_str(), arg_name))
+                    || (template_name != arg_name
+                        && trait_impls.contains(&(trait_name.as_str(), template_name)));
                 if !satisfies {
                     return Err(Diagnostic::new(
                         request.span,

@@ -153,6 +153,23 @@ fn public_trait_import_wins_over_private_match() {
 }
 
 #[test]
+fn generic_bound_accepts_specialized_generic_class() {
+    let model = "module model; public trait Marker {} public class Item<T> {} impl Marker for Item {} public class Other<T> {} public class Holder<T: Marker> {}";
+    let accepted = bundle(&[
+        ("model.ncr", model),
+        ("main.ncr", "module app; import model.*; void main() { Holder<Item<int>> holder = new Holder<Item<int>>(); }"),
+    ]);
+    accepted.validate().unwrap();
+
+    let rejected = bundle(&[
+        ("model.ncr", model),
+        ("main.ncr", "module app; import model.*; void main() { Holder<Other<int>> holder = new Holder<Other<int>>(); }"),
+    ]);
+    let error = rejected.validate().unwrap_err();
+    assert!(error.message.contains("does not satisfy trait bound"), "{error}");
+}
+
+#[test]
 fn declarations_are_unique_within_a_module_but_isolated_between_modules() {
     let duplicate = bundle(&[
         ("one.ncr", "module first.types; public class Item {}"),

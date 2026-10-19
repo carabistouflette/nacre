@@ -70,8 +70,10 @@ void main() {}
 `Example<int>` is compatible with the return type; `Example<boolean>` is not.
 Operations and interface contracts are checked after substituting the concrete
 type. A declared trait bound requires a matching `impl` for that concrete type.
-The bound resolves in the template's source module, then the root module, then
-its imports. Private traits are usable only within their declaring module.
+An implementation attached to a generic class template also satisfies the bound
+for each specialization of that class. The bound resolves in the template's
+source module, then the root module, then its imports. Private traits are usable
+only within their declaring module.
 Matching uses module-qualified trait identity, so a same-named trait from
 another module cannot satisfy the bound.
 
