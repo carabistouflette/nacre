@@ -3,6 +3,8 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Resolve UUID method bindings through the lazy index and reuse resolved functions
+  for signatures instead of rescanning Program.functions.
 - Detect Process feature groups in one allocation-free function pass, then reuse
   the lazy method index for native method metadata.
 - Resolve URI methods through the shared lazy index and reuse the current
