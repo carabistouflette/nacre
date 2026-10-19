@@ -59,6 +59,9 @@ boolean unitOk(Result<Unit, Text> result) {
 boolean unitError(Result<Unit, Text> result) {
     match (result) { Ok(value) { return false; } Err(error) { return true; } }
 }
+boolean booleanError(Result<boolean, Text> result) {
+    match (result) { Err(error) { return true; } Ok(value) { return false; } }
+}
 boolean byteBufferError(Result<ByteBuffer, Text> result) {
     match (result) { Ok(value) { return false; } Err(error) { return true; } }
 }
@@ -866,6 +869,40 @@ void main() {{
                     println(unitError(verifyCertificate(certificate, "www.example.test", caFile, 1800000000L)));
                     println(unitOk(verifyCertificate(certificate, "api.full.example.test", caFile, 1800000000L)));
                     println(unitError(verifyCertificate(certificate, "a.api.full.example.test", caFile, 1800000000L)));
+                }}
+            }}
+        }}
+    }}
+}}
+"#,
+        nacre_literal(CERTIFICATE),
+        nacre_literal(ca_path),
+    );
+    assert_native(&source, b"true\ntrue\ntrue\ntrue\ntrue\ntrue\n");
+}
+
+#[test]
+fn certificates_normalize_idna_hosts_and_reject_ambiguous_numeric_hosts() {
+    const CERTIFICATE: &str = include_str!("fixtures/crypto_idna_host.pem");
+    let ca_path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/crypto_idna_host.pem"
+    );
+    let source = format!(
+        r#"{HELPERS}
+void main() {{
+    match (parseCertificate({})) {{
+        Err(error) {{ println(false); println(false); println(false); println(false); println(false); println(false); }}
+        Ok(certificate) {{
+            println(booleanResultIs(certificateMatchesHost(certificate, "Bücher.Example"), true));
+            println(booleanResultIs(certificateMatchesHost(certificate, "xn--bcher-kva.example"), true));
+            match (Path.fromText(new Text({}))) {{
+                Err(error) {{ println(false); println(false); println(false); println(false); }}
+                Ok(caFile) {{
+                    println(unitOk(verifyCertificate(certificate, "Bücher.Example", caFile, 1800000000L)));
+                    println(unitOk(verifyCertificate(certificate, "xn--bcher-kva.example", caFile, 1800000000L)));
+                    println(booleanError(certificateMatchesHost(certificate, "0177.0.0.1")));
+                    println(unitError(verifyCertificate(certificate, "0177.0.0.1", caFile, 1800000000L)));
                 }}
             }}
         }}

@@ -297,6 +297,8 @@ fn append_body(
 pub fn implementations(program: &t::Program) -> String {
     let mut native_method_ids = None;
     let mut out = String::new();
+    let certificate_host_needs_idna = program.functions.iter().any(|function| matches!(function.native,
+        Some(t::NativeMethod::CertificateMatchesHost | t::NativeMethod::CertificateVerify)));
     out.push_str(&monotonic::implementation());
     out.push('\n');
     if let Some(text) = support::text_class(program) {
@@ -307,6 +309,9 @@ pub fn implementations(program: &t::Program) -> String {
         out.push('\n');
     }
     out.push_str(&crypto::digest_selection_helper(program));
+    if certificate_host_needs_idna {
+        out.push_str(&dns::idna_core_prototype(program));
+    }
     // Native consumers use ByteBuffer's authoritative reserve helpers.
     // Emit that storage core before wrappers, independently of class numbering.
     for class in &program.classes {
@@ -358,9 +363,14 @@ pub fn implementations(program: &t::Program) -> String {
         function.native == Some(t::NativeMethod::DnsResolve));
     out.push_str(&network::implementation(program, &mut native_method_ids, transport_needs_wait, transport_needs_connect, resolver_needed));
     out.push_str(&http::implementation(program, &mut native_method_ids));
-    out.push_str(&uri::percent_helpers(program, transport_needs_connect));
+    out.push_str(&uri::percent_helpers(
+        program, transport_needs_connect || certificate_host_needs_idna,
+    ));
     out.push_str(&uri::implementation(program, &mut native_method_ids));
-    out.push_str(&dns::implementation(program, &mut native_method_ids, transport_needs_connect, resolver_needed));
+    out.push_str(&dns::implementation(
+        program, &mut native_method_ids, transport_needs_connect, resolver_needed,
+        certificate_host_needs_idna,
+    ));
     out.push_str(&zip::entry_implementation(program, &mut native_method_ids));
     if let Some(zip) = zip::implementation(program, &mut native_method_ids) {
         out.push_str(&zip);

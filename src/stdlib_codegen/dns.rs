@@ -7,6 +7,11 @@ use super::support::{
 
 pub(super) const IDNA_HELPER_NAME: &str = "ncr_dns_idna_host";
 pub(super) const RESOLVER_HELPER_NAME: &str = "ncr_dns_resolve_host";
+fn idna_core_signature(text: usize) -> String {
+    format!(
+        "static bool {IDNA_HELPER_NAME}(ncr_obj_{text} *ncr_input, ncr_obj_{text} **ncr_ascii, ncr_obj_{text} **ncr_error, size_t ncr_line, size_t ncr_column)"
+    )
+}
 
 fn function<'a>(
     program: &'a t::Program,
@@ -47,6 +52,10 @@ fn text_result_layout(program: &t::Program, function: &t::Function, text: usize)
 pub(super) fn fields() -> String {
     "    unsigned char ncr_static_class;\n".to_owned()
 }
+pub(super) fn idna_core_prototype(program: &t::Program) -> String {
+    let text = text_class(program).expect("DNS helpers require native Text");
+    format!("{};\n", idna_core_signature(text))
+}
 
 pub(super) fn drop_fields() -> String { String::new() }
 
@@ -55,6 +64,7 @@ pub(super) fn implementation(
     native_method_ids: &mut Option<t::NativeMethodIndex>,
     transport_needs_idna: bool,
     transport_needs_resolver: bool,
+    certificate_host_needs_idna: bool,
 ) -> String {
     let mut public_idna = false;
     let mut public_resolve = false;
@@ -73,7 +83,8 @@ pub(super) fn implementation(
         }
     }
     let resolver_used = public_resolve || transport_needs_resolver;
-    let idna_core_used = public_idna || public_resolve || transport_needs_idna || transport_needs_resolver;
+    let idna_core_used = public_idna || public_resolve || transport_needs_idna
+        || transport_needs_resolver || certificate_host_needs_idna;
     if !idna_core_used && !reverse_used && !hostname_used { return String::new(); }
 
     let text = text_class(program).expect("DNS helpers require native Text");
@@ -113,8 +124,7 @@ pub(super) fn implementation(
 
     let mut substitutions = vec![
         ("@TEXT_ID@", text.to_string()),
-        ("@IDNA_CORE_SIGNATURE@", format!(
-            "static bool {IDNA_HELPER_NAME}(ncr_obj_{text} *ncr_input, ncr_obj_{text} **ncr_ascii, ncr_obj_{text} **ncr_error, size_t ncr_line, size_t ncr_column)")),
+        ("@IDNA_CORE_SIGNATURE@", idna_core_signature(text)),
     ];
     if let Some(idna) = idna_function {
         let (result, ok, err) = text_result_layout(program, idna, text);

@@ -596,6 +596,24 @@ static size_t ncr_cryptokeys_ip_address(const unsigned char *host, size_t length
     return 0;
 }
 
+/* Keep raw IP literals (including IPv6 zones) out of percent-decoding IDNA. */
+static bool ncr_cryptokeys_host_identity(@TEXT_TYPE@ input,
+    @TEXT_TYPE@ *ascii_host, @TEXT_TYPE@ *error,
+    unsigned char address[sizeof(struct in6_addr)], size_t *address_length,
+    size_t line, size_t column) {
+    *ascii_host = NULL;
+    *error = NULL;
+    *address_length = ncr_cryptokeys_ip_address(
+        input->bytes, (size_t)input->length, address);
+    if (*address_length != 0) { return true; }
+    if (!ncr_dns_idna_host(input, ascii_host, error, line, column)) {
+        return false;
+    }
+    *address_length = ncr_cryptokeys_ip_address(
+        (*ascii_host)->bytes, (size_t)(*ascii_host)->length, address);
+    return true;
+}
+
 static void ncr_cryptokeys_certificate_destroy(void *certificate, void *chain) {
     if (certificate != NULL) { X509_free((X509 *)certificate); }
     if (chain != NULL) { sk_X509_pop_free((STACK_OF(X509) *)chain, X509_free); }
@@ -799,16 +817,27 @@ static @CERTIFICATE_HOST_RESULT@ @CERTIFICATE_MATCHES_HOST@(@CERTIFICATE_TYPE@ n
         ncr_cryptokeys_text_has_nul(ncr_v_@CERTIFICATE_MATCHES_HOST_ID@)) {
         return ncr_result_error_@CERTIFICATE_HOST_ERROR_RESULT@("host must be nonempty and contain no NUL", sizeof("host must be nonempty and contain no NUL") - 1, line, column);
     }
+    @TEXT_TYPE@ ascii_host = NULL;
+    @TEXT_TYPE@ idna_error = NULL;
     unsigned char address[sizeof(struct in6_addr)];
-    size_t address_length = ncr_cryptokeys_ip_address(
-        ncr_v_@CERTIFICATE_MATCHES_HOST_ID@->bytes,
-        (size_t)ncr_v_@CERTIFICATE_MATCHES_HOST_ID@->length, address);
+    size_t address_length = 0;
+    if (!ncr_cryptokeys_host_identity(
+        ncr_v_@CERTIFICATE_MATCHES_HOST_ID@, &ascii_host, &idna_error,
+        address, &address_length, line, column)) {
+        if (ascii_host != NULL) { ncr_drop_@TEXT_CLASS@(ascii_host); }
+        return (@CERTIFICATE_HOST_RESULT@){
+            .tag = @CERTIFICATE_HOST_ERROR_TAG@,
+            .data.v@CERTIFICATE_HOST_ERROR_TAG@.f0 = idna_error
+        };
+    }
+    @TEXT_TYPE@ checked_host = ascii_host == NULL
+        ? ncr_v_@CERTIFICATE_MATCHES_HOST_ID@ : ascii_host;
     int matched = address_length == 0
         ? X509_check_host((X509 *)ncr_self->certificate,
-            (const char *)ncr_v_@CERTIFICATE_MATCHES_HOST_ID@->bytes,
-            (size_t)ncr_v_@CERTIFICATE_MATCHES_HOST_ID@->length,
+            (const char *)checked_host->bytes, (size_t)checked_host->length,
             NCR_CRYPTO_CERTIFICATE_HOST_FLAGS, NULL)
         : X509_check_ip((X509 *)ncr_self->certificate, address, address_length, 0);
+    if (ascii_host != NULL) { ncr_drop_@TEXT_CLASS@(ascii_host); }
     if (matched == 1) { return (@CERTIFICATE_HOST_RESULT@){ .tag = @CERTIFICATE_HOST_OK_TAG@, .data.v@CERTIFICATE_HOST_OK_TAG@.f0 = true }; }
     if (matched == 0) { return (@CERTIFICATE_HOST_RESULT@){ .tag = @CERTIFICATE_HOST_OK_TAG@, .data.v@CERTIFICATE_HOST_OK_TAG@.f0 = false }; }
     return ncr_result_error_@CERTIFICATE_HOST_ERROR_RESULT@("host check failed", sizeof("host check failed") - 1, line, column);
@@ -824,14 +853,36 @@ static @CERTIFICATE_VERIFY_RESULT@ @CERTIFICATE_VERIFY@(@CERTIFICATE_TYPE@ ncr_s
         ncr_cryptokeys_text_has_nul(ncr_v_@CERTIFICATE_VERIFY_CA_ID@->text)) {
         return ncr_result_error_@CERTIFICATE_VERIFY_ERROR_RESULT@("host and CA file path must be nonempty and contain no NUL", sizeof("host and CA file path must be nonempty and contain no NUL") - 1, line, column);
     }
+    @TEXT_TYPE@ ascii_host = NULL;
+    @TEXT_TYPE@ idna_error = NULL;
+    unsigned char address[sizeof(struct in6_addr)];
+    size_t address_length = 0;
+    if (!ncr_cryptokeys_host_identity(
+        ncr_v_@CERTIFICATE_VERIFY_HOST_ID@, &ascii_host, &idna_error,
+        address, &address_length, line, column)) {
+        if (ascii_host != NULL) { ncr_drop_@TEXT_CLASS@(ascii_host); }
+        return (@CERTIFICATE_VERIFY_RESULT@){
+            .tag = @CERTIFICATE_VERIFY_ERROR_TAG@,
+            .data.v@CERTIFICATE_VERIFY_ERROR_TAG@.f0 = idna_error
+        };
+    }
+    @TEXT_TYPE@ checked_host = ascii_host == NULL
+        ? ncr_v_@CERTIFICATE_VERIFY_HOST_ID@ : ascii_host;
     time_t verify_time = (time_t)ncr_v_@CERTIFICATE_VERIFY_TIME_ID@;
     if ((int64_t)verify_time != ncr_v_@CERTIFICATE_VERIFY_TIME_ID@) {
+        if (ascii_host != NULL) { ncr_drop_@TEXT_CLASS@(ascii_host); }
         return ncr_result_error_@CERTIFICATE_VERIFY_ERROR_RESULT@("verification time is outside the platform range", sizeof("verification time is outside the platform range") - 1, line, column);
     }
     size_t path_length = (size_t)ncr_v_@CERTIFICATE_VERIFY_CA_ID@->text->length;
-    if (path_length == SIZE_MAX) { return ncr_result_error_@CERTIFICATE_VERIFY_ERROR_RESULT@("CA file path is too long", sizeof("CA file path is too long") - 1, line, column); }
+    if (path_length == SIZE_MAX) {
+        if (ascii_host != NULL) { ncr_drop_@TEXT_CLASS@(ascii_host); }
+        return ncr_result_error_@CERTIFICATE_VERIFY_ERROR_RESULT@("CA file path is too long", sizeof("CA file path is too long") - 1, line, column);
+    }
     char *path = OPENSSL_malloc(path_length + 1);
-    if (path == NULL) { return ncr_result_error_@CERTIFICATE_VERIFY_ERROR_RESULT@("CA file path allocation failed", sizeof("CA file path allocation failed") - 1, line, column); }
+    if (path == NULL) {
+        if (ascii_host != NULL) { ncr_drop_@TEXT_CLASS@(ascii_host); }
+        return ncr_result_error_@CERTIFICATE_VERIFY_ERROR_RESULT@("CA file path allocation failed", sizeof("CA file path allocation failed") - 1, line, column);
+    }
     memcpy(path, ncr_v_@CERTIFICATE_VERIFY_CA_ID@->text->bytes, path_length);
     path[path_length] = '\0';
 
@@ -844,17 +895,14 @@ static @CERTIFICATE_VERIFY_RESULT@ @CERTIFICATE_VERIFY@(@CERTIFICATE_TYPE@ ncr_s
     if (!initialized) {
         X509_STORE_CTX_free(context);
         X509_STORE_free(store);
+        if (ascii_host != NULL) { ncr_drop_@TEXT_CLASS@(ascii_host); }
         return ncr_result_error_@CERTIFICATE_VERIFY_ERROR_RESULT@("unable to initialize certificate trust verification", sizeof("unable to initialize certificate trust verification") - 1, line, column);
     }
-    unsigned char address[sizeof(struct in6_addr)];
-    size_t address_length = ncr_cryptokeys_ip_address(
-        ncr_v_@CERTIFICATE_VERIFY_HOST_ID@->bytes,
-        (size_t)ncr_v_@CERTIFICATE_VERIFY_HOST_ID@->length, address);
     X509_VERIFY_PARAM *parameters = X509_STORE_CTX_get0_param(context);
     bool parameters_set = parameters != NULL && (address_length == 0
         ? X509_VERIFY_PARAM_set1_host(parameters,
-            (const char *)ncr_v_@CERTIFICATE_VERIFY_HOST_ID@->bytes,
-            (size_t)ncr_v_@CERTIFICATE_VERIFY_HOST_ID@->length) == 1
+            (const char *)checked_host->bytes,
+            (size_t)checked_host->length) == 1
         : X509_VERIFY_PARAM_set1_ip(parameters, address, address_length) == 1);
     if (parameters_set) {
         X509_VERIFY_PARAM_set_hostflags(parameters, NCR_CRYPTO_CERTIFICATE_HOST_FLAGS);
@@ -862,6 +910,7 @@ static @CERTIFICATE_VERIFY_RESULT@ @CERTIFICATE_VERIFY@(@CERTIFICATE_TYPE@ ncr_s
         X509_VERIFY_PARAM_set_time(parameters, verify_time);
     }
     int verified = parameters_set ? X509_verify_cert(context) : -1;
+    if (ascii_host != NULL) { ncr_drop_@TEXT_CLASS@(ascii_host); }
     X509_STORE_CTX_free(context);
     X509_STORE_free(store);
     if (verified != 1) { return ncr_result_error_@CERTIFICATE_VERIFY_ERROR_RESULT@(failure, sizeof("certificate verification failed") - 1, line, column); }

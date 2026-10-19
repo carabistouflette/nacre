@@ -84,6 +84,17 @@ fn add_result(
     replacements.push((error_result_placeholder, result.to_string()));
 }
 
+fn add_error_tag(
+    program: &t::Program,
+    native_method_ids: &mut Option<t::NativeMethodIndex>,
+    replacements: &mut Vec<(&'static str, String)>,
+    native: M,
+    placeholder: &'static str,
+) {
+    let result = result_id(method(program, native_method_ids, native));
+    replacements.push((placeholder, variant_id(program, result, "Err").to_string()));
+}
+
 fn group<'a>(source: &'a str, name: &str) -> &'a str {
     let start = format!("/* CRYPTOKEYS_GROUP {name} */");
     let end = format!("/* CRYPTOKEYS_GROUP_END {name} */");
@@ -148,10 +159,12 @@ fn add_method_placeholders(
         add_result(program, native_method_ids, replacements, M::CertificateNotAfterUnixSeconds, "@CERTIFICATE_NOT_AFTER_RESULT@", "@CERTIFICATE_NOT_AFTER_OK_TAG@", "@CERTIFICATE_NOT_AFTER_ERROR_RESULT@");
         add_method_parameter(program, native_method_ids, replacements, "@CERTIFICATE_MATCHES_HOST_ID@", M::CertificateMatchesHost, 0);
         add_result(program, native_method_ids, replacements, M::CertificateMatchesHost, "@CERTIFICATE_HOST_RESULT@", "@CERTIFICATE_HOST_OK_TAG@", "@CERTIFICATE_HOST_ERROR_RESULT@");
+        add_error_tag(program, native_method_ids, replacements, M::CertificateMatchesHost, "@CERTIFICATE_HOST_ERROR_TAG@");
         add_method_parameter(program, native_method_ids, replacements, "@CERTIFICATE_VERIFY_HOST_ID@", M::CertificateVerify, 0);
         add_method_parameter(program, native_method_ids, replacements, "@CERTIFICATE_VERIFY_CA_ID@", M::CertificateVerify, 1);
         add_method_parameter(program, native_method_ids, replacements, "@CERTIFICATE_VERIFY_TIME_ID@", M::CertificateVerify, 2);
         add_result(program, native_method_ids, replacements, M::CertificateVerify, "@CERTIFICATE_VERIFY_RESULT@", "@CERTIFICATE_VERIFY_OK_TAG@", "@CERTIFICATE_VERIFY_ERROR_RESULT@");
+        add_error_tag(program, native_method_ids, replacements, M::CertificateVerify, "@CERTIFICATE_VERIFY_ERROR_TAG@");
     }
 }
 
@@ -181,6 +194,7 @@ pub(super) fn implementation(program: &t::Program, native_method_ids: &mut Optio
     let mut replacements = vec![
         ("@TEXT_TYPE@", ctype(program, Type::Object(text)).into_owned()),
         ("@TEXT_FROM_BYTES@", format!("ncr_text_from_bytes_{text}")),
+        ("@TEXT_CLASS@", text.to_string()),
     ];
     if needs_buffer {
         let buffer = class_id(program, |class| matches!(class, C::ByteBuffer))

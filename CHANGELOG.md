@@ -162,6 +162,9 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   now requires SAN-based identities, disables Common Name fallback, and accepts
   wildcards only as a complete leftmost label.
 
+- Normalize DNS names in `Certificate.matchesHost` and `verify` through the
+  shared IDNA path; reject ambiguous legacy numeric IPv4 spellings.
+
 - Reject non-`Future` operands to `await` and unsupported `async` declarations.
   Document prefix and postfix `await` as unbounded blocking `Future.await(-1L)`.
 

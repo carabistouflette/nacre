@@ -613,9 +613,12 @@ round-trip parsing and verification. `matchesHost` and `verify` match DNS names
 against `dNSName` subject alternative names with wildcards limited to a complete
 leftmost label; partial wildcards are rejected. IPv4/IPv6 literals match only
 `iPAddress` subject alternative names; IPv6 zone identifiers do not affect
-certificate identity. Neither method falls back to the common name. `verify`
-checks the supplied CA file trust store, stored chain, server purpose, and
-explicit Unix time; it does not fetch certificates or use the network.
+certificate identity. Both normalize DNS names through the same ICU-backed IDNA
+processing as `Dns.idna`, so using these host checks requires ICU. Noncanonical
+legacy numeric IPv4 spellings are rejected rather than treated as DNS names.
+Neither method falls back to the common name. `verify` checks the supplied CA
+file trust store, stored chain, server purpose, and explicit Unix time; it does
+not fetch certificates or use the network.
 
 ## `Database` and `SqlStatement`
 
