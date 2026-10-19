@@ -1,5 +1,5 @@
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
-use super::support::{native_function, replace_method_ids, result_id, variant, variant_id};
+use super::support::{replace_method_ids, result_id, variant, variant_id};
 
 pub(super) fn database_fields() -> String {
     "    void *database;\n    void *lifetime;\n    void (*destroy)(void *);\n".to_owned()
@@ -31,6 +31,19 @@ fn assert_parameters(function: &t::Function, expected: &[Type]) {
     }
 }
 
+fn native_method<'a>(
+    program: &'a t::Program,
+    method_ids: &t::NativeMethodIndex,
+    receiver: Option<usize>,
+    method: M,
+) -> &'a t::Function {
+    let id = match receiver {
+        Some(receiver) => method_ids.get(receiver, method),
+        None => method_ids.get_static(method),
+    }.unwrap_or_else(|| panic!("compiler-owned database method {method:?} is present"));
+    program.functions.get(id).expect("native method index contains a valid function ID")
+}
+
 fn assert_result_payload(program: &t::Program, function: &t::Function,
                          payload: Type, error: Type) -> usize {
     let result = result_class(function);
@@ -41,8 +54,11 @@ fn assert_result_payload(program: &t::Program, function: &t::Function,
     result
 }
 
-fn option_info(program: &t::Program, method: M, expected_payload: Type) -> (usize, usize, usize, usize) {
-    let function = native_function(program, |candidate| candidate == method);
+fn option_info(
+    program: &t::Program, method_ids: &t::NativeMethodIndex, statement_class: usize,
+    method: M, expected_payload: Type,
+) -> (usize, usize, usize, usize) {
+    let function = native_method(program, method_ids, Some(statement_class), method);
     let result = result_class(function);
     let (_, ok) = variant(program, result, "Ok");
     let [Type::Object(option)] = ok.fields.as_slice() else {
@@ -55,43 +71,55 @@ fn option_info(program: &t::Program, method: M, expected_payload: Type) -> (usiz
     (result, *option, none, some)
 }
 
-pub(super) fn implementation(program: &t::Program, class_id: usize) -> String {
+pub(super) fn implementation(
+    program: &t::Program, method_ids: &t::NativeMethodIndex, class_id: usize,
+) -> String {
     assert!(matches!(program.classes[class_id].native, Some(C::Database)),
         "Database implementation belongs to its native class");
-    let statement_class = program.classes.iter()
-        .find(|class| matches!(class.native, Some(C::SqlStatement)))
-        .expect("Database requires SqlStatement").id;
-    let text = program.classes.iter().find(|class| matches!(class.native, Some(C::Text)))
-        .expect("Database requires Text").id;
-    let buffer = program.classes.iter().find(|class| matches!(class.native, Some(C::ByteBuffer)))
-        .expect("Database requires ByteBuffer").id;
+    let mut statement_class = None;
+    let mut text = None;
+    let mut buffer = None;
+    for class in &program.classes {
+        if statement_class.is_none() && matches!(class.native, Some(C::SqlStatement)) {
+            statement_class = Some(class.id);
+        }
+        if text.is_none() && matches!(class.native, Some(C::Text)) {
+            text = Some(class.id);
+        }
+        if buffer.is_none() && matches!(class.native, Some(C::ByteBuffer)) {
+            buffer = Some(class.id);
+        }
+    }
+    let statement_class = statement_class.expect("Database requires SqlStatement");
+    let text = text.expect("Database requires Text");
+    let buffer = buffer.expect("Database requires ByteBuffer");
 
-    let open = native_function(program, |method| method == M::DatabaseOpen);
-    let prepare = native_function(program, |method| method == M::DatabasePrepare);
-    let changes = native_function(program, |method| method == M::DatabaseChanges);
-    let rowid = native_function(program, |method| method == M::DatabaseLastInsertRowId);
-    let execute = native_function(program, |method| method == M::DatabaseExecute);
-    let begin = native_function(program, |method| method == M::DatabaseBegin);
-    let commit = native_function(program, |method| method == M::DatabaseCommit);
-    let rollback = native_function(program, |method| method == M::DatabaseRollback);
-    let timeout = native_function(program, |method| method == M::DatabaseSetBusyTimeoutMillis);
-    let database_close = native_function(program, |method| method == M::DatabaseClose);
-    let bind_null = native_function(program, |method| method == M::SqlStatementBindNull);
-    let bind_long = native_function(program, |method| method == M::SqlStatementBindLong);
-    let bind_double = native_function(program, |method| method == M::SqlStatementBindDouble);
-    let bind_text = native_function(program, |method| method == M::SqlStatementBindText);
-    let bind_blob = native_function(program, |method| method == M::SqlStatementBindBlob);
-    let step = native_function(program, |method| method == M::SqlStatementStep);
-    let reset = native_function(program, |method| method == M::SqlStatementReset);
-    let clear = native_function(program, |method| method == M::SqlStatementClearBindings);
-    let column_count = native_function(program, |method| method == M::SqlStatementColumnCount);
-    let column_name = native_function(program, |method| method == M::SqlStatementColumnName);
-    let column_type = native_function(program, |method| method == M::SqlStatementColumnType);
-    let column_long = native_function(program, |method| method == M::SqlStatementColumnLong);
-    let column_double = native_function(program, |method| method == M::SqlStatementColumnDouble);
-    let column_text = native_function(program, |method| method == M::SqlStatementColumnText);
-    let column_blob = native_function(program, |method| method == M::SqlStatementColumnBlob);
-    let statement_close = native_function(program, |method| method == M::SqlStatementClose);
+    let open = native_method(program, method_ids, None, M::DatabaseOpen);
+    let prepare = native_method(program, method_ids, Some(class_id), M::DatabasePrepare);
+    let changes = native_method(program, method_ids, Some(class_id), M::DatabaseChanges);
+    let rowid = native_method(program, method_ids, Some(class_id), M::DatabaseLastInsertRowId);
+    let execute = native_method(program, method_ids, Some(class_id), M::DatabaseExecute);
+    let begin = native_method(program, method_ids, Some(class_id), M::DatabaseBegin);
+    let commit = native_method(program, method_ids, Some(class_id), M::DatabaseCommit);
+    let rollback = native_method(program, method_ids, Some(class_id), M::DatabaseRollback);
+    let timeout = native_method(program, method_ids, Some(class_id), M::DatabaseSetBusyTimeoutMillis);
+    let database_close = native_method(program, method_ids, Some(class_id), M::DatabaseClose);
+    let bind_null = native_method(program, method_ids, Some(statement_class), M::SqlStatementBindNull);
+    let bind_long = native_method(program, method_ids, Some(statement_class), M::SqlStatementBindLong);
+    let bind_double = native_method(program, method_ids, Some(statement_class), M::SqlStatementBindDouble);
+    let bind_text = native_method(program, method_ids, Some(statement_class), M::SqlStatementBindText);
+    let bind_blob = native_method(program, method_ids, Some(statement_class), M::SqlStatementBindBlob);
+    let step = native_method(program, method_ids, Some(statement_class), M::SqlStatementStep);
+    let reset = native_method(program, method_ids, Some(statement_class), M::SqlStatementReset);
+    let clear = native_method(program, method_ids, Some(statement_class), M::SqlStatementClearBindings);
+    let column_count = native_method(program, method_ids, Some(statement_class), M::SqlStatementColumnCount);
+    let column_name = native_method(program, method_ids, Some(statement_class), M::SqlStatementColumnName);
+    let column_type = native_method(program, method_ids, Some(statement_class), M::SqlStatementColumnType);
+    let column_long = native_method(program, method_ids, Some(statement_class), M::SqlStatementColumnLong);
+    let column_double = native_method(program, method_ids, Some(statement_class), M::SqlStatementColumnDouble);
+    let column_text = native_method(program, method_ids, Some(statement_class), M::SqlStatementColumnText);
+    let column_blob = native_method(program, method_ids, Some(statement_class), M::SqlStatementColumnBlob);
+    let statement_close = native_method(program, method_ids, Some(statement_class), M::SqlStatementClose);
 
     let borrowed_text = Type::Borrow { class: text, mutable: false };
     let borrowed_buffer = Type::Borrow { class: buffer, mutable: false };
@@ -141,13 +169,13 @@ pub(super) fn implementation(program: &t::Program, class_id: usize) -> String {
     assert_result_payload(program, execute, Type::Long, text_type);
 
     let (long_result, long_option, long_none, long_some) =
-        option_info(program, M::SqlStatementColumnLong, Type::Long);
+        option_info(program, method_ids, statement_class, M::SqlStatementColumnLong, Type::Long);
     let (double_result, double_option, double_none, double_some) =
-        option_info(program, M::SqlStatementColumnDouble, Type::Double);
+        option_info(program, method_ids, statement_class, M::SqlStatementColumnDouble, Type::Double);
     let (text_result, text_option, text_none, text_some) =
-        option_info(program, M::SqlStatementColumnText, text_type);
+        option_info(program, method_ids, statement_class, M::SqlStatementColumnText, text_type);
     let (blob_result, blob_option, blob_none, blob_some) =
-        option_info(program, M::SqlStatementColumnBlob, Type::Object(buffer));
+        option_info(program, method_ids, statement_class, M::SqlStatementColumnBlob, Type::Object(buffer));
     assert_result_payload(program, column_long, Type::Object(long_option), text_type);
     assert_result_payload(program, column_double, Type::Object(double_option), text_type);
     assert_result_payload(program, column_text, Type::Object(text_option), text_type);
@@ -222,7 +250,12 @@ pub(super) fn implementation(program: &t::Program, class_id: usize) -> String {
         ("@STMT_COLUMN_TEXT_INDEX_ID@", M::SqlStatementColumnText, 0),
         ("@STMT_COLUMN_BLOB_INDEX_ID@", M::SqlStatementColumnBlob, 0),
     ] {
-        let function = native_function(program, |candidate| candidate == method);
+        let receiver = match method {
+            M::DatabaseOpen => None,
+            M::DatabasePrepare | M::DatabaseExecute | M::DatabaseSetBusyTimeoutMillis => Some(class_id),
+            _ => Some(statement_class),
+        };
+        let function = native_method(program, method_ids, receiver, method);
         replacements.push((placeholder, parameter(function, index)));
     }
     let template = include_str!("../../stdlib/database.c.in");

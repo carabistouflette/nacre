@@ -261,7 +261,10 @@ fn append_body(
         C::ByteBuffer => buffer::implementation(program, class.id),
         C::Uuid => uuid::implementation(program, class.id),
         C::BinaryReader | C::BinaryWriter => binary::implementation(program, class.id, native),
-        C::Database => database::implementation(program, class.id),
+        C::Database => {
+            let method_ids = native_method_ids.get_or_insert_with(|| t::NativeMethodIndex::new(program));
+            database::implementation(program, method_ids, class.id)
+        }
         C::SqlStatement => return,
         C::SocketAddress | C::TcpListener | C::TcpStream | C::Datagram | C::UdpSocket |
         C::Uri | C::Dns => return,
