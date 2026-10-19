@@ -700,10 +700,10 @@ must be in `0..=INT_MAX`; an expired lock wait returns `Err`.
 `Database.close` is idempotent and closes the connection with SQLite's
 `sqlite3_close_v2`: the connection becomes unusable immediately, and SQLite
 defers backend deallocation until all outstanding statements have been finalized.
-Closing or dropping the Database rolls back an uncommitted transaction before
-deferring backend deallocation, releasing transaction locks even while statements
-remain owned. Explicit close returns `Err` and leaves the connection open if
-rollback fails; drop attempts rollback without returning an error.
+After successful rollback, `Database.close` resets active statement cursors before
+`sqlite3_close_v2`, releasing read locks while statement handles remain owned.
+Explicit close returns `Err` and leaves the connection open if rollback fails;
+drop attempts rollback and cursor reset without returning an error.
 After the connection is closed or dropped, every operational
 `SqlStatement` method returns `Err`. `SqlStatement.close` remains safe and
 idempotent and finalizes only its handle; after closing a statement, its

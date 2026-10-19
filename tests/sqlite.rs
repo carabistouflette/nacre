@@ -722,6 +722,7 @@ Result<Unit, Text> exercise() {
     first.begin()?;
     first.execute(pendingInsert)?;
     SqlStatement retained = first.prepare(query)?;
+    println(retained.step()?);
     first.close()?;
     println(insertSucceeds(second, committedInsert));
     retained.close()?;
@@ -729,6 +730,7 @@ Result<Unit, Text> exercise() {
     abandoned.begin()?;
     abandoned.execute(pendingInsert)?;
     SqlStatement orphan = abandoned.prepare(query)?;
+    println(orphan.step()?);
     drop(abandoned);
     println(insertSucceeds(second, committedInsert));
     orphan.close()?;
@@ -746,7 +748,7 @@ void main() {
     let program = compile(source);
     let output = Command::new(program.path()).arg(&database.0).output().unwrap();
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
-    assert_eq!(output.stdout, b"true\ntrue\ntrue\n");
+    assert_eq!(output.stdout, b"true\n".repeat(5));
     assert_memory_balanced(&output);
 }
 
