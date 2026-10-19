@@ -176,6 +176,11 @@ int main(int argc, char **argv) {
         return 7;
     }
     if (strcmp(argv[1], "delayed") == 0) { sleep_millis(250); return 0; }
+    if (strcmp(argv[1], "closed-output-sleep") == 0) {
+        if (close(STDOUT_FILENO) != 0 || close(STDERR_FILENO) != 0) { return 109; }
+        sleep_millis(120);
+        return 0;
+    }
     if (strcmp(argv[1], "hang") == 0) { for (;;) { sleep_millis(1000); } }
     if (strcmp(argv[1], "self-term") == 0) { (void)raise(SIGTERM); return 90; }
     if (strcmp(argv[1], "pid-sleeper") == 0) {
@@ -604,6 +609,20 @@ Result<Unit, Text> testCapture() {{
         println("zero capture limit drains and marks both streams");
     }}
 
+    {closed_streams_command}
+    ProcessOutput closedStreams = closedStreamsCommand.output(64L, 0L)?;
+    borrow ByteBuffer closedStdout = closedStreams.stdout();
+    borrow ByteBuffer closedStderr = closedStreams.stderr();
+    if (closedStdout.length() == 0L && closedStderr.length() == 0L
+        && !closedStreams.timedOut()) {{
+        match (closedStreams.status()) {{
+            Exited(code) {{
+                if (code == 0L) {{ println("unbounded capture waited after both output pipes closed"); }}
+            }}
+            Signaled(signal) {{ println("closed-output child unexpectedly signaled"); }}
+        }}
+    }}
+
     {hang_command}
     ProcessOutput timed = hang.output(32L, 50L)?;
     borrow ByteBuffer timedStdout = timed.stdout();
@@ -639,6 +658,8 @@ void main() {{
         fixed_zero_command = helper_command(&helper, "fixed", "zeroCommand"),
         hang_command = helper_command(&helper, "prefix-hang", "hang"),
         fork_command = helper_command(&helper, "fork-writer", "forkCommand"),
+        closed_streams_command =
+            helper_command(&helper, "closed-output-sleep", "closedStreamsCommand"),
     );
     let output = run(&source, directory.path());
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -650,6 +671,7 @@ void main() {{
         "capture timeout preserved available stream prefixes",
         "timeout status is SIGKILL",
         "descendant-held pipes do not extend timeout",
+        "unbounded capture waited after both output pipes closed",
         "descendant parent exit retained",
     ] {
         assert!(stdout.contains(marker), "missing {marker:?} in output:\n{stdout}");

@@ -18,6 +18,9 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 - Count source-discovery depth by nested directories; source files at depth 32
   stay within the documented limit.
 
+- Block `Command.output` indefinitely on pipe readiness for unbounded captures,
+  avoiding fixed 10 ms wakeups; block on child completion once both pipes close.
+
 - Emit LLVM value copies and zeroing directly into the output buffer, avoiding
   temporary formatted strings.
 - Match trait bounds for specialized arguments against implementations attached

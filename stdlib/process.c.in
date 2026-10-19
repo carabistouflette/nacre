@@ -1074,7 +1074,7 @@ static bool ncr_process_deadline_expired(
 static int ncr_process_poll_timeout(
     bool bounded, int64_t deadline, int *failure
 ) {
-    if (!bounded) { return 10; }
+    if (!bounded) { return -1; }
     int64_t now = 0;
     if (!ncr_time_monotonic_value(&now, failure)) { return -1; }
     if (now >= deadline) { return 0; }
@@ -1228,13 +1228,29 @@ static ncr_obj_@COMMAND_OUTPUT_RESULT@ @COMMAND_OUTPUT@(
                 .data.v@COMMAND_OUTPUT_OK_TAG@.f0 = output,
             };
         }
+        if (!bounded && !child_reaped && stdout_pipe[0] < 0 && stderr_pipe[0] < 0) {
+            int wait_failure = 0;
+            if (!ncr_process_wait_blocking(pid, &wait_status, &wait_failure)) {
+                failure = wait_failure;
+                operation = "Command.output/waitpid";
+                goto failed;
+            }
+            child_reaped = true;
+            if (!ncr_process_make_status(wait_status, &status)) {
+                failure = ECHILD;
+                operation = "Command.output/waitpid status";
+                goto failed;
+            }
+            output->status = status;
+            continue;
+        }
 
         struct pollfd descriptors[2] = {
             { .fd = stdout_pipe[0], .events = POLLIN | POLLHUP | POLLERR, .revents = 0 },
             { .fd = stderr_pipe[0], .events = POLLIN | POLLHUP | POLLERR, .revents = 0 },
         };
         int poll_timeout = ncr_process_poll_timeout(bounded, deadline, &failure);
-        if (poll_timeout < 0) { operation = "Command.output/clock_gettime"; goto failed; }
+        if (bounded && poll_timeout < 0) { operation = "Command.output/clock_gettime"; goto failed; }
         int poll_status = poll(descriptors, 2, poll_timeout);
         if (poll_status < 0) {
             if (errno == EINTR) { continue; }
