@@ -246,12 +246,11 @@ fn index_imported_traits<'a>(
                             record_imported_trait(&mut scope, name, index, tr);
                         }
                     }
-                } else if let Some((module, imported_name)) = import.path.rsplit_once('.') {
-                    if let Some((trait_name, candidate)) = trait_map.get(module)
+                } else if let Some((module, imported_name)) = import.path.rsplit_once('.')
+                    && let Some((trait_name, candidate)) = trait_map.get(module)
                         .and_then(|traits| traits.get_key_value(imported_name)) {
-                            let (index, tr) = *candidate;
-                            record_imported_trait(&mut scope, *trait_name, index, tr);
-                        }
+                    let (index, tr) = *candidate;
+                    record_imported_trait(&mut scope, trait_name, index, tr);
                 }
             }
         }

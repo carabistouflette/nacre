@@ -326,7 +326,7 @@ impl<'a> Analyzer<'a> {
     fn holder_is_live(&self, holder: usize) -> bool {
         self.current_stmt
             .and_then(|stmt| self.live_at.get(&stmt))
-            .map_or(true, |live| live.contains(&holder))
+            .is_none_or(|live| live.contains(&holder))
     }
 
     fn label(&self, root: Root) -> String {
