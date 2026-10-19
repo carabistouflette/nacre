@@ -1642,8 +1642,9 @@ schema evolution.
 
 The pinned private dependency build in `scripts/build_libarchive.py` applies
 ZIP-specific corrections to libarchive 3.8.10: complete filename validation before
-conversion, EOCD comment extent and exact directory byte/entry-count checks, and a
-search across the full legal 65,557-byte EOCD/comment range. Invalid EOCD signatures
+conversion, local/central filename consistency, EOCD comment extent, and exact central
+directory byte/entry-count checks; the reader also searches the full legal 65,557-byte
+EOCD/comment range. Invalid EOCD signatures
 inside a comment do not stop the search; Zip64 locators are read separately when
 they precede that window. Self-extracting prefixes preserve relative entry offsets,
 including Zip64 offset expansion. See README for compile/runtime library paths.
@@ -1653,7 +1654,9 @@ uses explicit seek callbacks; outer compression filters are unsupported.
 `ZipReader` and `ZipWriter` use libarchive's ZIP support, including Zip64. They
 operate on archive entries only: no method extracts to the filesystem. UTF-8-flagged
 names preserve their exact UTF-8 bytes, including decomposed Unicode and literal
-backslashes; names are not normalized or rewritten as filesystem paths. Names
+backslashes; names are not normalized or rewritten as filesystem paths. When a
+local header marks its name UTF-8, it must match the central-directory pathname
+byte for byte or `ZipReader.next()` returns `Err`. Names
 without the UTF-8 flag retain libarchive's charset decoding. Absolute names and
 `.`/`..` components remain data, so callers that later extract entries must apply
 their own destination-path policy. Writers permit duplicate names; entries remain

@@ -70,7 +70,10 @@
  #include "archive_entry_locale.h"
  #include "archive_hmac_private.h"
  #include "archive_private.h"
-@@ -148,6 +149,57 @@
+@@ -97,0 +98,2 @@
++	unsigned char		*central_name;
++	size_t			central_name_length;
+@@ -148,6 +151,57 @@
  #define LA_NTFS_MTIME (1 << 5)
  #define LA_NTFS_ATIME (1 << 6)
  #define LA_NTFS_BTIME (1 << 7)
@@ -128,7 +131,7 @@
  
  /*
   * See "WinZip - AES Encryption Information"
-@@ -152,6 +204,9 @@
+@@ -152,6 +206,9 @@
  	struct archive_string	format_name;
  	int64_t			central_directory_offset;
  	int64_t			central_directory_offset_adjusted;
@@ -138,7 +141,7 @@
  	int			has_encrypted_entries;
  
  	/* List of entries (seekable Zip only) */
-@@ -969,6 +1024,8 @@
+@@ -969,6 +1026,8 @@
  		}
  		case 0x7075:
  		{
@@ -147,7 +150,7 @@
  			/* Info-ZIP Unicode Path Extra Field. */
  			if (datasize < 5 || entry == NULL)
  				break;
-@@ -1123,12 +1180,6 @@
+@@ -1123,12 +1182,6 @@
  	zip->entry_compressed_bytes_read = 0;
  	zip->computed_crc32 = zip->crc32func(0, NULL, 0);
  
@@ -160,7 +163,7 @@
  
  	if ((p = __archive_read_ahead(a, ZIP_LOCHDR_LEN, NULL)) == NULL) {
  		archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
-@@ -1174,23 +1225,25 @@
+@@ -1174,23 +1227,34 @@
  		    "Truncated ZIP file header");
  		return (ARCHIVE_FATAL);
  	}
@@ -187,6 +190,15 @@
 +		    "Invalid ZIP entry pathname");
 +		return ARCHIVE_WARN;
 +	}
++	if ((zip_entry_central_dir.flags & LA_FROM_CENTRAL_DIRECTORY) != 0
++	    && (filename_length != zip_entry_central_dir.central_name_length
++	        || (filename_length > 0
++	            && memcmp(h, zip_entry_central_dir.central_name,
++	                filename_length) != 0))) {
++		archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
++		    "Inconsistent local and central ZIP entry names");
++		ret = ARCHIVE_WARN;
++	}
 +	sconv = NULL;
 +	if (!(zip_entry->zip_flags & ZIP_UTF8_NAME)) {
 +		if (zip->sconv == NULL && !zip->init_default_conversion) {
@@ -203,7 +215,7 @@
  		if (errno == ENOMEM) {
  			archive_set_error(&a->archive, ENOMEM,
  			    "Can't allocate memory for Pathname");
-@@ -1230,23 +1283,7 @@
+@@ -1230,23 +1294,7 @@
  		zip_entry->mode |= 0664;
  	}
  
@@ -228,7 +240,7 @@
  
  	/* Make sure that entries with a trailing '/' are marked as directories
  	 * even if the External File Attributes contains bogus values.  If this
-@@ -1273,32 +1310,7 @@
+@@ -1273,32 +1321,7 @@
  		}
  	}
  
@@ -262,7 +274,7 @@
  
  	if (zip_entry->flags & LA_FROM_CENTRAL_DIRECTORY) {
  		/* If this came from the central dir, its size info
-@@ -3938,26 +3950,33 @@
+@@ -3938,26 +3961,33 @@
   * outbid.  But we can certainly do better...
   */
  static int
@@ -310,7 +322,7 @@
  
  	/* This is just a tiny bit higher than the maximum
  	   returned by the streaming Zip bidder.  This ensures
-@@ -3978,47 +4000,69 @@
+@@ -3978,47 +4011,69 @@
   * from it.
   */
  static int
@@ -417,7 +429,7 @@
  	return 32;
  }
  
-@@ -4039,9 +4083,9 @@
+@@ -4039,9 +4094,9 @@
  	if (file_size <= 0)
  		return 0;
  
@@ -430,7 +442,7 @@
  	current_offset = __archive_read_seek(a, -tail, SEEK_END);
  	if (current_offset < 0)
  		return 0;
-@@ -4229,16 +4273,40 @@
+@@ -4229,16 +4284,40 @@
  		switch (h[i]) {
  		case 'P':
  			if (memcmp(h + i, "PK\005\006", 4) == 0) {
@@ -479,7 +491,7 @@
  			}
  			i -= 4;
  			break;
-@@ -4173,83 +4241,47 @@
+@@ -4347,84 +4347,48 @@
  slurp_central_directory(struct archive_read *a, struct archive_entry* entry,
      struct zip *zip)
  {
@@ -583,10 +595,12 @@
  			return ARCHIVE_FATAL;
 -
 +		}
- 		zip_entry = calloc(1, sizeof(struct zip_entry));
+-		zip_entry = calloc(1, sizeof(struct zip_entry));
++		zip_entry = calloc(1, sizeof(struct zip_entry) + filename_length);
  		if (zip_entry == NULL) {
  			archive_set_error(&a->archive, ENOMEM,
-@@ -4277,16 +4309,12 @@
+ 				"Can't allocate zip entry");
+@@ -4451,16 +4494,12 @@
  			zip_entry->decdat = p[19];
  		zip_entry->compressed_size = archive_le32dec(p + 20);
  		zip_entry->uncompressed_size = archive_le32dec(p + 24);
@@ -604,7 +618,7 @@
  
  		/* If we can't guess the mode, leave it zero here;
  		   when we read the local file header we might get
-@@ -4311,7 +4339,7 @@
+@@ -4485,7 +4524,7 @@
  		/* We're done with the regular data; get the filename and
  		 * extra data. */
  		__archive_read_consume(a, 46);
@@ -613,13 +627,17 @@
  			NULL);
  		if (p == NULL) {
  			archive_set_error(&a->archive,
-@@ -4319,10 +4347,21 @@
+@@ -4493,10 +4532,25 @@
  			    "Truncated ZIP file header");
  			return ARCHIVE_FATAL;
  		}
 +		if (!zip_filename_is_valid((const unsigned char *)p, filename_length,
 +		    (zip_entry->zip_flags & ZIP_UTF8_NAME) != 0))
 +			zip_entry->flags |= LA_INVALID_FILENAME;
++		zip_entry->central_name = (unsigned char *)(zip_entry + 1);
++		zip_entry->central_name_length = filename_length;
++		if (filename_length > 0)
++			memcpy(zip_entry->central_name, p, filename_length);
  		if (ARCHIVE_OK != process_extra(a, entry, p + filename_length,
  		    extra_length, zip_entry)) {
  			return ARCHIVE_FATAL;
@@ -635,7 +653,7 @@
  
  		/*
  		 * Mac resource fork files are stored under the
-@@ -4391,8 +4430,16 @@
+@@ -4565,8 +4619,16 @@
  		/* Skip the comment too ... */
  		__archive_read_consume(a,
  		    filename_length + extra_length + comment_length);
@@ -654,7 +672,7 @@
  	return ARCHIVE_OK;
  }
  
-@@ -4610,6 +4657,11 @@
+@@ -4784,6 +4846,11 @@
  
  	if (zip->entry == NULL)
  		return ARCHIVE_EOF;

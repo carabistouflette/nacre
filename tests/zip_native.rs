@@ -901,3 +901,42 @@ fn reader_preserves_raw_names_rejects_malformed_names_and_checks_eocd_bounds() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("ZIP_BOUNDARY_OK"), "{stdout}");
 }
+
+#[test]
+fn reader_rejects_disagreement_between_local_and_central_names() {
+    let scratch = Scratch::new();
+    let fixture = scratch.path("mismatched-names.zip");
+    let mut archive = make_zip(&[(b"good", 0x0800)], &[], None, None, false);
+    let central = archive.windows(4)
+        .position(|window| window == b"PK\x01\x02")
+        .expect("ZIP fixture has a central directory");
+    assert_eq!(&archive[central + 46..central + 50], b"good");
+    archive[central + 46..central + 50].copy_from_slice(b"evil");
+    fs::write(&fixture, archive).unwrap();
+    let source = r#"
+Result<Unit, Text> exercise() {
+    Text filename = Args.get(0)?;
+    Path path = Path.fromText(filename)?;
+    match (ZipReader.open(path)) {
+        Err(error) { println("mismatch-rejected"); }
+        Ok(reader) {
+            match (reader.next()) {
+                Err(error) { println("mismatch-rejected"); }
+                Ok(entry) { println("mismatch-accepted"); }
+            }
+            reader.close()?;
+        }
+    }
+    return new Result<Unit, Text>.Ok(());
+}
+void main() {
+    match (exercise()) {
+        Err(error) { error.print(); }
+        Ok(unit) {}
+    }
+}
+"#;
+    let program = compile(source);
+    let output = run(&program, &[&fixture]);
+    assert_eq!(output.stdout, b"mismatch-rejected\n");
+}

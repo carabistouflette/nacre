@@ -12,6 +12,9 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 - Preserve exact raw UTF-8 ZIP entry names, including decomposed Unicode, while
   retaining libarchive charset conversion for legacy names.
 
+- Reject UTF-8 ZIP entries when the local-header filename differs from the
+  central-directory name.
+
 - Reject source inputs that traverse symbolic links, including package-directory
   aliases.
 

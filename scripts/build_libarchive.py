@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Build pinned libarchive with ZIP-specific boundary corrections.
 
-The private patch preserves ZIP names, validates complete filename fields and
-EOCD/directory extents, and searches the full legal comment range without weakening the
-strict seekable reader. Installation is prefix-local, not global.
+The private patch preserves ZIP names, validates complete filename fields and local/
+central filename consistency, validates EOCD/directory extents, and searches the full
+legal comment range without weakening the strict seekable reader. Installation is prefix-local, not global.
 """
 
 import argparse
