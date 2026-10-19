@@ -501,6 +501,41 @@ fn lsp_supports_document_symbols_hover_and_definition() {
 }
 
 #[test]
+fn document_symbols_survive_syntax_errors_in_other_units() {
+    let temp = TempDir::new();
+    let source_dir = temp.0.join("src");
+    fs::create_dir(&source_dir).unwrap();
+    fs::write(
+        temp.0.join("Nacre.toml"),
+        "[package]\nname = 'demo'\nversion = '0.1.0'\nsources = ['src']\n",
+    ).unwrap();
+    let visible_path = source_dir.join("Visible.ncr");
+    fs::write(&visible_path, "public class Visible {}\n").unwrap();
+    fs::write(source_dir.join("Broken.ncr"), "public class Broken {\n").unwrap();
+    let visible_uri = uri(&visible_path);
+
+    let mut client = Client::spawn();
+    client.send(json!({
+        "jsonrpc": "2.0", "id": 1, "method": "initialize",
+        "params": { "rootUri": uri(&temp.0), "capabilities": {} }
+    }));
+    client.response(1);
+    client.send(json!({ "jsonrpc": "2.0", "method": "initialized", "params": {} }));
+    client.send(json!({
+        "jsonrpc": "2.0", "id": 2, "method": "textDocument/documentSymbol",
+        "params": { "textDocument": { "uri": visible_uri } }
+    }));
+    let response = client.response(2);
+    let symbols = response["result"].as_array().expect("symbols array");
+    assert!(symbols.iter().any(|symbol| symbol["name"] == "Visible"), "{symbols:?}");
+
+    client.send(json!({ "jsonrpc": "2.0", "id": 3, "method": "shutdown" }));
+    assert!(client.response(3)["result"].is_null());
+    client.send(json!({ "jsonrpc": "2.0", "method": "exit" }));
+    client.finish();
+}
+
+#[test]
 fn lsp_reports_manifest_diagnostics_when_nacre_toml_is_invalid() {
     let temp = TempDir::new();
     let source_dir = temp.0.join("src");

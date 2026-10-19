@@ -347,7 +347,7 @@ impl Server {
             Err(_) => return Ok(json!([])),
         };
         let Some(file_source) = bundle.source_for_path(&path) else { return Ok(json!([])); };
-        let symbols = queries::document_symbols(&bundle, &path, file_source);
+        let symbols = queries::document_symbols(file_source);
         Ok(json!(symbols))
     }
 

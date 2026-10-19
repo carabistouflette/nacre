@@ -19,14 +19,13 @@ mod symbol_kind {
     pub const ENUM_MEMBER: u64 = 22;
 }
 
-pub(super) fn document_symbols(bundle: &SourceBundle, path: &Path, source: &str) -> Vec<Value> {
-    let Ok(program) = bundle.parse() else { return Vec::new(); };
+pub(super) fn document_symbols(source: &str) -> Vec<Value> {
+    let Ok(tokens) = crate::lexer::lex(source) else { return Vec::new(); };
+    let Ok(program) = crate::parser::parse(tokens) else { return Vec::new(); };
     let mut symbols = Vec::new();
 
     for class in &program.classes {
         if class.is_builtin { continue; }
-        let loc = bundle.locate(class.span);
-        if loc.path != path { continue; }
 
         let kind = if class.is_interface {
             symbol_kind::INTERFACE
@@ -40,47 +39,43 @@ pub(super) fn document_symbols(bundle: &SourceBundle, path: &Path, source: &str)
 
         if let Some(variants) = &class.variants {
             for variant in variants {
-                let v_loc = bundle.locate(variant.span);
                 children.push(json!({
                     "name": variant.name,
                     "kind": symbol_kind::ENUM_MEMBER,
-                    "range": range_json(source, v_loc.span.start, v_loc.span.end),
-                    "selectionRange": range_json(source, v_loc.span.start, v_loc.span.end),
+                    "range": range_json(source, variant.span.start, variant.span.end),
+                    "selectionRange": range_json(source, variant.span.start, variant.span.end),
                 }));
             }
         }
 
         for field in &class.fields {
-            let f_loc = bundle.locate(field.span);
             children.push(json!({
                 "name": field.name,
                 "kind": symbol_kind::PROPERTY,
-                "range": range_json(source, f_loc.span.start, f_loc.span.end),
-                "selectionRange": range_json(source, f_loc.span.start, f_loc.span.end),
+                "range": range_json(source, field.span.start, field.span.end),
+                "selectionRange": range_json(source, field.span.start, field.span.end),
             }));
         }
 
         if let Some(constructor) = &class.constructor {
-            let c_loc = bundle.locate(constructor.span);
             children.push(json!({
                 "name": class.name,
                 "kind": symbol_kind::CONSTRUCTOR,
-                "range": range_json(source, c_loc.span.start, c_loc.span.end),
-                "selectionRange": range_json(source, c_loc.span.start, c_loc.span.end),
+                "range": range_json(source, constructor.span.start, constructor.span.end),
+                "selectionRange": range_json(source, constructor.span.start, constructor.span.end),
             }));
         }
 
         for method in &class.methods {
-            let m_loc = bundle.locate(method.span);
             children.push(json!({
                 "name": method.name,
                 "kind": symbol_kind::METHOD,
-                "range": range_json(source, m_loc.span.start, m_loc.span.end),
-                "selectionRange": range_json(source, m_loc.span.start, m_loc.span.end),
+                "range": range_json(source, method.span.start, method.span.end),
+                "selectionRange": range_json(source, method.span.start, method.span.end),
             }));
         }
 
-        let class_range = range_json(source, loc.span.start, loc.span.end);
+        let class_range = range_json(source, class.span.start, class.span.end);
         symbols.push(json!({
             "name": class.name,
             "kind": kind,
@@ -91,9 +86,7 @@ pub(super) fn document_symbols(bundle: &SourceBundle, path: &Path, source: &str)
     }
 
     for function in &program.functions {
-        let loc = bundle.locate(function.span);
-        if loc.path != path { continue; }
-        let func_range = range_json(source, loc.span.start, loc.span.end);
+        let func_range = range_json(source, function.span.start, function.span.end);
         symbols.push(json!({
             "name": function.name,
             "kind": symbol_kind::FUNCTION,
@@ -103,19 +96,16 @@ pub(super) fn document_symbols(bundle: &SourceBundle, path: &Path, source: &str)
     }
 
     for tr in &program.traits {
-        let loc = bundle.locate(tr.span);
-        if loc.path != path { continue; }
         let mut children = Vec::new();
         for method in &tr.methods {
-            let m_loc = bundle.locate(method.span);
             children.push(json!({
                 "name": method.name,
                 "kind": symbol_kind::METHOD,
-                "range": range_json(source, m_loc.span.start, m_loc.span.end),
-                "selectionRange": range_json(source, m_loc.span.start, m_loc.span.end),
+                "range": range_json(source, method.span.start, method.span.end),
+                "selectionRange": range_json(source, method.span.start, method.span.end),
             }));
         }
-        let trait_range = range_json(source, loc.span.start, loc.span.end);
+        let trait_range = range_json(source, tr.span.start, tr.span.end);
         symbols.push(json!({
             "name": tr.name,
             "kind": symbol_kind::INTERFACE,

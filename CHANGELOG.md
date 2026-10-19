@@ -31,6 +31,8 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   passes instead of rescanning declarations for each lookup.
 - Resolve bundle diagnostic offsets by binary-searching ordered source-unit
   boundaries instead of scanning every file.
+- Keep valid document symbols available when another source unit has a syntax
+  error by parsing only the requested document.
 - Resolve the shared Mutex<Unit> class once during concurrency drop-helper
   generation instead of rescanning all classes for every handle type.
 - Index class field names once, replacing repeated linear scans and per-pattern
