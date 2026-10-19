@@ -1,12 +1,14 @@
 use crate::ir::{self as t, NativeMethod as M};
-use super::support::{native_function, replace_method_ids, replace_placeholders, result_id, variant_id};
+use super::support::{
+    replace_method_ids, replace_placeholders, required_first_native_method, result_id, variant_id,
+};
 
 pub(super) fn implementation(program: &t::Program, native_method_ids: &mut Option<t::NativeMethodIndex>) -> String {
-    let monotonic = native_function(program, |method| matches!(method, M::TimeMonotonicNanos));
+    let monotonic = required_first_native_method(program, native_method_ids, M::TimeMonotonicNanos);
     let monotonic_result = result_id(monotonic);
-    let unix_millis = native_function(program, |method| matches!(method, M::TimeUnixMillis));
-    let sleep_millis = native_function(program, |method| matches!(method, M::TimeSleepMillis));
-    let deadline = native_function(program, |method| matches!(method, M::TimeDeadlineAfterMillis));
+    let unix_millis = required_first_native_method(program, native_method_ids, M::TimeUnixMillis);
+    let sleep_millis = required_first_native_method(program, native_method_ids, M::TimeSleepMillis);
+    let deadline = required_first_native_method(program, native_method_ids, M::TimeDeadlineAfterMillis);
     let unix_result = result_id(unix_millis);
     let sleep_result = result_id(sleep_millis);
     let deadline_result = result_id(deadline);
