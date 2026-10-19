@@ -3,6 +3,8 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Detect Process feature groups in one allocation-free function pass, then reuse
+  the lazy method index for native method metadata.
 - Resolve URI methods through the shared lazy index and reuse the current
   function for emitted signatures instead of rescanning Program.functions.
 - Reuse the shared lazy method index for TLS implementation metadata after its

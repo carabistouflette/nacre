@@ -1,7 +1,7 @@
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
 use super::support::{
-    native_function, replace_method_ids, replace_placeholders, result_id, template_section,
-    text_class, variant, variant_id,
+    replace_method_ids, replace_placeholders, required_first_native_method, result_id,
+    template_section, text_class, variant, variant_id,
 };
 
 fn class(program: &t::Program, name: &str) -> usize {
@@ -30,8 +30,12 @@ fn parameter(function: &t::Function, index: usize) -> String {
     format!("ncr_v_{}", function.params[index].0)
 }
 
-fn process_function(program: &t::Program, method: M) -> &t::Function {
-    native_function(program, |native| native == method)
+fn process_function<'a>(
+    program: &'a t::Program,
+    native_method_ids: &mut Option<t::NativeMethodIndex>,
+    method: M,
+) -> &'a t::Function {
+    required_first_native_method(program, native_method_ids, method)
 }
 
 pub(super) fn fields(program: &t::Program, native: C) -> String {
@@ -86,14 +90,14 @@ fn group<'a>(source: &'a str, name: &str) -> &'a str {
     template_section(source, &start, &end)
 }
 
-fn has_any(program: &t::Program, methods: &[M]) -> bool {
-    program.functions.iter().any(|function| function.native.is_some_and(|method| methods.contains(&method)))
-}
 
-fn environment_substitutions(program: &t::Program) -> Vec<(&'static str, String)> {
-    let env_get = process_function(program, M::EnvGet);
-    let env_set = process_function(program, M::EnvSet);
-    let env_unset = process_function(program, M::EnvUnset);
+fn environment_substitutions(
+    program: &t::Program,
+    native_method_ids: &mut Option<t::NativeMethodIndex>,
+) -> Vec<(&'static str, String)> {
+    let env_get = process_function(program, native_method_ids, M::EnvGet);
+    let env_set = process_function(program, native_method_ids, M::EnvSet);
+    let env_unset = process_function(program, native_method_ids, M::EnvUnset);
     let env_get_result = result_id(env_get);
     let env_get_option = result_payload(program, env_get);
     let (_, env_get_ok) = variant(program, env_get_result, "Ok");
@@ -121,7 +125,10 @@ fn environment_substitutions(program: &t::Program) -> Vec<(&'static str, String)
     ]
 }
 
-fn command_substitutions(program: &t::Program) -> Vec<(&'static str, String)> {
+fn command_substitutions(
+    program: &t::Program,
+    native_method_ids: &mut Option<t::NativeMethodIndex>,
+) -> Vec<(&'static str, String)> {
     let path = native_class(program, "Path", |class| matches!(class, C::Path));
     let file = native_class(program, "File", |class| matches!(class, C::File));
     let command = native_class(program, "Command", |class| matches!(class, C::Command));
@@ -130,15 +137,15 @@ fn command_substitutions(program: &t::Program) -> Vec<(&'static str, String)> {
     let output = native_class(program, "ProcessOutput", |class| matches!(class, C::ProcessOutput));
     let reserve = format!("ncr_byte_buffer_reserve_{buffer}");
 
-    let command_create = process_function(program, M::CommandCreate);
-    let command_add_arg = process_function(program, M::CommandAddArg);
-    let command_set_env = process_function(program, M::CommandSetEnv);
-    let redirect_stdin = process_function(program, M::CommandRedirectStdin);
-    let redirect_stdout = process_function(program, M::CommandRedirectStdout);
-    let redirect_stderr = process_function(program, M::CommandRedirectStderr);
-    let clear_env = process_function(program, M::CommandClearEnv);
-    let spawn = process_function(program, M::CommandSpawn);
-    let capture = process_function(program, M::CommandOutput);
+    let command_create = process_function(program, native_method_ids, M::CommandCreate);
+    let command_add_arg = process_function(program, native_method_ids, M::CommandAddArg);
+    let command_set_env = process_function(program, native_method_ids, M::CommandSetEnv);
+    let redirect_stdin = process_function(program, native_method_ids, M::CommandRedirectStdin);
+    let redirect_stdout = process_function(program, native_method_ids, M::CommandRedirectStdout);
+    let redirect_stderr = process_function(program, native_method_ids, M::CommandRedirectStderr);
+    let clear_env = process_function(program, native_method_ids, M::CommandClearEnv);
+    let spawn = process_function(program, native_method_ids, M::CommandSpawn);
+    let capture = process_function(program, native_method_ids, M::CommandOutput);
 
     let command_result = result_id(command_add_arg);
     let spawn_result = result_id(spawn);
@@ -201,12 +208,15 @@ fn status_substitutions(program: &t::Program) -> Vec<(&'static str, String)> {
     ]
 }
 
-fn process_substitutions(program: &t::Program) -> Vec<(&'static str, String)> {
+fn process_substitutions(
+    program: &t::Program,
+    native_method_ids: &mut Option<t::NativeMethodIndex>,
+) -> Vec<(&'static str, String)> {
     let process = native_class(program, "Process", |class| matches!(class, C::Process));
-    let wait = process_function(program, M::ProcessWait);
-    let wait_for = process_function(program, M::ProcessWaitFor);
-    let terminate = process_function(program, M::ProcessTerminate);
-    let kill = process_function(program, M::ProcessKill);
+    let wait = process_function(program, native_method_ids, M::ProcessWait);
+    let wait_for = process_function(program, native_method_ids, M::ProcessWaitFor);
+    let terminate = process_function(program, native_method_ids, M::ProcessTerminate);
+    let kill = process_function(program, native_method_ids, M::ProcessKill);
     let wait_result = result_id(wait);
     let wait_for_result = result_id(wait_for);
     let option = result_payload(program, wait_for);
@@ -252,10 +262,18 @@ pub(super) fn implementations(program: &t::Program, native_method_ids: &mut Opti
         M::ProcessOutputStdout, M::ProcessOutputStderr, M::ProcessOutputStatus,
         M::ProcessOutputStdoutTruncated, M::ProcessOutputStderrTruncated, M::ProcessOutputTimedOut,
     ];
-    let has_env = has_any(program, ENV_METHODS);
-    let has_command = has_any(program, COMMAND_METHODS);
-    let has_process = has_any(program, PROCESS_METHODS);
-    let has_output = has_any(program, OUTPUT_METHODS);
+    let mut has_env = false;
+    let mut has_command = false;
+    let mut has_process = false;
+    let mut has_output = false;
+    for function in &program.functions {
+        let Some(method) = function.native else { continue; };
+        has_env |= ENV_METHODS.contains(&method);
+        has_command |= COMMAND_METHODS.contains(&method);
+        has_process |= PROCESS_METHODS.contains(&method);
+        has_output |= OUTPUT_METHODS.contains(&method);
+        if has_env && has_command && has_process && has_output { break; }
+    }
     if !has_env && !has_command && !has_process && !has_output { return None; }
 
     let template = include_str!("../../stdlib/process.c.in");
@@ -274,9 +292,9 @@ pub(super) fn implementations(program: &t::Program, native_method_ids: &mut Opti
         ("@TEXT_CLASS@", text.to_string()),
         ("@TEXT_TAKE@", format!("ncr_text_take_bytes_{text}")),
     ];
-    if has_env { substitutions.extend(environment_substitutions(program)); }
-    if has_command { substitutions.extend(command_substitutions(program)); }
-    if has_process { substitutions.extend(process_substitutions(program)); }
+    if has_env { substitutions.extend(environment_substitutions(program, native_method_ids)); }
+    if has_command { substitutions.extend(command_substitutions(program, native_method_ids)); }
+    if has_process { substitutions.extend(process_substitutions(program, native_method_ids)); }
     if has_output { substitutions.extend(output_substitutions(program)); }
     if has_process || has_output || has_command { substitutions.extend(status_substitutions(program)); }
     body = replace_placeholders(body, &substitutions);
@@ -284,3 +302,4 @@ pub(super) fn implementations(program: &t::Program, native_method_ids: &mut Opti
     debug_assert!(!super::support::has_placeholder(&body), "unexpanded Process placeholder");
     Some(body)
 }
+
