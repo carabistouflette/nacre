@@ -31,6 +31,9 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 - Reject source inputs that traverse symbolic links, including package-directory
   aliases.
 
+- Encode scaffold package names reversibly from destination basenames, so
+  distinct punctuation and non-UTF-8 paths cannot collapse to one package ID.
+
 - Count source-discovery depth by nested directories; source files at depth 32
   stay within the documented limit.
 

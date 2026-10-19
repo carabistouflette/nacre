@@ -431,3 +431,44 @@ fn hard_link_output_cannot_overwrite_an_input() {
 fn sanitize_is_not_a_frontend_flag() {
     assert!(!cli(&["check".as_ref(),Path::new("examples/language/hello_world.ncr").as_os_str(),"--sanitize".as_ref()]).status.success());
 }
+
+#[test]
+fn project_init_encodes_path_names_without_collisions() {
+    let temp = Temp::new();
+    for (directory, package_name, module_namespace) in [
+        (".alpha", "app__x2Ealpha", "pkg_app____x2Ealpha"),
+        ("_alpha", "app__ualpha", "pkg_app____ualpha"),
+        ("-alpha", "app_-alpha", "pkg_app___halpha"),
+        ("alpha.project", "alpha_x2Eproject", "pkg_alpha__x2Eproject"),
+        ("alpha@project", "alpha_x40project", "pkg_alpha__x40project"),
+        ("alpha_project", "alpha_uproject", "pkg_alpha__uproject"),
+    ] {
+        let project = temp.0.join(directory);
+        nacre::project::init(&project).unwrap();
+        let manifest = fs::read_to_string(project.join("Nacre.toml")).unwrap();
+        assert!(
+            manifest.contains(&format!("name = \"{package_name}\"")),
+            "{manifest}"
+        );
+        let main = fs::read_to_string(project.join("src/Main.ncr")).unwrap();
+        assert!(
+            main.starts_with(&format!("module {module_namespace}.app;")),
+            "{main}"
+        );
+    }
+    #[cfg(unix)]
+    {
+        use std::ffi::OsString;
+        use std::os::unix::ffi::OsStringExt;
+
+        let project = temp.0.join(OsString::from_vec(b"alpha-\xff".to_vec()));
+        nacre::project::init(&project).unwrap();
+        let manifest = fs::read_to_string(project.join("Nacre.toml")).unwrap();
+        assert!(manifest.contains("name = \"alpha-_xFF\""), "{manifest}");
+        let main = fs::read_to_string(project.join("src/Main.ncr")).unwrap();
+        assert!(
+            main.starts_with("module pkg_alpha_h__xFF.app;"),
+            "{main}"
+        );
+    }
+}

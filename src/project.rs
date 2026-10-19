@@ -583,9 +583,28 @@ fn reject_source_symlinks(root: &Path, relative: &Path) -> Result<(), String> {
 
 /// Create a fresh project, never overwrite an existing path.
 pub fn init(path: &Path) -> Result<(), String> {
-    let mut name = path.file_name().and_then(|name| name.to_str()).unwrap_or("app")
-        .chars().map(|c| if c.is_ascii_alphanumeric() || c == '_' || c == '-' { c } else { '_' }).collect::<String>();
-    if !name.as_bytes().first().is_some_and(u8::is_ascii_alphanumeric) { name.insert_str(0, "app_"); }
+    // Escape underscores and unsupported path bytes so distinct names cannot collide.
+    let basename = path
+        .file_name()
+        .map(std::ffi::OsStr::as_encoded_bytes)
+        .unwrap_or(b"app");
+    let mut name = String::with_capacity(basename.len().saturating_mul(4));
+    for &byte in basename {
+        match byte {
+            b'_' => name.push_str("_u"),
+            b'-' => name.push('-'),
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' => name.push(char::from(byte)),
+            _ => {
+                const HEX: &[u8; 16] = b"0123456789ABCDEF";
+                name.push_str("_x");
+                name.push(char::from(HEX[usize::from(byte >> 4)]));
+                name.push(char::from(HEX[usize::from(byte & 0x0f)]));
+            }
+        }
+    }
+    if !name.as_bytes().first().is_some_and(u8::is_ascii_alphanumeric) {
+        name.insert_str(0, "app_");
+    }
     fs::create_dir(path).map_err(|e| format!("unable to create {} (the path must be new): {e}", display_path(path)))?;
     // Encode punctuation injectively, and prefix digits/keywords into identifiers.
     let mut module_prefix = String::with_capacity(5 + name.len() * 2);

@@ -166,10 +166,15 @@ path that does not already exist. It creates `src/` example modules, a README,
 `.gitignore`, and `Nacre.toml` package metadata. Run `nacre check`, `nacre run`,
 or `nacre build --release` inside the new directory. No registry is contacted.
 Generated modules use a package-specific `pkg_` namespace so untouched helper
-modules from separate scaffolds can coexist as path dependencies. The namespace
-encodes `_` as `__` and `-` as `_h`; names differing only by those characters
-remain distinct. A dependency must expose library declarations rather than a
-second application `main`.
+modules from separate scaffolds can coexist as path dependencies. The package
+name is derived from the destination basename: ASCII letters, digits, and `-`
+stay literal; `_` becomes `_u`; each other filesystem-name byte becomes `_xHH`
+using uppercase hexadecimal. A non-alphanumeric initial character gets an
+`app_` prefix. This reversible encoding prevents distinct destination names
+from collapsing to one package name. In module namespaces, `_` becomes `__`
+and `-` becomes `_h`.
+A dependency must expose library declarations rather than a second application
+`main`.
 If writing a new project fails, the new directory may remain partially populated;
 existing paths are never removed automatically.
 
