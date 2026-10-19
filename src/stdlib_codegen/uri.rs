@@ -1,20 +1,23 @@
 use crate::c_repr::ctype;
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
 use super::support::{
-    marker, native_function, replace_method_ids, replace_placeholders, result_id, text_class,
-    native_function_if, has_placeholder, variant_id,
+    has_placeholder, marker, native_function_if, replace_method_ids, replace_placeholders,
+    required_first_native_method, result_id, text_class, variant_id,
 };
 
-fn function(program: &t::Program, method: M) -> &t::Function {
-    native_function(program, |candidate| candidate == method)
+fn function<'a>(
+    program: &'a t::Program,
+    native_method_ids: &mut Option<t::NativeMethodIndex>,
+    method: M,
+) -> &'a t::Function {
+    required_first_native_method(program, native_method_ids, method)
 }
 
 fn parameter(function: &t::Function, index: usize) -> String {
     function.params[index].0.to_string()
 }
 
-fn signature(program: &t::Program, method: M) -> String {
-    let function = function(program, method);
+fn signature(program: &t::Program, method: M, function: &t::Function) -> String {
     assert_eq!(function.native, Some(method), "URI signature has its compiler-owned native method");
     let mut parameters = Vec::new();
     if let Some(receiver) = function.receiver {
@@ -63,11 +66,11 @@ pub(super) fn implementation(program: &t::Program, native_method_ids: &mut Optio
     else { return String::new(); };
     let text = text_class(program).expect("URI requires native Text");
     let buffer = native_class_id(program, |native| matches!(native, C::ByteBuffer));
-    let parse = function(program, M::UriParse);
-    let from_iri = function(program, M::UriFromIri);
-    let normalize = function(program, M::UriNormalize);
-    let resolve = function(program, M::UriResolve);
-    let relativize = function(program, M::UriRelativize);
+    let parse = function(program, native_method_ids, M::UriParse);
+    let from_iri = function(program, native_method_ids, M::UriFromIri);
+    let normalize = function(program, native_method_ids, M::UriNormalize);
+    let resolve = function(program, native_method_ids, M::UriResolve);
+    let relativize = function(program, native_method_ids, M::UriRelativize);
     let (uri_result, uri_ok) = result_ok(program, parse, Type::Object(uri));
     for operation in [from_iri, normalize, resolve, relativize] {
         let (result, ok) = result_ok(program, operation, Type::Object(uri));
@@ -75,7 +78,7 @@ pub(super) fn implementation(program: &t::Program, native_method_ids: &mut Optio
             "URI parse, transformation, and resolution operations share Result<Uri, Text>");
     }
 
-    let scheme = function(program, M::UriScheme);
+    let scheme = function(program, native_method_ids, M::UriScheme);
     let option_text = match scheme.return_type {
         Type::Object(class) => class,
         _ => unreachable!("URI optional Text getter returns Option<Text>"),
@@ -85,11 +88,11 @@ pub(super) fn implementation(program: &t::Program, native_method_ids: &mut Optio
     assert_eq!(program.classes[option_text].variants.as_ref().expect("Option<Text> variants")[option_text_some].fields,
         [Type::Object(text)], "URI optional Text getter owns its Some payload");
     for method in [M::UriUserInfo, M::UriHost, M::UriQuery, M::UriFragment] {
-        assert_eq!(function(program, method).return_type, Type::Object(option_text),
+        assert_eq!(function(program, native_method_ids, method).return_type, Type::Object(option_text),
             "URI optional Text accessors share Option<Text>");
     }
 
-    let port = function(program, M::UriPort);
+    let port = function(program, native_method_ids, M::UriPort);
     let port_result = result_id(port);
     let port_ok = variant_id(program, port_result, "Ok");
     let port_layout = program.classes[port_result].result.expect("Uri.port Result layout");
@@ -103,9 +106,9 @@ pub(super) fn implementation(program: &t::Program, native_method_ids: &mut Optio
     assert_eq!(program.classes[port_option].variants.as_ref().expect("Option<int> variants")[port_option_some].fields,
         [Type::Int], "Uri.port Some payload is int");
 
-    let decode = function(program, M::UriDecodeComponent);
+    let decode = function(program, native_method_ids, M::UriDecodeComponent);
     let (text_result, text_ok) = result_ok(program, decode, Type::Object(text));
-    let percent_decode = function(program, M::UriPercentDecode);
+    let percent_decode = function(program, native_method_ids, M::UriPercentDecode);
     let (buffer_result, buffer_ok) = result_ok(program, percent_decode, Type::Object(buffer));
 
     let mut substitutions = vec![
@@ -156,7 +159,7 @@ pub(super) fn implementation(program: &t::Program, native_method_ids: &mut Optio
             M::UriPercentDecode => "@URI_PERCENT_DECODE_SIGNATURE@",
             _ => continue,
         };
-        substitutions.push((key, signature(program, method)));
+        substitutions.push((key, signature(program, method, native)));
     }
     for (method, key) in [
         (M::UriParse, "@URI_PARSE_INPUT@"),
@@ -168,7 +171,7 @@ pub(super) fn implementation(program: &t::Program, native_method_ids: &mut Optio
         (M::UriDecodeComponent, "@URI_DECODE_INPUT@"),
         (M::UriPercentDecode, "@URI_PERCENT_DECODE_INPUT@"),
     ] {
-        substitutions.push((key, parameter(function(program, method), 0)));
+        substitutions.push((key, parameter(function(program, native_method_ids, method), 0)));
     }
 
     let mut body = String::from("/* nacre-link: uri */\n#include <uriparser/Uri.h>\n");

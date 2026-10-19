@@ -3,6 +3,8 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Resolve URI methods through the shared lazy index and reuse the current
+  function for emitted signatures instead of rescanning Program.functions.
 - Reuse the shared lazy method index for TLS implementation metadata after its
   no-TLS class gate, eliminating repeated function-table scans.
 - Skip WebSocket method lookups when no WebSocket classes are present and reuse
