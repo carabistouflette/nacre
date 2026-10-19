@@ -236,3 +236,58 @@ exec "$NACRE_FIXTURE_REAL_CC" "$@"
     concurrent_probe.run("v3", "20\n");
     assert_eq!(fs::read(&concurrent_log).unwrap().len(), 8, "concurrent cache writes must leave a reusable executable");
 }
+
+#[test]
+fn c_cache_config_probe_child() {
+    if std::env::var_os("NACRE_CACHE_CONFIG_PROBE_CHILD").is_none() { return; }
+    let config = std::env::var("NACRE_CACHE_CONFIG_FILE").unwrap();
+    let config_flag = format!("--config={config}");
+    let program = native::compile_c_optimized(
+        "#ifndef VALUE\n#define VALUE 0\n#endif\nint main(void) { return VALUE; }\n",
+        "-O0",
+        &[&config_flag],
+    ).unwrap();
+    let output = program.output().unwrap();
+    let expected = std::env::var("NACRE_CACHE_EXPECTED_EXIT").unwrap().parse::<i32>().unwrap();
+    assert_eq!(output.status.code(), Some(expected));
+}
+
+#[test]
+fn c_cache_invalidates_for_changed_clang_config_file() {
+    if !Command::new("clang")
+        .arg("--version")
+        .output()
+        .is_ok_and(|output| output.status.success())
+    {
+        return;
+    }
+    let temp = TestDir::new();
+    let config = temp.path("clang.cfg");
+    let cache = temp.path("cache");
+    let executable = std::env::current_exe().unwrap();
+    let run_probe = |expected: &str| {
+        let output = Command::new(&executable)
+            .args(["--exact", "c_cache_config_probe_child", "--nocapture"])
+            .env("NACRE_CACHE_CONFIG_PROBE_CHILD", "1")
+            .env("NACRE_CACHE_CONFIG_FILE", &config)
+            .env("NACRE_CACHE_EXPECTED_EXIT", expected)
+            .env("NACRE_CACHE_DIR", &cache)
+            .env("NACRE_ENABLE_TEST_CACHE", "1")
+            .env("NACRE_CC", "clang")
+            .env_remove("CLANG_CONFIG_FILE")
+            .env_remove("NACRE_NO_CACHE")
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "Clang config cache probe failed\nstdout: {}\nstderr: {}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+        );
+    };
+
+    fs::write(&config, "-DVALUE=3\n").unwrap();
+    run_probe("3");
+    fs::write(&config, "-DVALUE=4\n").unwrap();
+    run_probe("4");
+}

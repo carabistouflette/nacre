@@ -6,6 +6,9 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 - Hash compiler environment settings in native C cache keys to prevent stale
   executables when SDK, deployment-target, or override options change.
 
+- Hash Clang config-file contents so in-place `--config` edits invalidate native
+  executable and runtime cache entries.
+
 - Emit LLVM value copies and zeroing directly into the output buffer, avoiding
   temporary formatted strings.
 - Match trait bounds for specialized arguments against implementations attached

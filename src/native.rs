@@ -347,6 +347,43 @@ fn hash_compiler_environment(hash: &mut u128) {
     }
 }
 
+fn hash_clang_config_files(hash: &mut u128, flags: &[&str]) -> Option<()> {
+    let mut index = 0;
+    while index < flags.len() {
+        let config_path = if flags[index] == "--config" {
+            index += 1;
+            *flags.get(index)?
+        } else if let Some(path) = flags[index].strip_prefix("--config=") {
+            path
+        } else {
+            index += 1;
+            continue;
+        };
+
+        let path = Path::new(config_path);
+        let metadata = fs::metadata(path).ok()?;
+        if !metadata.is_file() { return None; }
+        hash_cache_part(hash, b"clang-config-file");
+        hash_cache_part(hash, config_path.as_bytes());
+        hash_cache_part(hash, &metadata.len().to_le_bytes());
+
+        let mut file = fs::File::open(path).ok()?;
+        let mut buffer = [0; 8192];
+        let mut bytes_hashed = 0u64;
+        loop {
+            let bytes_read = file.read(&mut buffer).ok()?;
+            if bytes_read == 0 { break; }
+            bytes_hashed = bytes_hashed.checked_add(bytes_read as u64)?;
+            if bytes_hashed > metadata.len() { return None; }
+            update_cache_hash(hash, &buffer[..bytes_read]);
+        }
+        if bytes_hashed != metadata.len() { return None; }
+        hash_cache_part(hash, b"end-clang-config-file");
+        index += 1;
+    }
+    Some(())
+}
+
 fn compute_cache_key(
     compiler: &std::ffi::OsStr,
     compiler_identity: &[u8],
@@ -354,7 +391,7 @@ fn compute_cache_key(
     flags: &[&str],
     source: &str,
     dependencies: u128,
-) -> String {
+) -> Option<String> {
     let mut hash = 0xcbf29ce484222325u64 as u128;
     hash_cache_part(&mut hash, compiler.as_encoded_bytes());
     hash_cache_part(&mut hash, compiler_identity);
@@ -364,7 +401,8 @@ fn compute_cache_key(
     hash_cache_part(&mut hash, source.as_bytes());
     hash_cache_part(&mut hash, &dependencies.to_le_bytes());
     hash_compiler_environment(&mut hash);
-    format!("{hash:032x}")
+    hash_clang_config_files(&mut hash, flags)?;
+    Some(format!("{hash:032x}"))
 }
 
 fn parse_make_dependencies(output: &[u8]) -> Option<Vec<PathBuf>> {
@@ -506,9 +544,16 @@ pub fn compile_c_optimized(source: &str, optimization: &str, flags: &[&str]) -> 
             flags,
             &libraries,
             &c_path,
-        ).map(|dependencies| cache.join(compute_cache_key(
-            &compiler, identity, optimization, flags, source, dependencies,
-        ))),
+        ).and_then(|dependencies| {
+            compute_cache_key(
+                &compiler,
+                identity,
+                optimization,
+                flags,
+                source,
+                dependencies,
+            ).map(|key| cache.join(key))
+        }),
         _ => None,
     };
     if let Some(cached_path) = &cache_entry
@@ -619,22 +664,30 @@ pub(crate) fn compile_llvm_direct_with_runtime(
     fs::write(&user_path, llvm_ir).map_err(|e| format!("failed to write temporary direct LLVM IR: {e}"))?;
     fs::write(&runtime_path, runtime_c).map_err(|e| format!("failed to write temporary LLVM runtime C source: {e}"))?;
     let cache_entry = cache.and_then(|cache| {
-        runtime_dependency_fingerprint(compiler, optimization, flags, section_flags, &libraries, &runtime_path)
-            .map(|dependencies| {
-                let key = compute_runtime_cache_key(
-                    [
-                        compiler.as_encoded_bytes(), compiler_version.as_bytes(),
-                        linker.as_encoded_bytes(), linker_version.as_bytes(),
-                        target.as_bytes(), optimization.as_bytes(),
-                    ],
-                    flags,
-                    section_flags,
-                    libraries.header_flags(),
-                    runtime_c,
-                    dependencies,
-                );
-                cache.join(format!("llvm-runtime-{key}.bc"))
-            })
+        runtime_dependency_fingerprint(
+            compiler,
+            optimization,
+            flags,
+            section_flags,
+            &libraries,
+            &runtime_path,
+        ).and_then(|dependencies| {
+            compute_runtime_cache_key(
+                [
+                    compiler.as_encoded_bytes(),
+                    compiler_version.as_bytes(),
+                    linker.as_encoded_bytes(),
+                    linker_version.as_bytes(),
+                    target.as_bytes(),
+                    optimization.as_bytes(),
+                ],
+                flags,
+                section_flags,
+                libraries.header_flags(),
+                runtime_c,
+                dependencies,
+            ).map(|key| cache.join(format!("llvm-runtime-{key}.bc")))
+        })
     });
 
     let cached_runtime = cache_entry.as_ref().filter(|path| {
@@ -716,7 +769,7 @@ fn compute_runtime_cache_key(
     header_flags: impl Iterator<Item = &'static str>,
     runtime_c: &str,
     dependencies: u128,
-) -> String {
+) -> Option<String> {
     let mut hash = 0xcbf29ce484222325u64 as u128;
     for part in identity {
         for &byte in part {
@@ -732,9 +785,10 @@ fn compute_runtime_cache_key(
         hash_flag_group(&mut hash, group.iter().copied());
     }
     hash_compiler_environment(&mut hash);
+    hash_clang_config_files(&mut hash, flags)?;
     hash_cache_part(&mut hash, runtime_c.as_bytes());
     hash_cache_part(&mut hash, &dependencies.to_le_bytes());
-    format!("{hash:032x}")
+    Some(format!("{hash:032x}"))
 }
 
 fn hash_flag_group<'a>(hash: &mut u128, flags: impl Iterator<Item = &'a str>) {
