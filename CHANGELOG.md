@@ -3,6 +3,8 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Reuse the shared receiver-keyed native-method index for `Sender.send` and
+  `ThreadPool.submit` metadata across generic specializations.
 - Resolve Regex compile, match, and search metadata through the native-method
   index keyed by receiver, preserving receiver-specific lookup semantics.
 - Resolve XSLT compile and transform metadata through the shared native-method

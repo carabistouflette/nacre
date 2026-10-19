@@ -1,5 +1,5 @@
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
-use super::support::{result_id, variant_id};
+use super::support::{required_indexed_native_method, result_id, variant_id};
 use crate::c_repr::ctype;
 
 fn matching_class(program: &t::Program, predicate: impl Fn(C) -> Option<Type>, value: Type) -> usize {
@@ -446,10 +446,14 @@ fn channel_take(program: &t::Program, function: &t::Function, sender: bool) -> S
     );
     method_body(program, function, body)
 }
-fn sender_error_helpers(program: &t::Program, sender: usize) -> String {
-    let function = program.functions.iter().find(|function|
-        function.receiver == Some(sender) && function.native == Some(M::SenderSend))
-        .expect("Sender.send method exists");
+fn sender_error_helpers(
+    program: &t::Program,
+    sender: usize,
+    native_method_ids: &mut Option<t::NativeMethodIndex>,
+) -> String {
+    let method_ids = native_method_ids.get_or_insert_with(|| t::NativeMethodIndex::new(program));
+    let function =
+        required_indexed_native_method(program, method_ids, Some(sender), M::SenderSend);
     let result = result_id(function);
     let err_tag = program.classes[result].result.unwrap().err_variant;
     let Type::Object(send_error) = program.classes[result].result.unwrap().err_type
@@ -570,7 +574,10 @@ fn drop_helpers(program: &t::Program) -> String {
     out
 }
 
-pub(super) fn implementations(program: &t::Program) -> String {
+pub(super) fn implementations(
+    program: &t::Program,
+    native_method_ids: &mut Option<t::NativeMethodIndex>,
+) -> String {
     let mut out = include_str!("../../stdlib/concurrency.c.in").to_owned();
     out.push_str(&control_definitions(program));
     for class in &program.classes {
@@ -581,14 +588,14 @@ pub(super) fn implementations(program: &t::Program) -> String {
             _ => {}
         }
     }
-    out.push_str(&super::concurrency_extra::helpers(program));
+    out.push_str(&super::concurrency_extra::helpers(program, native_method_ids));
     for class in &program.classes {
         match class.native {
             Some(C::Channel(_)) => out.push_str(&channel_pair_drop(program, class.id)),
             Some(C::Sender(value)) => {
                 let channel = channel_class(program, value);
                 out.push_str(&channel_sender_drop(program, class.id, channel));
-                out.push_str(&sender_error_helpers(program, class.id));
+                out.push_str(&sender_error_helpers(program, class.id, native_method_ids));
             }
             Some(C::Receiver(value)) => {
                 let channel = channel_class(program, value);

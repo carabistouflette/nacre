@@ -1,6 +1,6 @@
 use crate::c_repr::ctype;
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
-use super::support::{result_id, variant_id};
+use super::support::{required_indexed_native_method, result_id, variant_id};
 
 fn unit_mutex(program: &t::Program) -> usize {
     program.classes.iter().find_map(|class| match class.native {
@@ -222,7 +222,10 @@ static bool ncr_cancel_requested_internal(struct ncr_mutex_control_{unit} *contr
 "#)
 }
 
-fn state_helpers(program: &t::Program) -> String {
+fn state_helpers(
+    program: &t::Program,
+    native_method_ids: &mut Option<t::NativeMethodIndex>,
+) -> String {
     let needs_unit = program.classes.iter().any(|class|
         class.native.is_some() && crate::stdlib::uses_unit_mutex(&class.name));
     if !needs_unit { return String::new(); }
@@ -253,7 +256,7 @@ fn state_helpers(program: &t::Program) -> String {
     }
     for class in &program.classes {
         if let Some(C::ThreadPool(value)) = class.native {
-            out.push_str(&pool_helpers(program, class.id, value, unit));
+            out.push_str(&pool_helpers(program, class.id, value, unit, native_method_ids));
         }
     }
     out
@@ -328,12 +331,18 @@ static void *ncr_future_worker_{id}(void *raw) {{
 }}
 "#)
 }
-fn pool_helpers(program: &t::Program, id: usize, value: Type, unit: usize) -> String {
+fn pool_helpers(
+    program: &t::Program,
+    id: usize,
+    value: Type,
+    unit: usize,
+    native_method_ids: &mut Option<t::NativeMethodIndex>,
+) -> String {
     let (task, run, future_result) = task_info(program, value);
     let slot = program.functions[run].virtual_slot.expect("CancelableTask.run vtable slot");
     let future = future_class(program, value);
     let token = token_class(program);
-    let mut out = pool_error_helpers(program, id, value);
+    let mut out = pool_error_helpers(program, id, value, native_method_ids);
     out.push_str(&pool_recurring_helpers(program, id, value, unit));
     out.push_str(&format!(r#"
 static void ncr_pool_state_drop_{id}(void *raw) {{
@@ -942,11 +951,16 @@ fn future_method(program: &t::Program, function: &t::Function) -> String {
     }
 }
 
-fn pool_error_helpers(program: &t::Program, id: usize, value: Type) -> String {
+fn pool_error_helpers(
+    program: &t::Program,
+    id: usize,
+    value: Type,
+    native_method_ids: &mut Option<t::NativeMethodIndex>,
+) -> String {
     let task = task_info(program, value).0;
-    let submit = program.functions.iter().find(|function|
-        function.receiver == Some(id) && function.native == Some(M::ThreadPoolSubmit))
-        .expect("ThreadPool.submit exists");
+    let method_ids = native_method_ids.get_or_insert_with(|| t::NativeMethodIndex::new(program));
+    let submit =
+        required_indexed_native_method(program, method_ids, Some(id), M::ThreadPoolSubmit);
     let (result, error_class, closed, full, system) = pool_error_shape(program, submit);
     let text = text_class(program);
     let closed_return = result_error_value(program, submit, "submit_error");
@@ -1205,8 +1219,11 @@ fn pool_shutdown(program: &t::Program, function: &t::Function) -> String {
     method_body(program, function, body)
 }
 
-pub(super) fn helpers(program: &t::Program) -> String {
-    state_helpers(program)
+pub(super) fn helpers(
+    program: &t::Program,
+    native_method_ids: &mut Option<t::NativeMethodIndex>,
+) -> String {
+    state_helpers(program, native_method_ids)
 }
 
 pub(super) fn drop_helpers(program: &t::Program) -> String {

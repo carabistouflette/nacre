@@ -340,7 +340,7 @@ pub fn implementations(program: &t::Program) -> String {
     debug_assert!(!support::has_placeholder(&icu), "unexpanded ICU template placeholder");
     out.push_str(&icu);
     out.push_str(&regex::implementation(program, &mut native_method_ids));
-    out.push_str(&concurrency::implementations(program));
+    out.push_str(&concurrency::implementations(program, &mut native_method_ids));
     if let Some(console) = console::implementation(program, &mut native_method_ids) {
         out.push_str(&console);
         out.push('\n');
