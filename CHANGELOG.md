@@ -12,6 +12,10 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 - Distinguish unset from empty values in native cache environment hashes, so
   different compiler and linker configurations do not reuse stale artifacts.
 
+- Fingerprint external linker-library contents from explicit search paths, so
+  same-path library changes invalidate cached links; bypass caching for inputs
+  that cannot be resolved safely.
+
 - Reject unresolvable relative LSP paths instead of silently mapping them under
   the filesystem root.
 

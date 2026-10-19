@@ -324,6 +324,12 @@
     "error": "E4002"
   },
   {
+    "name": "trait_impl_requires_its_own_method_definitions",
+    "source": "trait T { void run(); } class C { void run() {} } impl T for C {} void main() {}",
+    "valid": false,
+    "span_start": "impl T for C"
+  },
+  {
     "name": "wrong_return",
     "source": "interface I {readonly int get();}class C implements I {readonly boolean get(){return true;}}void main(){}",
     "valid": false,

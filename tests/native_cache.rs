@@ -160,26 +160,27 @@ impl CacheProbe<'_> {
     }
 
     #[cfg(target_os = "linux")]
-    fn run_with_library_path(&self, library_path: &Path, expected: &str) {
+    fn run_with_linker_search_path(&self, library_path: &Path, expected: &str) {
         let output = Command::new(self.executable)
-            .args(["--exact", "c_cache_library_path_probe_child", "--nocapture"])
-            .env("NACRE_CACHE_LIBRARY_PATH_PROBE_CHILD", "1")
+            .args(["--exact", "c_cache_linker_search_path_probe_child", "--nocapture"])
+            .env("NACRE_CACHE_LINKER_SEARCH_PATH_PROBE_CHILD", "1")
+            .env("NACRE_CACHE_LINKER_SEARCH_PATH", library_path)
             .env("NACRE_CACHE_EXPECTED", expected)
             .env("NACRE_CACHE_INCLUDE", self.include)
             .env("NACRE_CACHE_DIR", self.cache)
             .env("NACRE_ENABLE_TEST_CACHE", "1")
             .env("NACRE_CC", self.wrapper)
             .env("NACRE_FIXTURE_REAL_CC", self.compiler)
-            .env("NACRE_FIXTURE_VERSION", "library-path-v1")
+            .env("NACRE_FIXTURE_VERSION", "linker-search-path-v1")
             .env("NACRE_FIXTURE_COMPILE_LOG", self.compile_log)
-            .env("LIBRARY_PATH", library_path)
+            .env_remove("LIBRARY_PATH")
             .env_remove("MACOSX_DEPLOYMENT_TARGET")
             .env_remove("NACRE_NO_CACHE")
             .output()
             .unwrap();
         assert!(
             output.status.success(),
-            "library-path cache probe failed\nstdout: {}\nstderr: {}",
+            "linker-search-path cache probe failed\nstdout: {}\nstderr: {}",
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr),
         );
@@ -293,13 +294,25 @@ fn c_cache_probe_child() {
 
 #[cfg(target_os = "linux")]
 #[test]
-fn c_cache_library_path_probe_child() {
-    if std::env::var_os("NACRE_CACHE_LIBRARY_PATH_PROBE_CHILD").is_none() { return; }
+fn c_cache_linker_search_path_probe_child() {
+    if std::env::var_os("NACRE_CACHE_LINKER_SEARCH_PATH_PROBE_CHILD").is_none() {
+        return;
+    }
+    let search_path = std::env::var_os("NACRE_CACHE_LINKER_SEARCH_PATH").unwrap();
+    let search_path = PathBuf::from(search_path);
+    let search_path = search_path.to_str().unwrap();
     let program = native::compile_c_optimized(
         LIBRARY_SOURCE,
         "-O0",
-        &["-Wl,--whole-archive", "-lnacre_cache_fixture", "-Wl,--no-whole-archive"],
-    ).unwrap();
+        &[
+            "-L",
+            search_path,
+            "-Wl,--whole-archive",
+            "-lnacre_cache_fixture",
+            "-Wl,--no-whole-archive",
+        ],
+    )
+    .unwrap();
     let output = program.output().unwrap();
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     let expected = std::env::var("NACRE_CACHE_EXPECTED").unwrap();
@@ -436,7 +449,7 @@ fn c_cache_invalidates_for_header_and_compiler_changes() {
 
 #[cfg(target_os = "linux")]
 #[test]
-fn c_cache_invalidates_for_library_path_changes() {
+fn c_cache_relinks_when_external_library_changes() {
     let temp = TestDir::new();
     let first_library = temp.path("first library");
     let second_library = temp.path("second library");
@@ -460,25 +473,76 @@ fn c_cache_invalidates_for_library_path_changes() {
         compile_log: &compile_log,
     };
 
-    probe.run_with_library_path(&first_library, "10\n");
+    probe.run_with_linker_search_path(&first_library, "10\n");
     assert_eq!(fs::read(&compile_log).unwrap().len(), 1);
-    probe.run_with_library_path(&second_library, "20\n");
+    create_archive_fixture(&compiler, &first_library, 11);
+    probe.run_with_linker_search_path(&first_library, "11\n");
     assert_eq!(
         fs::read(&compile_log).unwrap().len(),
         2,
+        "changed contents at the same library path must relink the executable",
+    );
+
+    probe.run_with_linker_search_path(&second_library, "20\n");
+    assert_eq!(
+        fs::read(&compile_log).unwrap().len(),
+        3,
         "a changed linker search path must relink the executable",
     );
-    probe.run_with_library_path(&second_library, "20\n");
+    probe.run_with_linker_search_path(&second_library, "20\n");
     assert_eq!(
         fs::read(&compile_log).unwrap().len(),
-        2,
+        3,
         "an unchanged linker search path should reuse the executable",
     );
 }
 
 #[cfg(target_os = "linux")]
 #[test]
-fn c_cache_invalidates_for_ld_run_path_changes() {
+fn c_cache_bypasses_linker_scripts_with_untracked_inputs() {
+    let temp = TestDir::new();
+    let library_dir = temp.path("script library");
+    fs::create_dir(&library_dir).unwrap();
+    let compiler = native::find_c_compiler().unwrap();
+    create_archive_fixture(&compiler, &library_dir, 10);
+    let archive = library_dir.join("libnacre_cache_fixture_real.a");
+    fs::rename(library_dir.join("libnacre_cache_fixture.a"), &archive).unwrap();
+    fs::write(
+        library_dir.join("libnacre_cache_fixture.so"),
+        format!("INPUT ( \"{}\" )\n", archive.display()),
+    )
+    .unwrap();
+
+    let include = temp.path("include headers");
+    fs::create_dir(&include).unwrap();
+    let wrapper = make_compiler_wrapper(&temp);
+    let cache = temp.path("cache");
+    let compile_log = temp.path("actual-compiles");
+    let executable = std::env::current_exe().unwrap();
+    let probe = CacheProbe {
+        executable: &executable,
+        compiler: &compiler,
+        wrapper: &wrapper,
+        cache: &cache,
+        include: &include,
+        compile_log: &compile_log,
+    };
+
+    probe.run_with_linker_search_path(&library_dir, "10\n");
+    assert_eq!(fs::read(&compile_log).unwrap().len(), 1);
+    create_archive_fixture(&compiler, &library_dir, 11);
+    fs::rename(library_dir.join("libnacre_cache_fixture.a"), &archive).unwrap();
+    probe.run_with_linker_search_path(&library_dir, "11\n");
+    assert_eq!(
+        fs::read(&compile_log).unwrap().len(),
+        2,
+        "linker scripts can reference library inputs omitted from dependency scanning",
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn c_cache_relinks_external_library_runpath_changes() {
     let temp = TestDir::new();
     let first_library = temp.path("first runpath");
     let second_library = temp.path("second runpath");

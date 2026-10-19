@@ -34,6 +34,8 @@ def sources():
             frontend += ['    let _error = validate(source).expect_err("invalid source accepted");\n']
             if c.get('error', '').startswith('E'):
                 frontend += [f'    assert!(_error.message.contains({quoted(c.get("error", ""))}), "{{}}", _error.render("case.ncr", source));\n']
+            if c.get('span_start'):
+                frontend += [f'    assert_eq!(_error.span.start, source.find({quoted(c["span_start"])}).unwrap());\n']
         frontend += ['}\n']
         if 'stdout' in c:
             native += [f'\n#[test]\nfn {c["name"]}() {{\n', f'    let source = {quoted(c["source"])};\n',

@@ -464,6 +464,44 @@ fn c_compiler_command(
     command
 }
 
+fn hash_file_contents(hash: &mut u128, identity_path: &Path, content_path: &Path) -> Option<()> {
+    let metadata = fs::metadata(content_path).ok()?;
+    let mut file = fs::File::open(content_path).ok()?;
+    hash_cache_part(hash, identity_path.as_os_str().as_encoded_bytes());
+    hash_cache_part(hash, &metadata.len().to_le_bytes());
+    let mut buffer = [0; 8192];
+    loop {
+        let bytes_read = file.read(&mut buffer).ok()?;
+        if bytes_read == 0 { break; }
+        update_cache_hash(hash, &buffer[..bytes_read]);
+    }
+    Some(())
+}
+
+fn has_trackable_link_input_format(path: &Path) -> Option<bool> {
+    // Linker scripts and thin archives reference files outside this fingerprint.
+    let mut file = fs::File::open(path).ok()?;
+    let mut magic = [0; 8];
+    file.read_exact(&mut magic).ok()?;
+    const MACH_O_MAGICS: [[u8; 4]; 8] = [
+        [0xce, 0xfa, 0xed, 0xfe],
+        [0xcf, 0xfa, 0xed, 0xfe],
+        [0xfe, 0xed, 0xfa, 0xce],
+        [0xfe, 0xed, 0xfa, 0xcf],
+        [0xca, 0xfe, 0xba, 0xbe],
+        [0xca, 0xfe, 0xba, 0xbf],
+        [0xbe, 0xba, 0xfe, 0xca],
+        [0xbf, 0xba, 0xfe, 0xca],
+    ];
+    let file_magic = &magic[..4];
+    let is_elf = file_magic == b"\x7fELF";
+    let is_archive = &magic == b"!<arch>\n";
+    let is_mach_o = MACH_O_MAGICS
+        .iter()
+        .any(|candidate| file_magic == &candidate[..]);
+    Some(is_elf || is_archive || is_mach_o)
+}
+
 fn dependency_files_fingerprint(output: &[u8], source_path: &Path) -> Option<u128> {
     let source_path = source_path.canonicalize().ok()?;
     let mut paths = parse_make_dependencies(output)?;
@@ -473,18 +511,161 @@ fn dependency_files_fingerprint(output: &[u8], source_path: &Path) -> Option<u12
     for path in paths {
         let canonical = path.canonicalize().ok()?;
         if canonical == source_path { continue; }
-        let metadata = fs::metadata(&canonical).ok()?;
-        let mut file = fs::File::open(&canonical).ok()?;
-        hash_cache_part(&mut fingerprint, path.as_os_str().as_encoded_bytes());
-        hash_cache_part(&mut fingerprint, &metadata.len().to_le_bytes());
-        let mut buffer = [0; 8192];
-        loop {
-            let bytes_read = file.read(&mut buffer).ok()?;
-            if bytes_read == 0 { break; }
-            update_cache_hash(&mut fingerprint, &buffer[..bytes_read]);
+        hash_file_contents(&mut fingerprint, &path, &canonical)?;
+    }
+
+    Some(fingerprint)
+}
+
+fn library_search_paths(flags: &[&str]) -> Option<Vec<PathBuf>> {
+    let mut search_paths = Vec::new();
+    let mut index = 0;
+    while index < flags.len() {
+        let flag = flags[index];
+        if is_opaque_link_flag(flag)
+            || flag.starts_with('@')
+            || (!flag.starts_with('-') && Path::new(flag).is_file())
+        {
+            return None;
+        }
+        let path = if flag == "-L" {
+            index += 1;
+            Some(*flags.get(index)?)
+        } else {
+            flag.strip_prefix("-L")
+        };
+        if let Some(path) = path {
+            search_paths.push(if path.is_empty() { PathBuf::from(".") } else { PathBuf::from(path) });
+        }
+        index += 1;
+    }
+    if let Some(library_path) = env::var_os("LIBRARY_PATH") {
+        let mut added = false;
+        for path in env::split_paths(&library_path) {
+            search_paths.push(if path.as_os_str().is_empty() { PathBuf::from(".") } else { path });
+            added = true;
+        }
+        if !added && library_path.is_empty() {
+            search_paths.push(PathBuf::from("."));
         }
     }
-    Some(fingerprint)
+    Some(search_paths)
+}
+
+fn hash_linked_library(
+    hash: &mut u128,
+    search_paths: &[PathBuf],
+    name: &str,
+    required: bool,
+) -> Option<()> {
+    if name.is_empty() {
+        return None;
+    }
+    hash_cache_part(hash, b"linked-library");
+    hash_cache_part(hash, name.as_bytes());
+    let mut found = false;
+    if let Some(file_name) = name.strip_prefix(':') {
+        if file_name.is_empty() {
+            return None;
+        }
+        let mut candidate_found = false;
+        for directory in search_paths {
+            let path = directory.join(file_name);
+            if !path.is_file() {
+                continue;
+            }
+            let canonical = path.canonicalize().ok()?;
+            if !has_trackable_link_input_format(&canonical)? {
+                return None;
+            }
+            hash_file_contents(hash, &canonical, &canonical)?;
+            candidate_found = true;
+            found = true;
+            break;
+        }
+        hash_cache_part(hash, &[u8::from(candidate_found)]);
+    } else {
+        // Search both shared and static candidates; either can affect linker output.
+        let suffixes: &[&str] = if cfg!(target_os = "macos") {
+            &["dylib", "a"]
+        } else {
+            &["so", "a"]
+        };
+        for suffix in suffixes {
+            let file_name = format!("lib{name}.{suffix}");
+            hash_cache_part(hash, file_name.as_bytes());
+            let mut candidate_found = false;
+            for directory in search_paths {
+                let path = directory.join(&file_name);
+                if !path.is_file() {
+                    continue;
+                }
+                let canonical = path.canonicalize().ok()?;
+                if !has_trackable_link_input_format(&canonical)? {
+                    return None;
+                }
+                hash_file_contents(hash, &canonical, &canonical)?;
+                candidate_found = true;
+                found = true;
+                break;
+            }
+            hash_cache_part(hash, &[u8::from(candidate_found)]);
+        }
+    }
+    if required && !found {
+        return None;
+    }
+    Some(())
+}
+
+fn is_opaque_link_flag(flag: &str) -> bool {
+    // These `-Wl` modifiers only alter how the fingerprinted libraries are linked.
+    (flag.starts_with("-Wl,")
+        && !matches!(
+            flag,
+            "-Wl,--whole-archive" | "-Wl,--no-whole-archive" | "-Wl,--no-as-needed"
+        ))
+        || flag.starts_with("-Xlinker")
+        || flag.starts_with("-static")
+        || flag.starts_with("-B")
+        || flag.starts_with("-T")
+        || flag.starts_with("--script")
+        || flag.starts_with("--version-script")
+        || flag.starts_with("--dynamic-list")
+        || flag.starts_with("--sysroot")
+        || flag == "-isysroot"
+}
+
+fn hash_external_link_inputs(
+    hash: &mut u128,
+    flags: &[&str],
+    libraries: &NativeLibraries,
+) -> Option<()> {
+    // `-M` reports headers, not linker inputs. Unresolved or opaque inputs bypass caching.
+    let search_paths = library_search_paths(flags)?;
+    hash_cache_part(hash, b"external-link-inputs");
+    let mut index = 0;
+    while index < flags.len() {
+        let flag = flags[index];
+        let name = if flag == "-l" {
+            index += 1;
+            Some(*flags.get(index)?)
+        } else {
+            flag.strip_prefix("-l")
+        };
+        if let Some(name) = name {
+            hash_linked_library(hash, &search_paths, name, true)?;
+        }
+        index += 1;
+    }
+    for flag in libraries.link_flags() {
+        let name = flag.strip_prefix("-l")?;
+        hash_linked_library(hash, &search_paths, name, true)?;
+    }
+    if cfg!(unix) && !search_paths.is_empty() {
+        hash_linked_library(hash, &search_paths, "m", false)?;
+    }
+    Some(())
 }
 
 fn dependency_cache_fingerprint(
@@ -498,7 +679,9 @@ fn dependency_cache_fingerprint(
     command.args(["-M", "-MT", "nacre", "-MF", "-"]).arg(source_path);
     let output = capture_limited_output(command, OUTPUT_CAPTURE_LIMIT_BYTES, StdoutCapture::Capture).ok()?;
     if !output.status.success() || output.stdout_truncated { return None; }
-    dependency_files_fingerprint(&output.stdout, source_path)
+    let mut fingerprint = dependency_files_fingerprint(&output.stdout, source_path)?;
+    hash_external_link_inputs(&mut fingerprint, flags, libraries)?;
+    Some(fingerprint)
 }
 
 fn runtime_dependency_fingerprint(

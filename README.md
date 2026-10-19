@@ -345,6 +345,10 @@ and contents. If dependency scanning fails, the build safely bypasses the cache.
 The C executable key also hashes `LIBRARY_PATH` and `LD_RUN_PATH`, including
 whether each is unset or set to an empty value, so changed link-time library
 selection or embedded runtime search paths force a fresh link.
+Named external libraries are content-hashed when they resolve in explicit `-L`
+or `LIBRARY_PATH` paths. Libraries found only through compiler defaults, opaque
+linker options, linker scripts, thin archives, and direct file inputs bypass
+this executable cache.
 The cache defaults to `$XDG_CACHE_HOME/nacre` (or `$HOME/.cache/nacre`);
 `NACRE_CACHE_DIR` overrides the location and `NACRE_NO_CACHE` disables caching.
 PGO builds bypass the cache. Direct native builds use a separate runtime-bitcode
