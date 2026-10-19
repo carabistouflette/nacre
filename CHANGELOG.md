@@ -3,6 +3,8 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Reuse the lazy native-method index for CryptoKeys parameter and result metadata,
+  retaining the no-crypto class gate.
 - Resolve UUID method bindings through the lazy index and reuse resolved functions
   for signatures instead of rescanning Program.functions.
 - Detect Process feature groups in one allocation-free function pass, then reuse
