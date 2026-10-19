@@ -254,6 +254,9 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 
 - Run Clippy with warnings denied across all Rust targets and the fuzzing feature in CI.
 
+- Validate the fuzz crate's checked-in dependency graph with `cargo fetch --locked`
+  before bounded campaigns, preventing silent lockfile drift.
+
 - Discard test stdout and bound test/benchmark child output capture.
 
 - Bound native C/LLVM compiler and linker subprocess capture to 64 KiB per stream.

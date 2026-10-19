@@ -14,6 +14,20 @@ TARGETS = {
 
 
 def main() -> None:
+
+    subprocess.run(
+        [
+            "cargo",
+            "+nightly",
+            "fetch",
+            "--manifest-path",
+            "fuzz/Cargo.toml",
+            "--locked",
+        ],
+        cwd=ROOT,
+        check=True,
+    )
+
     for target, max_len in TARGETS.items():
         corpus = ROOT / "fuzz" / "corpus" / target
         artifacts = ROOT / "fuzz" / "artifacts" / target
