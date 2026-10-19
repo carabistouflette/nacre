@@ -1,5 +1,8 @@
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
-use super::support::{has_placeholder, native_function, replace_method_ids, replace_placeholders, result_id, template_section, variant_id};
+use super::support::{
+    has_placeholder, replace_method_ids, replace_placeholders, required_first_native_method,
+    result_id, template_section, variant_id,
+};
 
 fn class_id(program: &t::Program, native: C) -> Option<usize> {
     program.classes.iter().find_map(|class| {
@@ -93,11 +96,11 @@ pub(super) fn implementation(program: &t::Program, native_method_ids: &mut Optio
         if let Some(id) = id { bindings.push((key, id.to_string())); }
     }
     if reader.is_some() {
-        let from_text = native_function(program, |method| method == M::XmlReaderFromText);
-        let from_buffer = native_function(program, |method| method == M::XmlReaderFromBuffer);
+        let from_text = required_first_native_method(program, native_method_ids, M::XmlReaderFromText);
+        let from_buffer = required_first_native_method(program, native_method_ids, M::XmlReaderFromBuffer);
         let construct = result!(from_text, "CONSTRUCT");
         assert_eq!(result_id(from_buffer), construct, "XmlReader factories share their result");
-        let read = native_function(program, |method| method == M::XmlReaderRead);
+        let read = required_first_native_method(program, native_method_ids, M::XmlReaderRead);
         let result = result!(read, "READ");
         let (_, ok) = super::support::variant(program, result, "Ok");
         let [Type::Object(option)] = ok.fields.as_slice() else {
@@ -112,19 +115,19 @@ pub(super) fn implementation(program: &t::Program, native_method_ids: &mut Optio
         ]);
     }
     if event.is_some() {
-        let attribute = native_function(program, |method| method == M::XmlEventAttributeName);
+        let attribute = required_first_native_method(program, native_method_ids, M::XmlEventAttributeName);
         result!(attribute, "ATTRIBUTE");
     }
     if writer.is_some() {
-        let create = native_function(program, |method| method == M::XmlWriterCreate);
+        let create = required_first_native_method(program, native_method_ids, M::XmlWriterCreate);
         result!(create, "WRITER_CREATE");
-        let finish = native_function(program, |method| method == M::XmlWriterFinish);
+        let finish = required_first_native_method(program, native_method_ids, M::XmlWriterFinish);
         result!(finish, "FINISH");
     }
     let unit_method = if reader.is_some() { Some(M::XmlReaderClose) }
         else if writer.is_some() { Some(M::XmlWriterStartDocument) } else { None };
     if let Some(method) = unit_method {
-        let function = native_function(program, |candidate| candidate == method);
+        let function = required_first_native_method(program, native_method_ids, method);
         result!(function, "UNIT");
     }
     for function in &program.functions {

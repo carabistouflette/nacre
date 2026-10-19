@@ -3,6 +3,8 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Resolve active XML stream result metadata through the lazy native-method index,
+  avoiding repeated scans while preserving the no-XML early return.
 - Reuse the lazy native-method index for Filesystem parameter/result metadata,
   eliminating repeated scans while keeping the unused-filesystem path unindexed.
 - Resolve active Compression and Checksums method metadata through the lazy
