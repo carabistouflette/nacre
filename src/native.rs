@@ -329,6 +329,15 @@ fn hash_cache_part(hash: &mut u128, part: &[u8]) {
     update_cache_hash(hash, part);
 }
 
+fn hash_environment_variable(hash: &mut u128, variable: &str) {
+    update_cache_hash(hash, variable.as_bytes());
+    *hash = (*hash ^ 0xff).wrapping_mul(CACHE_HASH_PRIME);
+    if let Some(value) = env::var_os(variable) {
+        update_cache_hash(hash, value.as_encoded_bytes());
+    }
+    *hash = (*hash ^ 0xff).wrapping_mul(CACHE_HASH_PRIME);
+}
+
 fn hash_compiler_environment(hash: &mut u128) {
     for variable in [
         "CPATH",
@@ -338,12 +347,7 @@ fn hash_compiler_environment(hash: &mut u128) {
         "CLANG_CONFIG_FILE",
         "CCC_OVERRIDE_OPTIONS",
     ] {
-        update_cache_hash(hash, variable.as_bytes());
-        *hash = (*hash ^ 0xff).wrapping_mul(CACHE_HASH_PRIME);
-        if let Some(value) = env::var_os(variable) {
-            update_cache_hash(hash, value.as_encoded_bytes());
-        }
-        *hash = (*hash ^ 0xff).wrapping_mul(CACHE_HASH_PRIME);
+        hash_environment_variable(hash, variable);
     }
 }
 
@@ -401,6 +405,7 @@ fn compute_cache_key(
     hash_cache_part(&mut hash, source.as_bytes());
     hash_cache_part(&mut hash, &dependencies.to_le_bytes());
     hash_compiler_environment(&mut hash);
+    hash_environment_variable(&mut hash, "LIBRARY_PATH");
     hash_clang_config_files(&mut hash, flags)?;
     Some(format!("{hash:032x}"))
 }

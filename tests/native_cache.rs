@@ -10,6 +10,12 @@ use std::sync::{Arc, Barrier};
 
 static NEXT: AtomicUsize = AtomicUsize::new(0);
 const SOURCE: &str = "#include <stdio.h>\n#include \"cache_value.h\"\n#ifndef NACRE_CACHE_OVERRIDE\n#define NACRE_CACHE_OVERRIDE 0\n#endif\nint main(void) { printf(\"%d\\n\", NACRE_CACHE_VALUE + NACRE_CACHE_OVERRIDE); return 0; }\n";
+#[cfg(target_os = "linux")]
+const LIBRARY_SOURCE: &str = r#"
+#include <stdio.h>
+extern int nacre_cache_fixture_value(void);
+int main(void) { printf("%d\n", nacre_cache_fixture_value()); return 0; }
+"#;
 
 struct TestDir(PathBuf);
 
@@ -29,6 +35,67 @@ impl TestDir {
 
 impl Drop for TestDir {
     fn drop(&mut self) { let _ = fs::remove_dir_all(&self.0); }
+}
+
+fn make_compiler_wrapper(temp: &TestDir) -> PathBuf {
+    let wrapper = temp.path("compiler-wrapper");
+    fs::write(
+        &wrapper,
+        r#"#!/bin/sh
+if [ "$1" = "--version" ]; then printf 'fixture compiler %s\n' "$NACRE_FIXTURE_VERSION"; exit 0; fi
+if [ "$1" = "-dumpmachine" ]; then printf '%s\n' fixture-target; exit 0; fi
+for argument do
+    if [ "$argument" = "-o" ]; then
+        printf x >> "$NACRE_FIXTURE_COMPILE_LOG"
+        if [ -n "${NACRE_FIXTURE_BARRIER_TARGET:-}" ]; then
+            : > "$NACRE_FIXTURE_BARRIER_DIR/$$"
+            attempts=0
+            while [ "$attempts" -lt 500 ]; do
+                count=0
+                for marker in "$NACRE_FIXTURE_BARRIER_DIR"/*; do
+                    [ -e "$marker" ] && count=$((count + 1))
+                done
+                [ "$count" -ge "$NACRE_FIXTURE_BARRIER_TARGET" ] && break
+                sleep 0.01
+                attempts=$((attempts + 1))
+            done
+        fi
+        break
+    fi
+done
+if [ -n "${MACOSX_DEPLOYMENT_TARGET:-}" ]; then
+    set -- "$@" "-DNACRE_CACHE_OVERRIDE=$MACOSX_DEPLOYMENT_TARGET"
+fi
+exec "$NACRE_FIXTURE_REAL_CC" "$@"
+"#,
+    )
+    .unwrap();
+    use std::os::unix::fs::PermissionsExt;
+    fs::set_permissions(&wrapper, fs::Permissions::from_mode(0o755)).unwrap();
+    wrapper
+}
+
+#[cfg(target_os = "linux")]
+fn create_archive_fixture(compiler: &std::ffi::OsStr, directory: &Path, value: i32) {
+    let source = directory.join("fixture.c");
+    let object = directory.join("fixture.o");
+    let archive = directory.join("libnacre_cache_fixture.a");
+    fs::write(&source, format!("int nacre_cache_fixture_value(void) {{ return {value}; }}\n")).unwrap();
+    let compiled = Command::new(compiler)
+        .arg("-c")
+        .arg(&source)
+        .arg("-o")
+        .arg(&object)
+        .output()
+        .unwrap();
+    assert!(compiled.status.success(), "fixture compiler failed:\n{}", String::from_utf8_lossy(&compiled.stderr));
+    let archived = Command::new("ar")
+        .arg("rcs")
+        .arg(&archive)
+        .arg(&object)
+        .output()
+        .unwrap();
+    assert!(archived.status.success(), "fixture archive creation failed:\n{}", String::from_utf8_lossy(&archived.stderr));
 }
 
 struct CacheProbe<'a> {
@@ -76,6 +143,32 @@ impl CacheProbe<'_> {
         );
     }
 
+    #[cfg(target_os = "linux")]
+    fn run_with_library_path(&self, library_path: &Path, expected: &str) {
+        let output = Command::new(self.executable)
+            .args(["--exact", "c_cache_library_path_probe_child", "--nocapture"])
+            .env("NACRE_CACHE_LIBRARY_PATH_PROBE_CHILD", "1")
+            .env("NACRE_CACHE_EXPECTED", expected)
+            .env("NACRE_CACHE_INCLUDE", self.include)
+            .env("NACRE_CACHE_DIR", self.cache)
+            .env("NACRE_ENABLE_TEST_CACHE", "1")
+            .env("NACRE_CC", self.wrapper)
+            .env("NACRE_FIXTURE_REAL_CC", self.compiler)
+            .env("NACRE_FIXTURE_VERSION", "library-path-v1")
+            .env("NACRE_FIXTURE_COMPILE_LOG", self.compile_log)
+            .env("LIBRARY_PATH", library_path)
+            .env_remove("MACOSX_DEPLOYMENT_TARGET")
+            .env_remove("NACRE_NO_CACHE")
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "library-path cache probe failed\nstdout: {}\nstderr: {}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+        );
+    }
+
     fn run_concurrently(&self, barrier: &Path) {
         let output = Command::new(self.executable)
             .args(["--exact", "c_cache_concurrent_probe_child", "--nocapture"])
@@ -110,6 +203,21 @@ fn c_cache_probe_child() {
     let include = PathBuf::from(include);
     let include = include.to_str().unwrap();
     let program = native::compile_c_optimized(SOURCE, "-O0", &["-I", include]).unwrap();
+    let output = program.output().unwrap();
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    let expected = std::env::var("NACRE_CACHE_EXPECTED").unwrap();
+    assert_eq!(output.stdout, expected.as_bytes());
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn c_cache_library_path_probe_child() {
+    if std::env::var_os("NACRE_CACHE_LIBRARY_PATH_PROBE_CHILD").is_none() { return; }
+    let program = native::compile_c_optimized(
+        LIBRARY_SOURCE,
+        "-O0",
+        &["-Wl,--whole-archive", "-lnacre_cache_fixture", "-Wl,--no-whole-archive"],
+    ).unwrap();
     let output = program.output().unwrap();
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     let expected = std::env::var("NACRE_CACHE_EXPECTED").unwrap();
@@ -151,40 +259,7 @@ fn c_cache_invalidates_for_header_and_compiler_changes() {
     fs::create_dir(&include).unwrap();
     let header = include.join("cache_value.h");
     fs::write(&header, "#define NACRE_CACHE_VALUE 10\n").unwrap();
-    let wrapper = temp.path("compiler-wrapper");
-    fs::write(
-        &wrapper,
-        r#"#!/bin/sh
-if [ "$1" = "--version" ]; then printf 'fixture compiler %s\n' "$NACRE_FIXTURE_VERSION"; exit 0; fi
-if [ "$1" = "-dumpmachine" ]; then printf '%s\n' fixture-target; exit 0; fi
-for argument do
-    if [ "$argument" = "-o" ]; then
-        printf x >> "$NACRE_FIXTURE_COMPILE_LOG"
-        if [ -n "${NACRE_FIXTURE_BARRIER_TARGET:-}" ]; then
-            : > "$NACRE_FIXTURE_BARRIER_DIR/$$"
-            attempts=0
-            while [ "$attempts" -lt 500 ]; do
-                count=0
-                for marker in "$NACRE_FIXTURE_BARRIER_DIR"/*; do
-                    [ -e "$marker" ] && count=$((count + 1))
-                done
-                [ "$count" -ge "$NACRE_FIXTURE_BARRIER_TARGET" ] && break
-                sleep 0.01
-                attempts=$((attempts + 1))
-            done
-        fi
-        break
-    fi
-done
-if [ -n "${MACOSX_DEPLOYMENT_TARGET:-}" ]; then
-    set -- "$@" "-DNACRE_CACHE_OVERRIDE=$MACOSX_DEPLOYMENT_TARGET"
-fi
-exec "$NACRE_FIXTURE_REAL_CC" "$@"
-"#,
-    )
-    .unwrap();
-    use std::os::unix::fs::PermissionsExt;
-    fs::set_permissions(&wrapper, fs::Permissions::from_mode(0o755)).unwrap();
+    let wrapper = make_compiler_wrapper(&temp);
 
     let compiler = native::find_c_compiler().unwrap();
     let cache = temp.path("cache");
@@ -235,6 +310,48 @@ exec "$NACRE_FIXTURE_REAL_CC" "$@"
     assert_eq!(fs::read(&concurrent_log).unwrap().len(), 8);
     concurrent_probe.run("v3", "20\n");
     assert_eq!(fs::read(&concurrent_log).unwrap().len(), 8, "concurrent cache writes must leave a reusable executable");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn c_cache_invalidates_for_library_path_changes() {
+    let temp = TestDir::new();
+    let first_library = temp.path("first library");
+    let second_library = temp.path("second library");
+    fs::create_dir(&first_library).unwrap();
+    fs::create_dir(&second_library).unwrap();
+    let compiler = native::find_c_compiler().unwrap();
+    create_archive_fixture(&compiler, &first_library, 10);
+    create_archive_fixture(&compiler, &second_library, 20);
+    let include = temp.path("include headers");
+    fs::create_dir(&include).unwrap();
+    let wrapper = make_compiler_wrapper(&temp);
+    let cache = temp.path("cache");
+    let compile_log = temp.path("actual-compiles");
+    let executable = std::env::current_exe().unwrap();
+    let probe = CacheProbe {
+        executable: &executable,
+        compiler: &compiler,
+        wrapper: &wrapper,
+        cache: &cache,
+        include: &include,
+        compile_log: &compile_log,
+    };
+
+    probe.run_with_library_path(&first_library, "10\n");
+    assert_eq!(fs::read(&compile_log).unwrap().len(), 1);
+    probe.run_with_library_path(&second_library, "20\n");
+    assert_eq!(
+        fs::read(&compile_log).unwrap().len(),
+        2,
+        "a changed linker search path must relink the executable",
+    );
+    probe.run_with_library_path(&second_library, "20\n");
+    assert_eq!(
+        fs::read(&compile_log).unwrap().len(),
+        2,
+        "an unchanged linker search path should reuse the executable",
+    );
 }
 
 #[test]
