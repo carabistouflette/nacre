@@ -1,6 +1,9 @@
 use std::borrow::Cow;
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M};
-use super::support::{has_placeholder, native_function, replace_method_ids, replace_placeholders, result_id, variant_id};
+use super::support::{
+    has_placeholder, replace_method_ids, replace_placeholders, required_first_native_method,
+    result_id, variant_id,
+};
 
 struct MethodBinding {
     name: &'static str,
@@ -175,7 +178,7 @@ pub(super) fn implementation(program: &t::Program, native_method_ids: &mut Optio
     ] {
         if !present_class { continue; }
         for binding in bindings {
-            let function = native_function(program, |method| method == binding.method);
+            let function = required_first_native_method(program, native_method_ids, binding.method);
             for (placeholder, index) in binding.parameters {
                 substitutions.push((
                     Cow::Borrowed(placeholder),

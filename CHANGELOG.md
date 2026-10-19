@@ -3,6 +3,8 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Resolve BigInt/BigDecimal codegen method bindings through the lazy native-method
+  index instead of rescanning all functions for every binding.
 - Reuse the lazy native-method index in network code generation for method
   selection and feature checks, avoiding repeated scans without indexing
   programs that do not need network support.
