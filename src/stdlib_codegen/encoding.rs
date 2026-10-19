@@ -1,12 +1,16 @@
 use crate::c_repr::ctype;
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
 use super::support::{
-    marker, native_function, replace_method_ids, replace_placeholders, result_id, text_class,
-    variant, TEXT_INLINE_CAPACITY,
+    marker, replace_method_ids, replace_placeholders, required_first_native_method, result_id,
+    text_class, variant, TEXT_INLINE_CAPACITY,
 };
 
-fn function(program: &t::Program, method: M) -> &t::Function {
-    native_function(program, |candidate| candidate == method)
+fn function<'a>(
+    program: &'a t::Program,
+    native_method_ids: &mut Option<t::NativeMethodIndex>,
+    method: M,
+) -> &'a t::Function {
+    required_first_native_method(program, native_method_ids, method)
 }
 
 fn byte_buffer_id(program: &t::Program) -> usize {
@@ -20,8 +24,7 @@ fn parameter(function: &t::Function, index: usize) -> String {
     format!("ncr_v_{}", function.params[index].0)
 }
 
-fn signature(program: &t::Program, method: M) -> String {
-    let function = function(program, method);
+fn signature(program: &t::Program, method: M, function: &t::Function) -> String {
     assert_eq!(function.native, Some(method), "Encoding signature has the expected native method");
     assert!(function.receiver.is_none(), "Encoding methods are static");
     let mut parameters = function.params.iter()
@@ -53,14 +56,14 @@ pub(super) fn implementation(program: &t::Program, class: usize, native_method_i
     let text = text_class(program).expect("Encoding requires Text");
     let buffer = byte_buffer_id(program);
 
-    let hex_encode = function(program, M::EncodingHexEncode);
-    let hex_decode = function(program, M::EncodingHexDecode);
-    let base64_encode = function(program, M::EncodingBase64Encode);
-    let base64_decode = function(program, M::EncodingBase64Decode);
-    let base64_url_encode = function(program, M::EncodingBase64UrlEncode);
-    let base64_url_decode = function(program, M::EncodingBase64UrlDecode);
-    let utf8_encode = function(program, M::EncodingUtf8Encode);
-    let utf8_decode = function(program, M::EncodingUtf8Decode);
+    let hex_encode = function(program, native_method_ids, M::EncodingHexEncode);
+    let hex_decode = function(program, native_method_ids, M::EncodingHexDecode);
+    let base64_encode = function(program, native_method_ids, M::EncodingBase64Encode);
+    let base64_decode = function(program, native_method_ids, M::EncodingBase64Decode);
+    let base64_url_encode = function(program, native_method_ids, M::EncodingBase64UrlEncode);
+    let base64_url_decode = function(program, native_method_ids, M::EncodingBase64UrlDecode);
+    let utf8_encode = function(program, native_method_ids, M::EncodingUtf8Encode);
+    let utf8_decode = function(program, native_method_ids, M::EncodingUtf8Decode);
 
     for method in [hex_encode, base64_encode, base64_url_encode] {
         assert_borrow(method, 0, buffer);
@@ -89,14 +92,14 @@ pub(super) fn implementation(program: &t::Program, class: usize, native_method_i
         ("@TEXT_INIT@", format!("ncr_text_init_{text}")),
         ("@TEXT_TAKE_BYTES@", format!("ncr_text_take_bytes_{text}")),
         ("@BUFFER_RESERVE@", format!("ncr_byte_buffer_reserve_{buffer}")),
-        ("@HEX_ENCODE_SIGNATURE@", signature(program, M::EncodingHexEncode)),
-        ("@HEX_DECODE_SIGNATURE@", signature(program, M::EncodingHexDecode)),
-        ("@BASE64_ENCODE_SIGNATURE@", signature(program, M::EncodingBase64Encode)),
-        ("@BASE64_DECODE_SIGNATURE@", signature(program, M::EncodingBase64Decode)),
-        ("@BASE64_URL_ENCODE_SIGNATURE@", signature(program, M::EncodingBase64UrlEncode)),
-        ("@BASE64_URL_DECODE_SIGNATURE@", signature(program, M::EncodingBase64UrlDecode)),
-        ("@UTF8_ENCODE_SIGNATURE@", signature(program, M::EncodingUtf8Encode)),
-        ("@UTF8_DECODE_SIGNATURE@", signature(program, M::EncodingUtf8Decode)),
+        ("@HEX_ENCODE_SIGNATURE@", signature(program, M::EncodingHexEncode, hex_encode)),
+        ("@HEX_DECODE_SIGNATURE@", signature(program, M::EncodingHexDecode, hex_decode)),
+        ("@BASE64_ENCODE_SIGNATURE@", signature(program, M::EncodingBase64Encode, base64_encode)),
+        ("@BASE64_DECODE_SIGNATURE@", signature(program, M::EncodingBase64Decode, base64_decode)),
+        ("@BASE64_URL_ENCODE_SIGNATURE@", signature(program, M::EncodingBase64UrlEncode, base64_url_encode)),
+        ("@BASE64_URL_DECODE_SIGNATURE@", signature(program, M::EncodingBase64UrlDecode, base64_url_decode)),
+        ("@UTF8_ENCODE_SIGNATURE@", signature(program, M::EncodingUtf8Encode, utf8_encode)),
+        ("@UTF8_DECODE_SIGNATURE@", signature(program, M::EncodingUtf8Decode, utf8_decode)),
         ("@HEX_ENCODE_BYTES@", parameter(hex_encode, 0)),
         ("@HEX_DECODE_TEXT@", parameter(hex_decode, 0)),
         ("@BASE64_ENCODE_BYTES@", parameter(base64_encode, 0)),

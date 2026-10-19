@@ -3,6 +3,8 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Resolve Encoding methods through the lazy native-method index and reuse their
+  metadata when emitting signatures, avoiding repeated function-table scans.
 - Reuse the lazy native-method index for CryptoKeys parameter and result metadata,
   retaining the no-crypto class gate.
 - Resolve UUID method bindings through the lazy index and reuse resolved functions
