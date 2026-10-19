@@ -1,5 +1,8 @@
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
-use super::support::{has_placeholder, native_function, replace_method_ids, replace_placeholders, result_id, template_section, variant_id};
+use super::support::{
+    has_placeholder, native_function, replace_method_ids, replace_placeholders, result_id,
+    required_indexed_native_method, template_section, variant_id,
+};
 
 fn xml_class(program: &t::Program) -> Option<usize> {
     program.classes.iter().find_map(|class|
@@ -77,12 +80,9 @@ pub(super) fn implementation(program: &t::Program, native_method_ids: &mut Optio
         "XmlDocument query methods share Result<List<Text>, Text>");
     assert!(matches!(program.classes[list].native, Some(C::List(Type::Object(element))) if element == text),
         "XmlDocument query results specialize to native List<Text>");
-    let list_new = program.functions.iter().find(|function|
-        function.receiver == Some(list) && function.native == Some(M::ListNew))
-        .expect("XmlDocument List<Text> constructor");
-    let list_add = program.functions.iter().find(|function|
-        function.receiver == Some(list) && function.native == Some(M::ListAdd))
-        .expect("XmlDocument List<Text>.add");
+    let method_ids = native_method_ids.get_or_insert_with(|| t::NativeMethodIndex::new(program));
+    let list_new = required_indexed_native_method(program, method_ids, Some(list), M::ListNew);
+    let list_add = required_indexed_native_method(program, method_ids, Some(list), M::ListAdd);
 
     let parse_result = result_id(parse);
     let serialize_result = result_id(serialize);

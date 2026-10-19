@@ -1,8 +1,14 @@
 use crate::ir::{self as t, NativeMethod as M, Type};
 use super::support::{
-    native_function, replace_placeholders, result_id, variant_id, TEXT_INLINE_CAPACITY,
+    native_function, replace_placeholders, required_indexed_native_method, result_id,
+    variant_id, TEXT_INLINE_CAPACITY,
 };
-fn text_method_placeholders(body: String, program: &t::Program, text: usize) -> String {
+fn text_method_placeholders(
+    body: String,
+    program: &t::Program,
+    text: usize,
+    native_method_ids: &mut Option<t::NativeMethodIndex>,
+) -> String {
     let parse = native_function(program, |method| matches!(method, M::TextParseInt));
     let parse_long = native_function(program, |method| matches!(method, M::TextParseLong));
     let parse_double = native_function(program, |method| matches!(method, M::TextParseDouble));
@@ -19,18 +25,15 @@ fn text_method_placeholders(body: String, program: &t::Program, text: usize) -> 
         _ => unreachable!("Text.split specializes its result to native List<Text>"),
     };
     assert_eq!(list_element, Type::Object(text), "Text.split list element is Text");
-    let list_new = program.functions.iter().find(|function| {
-        function.receiver == Some(list_class) && matches!(function.native, Some(M::ListNew))
-    }).expect("Text.split List<Text> constructor");
-    let list_add = program.functions.iter().find(|function| {
-        function.receiver == Some(list_class) && matches!(function.native, Some(M::ListAdd))
-    }).expect("Text.split List<Text>.add");
-    let list_size = program.functions.iter().find(|function| {
-        function.receiver == Some(list_class) && matches!(function.native, Some(M::ListSize))
-    }).expect("Text.join List<Text>.size");
-    let list_get_ref = program.functions.iter().find(|function| {
-        function.receiver == Some(list_class) && matches!(function.native, Some(M::ListGetRef))
-    }).expect("Text.join List<Text>.getRef");
+    let method_ids = native_method_ids.get_or_insert_with(|| t::NativeMethodIndex::new(program));
+    let list_new =
+        required_indexed_native_method(program, method_ids, Some(list_class), M::ListNew);
+    let list_add =
+        required_indexed_native_method(program, method_ids, Some(list_class), M::ListAdd);
+    let list_size =
+        required_indexed_native_method(program, method_ids, Some(list_class), M::ListSize);
+    let list_get_ref =
+        required_indexed_native_method(program, method_ids, Some(list_class), M::ListGetRef);
     let parse_id = result_id(parse);
     let parse_long_id = result_id(parse_long);
     let parse_double_id = result_id(parse_double);
@@ -74,6 +77,15 @@ pub(super) fn drop_fields() -> String {
     "    if (p->bytes != NULL && p->bytes != p->inline_storage) { ncr_deallocate(p->bytes); }\n".to_owned()
 }
 
-pub(super) fn implementation(program: &t::Program, text: usize) -> String {
-    text_method_placeholders(include_str!("../../stdlib/text.c.in").to_owned(), program, text)
+pub(super) fn implementation(
+    program: &t::Program,
+    text: usize,
+    native_method_ids: &mut Option<t::NativeMethodIndex>,
+) -> String {
+    text_method_placeholders(
+        include_str!("../../stdlib/text.c.in").to_owned(),
+        program,
+        text,
+        native_method_ids,
+    )
 }

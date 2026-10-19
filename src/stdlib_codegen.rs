@@ -246,7 +246,7 @@ fn append_body(
             let method_ids = native_method_ids.get_or_insert_with(|| t::NativeMethodIndex::new(program));
             iterators::implementation(program, method_ids, native, class.id)
         }
-        C::Text => text::implementation(program, class.id),
+        C::Text => text::implementation(program, class.id, native_method_ids),
         C::Math => math::implementation(program, native_method_ids),
         C::Random => random::implementation(program, native_method_ids),
         C::Encoding => encoding::implementation(program, class.id, native_method_ids),

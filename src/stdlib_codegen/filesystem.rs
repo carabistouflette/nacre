@@ -1,6 +1,7 @@
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
 use super::support::{
-    native_function, replace_method_ids, replace_placeholders, result_id, text_class, variant, variant_id,
+    native_function, required_indexed_native_method, replace_method_ids, replace_placeholders,
+    result_id, text_class, variant, variant_id,
 };
 
 pub(super) fn fields(program: &t::Program, class: C) -> String {
@@ -298,12 +299,9 @@ fn files_implementation(
         unreachable!("Files.list specializes native List<Text>");
     };
     assert_eq!(list_text, text, "Files.list returns List<Text>");
-    let list_new = program.functions.iter().find(|function| {
-        function.receiver == Some(*list_class) && matches!(function.native, Some(M::ListNew))
-    }).expect("Files.list List<Text> constructor");
-    let list_add = program.functions.iter().find(|function| {
-        function.receiver == Some(*list_class) && matches!(function.native, Some(M::ListAdd))
-    }).expect("Files.list List<Text>.add");
+    let method_ids = native_method_ids.get_or_insert_with(|| t::NativeMethodIndex::new(program));
+    let list_new = required_indexed_native_method(program, method_ids, Some(*list_class), M::ListNew);
+    let list_add = required_indexed_native_method(program, method_ids, Some(*list_class), M::ListAdd);
     let path_from_text = native_method(program, M::PathFromText);
     let mut replacements = vec![
         ("@TEXT_ID@", text.to_string()),

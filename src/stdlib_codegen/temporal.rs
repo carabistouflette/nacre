@@ -1,7 +1,7 @@
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
 use super::support::{
-    native_class_id, native_function, replace_method_ids, replace_placeholders, result_id, text_class,
-    variant_id, TEXT_INLINE_CAPACITY,
+    native_class_id, native_function, replace_method_ids, replace_placeholders,
+    required_indexed_native_method, result_id, text_class, variant_id, TEXT_INLINE_CAPACITY,
 };
 
 pub(super) fn is_used(program: &t::Program) -> bool {
@@ -51,12 +51,9 @@ pub(super) fn implementation(program: &t::Program, native_method_ids: &mut Optio
     let list = program.classes.iter().find(|class| {
         matches!(class.native, Some(C::List(Type::Object(element))) if element == text)
     }).expect("Temporal.availableCalendars requires List<Text>").id;
-    let list_new = program.functions.iter().find(|function| {
-        function.receiver == Some(list) && matches!(function.native, Some(M::ListNew))
-    }).expect("Temporal.availableCalendars List<Text> constructor");
-    let list_add = program.functions.iter().find(|function| {
-        function.receiver == Some(list) && matches!(function.native, Some(M::ListAdd))
-    }).expect("Temporal.availableCalendars List<Text>.add");
+    let method_ids = native_method_ids.get_or_insert_with(|| t::NativeMethodIndex::new(program));
+    let list_new = required_indexed_native_method(program, method_ids, Some(list), M::ListNew);
+    let list_add = required_indexed_native_method(program, method_ids, Some(list), M::ListAdd);
 
     let temporal_result = result_id(instant);
     let fields_result = result_id(fields);
