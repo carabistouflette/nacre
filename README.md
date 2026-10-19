@@ -319,8 +319,9 @@ nacre doctor [--direct] [--zip]
 nacre lsp
 ```
 
-`nacre fmt` normalizes layout without splitting operators such as `<<` and `>>`;
-`--check` reports changed files without writing them.
+`nacre fmt` normalizes layout without splitting operators such as `<<` and `>>`.
+It validates all changed files before writing; formatting or validation failures
+leave the input files unchanged. `--check` reports changed files without writing.
 
 `nacre doc` writes a searchable static site to `doc/index.html` by default.
 API headings include module-qualified names, so same-named items from different

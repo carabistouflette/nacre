@@ -21,7 +21,9 @@ pub fn format_files(paths: &[PathBuf], check_only: bool) -> Result<i32, String> 
     }
 
     let mut needs_formatting = 0;
+    let mut pending_writes = Vec::new();
 
+    // Validate the entire input set before writing any formatted source.
     for file in &files {
         let original = fs::read_to_string(file).map_err(|e| format!("{}: {e}", file.display()))?;
         let formatted = format_source(&original)?;
@@ -31,15 +33,13 @@ pub fn format_files(paths: &[PathBuf], check_only: bool) -> Result<i32, String> 
             if check_only {
                 println!("Diff: {} needs formatting", file.display());
             } else {
-                // Safety check: ensure formatted code still parses
                 if let Err(e) = crate::validate(&formatted) {
                     return Err(format!(
                         "formatter safety check failed for {}: formatted code does not validate: {e:?}",
                         file.display()
                     ));
                 }
-                fs::write(file, &formatted).map_err(|e| format!("{}: {e}", file.display()))?;
-                println!("Formatted {}", file.display());
+                pending_writes.push((file, formatted));
             }
         }
     }
@@ -53,6 +53,10 @@ pub fn format_files(paths: &[PathBuf], check_only: bool) -> Result<i32, String> 
             Ok(0)
         }
     } else {
+        for (file, formatted) in pending_writes {
+            fs::write(file, &formatted).map_err(|e| format!("{}: {e}", file.display()))?;
+            println!("Formatted {}", file.display());
+        }
         println!("Checked {} file(s).", files.len());
         Ok(0)
     }

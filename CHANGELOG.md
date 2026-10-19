@@ -208,6 +208,8 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
 
 - Preserve non-ASCII characters in formatter tokenization without UTF-8 boundary
   panics.
+- Preflight changed sources before writing files, so later formatting or
+  validation failures cannot partially reformat earlier files.
 
 - Encode file URIs from Unix filesystem bytes, preserving non-UTF-8 source
   paths so the LSP can open them and publish diagnostics.
