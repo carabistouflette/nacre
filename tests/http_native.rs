@@ -536,6 +536,33 @@ void main() {
     assert_eq!(stdout_lines(&output), vec!["MALFORMED_HEADERS".to_owned()]);
     server.join().unwrap();
 }
+
+#[test]
+fn rejects_response_body_shorter_than_content_length() {
+    let (url, server) = one_response_server(
+        b"HTTP/1.1 200 OK\r\nContent-Length: 6\r\nConnection: close\r\n\r\nabc".to_vec(),
+        Duration::ZERO,
+    );
+    let source = r#"
+void main() {
+    Text method = new Text("GET");
+    Text url = new Text("@URL@");
+    match (HttpRequest.create(method, url)) {
+        Err(error) { println("CREATE_ERROR"); }
+        Ok(request) {
+            match (request.send()) {
+                Ok(response) { println("PARTIAL_RESPONSE_ESCAPED"); }
+                Err(error) { println("TRUNCATED_BODY_REJECTED"); }
+            }
+        }
+    }
+}
+"#;
+    let output = run(&compile(&source.replace("@URL@", &url)));
+    assert_eq!(stdout_lines(&output), vec!["TRUNCATED_BODY_REJECTED".to_owned()]);
+    let request = server.join().unwrap();
+    assert!(request.headers.starts_with("GET / HTTP/1.1"), "{}", request.headers);
+}
 #[test]
 fn rejects_control_bytes_in_http_status_reason_phrase() {
     let (url, server) = one_response_server(
