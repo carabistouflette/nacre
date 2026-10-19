@@ -3,6 +3,8 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Resolve HTTP codegen methods through the lazy native-method index instead of
+  rescanning the function table, retaining the no-HTTP early return.
 - Gate DNS output with one allocation-free scan, then reuse the lazy index for
   method metadata and signatures; pass the computed resolver requirement
   through to DNS generation.

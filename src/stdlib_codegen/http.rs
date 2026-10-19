@@ -2,7 +2,7 @@ use crate::c_repr::ctype;
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
 use super::native_usage;
 use super::support::{
-    native_function, replace_method_ids, replace_placeholders, result_id, text_class, variant_id,
+    required_first_native_method, replace_method_ids, replace_placeholders, result_id, text_class, variant_id,
 };
 
 const HTTP_METHODS: &[M] = &[
@@ -26,8 +26,12 @@ fn class_id(program: &t::Program, is: impl Fn(C) -> bool) -> usize {
         .expect("HTTP signatures specialize their required native class").id
 }
 
-fn method(program: &t::Program, native: M) -> &t::Function {
-    native_function(program, |candidate| candidate == native)
+fn method<'a>(
+    program: &'a t::Program,
+    native_method_ids: &mut Option<t::NativeMethodIndex>,
+    native: M,
+) -> &'a t::Function {
+    required_first_native_method(program, native_method_ids, native)
 }
 
 pub(super) fn uses_http(program: &t::Program) -> bool {
@@ -82,18 +86,18 @@ pub(super) fn implementation(program: &t::Program, native_method_ids: &mut Optio
     let buffer = class_id(program, |native| matches!(native, C::ByteBuffer));
     let path = class_id(program, |native| matches!(native, C::Path));
 
-    let create = method(program, M::HttpRequestCreate);
-    let set_header = method(program, M::HttpRequestSetHeader);
-    let set_body = method(program, M::HttpRequestSetBody);
-    let set_timeout = method(program, M::HttpRequestSetTimeoutMillis);
-    let set_max = method(program, M::HttpRequestSetMaxResponseBytes);
-    let set_ca = method(program, M::HttpRequestSetCaFile);
-    let send = method(program, M::HttpRequestSend);
-    let status = method(program, M::HttpResponseStatus);
-    let body = method(program, M::HttpResponseBody);
-    let header = method(program, M::HttpResponseHeader);
-    let final_url = method(program, M::HttpResponseFinalUrl);
-    let body_text = method(program, M::HttpResponseBodyText);
+    let create = method(program, native_method_ids, M::HttpRequestCreate);
+    let set_header = method(program, native_method_ids, M::HttpRequestSetHeader);
+    let set_body = method(program, native_method_ids, M::HttpRequestSetBody);
+    let set_timeout = method(program, native_method_ids, M::HttpRequestSetTimeoutMillis);
+    let set_max = method(program, native_method_ids, M::HttpRequestSetMaxResponseBytes);
+    let set_ca = method(program, native_method_ids, M::HttpRequestSetCaFile);
+    let send = method(program, native_method_ids, M::HttpRequestSend);
+    let status = method(program, native_method_ids, M::HttpResponseStatus);
+    let body = method(program, native_method_ids, M::HttpResponseBody);
+    let header = method(program, native_method_ids, M::HttpResponseHeader);
+    let final_url = method(program, native_method_ids, M::HttpResponseFinalUrl);
+    let body_text = method(program, native_method_ids, M::HttpResponseBodyText);
 
     assert_eq!(result_id(set_header), result_id(set_timeout), "HTTP setters share Result<Unit, Text>");
     assert_eq!(result_id(set_header), result_id(set_max), "HTTP setters share Result<Unit, Text>");
