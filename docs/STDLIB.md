@@ -56,7 +56,8 @@ failures do not unwind scopes. No throughput or latency guarantees are made.
 A character literal contains exactly one Unicode scalar, for example `'λ'` or
 `'\u{1f9ed}'`. Character literals support `\n`, `\r`, `\t`, `\0`, `\"`, `\'`,
 `\\`, and `\u{...}` escapes. String literals support `\n`, `\r`, `\t`, `\0`,
-`\"`, `\'`, and `\\`, but not Unicode escapes. Numeric expressions are promoted
+`\"`, `\'`, and `\\`, but not Unicode escapes. Failed `assert` messages preserve
+embedded NUL bytes when printed. Numeric expressions are promoted
 to a common numeric type; a wider numeric value can be used where a narrower type
 is not required. Explicit numeric casts use `(type)value`. A checked cast that is
 out of range, non-finite where disallowed, or not a Unicode scalar terminates

@@ -94,6 +94,17 @@ fn empty_and_embedded_nul_strings() {
     assert!(out.status.success());
     assert_eq!(out.stdout, "\na\0b\né 🦀\n".as_bytes());
 }
+
+#[test]
+fn assertion_message_preserves_embedded_nul_bytes() {
+    let out = execute(r#"void main() { assert(false, "left\0right"); }"#);
+    assert_eq!(out.status.code(), Some(70));
+    assert!(
+        out.stderr.ends_with(b"left\0right\n"),
+        "{}",
+        String::from_utf8_lossy(&out.stderr),
+    );
+}
 #[test]
 fn strings_with_quotes_backslash_and_percent() {
     assert_stdout(r#"void main() { println("\"salut\" \\ 100% %n"); }"#, "\"salut\" \\ 100% %n\n");

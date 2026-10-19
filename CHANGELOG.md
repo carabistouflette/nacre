@@ -3,6 +3,8 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Preserve embedded NUL bytes in failed assertion messages.
+
 - Ignore empty `NACRE_CACHE_DIR`, `XDG_CACHE_HOME`, and `HOME` values when
   resolving cache locations rather than writing artifacts in the current
   directory.

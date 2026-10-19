@@ -299,7 +299,9 @@ static void ncr_print_string(ncr_string value) {
 }
 static inline void ncr_assert(bool condition, const unsigned char *msg, size_t msg_len, size_t line, size_t column) {
     if (__builtin_expect(!condition, 0)) {
-        fprintf(stderr, "assertion failed [%zu:%zu]: %.*s\n", line, column, (int)msg_len, (const char *)msg);
+        fprintf(stderr, "assertion failed [%zu:%zu]: ", line, column);
+        (void)fwrite(msg, 1, msg_len, stderr);
+        (void)fputc('\n', stderr);
         exit(70);
     }
 }
