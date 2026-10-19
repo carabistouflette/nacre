@@ -355,13 +355,6 @@ fn transferred(op: Op, id: usize, before: u8) -> u8 {
         _ => before,
     }
 }
-fn transfer(op: Op, state: &mut [u8]) {
-    let id = match op {
-        Op::Declare(id) | Op::Cleanup(id) | Op::Write(id) | Op::Move { id, .. } => id,
-        _ => return,
-    };
-    state[id] = transferred(op, id, state[id]);
-}
 
 fn join(state: &mut [u8], output: &[u8]) -> bool {
     let mut changed = false;
@@ -390,15 +383,21 @@ fn solve(graph: &Graph, function: &t::Function) -> Result<States, Diagnostic> {
     queued[graph.entry] = true;
     while let Some(id) = queue.pop_front() {
         queued[id] = false;
-        // Most nodes do not change local state. Take the input so identity nodes
-        // propagate it without allocating an intermediate state vector.
+        // Most operations leave local state unchanged. Identity operations and
+        // no-op transfers propagate `input` without an output-vector allocation.
         let mut input = incoming[id].take().expect("reachable work item");
         let op = graph.nodes[id].op;
         let output = match op {
-            Op::Declare(_) | Op::Write(_) | Op::Move { .. } | Op::Cleanup(_) => {
-                let mut output = input.clone();
-                transfer(op, &mut output);
-                Some(output)
+            Op::Declare(id) | Op::Write(id) | Op::Move { id, .. } | Op::Cleanup(id) => {
+                let before = input[id];
+                let after = transferred(op, id, before);
+                if after == before {
+                    None
+                } else {
+                    let mut output = input.clone();
+                    output[id] = after;
+                    Some(output)
+                }
             }
             _ => None,
         };

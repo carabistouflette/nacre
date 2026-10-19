@@ -3,6 +3,8 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Avoid copying the full ownership-state vector for transfers that leave the
+  state unchanged.
 - Index Thread<T> spawn task/run metadata once and reuse it for thread context,
   worker, spawn, and drop code generation instead of rescanning all functions.
 - Reuse the shared receiver-keyed native-method index for `Sender.send` and
