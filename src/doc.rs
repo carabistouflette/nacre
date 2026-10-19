@@ -56,10 +56,11 @@ pub fn extract_doc_comment(source: &str, span_start: usize) -> Option<String> {
 }
 
 pub fn render_documentation(program: &Program, bundle: &SourceBundle) -> String {
-    // Group items: Classes, Interfaces, Enums, Free Functions
+    // Group items: Classes, Interfaces, Enums, Traits, Free Functions
     let mut classes = Vec::new();
     let mut interfaces = Vec::new();
     let mut enums = Vec::new();
+    let mut traits = Vec::new();
 
     for class in &program.classes {
         if class.is_builtin {
@@ -75,6 +76,12 @@ pub fn render_documentation(program: &Program, bundle: &SourceBundle) -> String 
         } else {
             classes.push((class, doc));
         }
+    }
+
+    for trait_item in &program.traits {
+        let loc = bundle.locate(trait_item.span);
+        let doc = extract_doc_comment(loc.source, loc.span.start);
+        traits.push((trait_item, doc));
     }
 
     let mut functions = Vec::new();
@@ -167,6 +174,7 @@ header p { color: var(--text-muted); font-size: 1.1rem; margin-bottom: 32px; }
   color: white;
 }
 .badge.interface { background: #8957e5; }
+.badge.trait { background: #8957e5; }
 .badge.enum { background: #d29922; }
 .badge.fn { background: #238636; }
 .docstring {
@@ -254,6 +262,20 @@ function filterItems() {
         html.push_str("</section>");
     }
 
+    if !traits.is_empty() {
+        html.push_str("<section><h3>Traits</h3>");
+        for (trait_item, _) in &traits {
+            let name = qualified_item_name(program, trait_item.unit, &trait_item.name);
+            let anchor = documentation_item_id("trait", &name);
+            html.push_str(&format!(
+                "<a href=\"#{}\">{}</a>",
+                escape_html(&anchor),
+                escape_html(&name)
+            ));
+        }
+        html.push_str("</section>");
+    }
+
     if !functions.is_empty() {
         html.push_str("<section><h3>Functions</h3>");
         for (f, _) in &functions {
@@ -318,20 +340,7 @@ function filterItems() {
             html.push_str("</table><br>");
         }
 
-        if !class.methods.is_empty() {
-            html.push_str("<h4>Methods</h4><table><tr><th>Signature</th><th>Description</th></tr>");
-            for m in &class.methods {
-                let loc = bundle.locate(m.span);
-                let m_doc = extract_doc_comment(loc.source, loc.span.start);
-                let desc = m_doc.as_deref().unwrap_or("");
-                html.push_str(&format!(
-                    "<tr><td><code>{}</code></td><td>{}</td></tr>",
-                    escape_html(&format_function_signature(m)),
-                    escape_html(desc)
-                ));
-            }
-            html.push_str("</table>");
-        }
+        render_method_table(&mut html, &class.methods, bundle);
 
         html.push_str("</div>");
     }
@@ -357,20 +366,7 @@ function filterItems() {
             html.push_str(&format!("<div class=\"docstring\">{}</div>", render_markdown(doc_str)));
         }
 
-        if !iface.methods.is_empty() {
-            html.push_str("<h4>Methods</h4><table><tr><th>Signature</th><th>Description</th></tr>");
-            for m in &iface.methods {
-                let loc = bundle.locate(m.span);
-                let m_doc = extract_doc_comment(loc.source, loc.span.start);
-                let desc = m_doc.as_deref().unwrap_or("");
-                html.push_str(&format!(
-                    "<tr><td><code>{}</code></td><td>{}</td></tr>",
-                    escape_html(&format_function_signature(m)),
-                    escape_html(desc)
-                ));
-            }
-            html.push_str("</table>");
-        }
+        render_method_table(&mut html, &iface.methods, bundle);
 
         html.push_str("</div>");
     }
@@ -409,6 +405,35 @@ function filterItems() {
         html.push_str("</div>");
     }
 
+    // Traits
+    for (trait_item, doc) in &traits {
+        let name = qualified_item_name(program, trait_item.unit, &trait_item.name);
+        let anchor = documentation_item_id("trait", &name);
+        html.push_str(&format!(
+            "<div class=\"card\" id=\"{}\">",
+            escape_html(&anchor)
+        ));
+        html.push_str(&format!(
+            "<h3><span class=\"badge trait\">trait</span> {}</h3>",
+            escape_html(&name)
+        ));
+        html.push_str(&format!(
+            "<div class=\"signature\">trait {}</div>",
+            escape_html(&trait_item.name)
+        ));
+
+        if let Some(doc_str) = doc {
+            html.push_str(&format!(
+                "<div class=\"docstring\">{}</div>",
+                render_markdown(doc_str)
+            ));
+        }
+
+        render_method_table(&mut html, &trait_item.methods, bundle);
+
+        html.push_str("</div>");
+    }
+
     // Free functions
     for (func, doc) in &functions {
         let name = qualified_item_name(program, func.unit, &func.name);
@@ -432,6 +457,25 @@ function filterItems() {
     html.push_str("</main></body></html>\n");
     html
 }
+fn render_method_table(html: &mut String, methods: &[Function], bundle: &SourceBundle) {
+    if methods.is_empty() {
+        return;
+    }
+
+    html.push_str("<h4>Methods</h4><table><tr><th>Signature</th><th>Description</th></tr>");
+    for method in methods {
+        let loc = bundle.locate(method.span);
+        let method_doc = extract_doc_comment(loc.source, loc.span.start);
+        let description = method_doc.as_deref().unwrap_or("");
+        html.push_str(&format!(
+            "<tr><td><code>{}</code></td><td>{}</td></tr>",
+            escape_html(&format_function_signature(method)),
+            escape_html(description)
+        ));
+    }
+    html.push_str("</table>");
+}
+
 fn qualified_item_name(program: &Program, unit: usize, name: &str) -> String {
     match program.units.get(unit).map(|source| source.module.as_str()) {
         Some(module) if !module.is_empty() => format!("{module}::{name}"),

@@ -325,6 +325,7 @@ nacre lsp
 `nacre doc` writes a searchable static site to `doc/index.html` by default.
 API headings include module-qualified names, so same-named items from different
 modules remain distinguishable.
+Trait declarations and their method comments are included in the generated API site.
 
 `nacre test` discards child stdout and captures at most 64 KiB of stderr. The
 `nacre bench` runner captures at most 64 KiB per stream; it drains and discards

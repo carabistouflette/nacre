@@ -39,15 +39,33 @@ fn attribute_values<'a>(html: &'a str, marker: &str) -> Vec<&'a str> {
 }
 
 #[test]
-fn generated_docs_disambiguate_same_named_items_across_modules() {
+fn generated_docs_include_traits_and_disambiguate_same_named_items() {
     let scratch = Scratch::new();
     let first = scratch.source(
         "first.ncr",
-        "module first.types; public class Shared {} public interface Service {} public enum Status { Ready; } public int answer() { return 1; }",
+        r#"module first.types;
+/// First compute contract.
+public trait Compute {
+    /// Computes a value in the first module.
+    int compute(int value);
+}
+public class Shared {}
+public interface Service {}
+public enum Status { Ready; }
+public int answer() { return 1; }"#,
     );
     let second = scratch.source(
         "second.ncr",
-        "module second.types; public class Shared {} public interface Service {} public enum Status { Ready; } public int answer() { return 2; }",
+        r#"module second.types;
+/// Second compute contract.
+public trait Compute {
+    /// Computes a value in the second module.
+    int compute(int value);
+}
+public class Shared {}
+public interface Service {}
+public enum Status { Ready; }
+public int answer() { return 2; }"#,
     );
     let output = scratch.0.join("html");
 
@@ -58,7 +76,7 @@ fn generated_docs_disambiguate_same_named_items_across_modules() {
     let unique_ids: HashSet<_> = ids.iter().copied().collect();
     let unique_targets: HashSet<_> = targets.iter().copied().collect();
 
-    assert_eq!(ids.len(), 8);
+    assert_eq!(ids.len(), 10);
     assert_eq!(
         unique_ids.len(),
         ids.len(),
@@ -76,4 +94,11 @@ fn generated_docs_disambiguate_same_named_items_across_modules() {
     assert!(html.contains("second.types::Status"));
     assert!(html.contains("first.types::answer"));
     assert!(html.contains("second.types::answer"));
+    assert!(html.contains("first.types::Compute"));
+    assert!(html.contains("second.types::Compute"));
+    assert!(html.contains("First compute contract."));
+    assert!(html.contains("Second compute contract."));
+    assert!(html.contains("Computes a value in the first module."));
+    assert!(html.contains("public int compute(int value)"));
+    assert!(html.contains("Computes a value in the second module."));
 }
