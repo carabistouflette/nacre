@@ -594,7 +594,7 @@ fn ensure_no_dependency_cycle(owner_file: &Path, target_file: &Path) -> Result<(
     let mut visited = 0usize;
     let mut total_manifest_bytes = 0usize;
     visit_dependency_graph(
-        &target_file,
+        target_file,
         &owner_file,
         &mut states,
         &mut visited,
@@ -602,19 +602,14 @@ fn ensure_no_dependency_cycle(owner_file: &Path, target_file: &Path) -> Result<(
     )
 }
 
+/// `manifest_file` is canonicalized by the root caller or dependency resolver.
 fn visit_dependency_graph(
-    manifest_file: &Path,
+    manifest_file: PathBuf,
     owner_file: &Path,
     states: &mut HashMap<PathBuf, u8>,
     visited: &mut usize,
     total_manifest_bytes: &mut usize,
 ) -> Result<(), String> {
-    let manifest_file = fs::canonicalize(manifest_file).map_err(|error| {
-        path_error(
-            manifest_file,
-            format!("cannot resolve reachable dependency manifest: {error}"),
-        )
-    })?;
     if manifest_file == owner_file {
         return Err(path_error(
             owner_file,
@@ -659,7 +654,7 @@ fn visit_dependency_graph(
     for dependency in manifest.dependencies.values() {
         if let Some(reachable) = existing_dependency_manifest(base, &dependency.path, &manifest_file)? {
             visit_dependency_graph(
-                &reachable,
+                reachable,
                 owner_file,
                 states,
                 visited,
