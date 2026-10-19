@@ -228,6 +228,8 @@ fn decompression_errors_reject_bounds_corruption_truncation_and_trailing_bytes()
     truncated_gzip.pop();
     let mut trailing_gzip = GZIP_HELLO_WORLD.to_vec();
     trailing_gzip.push(0);
+    let mut concatenated_gzip = GZIP_HELLO_WORLD.to_vec();
+    concatenated_gzip.extend_from_slice(GZIP_HELLO_WORLD);
 
     let mut source = String::from(
         r#"
@@ -289,6 +291,7 @@ void main() {
 /* GZIP_CORRUPT */
 /* GZIP_TRUNCATED */
 /* GZIP_TRAILING */
+/* GZIP_CONCAT_SMALL */
 /* INVALID_LEVELS */
 checkBombBound();
 }
@@ -307,6 +310,7 @@ checkBombBound();
         ("/* GZIP_CORRUPT */", "gzipCorrupt", corrupt_gzip.as_slice(), "expectGunzipError(gzipCorrupt, 64L);"),
         ("/* GZIP_TRUNCATED */", "gzipTruncated", truncated_gzip.as_slice(), "expectGunzipError(gzipTruncated, 64L);"),
         ("/* GZIP_TRAILING */", "gzipTrailing", trailing_gzip.as_slice(), "expectGunzipError(gzipTrailing, 64L);"),
+        ("/* GZIP_CONCAT_SMALL */", "gzipConcatSmall", concatenated_gzip.as_slice(), "expectGunzipError(gzipConcatSmall, 21L);"),
         ("/* INVALID_LEVELS */", "empty", &[] as &[u8], "expectDeflateError(empty, -2); expectGzipError(empty, 10);"),
     ] {
         source = source.replace(marker, &case_source(name, bytes, call));
@@ -314,6 +318,6 @@ checkBombBound();
     let output = execute(&source);
     assert_clean(
         &output,
-        b"inflate-error\ninflate-error\ninflate-error\ninflate-error\ninflate-error\ninflate-error\ngunzip-error\ngunzip-error\ngunzip-error\ngunzip-error\ngunzip-error\ngunzip-error\ndeflate-error\ngzip-error\ninflate-error\ngunzip-error\n",
+        b"inflate-error\ninflate-error\ninflate-error\ninflate-error\ninflate-error\ninflate-error\ngunzip-error\ngunzip-error\ngunzip-error\ngunzip-error\ngunzip-error\ngunzip-error\ngunzip-error\ndeflate-error\ngzip-error\ninflate-error\ngunzip-error\n",
     );
 }
