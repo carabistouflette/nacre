@@ -1,7 +1,7 @@
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
 use super::support::{
     has_placeholder, native_class_id_if, replace_method_ids, replace_placeholders,
-    required_first_native_method, result_id, text_class, variant, variant_id,
+    required_indexed_native_method, result_id, text_class, variant, variant_id,
 };
 
 fn method<'a>(
@@ -10,9 +10,8 @@ fn method<'a>(
     receiver: Option<usize>,
     method: M,
 ) -> &'a t::Function {
-    let function = required_first_native_method(program, native_method_ids, method);
-    assert_eq!(function.receiver, receiver, "Regex method has the expected receiver");
-    function
+    let method_ids = native_method_ids.get_or_insert_with(|| t::NativeMethodIndex::new(program));
+    required_indexed_native_method(program, method_ids, receiver, method)
 }
 
 pub(super) fn preamble(program: &t::Program) -> String {
