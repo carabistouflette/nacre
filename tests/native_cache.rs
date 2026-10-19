@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Barrier};
 
 static NEXT: AtomicUsize = AtomicUsize::new(0);
-const SOURCE: &str = "#include <stdio.h>\n#include \"cache_value.h\"\nint main(void) { printf(\"%d\\n\", NACRE_CACHE_VALUE); return 0; }\n";
+const SOURCE: &str = "#include <stdio.h>\n#include \"cache_value.h\"\n#ifndef NACRE_CACHE_OVERRIDE\n#define NACRE_CACHE_OVERRIDE 0\n#endif\nint main(void) { printf(\"%d\\n\", NACRE_CACHE_VALUE + NACRE_CACHE_OVERRIDE); return 0; }\n";
 
 struct TestDir(PathBuf);
 
@@ -42,8 +42,17 @@ struct CacheProbe<'a> {
 
 impl CacheProbe<'_> {
     fn run(&self, version: &str, expected: &str) {
-        let output = Command::new(self.executable)
-            .args(["--exact", "c_cache_probe_child", "--nocapture"])
+        self.run_with_deployment_target(version, expected, None);
+    }
+
+    fn run_with_deployment_target(
+        &self,
+        version: &str,
+        expected: &str,
+        target: Option<&str>,
+    ) {
+        let mut command = Command::new(self.executable);
+        command.args(["--exact", "c_cache_probe_child", "--nocapture"])
             .env("NACRE_CACHE_PROBE_CHILD", "1")
             .env("NACRE_CACHE_EXPECTED", expected)
             .env("NACRE_CACHE_INCLUDE", self.include)
@@ -54,8 +63,11 @@ impl CacheProbe<'_> {
             .env("NACRE_FIXTURE_VERSION", version)
             .env("NACRE_FIXTURE_COMPILE_LOG", self.compile_log)
             .env_remove("NACRE_NO_CACHE")
-            .output()
-            .unwrap();
+            .env_remove("MACOSX_DEPLOYMENT_TARGET");
+        if let Some(target) = target {
+            command.env("MACOSX_DEPLOYMENT_TARGET", target);
+        }
+        let output = command.output().unwrap();
         assert!(
             output.status.success(),
             "cache probe failed\nstdout: {}\nstderr: {}",
@@ -78,6 +90,7 @@ impl CacheProbe<'_> {
             .env("NACRE_FIXTURE_COMPILE_LOG", self.compile_log)
             .env("NACRE_FIXTURE_BARRIER_DIR", barrier)
             .env("NACRE_FIXTURE_BARRIER_TARGET", "8")
+            .env_remove("MACOSX_DEPLOYMENT_TARGET")
             .env_remove("NACRE_NO_CACHE")
             .output()
             .unwrap();
@@ -163,6 +176,9 @@ for argument do
         break
     fi
 done
+if [ -n "${MACOSX_DEPLOYMENT_TARGET:-}" ]; then
+    set -- "$@" "-DNACRE_CACHE_OVERRIDE=$MACOSX_DEPLOYMENT_TARGET"
+fi
 exec "$NACRE_FIXTURE_REAL_CC" "$@"
 "#,
     )
@@ -195,6 +211,14 @@ exec "$NACRE_FIXTURE_REAL_CC" "$@"
 
     probe.run("v2", "20\n");
     assert_eq!(fs::read(&compile_log).unwrap().len(), 3, "unchanged inputs should reuse the executable");
+    probe.run_with_deployment_target("v2", "21\n", Some("1"));
+    assert_eq!(fs::read(&compile_log).unwrap().len(), 4, "compiler environment must invalidate the executable");
+
+    probe.run_with_deployment_target("v2", "22\n", Some("2"));
+    assert_eq!(fs::read(&compile_log).unwrap().len(), 5, "changed compiler environment must invalidate the executable");
+
+    probe.run_with_deployment_target("v2", "22\n", Some("2"));
+    assert_eq!(fs::read(&compile_log).unwrap().len(), 5, "unchanged compiler environment should reuse the executable");
     let concurrent_cache = temp.path("concurrent-cache");
     let barrier = temp.path("compiler-barrier");
     fs::create_dir(&barrier).unwrap();

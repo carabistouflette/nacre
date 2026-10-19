@@ -316,16 +316,35 @@ fn cache_compiler_identity(compiler: &std::ffi::OsStr, version: &[u8]) -> Option
     Some(identity)
 }
 
+const CACHE_HASH_PRIME: u128 = 0x100000001b3;
+
 fn update_cache_hash(hash: &mut u128, bytes: &[u8]) {
-    const PRIME: u128 = 0x100000001b3;
     for byte in bytes {
-        *hash = (*hash ^ u128::from(*byte)).wrapping_mul(PRIME);
+        *hash = (*hash ^ u128::from(*byte)).wrapping_mul(CACHE_HASH_PRIME);
     }
 }
 
 fn hash_cache_part(hash: &mut u128, part: &[u8]) {
     update_cache_hash(hash, &(part.len() as u128).to_le_bytes());
     update_cache_hash(hash, part);
+}
+
+fn hash_compiler_environment(hash: &mut u128) {
+    for variable in [
+        "CPATH",
+        "C_INCLUDE_PATH",
+        "SDKROOT",
+        "MACOSX_DEPLOYMENT_TARGET",
+        "CLANG_CONFIG_FILE",
+        "CCC_OVERRIDE_OPTIONS",
+    ] {
+        update_cache_hash(hash, variable.as_bytes());
+        *hash = (*hash ^ 0xff).wrapping_mul(CACHE_HASH_PRIME);
+        if let Some(value) = env::var_os(variable) {
+            update_cache_hash(hash, value.as_encoded_bytes());
+        }
+        *hash = (*hash ^ 0xff).wrapping_mul(CACHE_HASH_PRIME);
+    }
 }
 
 fn compute_cache_key(
@@ -344,6 +363,7 @@ fn compute_cache_key(
     for flag in flags { hash_cache_part(&mut hash, flag.as_bytes()); }
     hash_cache_part(&mut hash, source.as_bytes());
     hash_cache_part(&mut hash, &dependencies.to_le_bytes());
+    hash_compiler_environment(&mut hash);
     format!("{hash:032x}")
 }
 
@@ -698,12 +718,11 @@ fn compute_runtime_cache_key(
     dependencies: u128,
 ) -> String {
     let mut hash = 0xcbf29ce484222325u64 as u128;
-    let prime = 0x100000001b3u64 as u128;
     for part in identity {
         for &byte in part {
-            hash = (hash ^ byte as u128).wrapping_mul(prime);
+            hash = (hash ^ byte as u128).wrapping_mul(CACHE_HASH_PRIME);
         }
-        hash = (hash ^ 0xff).wrapping_mul(prime);
+        hash = (hash ^ 0xff).wrapping_mul(CACHE_HASH_PRIME);
     }
     for group in [RUNTIME_C_FLAGS, section_flags] {
         hash_flag_group(&mut hash, group.iter().copied());
@@ -712,31 +731,19 @@ fn compute_runtime_cache_key(
     for group in [flags, BITCODE_FLAGS] {
         hash_flag_group(&mut hash, group.iter().copied());
     }
-    for variable in ["CPATH", "C_INCLUDE_PATH", "SDKROOT", "MACOSX_DEPLOYMENT_TARGET", "CLANG_CONFIG_FILE", "CCC_OVERRIDE_OPTIONS"] {
-        for &byte in variable.as_bytes() {
-            hash = (hash ^ byte as u128).wrapping_mul(prime);
-        }
-        hash = (hash ^ 0xff).wrapping_mul(prime);
-        if let Some(value) = env::var_os(variable) {
-            for &byte in value.as_encoded_bytes() {
-                hash = (hash ^ byte as u128).wrapping_mul(prime);
-            }
-        }
-        hash = (hash ^ 0xff).wrapping_mul(prime);
-    }
+    hash_compiler_environment(&mut hash);
     hash_cache_part(&mut hash, runtime_c.as_bytes());
     hash_cache_part(&mut hash, &dependencies.to_le_bytes());
     format!("{hash:032x}")
 }
 
 fn hash_flag_group<'a>(hash: &mut u128, flags: impl Iterator<Item = &'a str>) {
-    const PRIME: u128 = 0x100000001b3;
-    *hash = (*hash ^ 0xfe).wrapping_mul(PRIME);
+    *hash = (*hash ^ 0xfe).wrapping_mul(CACHE_HASH_PRIME);
     for flag in flags {
         for &byte in flag.as_bytes() {
-            *hash = (*hash ^ u128::from(byte)).wrapping_mul(PRIME);
+            *hash = (*hash ^ u128::from(byte)).wrapping_mul(CACHE_HASH_PRIME);
         }
-        *hash = (*hash ^ 0xff).wrapping_mul(PRIME);
+        *hash = (*hash ^ 0xff).wrapping_mul(CACHE_HASH_PRIME);
     }
 }
 
