@@ -3,6 +3,9 @@
 ## 0.12.0
 Experimental native alpha; Linux systems APIs, breaking source changes permitted.
 
+- Resolve active Compression and Checksums method metadata through the lazy
+  native-method index, removing repeated scans while preserving the no-feature
+  early return.
 - Use the lazy native-method index for required Math, Random, and Time codegen
   lookups instead of rescanning the full function table.
 - Resolve BigInt/BigDecimal codegen method bindings through the lazy native-method

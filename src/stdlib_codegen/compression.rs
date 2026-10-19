@@ -1,6 +1,7 @@
 use crate::ir::{self as t, NativeMethod as M, Type};
 use super::support::{
-    native_function, native_function_if, replace_method_ids, replace_placeholders, result_id,
+    native_function_if, required_first_native_method, replace_method_ids, replace_placeholders,
+    result_id,
     template_section, text_class, variant,
 };
 
@@ -33,21 +34,25 @@ pub(super) fn implementation(program: &t::Program, native_method_ids: &mut Optio
     let mut body = template_section(TEMPLATE,
         "/* COMPRESSION_GROUP common */", "/* COMPRESSION_GROUP_END common */").to_owned();
     if compression {
-        body.push_str(&compression_body(program, buffer));
+        body.push_str(&compression_body(program, native_method_ids, buffer));
     }
     if checksums {
-        body.push_str(&checksum_body(program, buffer));
+        body.push_str(&checksum_body(program, native_method_ids, buffer));
     }
     let body = replace_method_ids(body, program, None, native_method_ids);
     debug_assert!(!super::support::has_placeholder(&body), "unexpanded Compression placeholder");
     body
 }
 
-fn compression_body(program: &t::Program, buffer: usize) -> String {
-    let deflate = native_function(program, |method| method == M::CompressionDeflate);
-    let inflate = native_function(program, |method| method == M::CompressionInflate);
-    let gzip = native_function(program, |method| method == M::CompressionGzip);
-    let gunzip = native_function(program, |method| method == M::CompressionGunzip);
+fn compression_body(
+    program: &t::Program,
+    native_method_ids: &mut Option<t::NativeMethodIndex>,
+    buffer: usize,
+) -> String {
+    let deflate = required_first_native_method(program, native_method_ids, M::CompressionDeflate);
+    let inflate = required_first_native_method(program, native_method_ids, M::CompressionInflate);
+    let gzip = required_first_native_method(program, native_method_ids, M::CompressionGzip);
+    let gunzip = required_first_native_method(program, native_method_ids, M::CompressionGunzip);
 
     assert_eq!(deflate.return_type, inflate.return_type);
     assert_eq!(deflate.return_type, gzip.return_type);
@@ -92,9 +97,13 @@ fn compression_body(program: &t::Program, buffer: usize) -> String {
     ])
 }
 
-fn checksum_body(program: &t::Program, buffer: usize) -> String {
-    let crc32 = native_function(program, |method| method == M::ChecksumsCrc32);
-    let adler32 = native_function(program, |method| method == M::ChecksumsAdler32);
+fn checksum_body(
+    program: &t::Program,
+    native_method_ids: &mut Option<t::NativeMethodIndex>,
+    buffer: usize,
+) -> String {
+    let crc32 = required_first_native_method(program, native_method_ids, M::ChecksumsCrc32);
+    let adler32 = required_first_native_method(program, native_method_ids, M::ChecksumsAdler32);
     assert_eq!(crc32.params.len(), 1);
     assert_eq!(adler32.params.len(), 1);
     assert_eq!(crc32.return_type, Type::Long);
