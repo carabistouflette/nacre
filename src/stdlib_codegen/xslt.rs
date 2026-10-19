@@ -1,5 +1,8 @@
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
-use super::support::{has_placeholder, native_function, replace_method_ids, replace_placeholders, result_id, variant_id};
+use super::support::{
+    has_placeholder, replace_method_ids, replace_placeholders, required_first_native_method,
+    result_id, variant_id,
+};
 
 pub(super) fn fields() -> String {
     "    void *stylesheet;\n".to_owned()
@@ -22,9 +25,12 @@ pub(super) fn implementation(program: &t::Program, native_method_ids: &mut Optio
         .id;
     let text_class = super::support::text_class(program).expect("XSLT requires Text");
 
-    let compile = native_function(program, |method| matches!(method, M::XsltStylesheetCompile));
-    let transform = native_function(program, |method| matches!(method, M::XsltStylesheetTransform));
-    let transform_bytes = native_function(program, |method| matches!(method, M::XsltStylesheetTransformBytes));
+    let compile =
+        required_first_native_method(program, native_method_ids, M::XsltStylesheetCompile);
+    let transform =
+        required_first_native_method(program, native_method_ids, M::XsltStylesheetTransform);
+    let transform_bytes =
+        required_first_native_method(program, native_method_ids, M::XsltStylesheetTransformBytes);
     let buffer_class = program.classes.iter()
         .find(|class| matches!(class.native, Some(C::ByteBuffer)))
         .expect("XSLT serialized output requires ByteBuffer").id;
