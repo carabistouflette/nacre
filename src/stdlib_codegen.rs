@@ -343,7 +343,8 @@ pub fn implementations(program: &t::Program) -> String {
     }
     out.push_str(&compression::implementation(program));
     out.push_str(&big_numbers::implementation(program));
-    let icu = support::replace_method_ids(unicode::implementation(program), program, None);
+    let method_ids = native_method_ids.get_or_insert_with(|| t::NativeMethodIndex::new(program));
+    let icu = support::replace_method_ids(unicode::implementation(program, method_ids), program, None);
     debug_assert!(!support::has_placeholder(&icu), "unexpanded ICU template placeholder");
     out.push_str(&icu);
     out.push_str(&regex::implementation(program));

@@ -1,7 +1,7 @@
 use crate::ir::{self as t, NativeMethod as M, Type};
 use super::native_usage;
 use super::support::{
-    native_function, replace_placeholders, result_id, template_section, variant_id,
+    replace_placeholders, required_indexed_native_method, result_id, template_section, variant_id,
 };
 
 const UNICODE_METHODS: &[M] = &[
@@ -98,7 +98,13 @@ fn add_result(program: &t::Program, substitutions: &mut Vec<(&'static str, Strin
     substitutions.push((ok_placeholder, variant_id(program, result, "Ok").to_string()));
 }
 
-pub(super) fn implementation(program: &t::Program) -> String {
+fn method<'a>(
+    program: &'a t::Program, method_ids: &t::NativeMethodIndex, native: M,
+) -> &'a t::Function {
+    required_indexed_native_method(program, method_ids, None, native)
+}
+
+pub(super) fn implementation(program: &t::Program, method_ids: &t::NativeMethodIndex) -> String {
     let mut usage = [false; ICU_METHODS.len()];
     native_usage::for_each(program, |method| {
         if let Some(index) = method_index(method) { usage[index] = true; }
@@ -210,76 +216,76 @@ pub(super) fn implementation(program: &t::Program) -> String {
     if let Some(buffer) = buffer { substitutions.push(("@BUFFER_ID@", buffer.to_string())); }
 
     if uses(&usage, M::CharacterIsLetter) {
-        add_param(&mut substitutions, "@CHAR_LETTER@", native_function(program, |method| method == M::CharacterIsLetter), 0);
+        add_param(&mut substitutions, "@CHAR_LETTER@", method(program, method_ids, M::CharacterIsLetter), 0);
     }
     if uses(&usage, M::CharacterIsDigit) {
-        add_param(&mut substitutions, "@CHAR_DIGIT@", native_function(program, |method| method == M::CharacterIsDigit), 0);
+        add_param(&mut substitutions, "@CHAR_DIGIT@", method(program, method_ids, M::CharacterIsDigit), 0);
     }
     if uses(&usage, M::CharacterIsWhitespace) {
-        add_param(&mut substitutions, "@CHAR_WHITESPACE@", native_function(program, |method| method == M::CharacterIsWhitespace), 0);
+        add_param(&mut substitutions, "@CHAR_WHITESPACE@", method(program, method_ids, M::CharacterIsWhitespace), 0);
     }
     if uses(&usage, M::CharacterIsUpperCase) {
-        add_param(&mut substitutions, "@CHAR_UPPER@", native_function(program, |method| method == M::CharacterIsUpperCase), 0);
+        add_param(&mut substitutions, "@CHAR_UPPER@", method(program, method_ids, M::CharacterIsUpperCase), 0);
     }
     if uses(&usage, M::CharacterIsLowerCase) {
-        add_param(&mut substitutions, "@CHAR_LOWER@", native_function(program, |method| method == M::CharacterIsLowerCase), 0);
+        add_param(&mut substitutions, "@CHAR_LOWER@", method(program, method_ids, M::CharacterIsLowerCase), 0);
     }
     if uses(&usage, M::CharacterToUpperCase) {
-        add_param(&mut substitutions, "@CHAR_TO_UPPER@", native_function(program, |method| method == M::CharacterToUpperCase), 0);
+        add_param(&mut substitutions, "@CHAR_TO_UPPER@", method(program, method_ids, M::CharacterToUpperCase), 0);
     }
     if uses(&usage, M::CharacterToLowerCase) {
-        add_param(&mut substitutions, "@CHAR_TO_LOWER@", native_function(program, |method| method == M::CharacterToLowerCase), 0);
+        add_param(&mut substitutions, "@CHAR_TO_LOWER@", method(program, method_ids, M::CharacterToLowerCase), 0);
     }
     if uses(&usage, M::CharacterCategory) {
-        add_param(&mut substitutions, "@CHAR_CATEGORY@", native_function(program, |method| method == M::CharacterCategory), 0);
+        add_param(&mut substitutions, "@CHAR_CATEGORY@", method(program, method_ids, M::CharacterCategory), 0);
     }
     if uses(&usage, M::CharacterNumericValue) {
-        add_param(&mut substitutions, "@CHAR_NUMERIC@", native_function(program, |method| method == M::CharacterNumericValue), 0);
+        add_param(&mut substitutions, "@CHAR_NUMERIC@", method(program, method_ids, M::CharacterNumericValue), 0);
     }
 
     if uses(&usage, M::UnicodeToUpperCase) {
         append_section(&mut body, source, "/* NACRE_UNICODE_BEGIN UNICODE_TO_UPPER_CASE */", "/* NACRE_UNICODE_END UNICODE_TO_UPPER_CASE */");
-        let function = native_function(program, |method| method == M::UnicodeToUpperCase);
+        let function = method(program, method_ids, M::UnicodeToUpperCase);
         add_result(program, &mut substitutions, function, "@UPPER_RESULT@", "@UPPER_OK@");
         add_param(&mut substitutions, "@UPPER_TEXT@", function, 0);
         add_param(&mut substitutions, "@UPPER_LOCALE@", function, 1);
     }
     if uses(&usage, M::UnicodeToLowerCase) {
         append_section(&mut body, source, "/* NACRE_UNICODE_BEGIN UNICODE_TO_LOWER_CASE */", "/* NACRE_UNICODE_END UNICODE_TO_LOWER_CASE */");
-        let function = native_function(program, |method| method == M::UnicodeToLowerCase);
+        let function = method(program, method_ids, M::UnicodeToLowerCase);
         add_result(program, &mut substitutions, function, "@LOWER_RESULT@", "@LOWER_OK@");
         add_param(&mut substitutions, "@LOWER_TEXT@", function, 0);
         add_param(&mut substitutions, "@LOWER_LOCALE@", function, 1);
     }
     if uses(&usage, M::UnicodeCaseFold) {
         append_section(&mut body, source, "/* NACRE_UNICODE_BEGIN UNICODE_CASE_FOLD */", "/* NACRE_UNICODE_END UNICODE_CASE_FOLD */");
-        let function = native_function(program, |method| method == M::UnicodeCaseFold);
+        let function = method(program, method_ids, M::UnicodeCaseFold);
         add_result(program, &mut substitutions, function, "@FOLD_RESULT@", "@FOLD_OK@");
         add_param(&mut substitutions, "@FOLD_TEXT@", function, 0);
     }
     if uses(&usage, M::UnicodeNormalize) {
         append_section(&mut body, source, "/* NACRE_UNICODE_BEGIN UNICODE_NORMALIZE */", "/* NACRE_UNICODE_END UNICODE_NORMALIZE */");
-        let function = native_function(program, |method| method == M::UnicodeNormalize);
+        let function = method(program, method_ids, M::UnicodeNormalize);
         add_result(program, &mut substitutions, function, "@NORMALIZE_RESULT@", "@NORMALIZE_OK@");
         add_param(&mut substitutions, "@NORMALIZE_TEXT@", function, 0);
         add_param(&mut substitutions, "@NORMALIZE_FORM@", function, 1);
     }
     if uses(&usage, M::UnicodeGraphemeCount) {
         append_section(&mut body, source, "/* NACRE_UNICODE_BEGIN UNICODE_GRAPHEME_COUNT */", "/* NACRE_UNICODE_END UNICODE_GRAPHEME_COUNT */");
-        let function = native_function(program, |method| method == M::UnicodeGraphemeCount);
+        let function = method(program, method_ids, M::UnicodeGraphemeCount);
         add_result(program, &mut substitutions, function, "@COUNT_RESULT@", "@COUNT_OK@");
         add_param(&mut substitutions, "@COUNT_TEXT@", function, 0);
     }
     if uses(&usage, M::UnicodeGraphemeAt) {
         append_section(&mut body, source, "/* NACRE_UNICODE_BEGIN UNICODE_GRAPHEME_AT */", "/* NACRE_UNICODE_END UNICODE_GRAPHEME_AT */");
-        let function = native_function(program, |method| method == M::UnicodeGraphemeAt);
+        let function = method(program, method_ids, M::UnicodeGraphemeAt);
         add_result(program, &mut substitutions, function, "@AT_RESULT@", "@AT_OK@");
         add_param(&mut substitutions, "@AT_TEXT@", function, 0);
         add_param(&mut substitutions, "@AT_INDEX@", function, 1);
     }
     if uses(&usage, M::UnicodeCompareLocale) {
         append_section(&mut body, source, "/* NACRE_UNICODE_BEGIN UNICODE_COMPARE_LOCALE */", "/* NACRE_UNICODE_END UNICODE_COMPARE_LOCALE */");
-        let function = native_function(program, |method| method == M::UnicodeCompareLocale);
+        let function = method(program, method_ids, M::UnicodeCompareLocale);
         add_result(program, &mut substitutions, function, "@COMPARE_RESULT@", "@COMPARE_OK@");
         add_param(&mut substitutions, "@COMPARE_LEFT@", function, 0);
         add_param(&mut substitutions, "@COMPARE_RIGHT@", function, 1);
@@ -288,14 +294,14 @@ pub(super) fn implementation(program: &t::Program) -> String {
 
     if uses(&usage, M::CharsetEncode) {
         append_section(&mut body, source, "/* NACRE_UNICODE_BEGIN CHARSET_ENCODE */", "/* NACRE_UNICODE_END CHARSET_ENCODE */");
-        let function = native_function(program, |method| method == M::CharsetEncode);
+        let function = method(program, method_ids, M::CharsetEncode);
         add_result(program, &mut substitutions, function, "@ENCODE_RESULT@", "@ENCODE_OK@");
         add_param(&mut substitutions, "@ENCODE_TEXT@", function, 0);
         add_param(&mut substitutions, "@ENCODE_CHARSET@", function, 1);
     }
     if uses(&usage, M::CharsetDecode) {
         append_section(&mut body, source, "/* NACRE_UNICODE_BEGIN CHARSET_DECODE */", "/* NACRE_UNICODE_END CHARSET_DECODE */");
-        let function = native_function(program, |method| method == M::CharsetDecode);
+        let function = method(program, method_ids, M::CharsetDecode);
         add_result(program, &mut substitutions, function, "@DECODE_RESULT@", "@DECODE_OK@");
         add_param(&mut substitutions, "@DECODE_BUFFER@", function, 0);
         add_param(&mut substitutions, "@DECODE_CHARSET@", function, 1);
@@ -305,18 +311,22 @@ pub(super) fn implementation(program: &t::Program) -> String {
         append_section(&mut body, locale_source, "/* NACRE_LOCALE_BEGIN AVAILABLE */", "/* NACRE_LOCALE_END AVAILABLE */");
     }
     if uses(&usage, M::CharsetAvailable) || uses(&usage, M::LocaleAvailable) {
-        let function = native_function(program, |method|
-            method == M::LocaleAvailable || method == M::CharsetAvailable);
+        let locale_available = uses(&usage, M::LocaleAvailable)
+            .then(|| method(program, method_ids, M::LocaleAvailable));
+        let charset_available = uses(&usage, M::CharsetAvailable)
+            .then(|| method(program, method_ids, M::CharsetAvailable));
+        let function = match (locale_available, charset_available) {
+            (Some(locale), Some(charset)) if locale.id < charset.id => locale,
+            (Some(_), Some(charset)) => charset,
+            (Some(function), None) | (None, Some(function)) => function,
+            (None, None) => unreachable!("available list code requires a used API"),
+        };
         let Type::Object(list) = function.return_type else { unreachable!("Locale/Charset.available returns List<Text>") };
         let Some(t::NativeClass::List(Type::Object(text))) = program.classes[list].native else {
             unreachable!("Locale/Charset.available specializes List<Text>");
         };
-        let list_new = program.functions.iter().find(|function| {
-            function.receiver == Some(list) && function.native == Some(M::ListNew)
-        }).expect("available List<Text> constructor").id;
-        let list_add = program.functions.iter().find(|function| {
-            function.receiver == Some(list) && function.native == Some(M::ListAdd)
-        }).expect("available List<Text>.add").id;
+        let list_new = required_indexed_native_method(program, method_ids, Some(list), M::ListNew).id;
+        let list_add = required_indexed_native_method(program, method_ids, Some(list), M::ListAdd).id;
         substitutions.push(("@LIST_TYPE@", crate::c_repr::ctype(program, Type::Object(list)).into_owned()));
         substitutions.push(("@LIST_NEW@", format!("ncr_fn_{list_new}")));
         substitutions.push(("@LIST_ADD@", format!("ncr_fn_{list_add}")));
@@ -347,7 +357,7 @@ pub(super) fn implementation(program: &t::Program) -> String {
     }
     if uses(&usage, M::LocaleParseDecimal) {
         append_section(&mut body, locale_source, "/* NACRE_LOCALE_BEGIN PARSE_DECIMAL_API */", "/* NACRE_LOCALE_END PARSE_DECIMAL_API */");
-        let function = native_function(program, |method| method == M::LocaleParseDecimal);
+        let function = method(program, method_ids, M::LocaleParseDecimal);
         add_result(program, &mut substitutions, function, "@PARSE_DECIMAL_RESULT@", "@PARSE_DECIMAL_OK@");
         add_param(&mut substitutions, "@PARSE_DECIMAL_VALUE@", function, 0);
         add_param(&mut substitutions, "@PARSE_DECIMAL_PATTERN@", function, 1);
@@ -355,7 +365,7 @@ pub(super) fn implementation(program: &t::Program) -> String {
     }
     if uses(&usage, M::LocaleFormatCurrencyDecimal) {
         append_section(&mut body, locale_source, "/* NACRE_LOCALE_BEGIN FORMAT_CURRENCY_DECIMAL */", "/* NACRE_LOCALE_END FORMAT_CURRENCY_DECIMAL */");
-        let function = native_function(program, |method| method == M::LocaleFormatCurrencyDecimal);
+        let function = method(program, method_ids, M::LocaleFormatCurrencyDecimal);
         add_result(program, &mut substitutions, function, "@FORMAT_CURRENCY_DECIMAL_RESULT@", "@FORMAT_CURRENCY_DECIMAL_OK@");
         add_param(&mut substitutions, "@FORMAT_CURRENCY_DECIMAL_VALUE@", function, 0);
         add_param(&mut substitutions, "@FORMAT_CURRENCY_DECIMAL_CODE@", function, 1);
@@ -363,7 +373,7 @@ pub(super) fn implementation(program: &t::Program) -> String {
     }
     if uses(&usage, M::LocaleFormatNumber) {
         append_section(&mut body, locale_source, "/* NACRE_LOCALE_BEGIN FORMAT_NUMBER */", "/* NACRE_LOCALE_END FORMAT_NUMBER */");
-        let function = native_function(program, |method| method == M::LocaleFormatNumber);
+        let function = method(program, method_ids, M::LocaleFormatNumber);
         add_result(program, &mut substitutions, function, "@FORMAT_NUMBER_RESULT@", "@FORMAT_NUMBER_OK@");
         add_param(&mut substitutions, "@FORMAT_NUMBER_VALUE@", function, 0);
         add_param(&mut substitutions, "@FORMAT_NUMBER_PATTERN@", function, 1);
@@ -371,7 +381,7 @@ pub(super) fn implementation(program: &t::Program) -> String {
     }
     if uses(&usage, M::LocaleFormatDecimal) {
         append_section(&mut body, locale_source, "/* NACRE_LOCALE_BEGIN FORMAT_DECIMAL_API */", "/* NACRE_LOCALE_END FORMAT_DECIMAL_API */");
-        let function = native_function(program, |method| method == M::LocaleFormatDecimal);
+        let function = method(program, method_ids, M::LocaleFormatDecimal);
         add_result(program, &mut substitutions, function, "@FORMAT_DECIMAL_RESULT@", "@FORMAT_DECIMAL_OK@");
         add_param(&mut substitutions, "@FORMAT_DECIMAL_VALUE@", function, 0);
         add_param(&mut substitutions, "@FORMAT_DECIMAL_PATTERN@", function, 1);
@@ -379,7 +389,7 @@ pub(super) fn implementation(program: &t::Program) -> String {
     }
     if uses(&usage, M::LocaleParseNumber) {
         append_section(&mut body, locale_source, "/* NACRE_LOCALE_BEGIN PARSE_NUMBER */", "/* NACRE_LOCALE_END PARSE_NUMBER */");
-        let function = native_function(program, |method| method == M::LocaleParseNumber);
+        let function = method(program, method_ids, M::LocaleParseNumber);
         add_result(program, &mut substitutions, function, "@PARSE_NUMBER_RESULT@", "@PARSE_NUMBER_OK@");
         add_param(&mut substitutions, "@PARSE_NUMBER_VALUE@", function, 0);
         add_param(&mut substitutions, "@PARSE_NUMBER_PATTERN@", function, 1);
@@ -387,7 +397,7 @@ pub(super) fn implementation(program: &t::Program) -> String {
     }
     if uses(&usage, M::LocaleFormatCurrency) {
         append_section(&mut body, locale_source, "/* NACRE_LOCALE_BEGIN FORMAT_CURRENCY */", "/* NACRE_LOCALE_END FORMAT_CURRENCY */");
-        let function = native_function(program, |method| method == M::LocaleFormatCurrency);
+        let function = method(program, method_ids, M::LocaleFormatCurrency);
         add_result(program, &mut substitutions, function, "@FORMAT_CURRENCY_RESULT@", "@FORMAT_CURRENCY_OK@");
         add_param(&mut substitutions, "@FORMAT_CURRENCY_VALUE@", function, 0);
         add_param(&mut substitutions, "@FORMAT_CURRENCY_CODE@", function, 1);
