@@ -477,7 +477,10 @@ python3 scripts/publish.py --message "Describe the verified change"
 The command regenerates `MANIFEST.sha256` from exact staged Git blobs, including
 added/deleted files; exports staged sources to a temporary directory; verifies
 checksums and runs the package audit there; then stages only the manifest,
-commits the selected changes, and pushes the current feature branch to `origin`.
+commits the selected changes, and pushes the current feature branch to
+`origin`. Before pushing, the resulting commit's tree and parent are checked
+against the audited snapshot. Commit hooks remain enabled; if one changes the
+audited commit, the local commit is left for inspection and not pushed.
 Unstaged edits and untracked files are not included. The audit's generated test
 inventory never overwrites the working copy.
 

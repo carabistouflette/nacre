@@ -4,6 +4,10 @@
 Stage explicit owned paths first. --check previews the same publication without
 changing the worktree/index, committing, or pushing. Audits run only in a temporary
 export because audit_package.py writes its source inventory.
+
+Commit hooks remain enabled; the resulting commit tree and parent are verified
+before pushing. If a hook changes the audited commit, the local commit is left
+unpublished for inspection.
 """
 import argparse
 import hashlib
@@ -77,6 +81,7 @@ def export_tree(root: Path, tree: str, destination: Path) -> bytes:
 def publish(check: bool, message: str | None, no_push: bool) -> None:
     root = Path(git(Path.cwd(), "rev-parse", "--show-toplevel").decode().strip())
     branch = git(root, "branch", "--show-current").decode().strip()
+    starting_head = git(root, "rev-parse", "HEAD").decode().strip()
     if not check and (not branch or branch in {"main", "master"}):
         raise ValueError("Publish from a feature branch, not main/master or detached HEAD")
     tree = git(root, "write-tree").decode().strip()
@@ -97,6 +102,8 @@ def publish(check: bool, message: str | None, no_push: bool) -> None:
         return
     if git(root, "write-tree").decode().strip() != tree:
         raise ValueError("Staged content changed during checks; review it and run again")
+    if git(root, "rev-parse", "HEAD").decode().strip() != starting_head:
+        raise ValueError("HEAD changed during checks; review it and run again")
     if (root / MANIFEST).read_bytes() != original_manifest:
         raise ValueError("MANIFEST.sha256 has unstaged edits; stage or preserve them explicitly")
     if git(root, "branch", "--show-current").decode().strip() != branch:
@@ -104,11 +111,24 @@ def publish(check: bool, message: str | None, no_push: bool) -> None:
 
     (root / MANIFEST).write_bytes(manifest)
     subprocess.run(["git", "-C", str(root), "add", "--", MANIFEST], check=True)
+    expected_commit_tree = git(root, "write-tree").decode().strip()
     subprocess.run(["git", "-C", str(root), "commit", "-m", message], check=True)
+    commit = git(root, "rev-parse", "HEAD").decode().strip()
+    committed_tree = git(root, "rev-parse", f"{commit}^{{tree}}").decode().strip()
+    committed_parent = git(root, "rev-parse", f"{commit}^").decode().strip()
+    if committed_tree != expected_commit_tree or committed_parent != starting_head:
+        raise ValueError(
+            "Commit hooks changed the audited tree or parent; the local commit was "
+            "created but will not be pushed"
+        )
+    if git(root, "branch", "--show-current").decode().strip() != branch:
+        raise ValueError(
+            "Branch changed during commit; the local commit was created but will not be pushed"
+        )
     if not no_push:
         subprocess.run([
             "git", "-C", str(root), "push", "--set-upstream", "origin",
-            f"HEAD:refs/heads/{branch}",
+            f"{commit}:refs/heads/{branch}",
         ], check=True)
 
 

@@ -119,6 +119,31 @@ class PublishingTests(unittest.TestCase):
         self.assertIn("Publication stopped", result.stderr)
         self.assert_not_published()
 
+    def test_pre_commit_hook_cannot_push_unhashed_files(self):
+        hooks = self.work / "test-hooks"
+        hooks.mkdir()
+        hook = hooks / "pre-commit"
+        hook.write_text(
+            "#!/bin/sh\n"
+            "printf 'hook-added content\\n' > hook-added.txt\n"
+            "git add -- hook-added.txt\n"
+        )
+        hook.chmod(0o755)
+        git(self.work, "config", "core.hooksPath", str(hooks))
+
+        result = self.publish("--message", "Publish only audited content")
+        self.assertEqual(
+            git(self.remote, "for-each-ref", "--format=%(refname)"), b"",
+            result.stdout + result.stderr,
+        )
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("audited tree", result.stderr)
+        self.assertNotEqual(git(self.work, "rev-parse", "HEAD"), self.original_head)
+        committed = git(self.work, "ls-tree", "-r", "--name-only", "HEAD").decode()
+        self.assertIn("hook-added.txt", committed)
+        manifest = git(self.work, "show", "HEAD:MANIFEST.sha256").decode()
+        self.assertNotIn("hook-added.txt", manifest)
+
     def test_graphify_artifacts_are_rejected_even_when_force_staged(self):
         artifact = self.work / "graphify-out/graph.json"
         artifact.parent.mkdir()
