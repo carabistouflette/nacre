@@ -1,7 +1,7 @@
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
 use super::support::{
-    has_placeholder, native_function, replace_method_ids, replace_placeholders, result_id,
-    required_indexed_native_method, template_section, variant_id,
+    has_placeholder, replace_method_ids, replace_placeholders, required_first_native_method,
+    required_indexed_native_method, result_id, template_section, variant_id,
 };
 
 fn xml_class(program: &t::Program) -> Option<usize> {
@@ -47,8 +47,12 @@ pub(super) fn drop_helper_prototypes(program: &t::Program) -> String {
     }
 }
 
-fn method(program: &t::Program, native: M) -> &t::Function {
-    native_function(program, |candidate| candidate == native)
+fn method<'a>(
+    program: &'a t::Program,
+    native_method_ids: &mut Option<t::NativeMethodIndex>,
+    native: M,
+) -> &'a t::Function {
+    required_first_native_method(program, native_method_ids, native)
 }
 
 
@@ -59,17 +63,17 @@ fn parameter(function: &t::Function, index: usize) -> String {
 pub(super) fn implementation(program: &t::Program, native_method_ids: &mut Option<t::NativeMethodIndex>) -> Option<String> {
     let xml = xml_class(program)?;
     let text = super::support::text_class(program).expect("Text native class");
-    let parse = method(program, M::XmlDocumentParse);
-    let serialize = method(program, M::XmlDocumentSerialize);
-    let query_text = method(program, M::XmlDocumentQueryText);
-    let query_xml = method(program, M::XmlDocumentQueryXml);
-    let set_text = method(program, M::XmlDocumentSetText);
-    let set_attribute = method(program, M::XmlDocumentSetAttribute);
-    let remove = method(program, M::XmlDocumentRemove);
-    let append_xml = method(program, M::XmlDocumentAppendXml);
-    let validate = method(program, M::XmlDocumentValidate);
-    let register_namespace = method(program, M::XmlDocumentRegisterNamespace);
-    let escape = method(program, M::XmlDocumentEscape);
+    let parse = method(program, native_method_ids, M::XmlDocumentParse);
+    let serialize = method(program, native_method_ids, M::XmlDocumentSerialize);
+    let query_text = method(program, native_method_ids, M::XmlDocumentQueryText);
+    let query_xml = method(program, native_method_ids, M::XmlDocumentQueryXml);
+    let set_text = method(program, native_method_ids, M::XmlDocumentSetText);
+    let set_attribute = method(program, native_method_ids, M::XmlDocumentSetAttribute);
+    let remove = method(program, native_method_ids, M::XmlDocumentRemove);
+    let append_xml = method(program, native_method_ids, M::XmlDocumentAppendXml);
+    let validate = method(program, native_method_ids, M::XmlDocumentValidate);
+    let register_namespace = method(program, native_method_ids, M::XmlDocumentRegisterNamespace);
+    let escape = method(program, native_method_ids, M::XmlDocumentEscape);
 
     let query_text_result = result_id(query_text);
     let Type::Object(list) = program.classes[query_text_result].result

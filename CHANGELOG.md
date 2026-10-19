@@ -45,6 +45,8 @@ Experimental native alpha; Linux systems APIs, breaking source changes permitted
   codegen bodies; retain owner-specific scans for specialized factories.
 - Reuse the shared native-method index for List<Text> helper IDs in Text,
   DateTime, Temporal, filesystem, and XML codegen.
+- Resolve exact global native method IDs through the lazy index in Text,
+  DateTime, Temporal, and XML codegen instead of rescanning Program.functions.
 - Resolve the shared Mutex<Unit> class once during concurrency drop-helper
   generation instead of rescanning all classes for every handle type.
 - Index class field names once, replacing repeated linear scans and per-pattern

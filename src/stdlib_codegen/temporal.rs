@@ -1,6 +1,6 @@
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
 use super::support::{
-    native_class_id, native_function, replace_method_ids, replace_placeholders,
+    native_class_id, replace_method_ids, replace_placeholders, required_first_native_method,
     required_indexed_native_method, result_id, text_class, variant_id, TEXT_INLINE_CAPACITY,
 };
 
@@ -38,11 +38,11 @@ pub(super) fn drop_fields() -> String {
 }
 
 pub(super) fn implementation(program: &t::Program, native_method_ids: &mut Option<t::NativeMethodIndex>) -> String {
-    let instant = native_function(program, |method| matches!(method, M::TemporalInstant));
-    let epoch_second = native_function(program, |method| matches!(method, M::TemporalEpochSecond));
-    let offset_seconds = native_function(program, |method| matches!(method, M::TemporalOffsetSeconds));
-    let fields = native_function(program, |method| matches!(method, M::TemporalFields));
-    let format = native_function(program, |method| matches!(method, M::TemporalFormat));
+    let instant = required_first_native_method(program, native_method_ids, M::TemporalInstant);
+    let epoch_second = required_first_native_method(program, native_method_ids, M::TemporalEpochSecond);
+    let offset_seconds = required_first_native_method(program, native_method_ids, M::TemporalOffsetSeconds);
+    let fields = required_first_native_method(program, native_method_ids, M::TemporalFields);
+    let format = required_first_native_method(program, native_method_ids, M::TemporalFormat);
 
     let temporal = native_class_id(program, |class| matches!(class, C::Temporal));
     let text = text_class(program).expect("Temporal APIs require native Text");

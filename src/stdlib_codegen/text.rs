@@ -1,7 +1,7 @@
 use crate::ir::{self as t, NativeMethod as M, Type};
 use super::support::{
-    native_function, replace_placeholders, required_indexed_native_method, result_id,
-    variant_id, TEXT_INLINE_CAPACITY,
+    required_first_native_method, required_indexed_native_method, replace_placeholders,
+    result_id, variant_id, TEXT_INLINE_CAPACITY,
 };
 fn text_method_placeholders(
     body: String,
@@ -9,13 +9,13 @@ fn text_method_placeholders(
     text: usize,
     native_method_ids: &mut Option<t::NativeMethodIndex>,
 ) -> String {
-    let parse = native_function(program, |method| matches!(method, M::TextParseInt));
-    let parse_long = native_function(program, |method| matches!(method, M::TextParseLong));
-    let parse_double = native_function(program, |method| matches!(method, M::TextParseDouble));
-    let slice_bytes = native_function(program, |method| matches!(method, M::TextSliceBytes));
-    let slice = native_function(program, |method| matches!(method, M::TextSlice));
-    let split = native_function(program, |method| matches!(method, M::TextSplit));
-    let join = native_function(program, |method| matches!(method, M::TextJoin));
+    let parse = required_first_native_method(program, native_method_ids, M::TextParseInt);
+    let parse_long = required_first_native_method(program, native_method_ids, M::TextParseLong);
+    let parse_double = required_first_native_method(program, native_method_ids, M::TextParseDouble);
+    let slice_bytes = required_first_native_method(program, native_method_ids, M::TextSliceBytes);
+    let slice = required_first_native_method(program, native_method_ids, M::TextSlice);
+    let split = required_first_native_method(program, native_method_ids, M::TextSplit);
+    let join = required_first_native_method(program, native_method_ids, M::TextJoin);
     let list_class = match split.return_type {
         Type::Object(class) => class,
         _ => unreachable!("Text.split returns a concrete List<Text>"),

@@ -434,17 +434,24 @@ impl NativeMethodIndex {
         self.by_receiver.get(&(None, method)).copied()
     }
 
-    pub(crate) fn iter_first_by_method(&self) -> impl Iterator<Item = (NativeMethod, usize)> + '_ {
+    fn first_methods(&self) -> &HashMap<NativeMethod, usize> {
         self.first_by_method.get_or_init(|| {
             let mut first_by_method: HashMap<NativeMethod, usize> = HashMap::new();
             for ((_, method), id) in &self.by_receiver {
+                // Function IDs follow declaration order, so the minimum preserves a full-scan lookup.
                 first_by_method.entry(*method)
                     .and_modify(|first_id| *first_id = (*first_id).min(*id))
                     .or_insert(*id);
             }
             first_by_method
         })
-        .iter()
-        .map(|(method, id)| (*method, *id))
+    }
+
+    pub(crate) fn get_first_by_method(&self, method: NativeMethod) -> Option<usize> {
+        self.first_methods().get(&method).copied()
+    }
+
+    pub(crate) fn iter_first_by_method(&self) -> impl Iterator<Item = (NativeMethod, usize)> + '_ {
+        self.first_methods().iter().map(|(method, id)| (*method, *id))
     }
 }

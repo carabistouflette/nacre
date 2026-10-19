@@ -1,7 +1,7 @@
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
 use super::support::{
-    native_function, required_indexed_native_method, replace_method_ids, replace_placeholders,
-    result_id, text_class, variant_id,
+    required_first_native_method, required_indexed_native_method, replace_method_ids,
+    replace_placeholders, result_id, text_class, variant_id,
 };
 
 
@@ -18,13 +18,13 @@ pub(super) fn common_helpers(program: &t::Program) -> String {
 }
 
 pub(super) fn implementation(program: &t::Program, native_method_ids: &mut Option<t::NativeMethodIndex>) -> String {
-    let from_parts = native_function(program, |method| matches!(method, M::DateTimeFromParts));
-    let parts = native_function(program, |method| matches!(method, M::DateTimeParts));
-    let format = native_function(program, |method| matches!(method, M::DateTimeFormat));
-    let parse = native_function(program, |method| matches!(method, M::DateTimeParse));
-    let days_in_month = native_function(program, |method| matches!(method, M::DateTimeDaysInMonth));
-    let add_calendar = native_function(program, |method| matches!(method, M::DateTimeAddCalendar));
-    let duration = native_function(program, |method| matches!(method, M::DateTimeDurationMillis));
+    let from_parts = required_first_native_method(program, native_method_ids, M::DateTimeFromParts);
+    let parts = required_first_native_method(program, native_method_ids, M::DateTimeParts);
+    let format = required_first_native_method(program, native_method_ids, M::DateTimeFormat);
+    let parse = required_first_native_method(program, native_method_ids, M::DateTimeParse);
+    let days_in_month = required_first_native_method(program, native_method_ids, M::DateTimeDaysInMonth);
+    let add_calendar = required_first_native_method(program, native_method_ids, M::DateTimeAddCalendar);
+    let duration = required_first_native_method(program, native_method_ids, M::DateTimeDurationMillis);
 
     let text = text_class(program).expect("DateTime APIs require native Text");
     let fields = program.classes.iter().find(|class| class.name == "DateFields")

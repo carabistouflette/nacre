@@ -588,6 +588,17 @@ pub(super) fn required_indexed_native_method<'a>(
     }.unwrap_or_else(|| panic!("compiler-owned native method {method:?} is present"));
     program.functions.get(id).expect("native method index contains a valid function ID")
 }
+pub(super) fn required_first_native_method<'a>(
+    program: &'a t::Program,
+    native_method_ids: &mut Option<t::NativeMethodIndex>,
+    method: M,
+) -> &'a t::Function {
+    let id = native_method_ids
+        .get_or_insert_with(|| t::NativeMethodIndex::new(program))
+        .get_first_by_method(method)
+        .unwrap_or_else(|| panic!("compiler-owned native function is present"));
+    program.functions.get(id).expect("native method index contains a valid function ID")
+}
 
 pub(super) fn native_function_if(program: &t::Program, is: impl Fn(M) -> bool) -> Option<&t::Function> {
     program.functions.iter().find(|function| {
@@ -896,6 +907,17 @@ mod tests {
         };
         let with_hasher = super::marker(super::M::MapWithHasher);
         let map_size = super::marker(super::M::MapSize);
+        let mut native_method_ids = None;
+        let method_ids = native_method_ids
+            .get_or_insert_with(|| super::t::NativeMethodIndex::new(&program));
+        assert_eq!(
+            method_ids.get_first_by_method(super::M::MapWithHasher),
+            Some(10),
+        );
+        assert_eq!(
+            method_ids.get_first_by_method(super::M::MapSize),
+            Some(50),
+        );
         assert_eq!(
             replace_method_ids(with_hasher.to_owned(), &program, None, &mut None),
             "ncr_fn_10",
