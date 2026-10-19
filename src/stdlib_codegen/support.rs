@@ -576,6 +576,19 @@ pub(super) fn template_section<'a>(source: &'a str, begin: &str, end: &str) -> &
     source.split_once(begin).expect("native template section opener").1
         .split_once(end).expect("native template section closer").0
 }
+pub(super) fn required_indexed_native_method<'a>(
+    program: &'a t::Program,
+    method_ids: &t::NativeMethodIndex,
+    receiver: Option<usize>,
+    method: M,
+) -> &'a t::Function {
+    let id = match receiver {
+        Some(receiver) => method_ids.get(receiver, method),
+        None => method_ids.get_static(method),
+    }.unwrap_or_else(|| panic!("compiler-owned native method {method:?} is present"));
+    program.functions.get(id).expect("native method index contains a valid function ID")
+}
+
 pub(super) fn native_function_if(program: &t::Program, is: impl Fn(M) -> bool) -> Option<&t::Function> {
     program.functions.iter().find(|function| {
         function.native.is_some_and(&is)

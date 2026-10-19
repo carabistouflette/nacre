@@ -1,5 +1,8 @@
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
-use super::support::{replace_method_ids, result_id, variant, variant_id};
+use super::support::{
+    replace_method_ids, result_id, variant, variant_id,
+    required_indexed_native_method as native_method,
+};
 
 pub(super) fn database_fields() -> String {
     "    void *database;\n    void *lifetime;\n    void (*destroy)(void *);\n".to_owned()
@@ -31,18 +34,6 @@ fn assert_parameters(function: &t::Function, expected: &[Type]) {
     }
 }
 
-fn native_method<'a>(
-    program: &'a t::Program,
-    method_ids: &t::NativeMethodIndex,
-    receiver: Option<usize>,
-    method: M,
-) -> &'a t::Function {
-    let id = match receiver {
-        Some(receiver) => method_ids.get(receiver, method),
-        None => method_ids.get_static(method),
-    }.unwrap_or_else(|| panic!("compiler-owned database method {method:?} is present"));
-    program.functions.get(id).expect("native method index contains a valid function ID")
-}
 
 fn assert_result_payload(program: &t::Program, function: &t::Function,
                          payload: Type, error: Type) -> usize {

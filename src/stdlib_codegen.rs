@@ -258,9 +258,15 @@ fn append_body(
             let method_ids = native_method_ids.get_or_insert_with(|| t::NativeMethodIndex::new(program));
             arrays::zeroed_implementations(program, method_ids)
         }
-        C::ByteBuffer => buffer::implementation(program, class.id),
+        C::ByteBuffer => {
+            let method_ids = native_method_ids.get_or_insert_with(|| t::NativeMethodIndex::new(program));
+            buffer::implementation(program, method_ids, class.id)
+        }
         C::Uuid => uuid::implementation(program, class.id),
-        C::BinaryReader | C::BinaryWriter => binary::implementation(program, class.id, native),
+        C::BinaryReader | C::BinaryWriter => {
+            let method_ids = native_method_ids.get_or_insert_with(|| t::NativeMethodIndex::new(program));
+            binary::implementation(program, method_ids, class.id, native)
+        }
         C::Database => {
             let method_ids = native_method_ids.get_or_insert_with(|| t::NativeMethodIndex::new(program));
             database::implementation(program, method_ids, class.id)

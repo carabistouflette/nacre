@@ -1,5 +1,8 @@
 use crate::ir::{self as t, NativeClass as C, NativeMethod as M, Type};
-use super::support::{replace_method_ids, replace_placeholders, result_id, text_class, variant};
+use super::support::{
+    replace_method_ids, replace_placeholders, result_id, text_class, variant,
+    required_indexed_native_method,
+};
 
 fn buffer_class(program: &t::Program) -> usize {
     program.classes.iter().find(|class| matches!(class.native, Some(C::ByteBuffer)))
@@ -10,16 +13,16 @@ fn text_class_id(program: &t::Program) -> usize {
     text_class(program).expect("Text is in the trusted prelude")
 }
 
-fn method(program: &t::Program, receiver: usize, native: M) -> &t::Function {
-    program.functions.iter().find(|function| {
-        function.receiver == Some(receiver) && function.native == Some(native)
-    }).expect("compiler-owned binary method is present")
+fn method<'a>(
+    program: &'a t::Program, method_ids: &t::NativeMethodIndex, receiver: usize, native: M,
+) -> &'a t::Function {
+    required_indexed_native_method(program, method_ids, Some(receiver), native)
 }
 
-fn static_method(program: &t::Program, native: M) -> &t::Function {
-    program.functions.iter().find(|function| {
-        function.receiver.is_none() && function.native == Some(native)
-    }).expect("compiler-owned binary static method is present")
+fn static_method<'a>(
+    program: &'a t::Program, method_ids: &t::NativeMethodIndex, native: M,
+) -> &'a t::Function {
+    required_indexed_native_method(program, method_ids, None, native)
 }
 
 fn param(function: &t::Function, index: usize) -> String {
@@ -136,7 +139,9 @@ fn group(source: &str, name: &str) -> String {
     body.split_once(&end).expect("binary template group ends").0.to_owned()
 }
 
-pub(super) fn implementation(program: &t::Program, class_id: usize, native: C) -> String {
+pub(super) fn implementation(
+    program: &t::Program, method_ids: &t::NativeMethodIndex, class_id: usize, native: C,
+) -> String {
     let buffer = buffer_class(program);
     let mut substitutions = vec![
         ("@BUFFER_ID@", buffer.to_string()),
@@ -144,17 +149,17 @@ pub(super) fn implementation(program: &t::Program, class_id: usize, native: C) -
     let mut body = match native {
         C::BinaryReader => {
             let reader = class_id;
-            let new = method(program, reader, M::BinaryReaderNew);
-            let from_source = static_method(program, M::BinaryReaderFromSource);
-            let seek = method(program, reader, M::BinaryReaderSeek);
-            let read_byte = method(program, reader, M::BinaryReaderReadByte);
-            let read_int16 = method(program, reader, M::BinaryReaderReadInt16);
-            let read_int32 = method(program, reader, M::BinaryReaderReadInt32);
-            let read_int64 = method(program, reader, M::BinaryReaderReadInt64);
-            let read_float32 = method(program, reader, M::BinaryReaderReadFloat32);
-            let read_double = method(program, reader, M::BinaryReaderReadDouble);
-            let read_bytes = method(program, reader, M::BinaryReaderReadBytes);
-            let read_utf8 = method(program, reader, M::BinaryReaderReadUtf8);
+            let new = method(program, method_ids, reader, M::BinaryReaderNew);
+            let from_source = static_method(program, method_ids, M::BinaryReaderFromSource);
+            let seek = method(program, method_ids, reader, M::BinaryReaderSeek);
+            let read_byte = method(program, method_ids, reader, M::BinaryReaderReadByte);
+            let read_int16 = method(program, method_ids, reader, M::BinaryReaderReadInt16);
+            let read_int32 = method(program, method_ids, reader, M::BinaryReaderReadInt32);
+            let read_int64 = method(program, method_ids, reader, M::BinaryReaderReadInt64);
+            let read_float32 = method(program, method_ids, reader, M::BinaryReaderReadFloat32);
+            let read_double = method(program, method_ids, reader, M::BinaryReaderReadDouble);
+            let read_bytes = method(program, method_ids, reader, M::BinaryReaderReadBytes);
+            let read_utf8 = method(program, method_ids, reader, M::BinaryReaderReadUtf8);
             let source = interface_class(program, "ByteSource");
             let source_read = interface_method(program, source, "read");
             let (source_read_ok, source_read_error) = interface_result_tags(program, source_read);
@@ -201,18 +206,18 @@ pub(super) fn implementation(program: &t::Program, class_id: usize, native: C) -
         }
         C::BinaryWriter => {
             let writer = class_id;
-            let new = method(program, writer, M::BinaryWriterNew);
-            let to_sink = static_method(program, M::BinaryWriterToSink);
-            let flush = method(program, writer, M::BinaryWriterFlush);
-            let write_byte = method(program, writer, M::BinaryWriterWriteByte);
-            let write_int16 = method(program, writer, M::BinaryWriterWriteInt16);
-            let write_int32 = method(program, writer, M::BinaryWriterWriteInt32);
-            let write_int64 = method(program, writer, M::BinaryWriterWriteInt64);
-            let write_float32 = method(program, writer, M::BinaryWriterWriteFloat32);
-            let write_double = method(program, writer, M::BinaryWriterWriteDouble);
-            let write_bytes = method(program, writer, M::BinaryWriterWriteBytes);
-            let write_utf8 = method(program, writer, M::BinaryWriterWriteUtf8);
-            let finish = static_method(program, M::BinaryWriterFinish);
+            let new = method(program, method_ids, writer, M::BinaryWriterNew);
+            let to_sink = static_method(program, method_ids, M::BinaryWriterToSink);
+            let flush = method(program, method_ids, writer, M::BinaryWriterFlush);
+            let write_byte = method(program, method_ids, writer, M::BinaryWriterWriteByte);
+            let write_int16 = method(program, method_ids, writer, M::BinaryWriterWriteInt16);
+            let write_int32 = method(program, method_ids, writer, M::BinaryWriterWriteInt32);
+            let write_int64 = method(program, method_ids, writer, M::BinaryWriterWriteInt64);
+            let write_float32 = method(program, method_ids, writer, M::BinaryWriterWriteFloat32);
+            let write_double = method(program, method_ids, writer, M::BinaryWriterWriteDouble);
+            let write_bytes = method(program, method_ids, writer, M::BinaryWriterWriteBytes);
+            let write_utf8 = method(program, method_ids, writer, M::BinaryWriterWriteUtf8);
+            let finish = static_method(program, method_ids, M::BinaryWriterFinish);
             let sink = interface_class(program, "ByteSink");
             let sink_write = interface_method(program, sink, "write");
             let sink_flush = interface_method(program, sink, "flush");
