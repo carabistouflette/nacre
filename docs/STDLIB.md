@@ -1427,11 +1427,13 @@ Events are separate records and need not represent one high-level filesystem
 operation. Move-from/move-to events can be correlated by their nonzero cookie.
 `name()` is the UTF-8 entry name. An entry with a non-UTF-8 name makes `next`
 return `Err` after consuming that event, without invalidating the watch. The name
-is empty for attribute changes to the watched directory itself and for other
-self, ignored, and overflow events. Queue overflow is returned as
-`WatchKind.Overflow` with `overflow() == true`, not silently discarded. A
-`DeletedSelf` or `Ignored` event invalidates the watch; queued events remain
-readable, then later `next` calls return `Err`.
+is empty for attribute changes to the watched directory itself, and for self,
+ignored, and overflow events. Queue overflow is returned as
+`WatchKind.Overflow` with `overflow() == true`, not silently discarded. The kernel
+may have dropped events, so rescan the directory to reconstruct current state
+before relying on later notifications; overflow does not invalidate the watch.
+`DeletedSelf` or `Ignored` invalidates the watch; queued events remain readable,
+then later `next` calls return `Err`.
 `close()` is idempotent, including after invalidation.
 
 ## Byte streams and binary encoding
